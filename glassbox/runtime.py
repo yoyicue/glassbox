@@ -8,7 +8,9 @@ and probes should delegate here so they do not drift.
 from __future__ import annotations
 
 import contextlib
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from glassbox.backend_registry import (
@@ -23,7 +25,7 @@ from glassbox.backend_registry import (
 )
 from glassbox.cognition import HeuristicTyper
 from glassbox.config import AgentConfig, get_config
-from glassbox.effector import Effector
+from glassbox.effector import NOOP_CAPABILITIES, BackendCapabilities, Effector
 from glassbox.geometry import content_size_for_crop, effector_frame_resolution, make_device_geometry
 from glassbox.memory import save_utg, wrap_with_memory_if_enabled
 from glassbox.obs import open_recorder, wrap_vlm_cache_if_enabled
@@ -96,6 +98,55 @@ def make_source(*, cfg: AgentConfig | None = None):
         raise RuntimeUnavailable(str(exc)) from exc
 
 
+def _effector_capabilities(effector: Effector | object) -> BackendCapabilities:
+    capabilities = getattr(effector, "capabilities", None)
+    if callable(capabilities):
+        return capabilities()
+    return BackendCapabilities(
+        backend=effector.__class__.__name__.lower(),
+        coordinate_space=getattr(effector, "coordinate_space", "frame_px") or "frame_px",
+    )
+
+
+def _connect_effector_if_needed(
+    effector: Effector,
+    *,
+    capabilities: BackendCapabilities,
+    cfg: AgentConfig,
+    backend: str,
+    source,
+    frame_resolution: tuple[int, int] | None,
+    coordinate_space: str,
+    device_geometry,
+) -> Effector:
+    if not capabilities.requires_connection:
+        return effector
+    preflight = effector.preflight()
+    if not preflight.ok and preflight.fatal:
+        raise RuntimeUnavailable(preflight.message)
+    try:
+        effector.connect()
+    except Exception as exc:
+        effector.close()
+        if not getattr(cfg, "allow_noop_fallback", False):
+            raise RuntimeUnavailable(
+                f"{backend} effector connect() failed: {exc}. "
+                "Confirm the configured hardware is connected, or set "
+                "GLASSBOX_ALLOW_NOOP_FALLBACK=1 for dry-run mode."
+            ) from exc
+        print(f"[runtime] {backend} effector connect() failed: {exc}")
+        print("[runtime] falling back to NoOpEffector (GLASSBOX_ALLOW_NOOP_FALLBACK=1)")
+        return DEFAULT_EFFECTOR_REGISTRY.create(
+            "noop",
+            cfg=cfg,
+            source=source,
+            frame_resolution=frame_resolution,
+            coordinate_space=coordinate_space,
+            device_geometry=device_geometry,
+        )
+    return effector
+
+
 def make_effector(
     source,
     *,
@@ -103,46 +154,12 @@ def make_effector(
     frame_resolution: tuple[int, int] | None = None,
     coordinate_space: str | None = None,
     device_geometry=None,
+    connect: bool = True,
 ) -> Effector:
     cfg = cfg or get_config()
     coordinate_space = coordinate_space or "frame_px"
     backend = select_effector_backend(cfg)
-
-    if backend == "picokvm":
-        eff = DEFAULT_EFFECTOR_REGISTRY.create(
-            backend,
-            cfg=cfg,
-            source=source,
-            frame_resolution=frame_resolution,
-            coordinate_space=coordinate_space,
-            device_geometry=device_geometry,
-        )
-        preflight = eff.preflight()
-        if not preflight.ok and preflight.fatal:
-            raise RuntimeUnavailable(preflight.message)
-        try:
-            eff.connect()
-        except Exception as exc:
-            eff.close()
-            if not getattr(cfg, "allow_noop_fallback", False):
-                raise RuntimeUnavailable(
-                    f"{backend} effector connect() failed: {exc}. "
-                    "Confirm the configured hardware is connected, or set "
-                    "GLASSBOX_ALLOW_NOOP_FALLBACK=1 for dry-run mode."
-                ) from exc
-            print(f"[runtime] {backend} effector connect() failed: {exc}")
-            print("[runtime] falling back to NoOpEffector (GLASSBOX_ALLOW_NOOP_FALLBACK=1)")
-            return DEFAULT_EFFECTOR_REGISTRY.create(
-                "noop",
-                cfg=cfg,
-                source=source,
-                frame_resolution=frame_resolution,
-                coordinate_space=coordinate_space,
-                device_geometry=device_geometry,
-            )
-        return eff
-
-    return DEFAULT_EFFECTOR_REGISTRY.create(
+    eff = DEFAULT_EFFECTOR_REGISTRY.create(
         backend,
         cfg=cfg,
         source=source,
@@ -150,6 +167,40 @@ def make_effector(
         coordinate_space=coordinate_space,
         device_geometry=device_geometry,
     )
+    capabilities = _effector_capabilities(eff)
+    if not connect:
+        return eff
+    return _connect_effector_if_needed(
+        eff,
+        capabilities=capabilities,
+        cfg=cfg,
+        backend=backend,
+        source=source,
+        frame_resolution=frame_resolution,
+        coordinate_space=capabilities.coordinate_space,
+        device_geometry=device_geometry,
+    )
+
+
+def _crop_config_value(
+    cfg: AgentConfig,
+    capabilities: BackendCapabilities,
+    suffix: str,
+    default=None,
+):
+    backend_value = getattr(cfg, f"{capabilities.backend}_{suffix}", None)
+    if backend_value is not None:
+        return backend_value
+    return getattr(cfg, f"effector_{suffix}", default)
+
+
+def _crop_cache_path(
+    cfg: AgentConfig,
+    capabilities: BackendCapabilities | None = None,
+) -> Path | None:
+    capabilities = capabilities or NOOP_CAPABILITIES
+    cache = _crop_config_value(cfg, capabilities, "crop_cache")
+    return Path(cache) if cache else None
 
 
 def _crop_from_bbox(
@@ -167,35 +218,112 @@ def _crop_from_bbox(
     return LetterboxCrop(crop_bbox=(x, y, w, h), frame_size=frame_size, phone_size=phone_size)
 
 
-def detect_crop(source, *, cfg: AgentConfig | None = None, device_geometry=None) -> LetterboxCrop | None:
+def _load_cached_crop(
+    cfg: AgentConfig,
+    *,
+    capabilities: BackendCapabilities,
+    frame_size: tuple[int, int],
+    phone_size: tuple[int, int],
+) -> LetterboxCrop | None:
+    path = _crop_cache_path(cfg, capabilities)
+    if path is None:
+        return None
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if payload.get("frame_size") != list(frame_size) or payload.get("phone_size") != list(phone_size):
+            return None
+        bbox = tuple(int(v) for v in payload["crop_bbox"])
+        return _crop_from_bbox(bbox, frame_size=frame_size, phone_size=phone_size)
+    except Exception as exc:
+        print(f"[runtime] ignoring invalid crop cache {path}: {exc}")
+        return None
+
+
+def _save_cached_crop(
+    cfg: AgentConfig,
+    crop: LetterboxCrop,
+    *,
+    capabilities: BackendCapabilities,
+) -> None:
+    path = _crop_cache_path(cfg, capabilities)
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({
+                "crop_bbox": list(crop.crop_bbox),
+                "frame_size": list(crop.frame_size),
+                "phone_size": list(crop.phone_size),
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        print(f"[runtime] failed to save crop cache {path}: {exc}")
+
+
+def detect_crop(
+    source,
+    *,
+    cfg: AgentConfig | None = None,
+    device_geometry=None,
+    effector_capabilities: BackendCapabilities | None = None,
+) -> LetterboxCrop | None:
     cfg = cfg or get_config()
+    capabilities = effector_capabilities or NOOP_CAPABILITIES
     geometry = device_geometry or make_device_geometry(
         cfg,
         frame_size=getattr(source, "resolution", None),
     )
-    phone_size = content_size_for_crop(cfg, geometry)
-    crop_bbox = None
+    phone_size = content_size_for_crop(cfg, geometry, capabilities=capabilities)
+    crop_bbox = _crop_config_value(cfg, capabilities, "crop_bbox")
     if crop_bbox is not None:
         try:
             frame_size = source.resolution
         except Exception as exc:
-            raise RuntimeUnavailable("configured crop bbox requires current frame resolution") from exc
+            raise RuntimeUnavailable(
+                "A configured effector crop bbox is set but current frame resolution is unavailable"
+            ) from exc
         crop = _crop_from_bbox(crop_bbox, frame_size=frame_size, phone_size=phone_size)
         print(f"[runtime] using configured crop bbox={crop.crop_bbox}")
         return crop
     last_exc: Exception | None = None
-    attempts = 1
+    attempts = max(1, int(_crop_config_value(cfg, capabilities, "crop_retries", 3)))
     try:
         for _ in range(attempts):
             frame = source.snapshot()
             try:
                 crop = LetterboxCrop.auto_detect(frame.img, phone_size=phone_size)
+                if capabilities.requires_calibrated_crop:
+                    _save_cached_crop(cfg, crop, capabilities=capabilities)
                 break
             except Exception as exc:
                 last_exc = exc
         else:
             raise last_exc or RuntimeUnavailable("no frame available for crop detection")
     except Exception as exc:
+        if capabilities.requires_calibrated_crop:
+            try:
+                frame_size = source.resolution
+            except Exception:
+                frame_size = None
+            if frame_size is not None:
+                cached = _load_cached_crop(
+                    cfg,
+                    capabilities=capabilities,
+                    frame_size=frame_size,
+                    phone_size=phone_size,
+                )
+                if cached is not None:
+                    print(f"[runtime] using cached crop bbox={cached.crop_bbox}")
+                    return cached
+            raise RuntimeUnavailable(
+                f"{capabilities.backend} requires a calibrated letterbox crop. "
+                f"Auto-detect failed after {attempts} frame(s): {exc}. "
+                "Set an effector crop bbox or provide a valid effector crop cache."
+            ) from exc
         print(f"[runtime] letterbox auto-detect failed, using full frame: {exc}")
         return None
     try:
@@ -243,25 +371,58 @@ def build_phone(
                 f"GLASSBOX_OCR={cfg.ocr!r} is not supported; expected 'vision' or 'ocrmac'"
             ) from exc
 
-    if crop is None:
-        crop = detect_crop(source, cfg=cfg, device_geometry=device_geometry)
-
     if effector is None:
-        coordinate_space = "frame_px"
+        effector = make_effector(
+            source,
+            cfg=cfg,
+            frame_resolution=None,
+            coordinate_space=None,
+            device_geometry=device_geometry,
+            connect=False,
+        )
+    capabilities = _effector_capabilities(effector)
+    coordinate_space = capabilities.coordinate_space
+
+    if crop is None:
+        crop = detect_crop(
+            source,
+            cfg=cfg,
+            device_geometry=device_geometry,
+            effector_capabilities=capabilities,
+        )
+
+    if not provided_effector:
         effector_resolution = effector_frame_resolution(
             cfg,
             device_geometry,
             crop_present=crop is not None,
+            capabilities=capabilities,
         )
-        effector = make_effector(
-            source,
+        if effector_resolution is not None:
+            with contextlib.suppress(Exception):
+                effector.close()
+            effector = make_effector(
+                source,
+                cfg=cfg,
+                frame_resolution=effector_resolution,
+                coordinate_space=coordinate_space,
+                device_geometry=device_geometry,
+                connect=False,
+            )
+            capabilities = _effector_capabilities(effector)
+            coordinate_space = capabilities.coordinate_space
+        effector = _connect_effector_if_needed(
+            effector,
+            capabilities=capabilities,
             cfg=cfg,
+            backend=select_effector_backend(cfg),
+            source=source,
             frame_resolution=effector_resolution,
             coordinate_space=coordinate_space,
             device_geometry=device_geometry,
         )
-    else:
-        coordinate_space = getattr(effector, "coordinate_space", None)
+        capabilities = _effector_capabilities(effector)
+        coordinate_space = capabilities.coordinate_space
 
     try:
         frame_size = crop.cropped_size if crop is not None else source.resolution
@@ -343,7 +504,7 @@ def build_phone(
             manifest_extra={
                 "backend": {
                     "name": effector.__class__.__name__,
-                    "transport": "picokvm" if cfg.picokvm else "none",
+                    "transport": capabilities.transport_label,
                 },
                 "device": {
                     "name": device_geometry.model,
@@ -407,8 +568,16 @@ def build_phone(
         recovery_provider=platform.recovery,
         device_geometry=device_geometry,
         gesture_config=PhoneGestureConfig(
-            wheel_ticks_per_scroll=cfg.wheel_ticks_per_scroll,
-            wheel_invert=cfg.wheel_invert,
+            wheel_ticks_per_scroll=(
+                capabilities.wheel_ticks_per_scroll
+                if capabilities.wheel_ticks_per_scroll is not None
+                else cfg.wheel_ticks_per_scroll
+            ),
+            wheel_invert=(
+                capabilities.wheel_invert
+                if capabilities.wheel_invert is not None
+                else cfg.wheel_invert
+            ),
         ),
     )
     return PhoneRuntime(

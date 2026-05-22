@@ -7,6 +7,7 @@ from glassbox.backend_registry import (
     DEFAULT_EFFECTOR_REGISTRY,
     DEFAULT_FRAME_SOURCE_REGISTRY,
     DEFAULT_VLM_REGISTRY,
+    BackendRegistration,
     select_effector_backend,
     select_frame_source_backend,
     select_icon_detector_backend,
@@ -15,7 +16,7 @@ from glassbox.backend_registry import (
 )
 from glassbox.cognition.base import Box, Scene, UIElement
 from glassbox.config import AgentConfig
-from glassbox.effector import ActionResult
+from glassbox.effector import ActionResult, BackendCapabilities, PreflightResult
 from glassbox.geometry import make_device_geometry
 from glassbox.memory import UTG, ScreenMemory
 from glassbox.obs import Recorder
@@ -208,6 +209,11 @@ def test_runtime_selects_registered_frame_source_and_effector_backends(tmp_path)
     assert select_frame_source_backend(AgentConfig(_env_file=None, picokvm=True)) == "picokvm_stream"
     assert select_effector_backend(AgentConfig(_env_file=None)) == "noop"
     assert select_effector_backend(AgentConfig(_env_file=None, picokvm=True)) == "picokvm"
+    assert select_effector_backend(AgentConfig(_env_file=None, effector_backend="picokvm")) == "picokvm"
+    assert (
+        select_effector_backend(AgentConfig(_env_file=None, picokvm=True, effector_backend="noop"))
+        == "noop"
+    )
     assert select_ocr_backend(AgentConfig(_env_file=None, ocr="vision")) == "vision"
     assert select_ocr_backend(AgentConfig(_env_file=None, ocr="ocrmac")) == "ocrmac"
     assert select_icon_detector_backend(AgentConfig(_env_file=None)) == "classical"
@@ -231,6 +237,19 @@ def test_runtime_selects_registered_frame_source_and_effector_backends(tmp_path)
     assert "picokvm" in set(DEFAULT_EFFECTOR_REGISTRY.names())
     assert set(DEFAULT_VLM_REGISTRY.names()) == {"moonshot", "siliconflow"}
     assert select_platform_backend(AgentConfig(_env_file=None)) == "ios"
+
+
+@pytest.mark.smoke
+def test_picokvm_flags_select_matching_frame_source_and_effector(monkeypatch):
+    for env_name in ("AGENT_PICOKVM", "GLASSBOX_PICOKVM"):
+        monkeypatch.delenv("AGENT_PICOKVM", raising=False)
+        monkeypatch.delenv("GLASSBOX_PICOKVM", raising=False)
+        monkeypatch.delenv("GLASSBOX_EFFECTOR", raising=False)
+        monkeypatch.setenv(env_name, "1")
+        cfg = AgentConfig(_env_file=None)
+
+        assert select_frame_source_backend(cfg) == "picokvm_stream"
+        assert select_effector_backend(cfg) == "picokvm"
 
 
 @pytest.mark.smoke
@@ -335,4 +354,75 @@ def test_build_phone_takes_platform_subcapabilities_from_registry(monkeypatch):
     assert runtime.phone._platform_scene_classifier == "scene"
     assert runtime.phone.icon_map == "icon-map"
     assert runtime.phone.gesture_config.wheel_ticks_per_scroll == 12
+    assert runtime.phone.gesture_config.wheel_invert is True
+
+
+@pytest.mark.smoke
+def test_build_phone_loads_out_of_tree_effector_from_entry_point(monkeypatch):
+    class BrightSource:
+        resolution = (440, 956)
+
+        @staticmethod
+        def snapshot():
+            return Frame(img=np.full((956, 440, 3), 255, dtype=np.uint8), ts=0.0)
+
+    class ToyEffector:
+        coordinate_space = "phone_pt"
+
+        def __init__(self, **_kwargs):
+            self.connected = False
+
+        def capabilities(self):
+            return BackendCapabilities(
+                backend="toy",
+                coordinate_space="phone_pt",
+                pointer_kind="touch_digitizer",
+                requires_calibrated_crop=True,
+                requires_connection=True,
+                transport_label="toy-wire",
+                wheel_ticks_per_scroll=7,
+                wheel_invert=True,
+            )
+
+        def preflight(self):
+            return PreflightResult(ok=True)
+
+        def connect(self):
+            self.connected = True
+
+        def close(self):
+            self.connected = False
+
+        def is_connected(self):
+            return self.connected
+
+        def supports(self, _action):
+            return True
+
+        def tap(self, *_args, **_kwargs):
+            return ActionResult(ok=True, backend="toy", connected=self.connected)
+
+    class ToyEntryPoint:
+        def load(self):
+            return BackendRegistration(name="toy", factory=lambda **kwargs: ToyEffector(**kwargs))
+
+    def fake_entry_points(*, group=None):
+        return [ToyEntryPoint()] if group == "glassbox.effectors" else []
+
+    old_registrations = dict(DEFAULT_EFFECTOR_REGISTRY._by_name)
+    old_loaded = DEFAULT_EFFECTOR_REGISTRY._entry_points_loaded
+    monkeypatch.setattr("glassbox.backend_registry.entry_points", fake_entry_points)
+    monkeypatch.setenv("GLASSBOX_EFFECTOR", "toy")
+    DEFAULT_EFFECTOR_REGISTRY._entry_points_loaded = False
+    try:
+        cfg = AgentConfig(_env_file=None)
+        runtime = build_phone(source=BrightSource(), cfg=cfg, ocr=FakeOCR())
+    finally:
+        DEFAULT_EFFECTOR_REGISTRY._by_name = old_registrations
+        DEFAULT_EFFECTOR_REGISTRY._entry_points_loaded = old_loaded
+
+    assert isinstance(runtime.effector, ToyEffector)
+    assert runtime.effector.connected is True
+    assert runtime.phone.coordinate_space == "phone_pt"
+    assert runtime.phone.gesture_config.wheel_ticks_per_scroll == 7
     assert runtime.phone.gesture_config.wheel_invert is True

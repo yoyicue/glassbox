@@ -111,7 +111,7 @@ def test_architecture_boundaries_doc_records_closed_business_decisions():
 
 
 def test_boundary_contract_types_expose_stable_versions():
-    assert ARCHITECTURE_BOUNDARY_CONTRACT_VERSION == 1
+    assert ARCHITECTURE_BOUNDARY_CONTRACT_VERSION == 2
     assert FRAME_CONTRACT_VERSION == 1
     assert COGNITION_CONTRACT_VERSION == 1
     assert Frame.CONTRACT_VERSION == FRAME_CONTRACT_VERSION

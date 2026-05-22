@@ -8,6 +8,51 @@ The default open-source tree includes PicoKVM, noop, and static-frame paths. It
 does not include any third-party target app, private profiles, or private
 transport bridges.
 
+## Hardware setup
+
+The reference setup drives a real iPhone with a Luckfox PicoKVM sitting between
+the phone and the controller host. glassbox never touches the iPhone directly —
+it only talks to the PicoKVM over the network. A single USB-C Digital AV
+Multiport Adapter on the iPhone carries both directions (HDMI video out + a
+USB-A host port for HID input) and also distributes power, while glassbox
+reaches the PicoKVM over plain HTTP:
+
+```
+   USB-C Digital AV Multiport Adapter
+   ┌─────────┐  ── HDMI out ─────────────▶  ┌──────────────┐  GET /video/stream  ┌──────────┐
+   │ iPhone  │     (video)                   │   Luckfox    │  (H.264) ─────────▶ │ glassbox │
+   │  (iOS)  │                               │   PicoKVM    │                     │ (macOS)  │
+   │ USB-C ──┤  ◀─ USB-A host port ───────   │ HDMI capture │  POST /api/rpc      │          │
+   └─────────┘     USB HID + power           │ + HID gadget │  ◀── (JSON-RPC) ─── └──────────┘
+        │                                    └──────────────┘
+        └── USB-C power-in ◀── charger (powers the iPhone *and* the PicoKVM)
+```
+
+- **One adapter, two paths + power:** the iPhone's USB-C port connects to a
+  USB-C Digital AV Multiport Adapter. Its **HDMI** port feeds the PicoKVM
+  capture input (video out), and its **USB-A** port hosts the PicoKVM HID gadget
+  (control in). The adapter's **USB-C power-in is required, not optional**: the
+  charger plugged there powers the iPhone *and* feeds the PicoKVM through the
+  USB-A port, so the PicoKVM draws its power from this same USB-C. This is the
+  current bring-up wiring; any Lightning/USB-C-to-HDMI plus USB-host equivalent
+  works the same way.
+- **Video (perception):** the iPhone's screen leaves over HDMI into the
+  PicoKVM's capture input. The PicoKVM re-serves it as an H.264 stream at
+  `GET /video/stream`, which `PicoKVMFrameSource` decodes into frames (the
+  `frame_px` coordinate space).
+- **Control (action):** glassbox sends actions as JSON-RPC over HTTP to
+  `POST /api/rpc`. The PicoKVM presents itself to the iPhone (through the
+  adapter's USB-A host port) as a USB HID mouse + keyboard and injects the
+  resulting pointer/key events. Because this is a HID pointer and not a touch
+  digitizer, the iPhone must have **AssistiveTouch / external pointer enabled**;
+  taps are pointer moves plus clicks, and swipes/drags are mouse drags. PicoKVM
+  logical coordinates (absolute, max 32767) are mapped to decoded frame pixels
+  via a calibrated linear fit.
+- **Network:** both links to glassbox are plain HTTP to the PicoKVM, set with
+  `GLASSBOX_PICOKVM_BASE_URL` (default `http://picokvm.local`). The controller
+  host (macOS) only needs network reachability to the PicoKVM, not a direct
+  cable to the iPhone.
+
 ## Install
 
 ```bash
