@@ -8,6 +8,63 @@ The default open-source tree includes PicoKVM, noop, and static-frame paths. It
 does not include any third-party target app, private profiles, or private
 transport bridges.
 
+## Architecture
+
+glassbox runs an **observe → decide → act → verify** loop against a live screen,
+records every step, and updates a screen-memory graph it can reuse on later runs.
+`glassbox/runtime.py` is the assembler: it wires the stages below into a single
+`Phone`, and `glassbox.ai` exposes that runtime as a stable author-mode facade.
+
+```
+                        ┌──────────────────── screen memory (UTG graph) ◀─┐
+                        ▼                                                  │
+   frame  ──▶ Perception ──▶ Cognition ──▶ Action ──▶ Effector ──▶ device │
+   source     (crop +        (OCR/VLM →    (intent →   (HID/noop    input  │
+              stability)      elements)     actuation)  transport)         │
+                                                │                          │
+                                                └──▶ Verification ─────────┘
+                                                     (semantic effect, not
+                                                      transport ACK)
+```
+
+Each stage maps to a package:
+
+| Stage | Package | Role |
+| --- | --- | --- |
+| Perception | `glassbox/perception` | Pull frames from a frame source, letterbox-crop to the device content area, debounce with a stability policy. |
+| Cognition | `glassbox/cognition` | Turn a frame into an observation: OCR (with voting), optional VLM, icon detection, set-of-marks, text matching → elements with geometry. |
+| Action | `glassbox/action` | Orchestrate intents (tap text, swipe, launch app) into low-level actuations, with policy, seeds, and recovery. |
+| Effector | `glassbox/effector.py`, `glassbox/effectors/` | The input transport that actually drives the device (noop, PicoKVM HID), described by `BackendCapabilities`. |
+| Verification | `glassbox/verification` | Confirm the *semantic* effect of an action (scene/text diff, golden, verifiers) instead of trusting a transport ACK or raw pixel delta. |
+| Screen memory | `glassbox/memory` | A UTG-style graph of screens, elements, and transitions, persisted across runs. |
+| Observability | `glassbox/obs` | Recorder, artifacts, replay, and VLM/OCR caches. |
+| iOS platform | `glassbox/ios` | Scene classification, SpringBoard map, AssistiveTouch primitives, safe-area/recovery — the iOS provider behind the Platform seam. |
+
+### Pluggable seams
+
+Every stage is a **named boundary** — `FrameSource`, `Effector`, `OCR`, `VLM`,
+`IconDetector`, `Verifier`, `Platform`, and `CrawlPolicy` (defined in
+`glassbox/boundaries.py`). Backends are discovered as Python **entry points**
+(`glassbox.frame_sources`, `glassbox.effectors`, `glassbox.ocr`, `glassbox.vlm`,
+`glassbox.icon_detectors`, `glassbox.verifiers`, `glassbox.platforms`,
+`glassbox.crawl_policies`), so you add a backend by registering an entry point —
+no core edits. Effector backends advertise capabilities (coordinate space,
+connection requirements, transport label, calibrated-crop and wheel defaults).
+Boundary maturity is tracked in
+[`docs/design/architecture_boundaries.md`](docs/design/architecture_boundaries.md)
+(contract v2; 6 of 8 graduated, Platform and CrawlPolicy provisional).
+
+### Entry surfaces
+
+- **`glassbox.ai`** — stable author-mode facade (`open_phone() -> AIPhone`,
+  `ai-api-v1`); text-first `observe` / `tap` / `goto` / `explore` /
+  `save_report`. See [`docs/design/public_api.md`](docs/design/public_api.md).
+- **`glassbox.phone.Phone`** — the low-level runtime object assembled by
+  `runtime.py`.
+- **`glassbox-mcp-server`** — remote MCP (stdio) for agents.
+- **`glassbox-ai-session`** — long-lived JSONL observe-decide-act session.
+- **`glassbox-show-screen` / `glassbox-list-devices`** — demos.
+
 ## Hardware setup
 
 The reference setup drives a real iPhone with a Luckfox PicoKVM sitting between
@@ -86,7 +143,7 @@ uv run glassbox-show-screen
 
 | Surface | Built in | Notes |
 | --- | --- | --- |
-| Frame source | AVFoundation, static PNG directory, PicoKVM MJPEG stream | macOS is the primary controller platform. |
+| Frame source | AVFoundation, static PNG directory, PicoKVM H.264 stream | macOS is the primary controller platform. |
 | Effector | noop, PicoKVM | PicoKVM uses USB HID mouse/keyboard semantics with iOS AssistiveTouch/external pointer enabled. |
 | OCR | Apple Vision, ocrmac | PaddleOCR is optional through the `ocr` extra. |
 | VLM | Moonshot-compatible and SiliconFlow-compatible clients | VLM is opt-in with environment-provided API keys. |
