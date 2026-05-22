@@ -4,6 +4,9 @@ glassbox is an iOS-first computer-use runtime for driving a real device from
 screen observations. It wires frame capture, OCR/VLM perception, action
 execution, verification, recording, and screen memory behind pluggable seams.
 
+New here? [ONBOARDING.md](ONBOARDING.md) walks you from parts to a verified
+first run.
+
 ## Why this approach: minimal intrusiveness
 
 glassbox is **out-of-band**: it observes through the iPhone's HDMI output and
