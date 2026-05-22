@@ -8,6 +8,31 @@ The default open-source tree includes PicoKVM, noop, and static-frame paths. It
 does not include any third-party target app, private profiles, or private
 transport bridges.
 
+## Why this approach: minimal intrusiveness
+
+glassbox is **out-of-band**: it observes through the iPhone's HDMI output and
+acts through a USB HID mouse/keyboard. No glassbox code runs on the phone.
+Compared with the usual iOS automation approaches, it changes the target device
+the least:
+
+- **No app or test runner installed.** No WebDriverAgent / Appium / XCUITest
+  runner, no companion app, no sideloading.
+- **No jailbreak, provisioning profile, or developer account.** It runs against
+  a stock retail device on stock iOS.
+- **No code injection or instrumentation.** The target app runs completely
+  unmodified — glassbox sees exactly the rendered screen (HDMI) and acts exactly
+  as a physical pointer/keyboard would (HID).
+- **One on-device setting.** Enable AssistiveTouch / external pointer (a built-in
+  accessibility toggle); nothing else on the phone is touched.
+- **Controller is off-device.** All perception/cognition/action logic runs on
+  macOS; the phone only mirrors video out and accepts HID in.
+
+The payoff is high-fidelity observations and actions with no test-harness
+artifacts and no anti-tamper / jailbreak-detection surface, so the rig is safe
+to point at apps you cannot or should not modify. The tradeoff is external
+capture hardware (the PicoKVM) and HID-pointer semantics instead of native
+multi-touch.
+
 ## Architecture
 
 glassbox runs an **observe → decide → act → verify** loop against a live screen,
