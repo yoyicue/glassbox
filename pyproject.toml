@@ -37,7 +37,6 @@ dev = [
     "pytest-rerunfailures>=14.0",
     "allure-pytest>=2.13",
     "ruff>=0.4",
-    "mypy>=1.10",
 ]
 
 [project.scripts]
