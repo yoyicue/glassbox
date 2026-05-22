@@ -32,6 +32,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +46,7 @@ class AgentConfig(BaseSettings):
         env_file=str(_REPO_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     # ─── Capture card (HDMI frame grabbing) ──────────────────────────
@@ -73,19 +75,36 @@ class AgentConfig(BaseSettings):
     NoOpEffector when startup fails. Defaults off so hardware failures are
     visible in production runs."""
 
-    picokvm: bool = False
-    """Use Luckfox PicoKVM for HID output and HDMI frame input.
-    Private PicoKVM settings use GLASSBOX_PICOKVM_*."""
+    effector_backend: str = Field(
+        default="noop",
+        validation_alias=AliasChoices("GLASSBOX_EFFECTOR", "AGENT_EFFECTOR", "AGENT_EFFECTOR_BACKEND"),
+    )
+    """Effector backend selector. GLASSBOX_EFFECTOR is the plugin-facing spelling."""
 
     wheel_ticks_per_scroll: int = 90
-    """Default single-tick mouse-wheel reports for one wheel_scroll_down/up call."""
+    """Default wheel report count for one semantic wheel scroll."""
 
     wheel_interval_ms: int = 40
     """Delay between synthetic mouse-wheel reports. env GLASSBOX_WHEEL_INTERVAL_MS."""
 
     wheel_invert: bool = False
-    """Flip vertical wheel sign after true-device calibration determines iOS
-    natural-scroll direction."""
+    """Flip vertical wheel direction for effectors that do not declare their own default."""
+
+    effector_crop_bbox: tuple[int, int, int, int] | None = None
+    """Generic calibrated content crop bbox (x, y, w, h) for plugin effectors."""
+
+    effector_crop_cache: str | None = None
+    """Generic path for the last-good calibrated crop JSON for plugin effectors."""
+
+    effector_crop_retries: int = 3
+    """Generic crop auto-detection retry count for plugin effectors."""
+
+    picokvm: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("GLASSBOX_PICOKVM", "AGENT_PICOKVM"),
+    )
+    """Use Luckfox PicoKVM for HID output and HDMI frame input.
+    Private PicoKVM settings use GLASSBOX_PICOKVM_*."""
 
     stable_after_action: bool = False
     """Wait for consecutive stable frames before the first semantic read after

@@ -16,10 +16,14 @@ def test_defaults():
     assert cfg.frame_dir is None
     assert cfg.auto_recover_capture is False
     assert cfg.allow_noop_fallback is False
+    assert cfg.effector_backend == "noop"
     assert cfg.picokvm is False
     assert cfg.wheel_ticks_per_scroll == 90
     assert cfg.wheel_interval_ms == 40
     assert cfg.wheel_invert is False
+    assert cfg.effector_crop_bbox is None
+    assert cfg.effector_crop_cache is None
+    assert cfg.effector_crop_retries == 3
     assert cfg.phone_model == "iphone_17_pro_max"
     assert cfg.ocr == "vision"
     assert cfg.crawl_policy == "generic"
@@ -36,6 +40,7 @@ def test_env_override_int(monkeypatch):
     monkeypatch.setenv("GLASSBOX_HDMI_INDEX", "2")
     monkeypatch.setenv("GLASSBOX_WHEEL_TICKS_PER_SCROLL", "11")
     monkeypatch.setenv("GLASSBOX_WHEEL_INTERVAL_MS", "9")
+    monkeypatch.setenv("GLASSBOX_EFFECTOR_CROP_RETRIES", "4")
     monkeypatch.setenv("GLASSBOX_ENABLE_VLM", "1")
     monkeypatch.setenv("GLASSBOX_VLM_CACHE_DIR", "/tmp/vlm-cache")
     monkeypatch.setenv("GLASSBOX_CRAWL_POLICY", "ios_settings")
@@ -45,6 +50,7 @@ def test_env_override_int(monkeypatch):
     assert cfg.hdmi_index == 2
     assert cfg.wheel_ticks_per_scroll == 11
     assert cfg.wheel_interval_ms == 9
+    assert cfg.effector_crop_retries == 4
     assert cfg.enable_vlm is True
     assert cfg.vlm_cache_dir == "/tmp/vlm-cache"
     assert cfg.crawl_policy == "ios_settings"
@@ -67,6 +73,17 @@ def test_env_override_bool(monkeypatch):
     assert cfg.wheel_invert is True
     assert cfg.allow_noop_fallback is True
     assert cfg.action_fail_fast is False
+
+
+@pytest.mark.smoke
+def test_effector_env_aliases(monkeypatch):
+    monkeypatch.setenv("AGENT_PICOKVM", "1")
+    monkeypatch.setenv("AGENT_EFFECTOR", "toy")
+
+    cfg = AgentConfig(_env_file=None)
+
+    assert cfg.picokvm is True
+    assert cfg.effector_backend == "toy"
 
 
 @pytest.mark.smoke

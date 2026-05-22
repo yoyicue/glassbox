@@ -22,7 +22,7 @@ from glassbox.effector import Effector
 from glassbox.perception.source import Frame
 from glassbox.verification.verifiers import SemanticOutcome, VerifierInput
 
-ARCHITECTURE_BOUNDARY_CONTRACT_VERSION = 1
+ARCHITECTURE_BOUNDARY_CONTRACT_VERSION = 2
 
 
 @dataclass(frozen=True)

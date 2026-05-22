@@ -115,6 +115,8 @@ class PicoKVMEffector:
             switch_input_source_strategy="unsupported",
             paste_strategy="unsupported",
             requires_assistive_touch=True,
+            requires_connection=True,
+            transport_label="picokvm-http",
         )
 
     def preflight(self) -> PreflightResult:

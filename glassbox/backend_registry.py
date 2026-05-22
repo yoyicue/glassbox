@@ -152,7 +152,11 @@ def _picokvm_effector_factory(*, cfg: AgentConfig, coordinate_space: str, **kwar
 
 
 def select_effector_backend(cfg: AgentConfig) -> str:
-    return "picokvm" if cfg.picokvm else "noop"
+    explicit = "effector_backend" in getattr(cfg, "model_fields_set", set())
+    if not explicit and cfg.picokvm:
+        return "picokvm"
+    name = str(getattr(cfg, "effector_backend", "noop") or "noop").strip().lower()
+    return name or "noop"
 
 
 def noop_effector_registration() -> BackendRegistration:

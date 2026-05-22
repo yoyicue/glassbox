@@ -7,7 +7,7 @@ implementations used by offline runs and tests.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol
 
 EFFECTOR_ACTIONS = frozenset({
@@ -187,6 +187,11 @@ class BackendCapabilities:
     switch_input_source_strategy: SystemActionStrategy = "unsupported"
     paste_strategy: SystemActionStrategy = "unsupported"
     requires_assistive_touch: bool = False
+    requires_calibrated_crop: bool = False
+    requires_connection: bool = False
+    transport_label: str = "none"
+    wheel_ticks_per_scroll: int | None = None
+    wheel_invert: bool | None = None
 
     def supports_direct(self, action: str) -> bool:
         return action in self.direct_actions
@@ -315,7 +320,7 @@ class NoOpEffector:
         return False
 
     def capabilities(self) -> BackendCapabilities:
-        return NOOP_CAPABILITIES
+        return replace(NOOP_CAPABILITIES, coordinate_space=self.coordinate_space)
 
     def preflight(self) -> PreflightResult:
         return PreflightResult(ok=True)
@@ -388,7 +393,7 @@ class MockEffector:
         return action in EFFECTOR_ACTIONS
 
     def capabilities(self) -> BackendCapabilities:
-        return MOCK_CAPABILITIES
+        return replace(MOCK_CAPABILITIES, coordinate_space=self.coordinate_space)
 
     def preflight(self) -> PreflightResult:
         return PreflightResult(ok=True)
