@@ -60,6 +60,24 @@ export GLASSBOX_PICOKVM_BASE_URL=http://picokvm.local
 uv run glassbox-show-screen
 ```
 
+First end-to-end run against the always-available iOS Settings app — the
+quickest way to confirm the whole rig works. Start with the readiness preflight,
+then a fast read-only walkthrough:
+
+```bash
+# 1. Check the PicoKVM rig is reachable (RPC + one decoded frame).
+uv run python -m skills.regression.ios_settings.diagnose --json
+
+# 2. Drive Settings read-only, write a report, and verify it.
+#    --quick visits a few pages; drop it for the full exhaustive audit.
+uv run python -m skills.regression.ios_settings.run_full --quick
+```
+
+The walkthrough never changes a setting: it foregrounds Settings, opens
+navigation rows, reads page text, and returns via the visible back affordance.
+It exercises the full perception → action → verification pipeline and writes a
+JSON report plus artifacts.
+
 ## Architecture
 
 glassbox runs an **observe → decide → act → verify** loop against a live screen,
