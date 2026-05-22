@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "source": "glassbox.ios.assistive_touch.assistive_touch_safe_primitives",
+  "safety_policy": {
+    "default": "safe primitives only; unsafe menu labels are excluded and blocked before physical input",
+    "unsafe_labels": [
+      "SOS",
+      "关机",
+      "关闭电源",
+      "操作按钮",
+      "重新启动",
+      "锁定屏幕",
+      "锁屏"
+    ]
+  },
+  "count": 15,
+  "primitives": [
+    {
+      "name": "assistive_touch.notification_center",
+      "label": "通知中心",
+      "path": [],
+      "level": "level1",
+      "effect": "open_notification_center",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.app_switcher",
+      "label": "App切换器",
+      "path": [],
+      "level": "level1",
+      "effect": "open_app_switcher",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.device",
+      "label": "设备",
+      "path": [],
+      "level": "level1",
+      "effect": "open_device_menu",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.hold_and_drag",
+      "label": "按住并拖移",
+      "path": [],
+      "level": "level1",
+      "effect": "enter_hold_and_drag",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.home",
+      "label": "主屏幕",
+      "path": [],
+      "level": "level1",
+      "effect": "go_home",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.control_center",
+      "label": "控制中心",
+      "path": [],
+      "level": "level1",
+      "effect": "open_control_center",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.rotate_screen",
+      "label": "旋转屏幕",
+      "path": [
+        "设备"
+      ],
+      "level": "device",
+      "effect": "open_rotate_screen_menu",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.volume_up",
+      "label": "调高音量",
+      "path": [
+        "设备"
+      ],
+      "level": "device",
+      "effect": "volume_up",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.volume_down",
+      "label": "调低音量",
+      "path": [
+        "设备"
+      ],
+      "level": "device",
+      "effect": "volume_down",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.more",
+      "label": "更多",
+      "path": [
+        "设备"
+      ],
+      "level": "device",
+      "effect": "open_more_menu",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.screenshot",
+      "label": "截屏",
+      "path": [
+        "设备",
+        "更多"
+      ],
+      "level": "more",
+      "effect": "take_screenshot",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.shake",
+      "label": "摇动",
+      "path": [
+        "设备",
+        "更多"
+      ],
+      "level": "more",
+      "effect": "shake",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.accessibility_shortcut",
+      "label": "辅助功能快捷键",
+      "path": [
+        "设备",
+        "更多"
+      ],
+      "level": "more",
+      "effect": "accessibility_shortcut",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.reachability",
+      "label": "便捷访问",
+      "path": [
+        "设备",
+        "更多"
+      ],
+      "level": "more",
+      "effect": "reachability",
+      "safe": true
+    },
+    {
+      "name": "assistive_touch.more_app_switcher",
+      "label": "App切换器",
+      "path": [
+        "设备",
+        "更多"
+      ],
+      "level": "more",
+      "effect": "open_app_switcher",
+      "safe": true
+    }
+  ]
+}

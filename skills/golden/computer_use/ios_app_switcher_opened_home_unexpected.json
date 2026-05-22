@@ -1,0 +1,9 @@
+{
+  "case_id": "ios_app_switcher_opened_home_unexpected_001",
+  "action": "recents",
+  "expected_status": "failed",
+  "before_texts": ["主屏幕"],
+  "after_texts": ["天气", "日历", "照片", "App Store"],
+  "metadata": {},
+  "expected_disqualifying_state": "ios_home_unexpected"
+}

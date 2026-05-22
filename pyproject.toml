@@ -1,0 +1,126 @@
+[project]
+name = "glassbox"
+version = "0.1.0"
+description = "iOS-first computer-use runtime with pluggable perception and actuation backends"
+requires-python = ">=3.11"
+dependencies = [
+    # —— perception ——
+    "numpy>=1.26",
+    "opencv-python>=4.9",          # 抓帧 + 模板匹配 + frame diff
+    # —— cognition ——
+    "anthropic>=0.40",             # Claude Vision (VLM 后端)
+    # paddleocr 安装比较重(带 paddle 框架),独立 extras 装,避免 default 拉爆环境
+    # "paddleocr",                 # → 见 [project.optional-dependencies]
+    # —— infra ——
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "loguru>=0.7",
+    "rich>=13.7",
+    "pyyaml>=6.0",                 # App profile yaml 解析
+    "tomli>=2.0; python_version<'3.11'",
+    "ocrmac>=1.0.1",
+    "httpx[socks]>=0.28.1",
+    "python-dotenv>=1.2.2",
+]
+
+[project.optional-dependencies]
+ocr = [
+    "paddleocr>=2.7",              # 中文 OCR;装这个会拉 paddlepaddle (~700MB)
+]
+# NOTE: the OmniParser icon-detector backend (AGPL-3.0: ultralytics/torch) is
+# intentionally NOT a project extra here — it ships as a git-ignored drop-in
+# plugin so this MIT package stays dependency-clean. See
+# glassbox/cognition/icon_backends/README.md.
+dev = [
+    "pytest>=8.0",
+    "pytest-html>=4.1",
+    "pytest-rerunfailures>=14.0",
+    "allure-pytest>=2.13",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+glassbox-show-screen = "glassbox.demo.show_screen:main"
+glassbox-list-devices = "glassbox.demo.list_devices:main"
+glassbox-ai-session = "glassbox.ai_session:main"
+glassbox-mcp-server = "glassbox.mcp.server:main"
+
+[project.entry-points."glassbox.app_policies"]
+ios_settings = "glassbox.app_policies:ios_settings_app_policy"
+
+[project.entry-points."glassbox.platforms"]
+ios = "glassbox.platforms:ios_platform_registration"
+
+[project.entry-points."glassbox.frame_sources"]
+avf = "glassbox.backend_registry:avf_frame_source_registration"
+picokvm_stream = "glassbox.backend_registry:picokvm_frame_source_registration"
+static = "glassbox.backend_registry:static_frame_source_registration"
+
+[project.entry-points."glassbox.effectors"]
+noop = "glassbox.backend_registry:noop_effector_registration"
+picokvm = "glassbox.backend_registry:picokvm_effector_registration"
+
+[project.entry-points."glassbox.ocr"]
+ocrmac = "glassbox.backend_registry:ocrmac_registration"
+vision = "glassbox.backend_registry:vision_ocr_registration"
+
+[project.entry-points."glassbox.icon_detectors"]
+classical = "glassbox.backend_registry:classical_icon_detector_registration"
+
+[project.entry-points."glassbox.vlm"]
+moonshot = "glassbox.backend_registry:moonshot_vlm_registration"
+siliconflow = "glassbox.backend_registry:siliconflow_vlm_registration"
+
+[project.entry-points."glassbox.crawl_policies"]
+generic = "glassbox.crawl_policies:generic_crawl_policy_registration"
+ios_settings = "glassbox.crawl_policies:ios_settings_crawl_policy_registration"
+
+[project.entry-points."glassbox.verifiers"]
+foreground_app = "glassbox.verification.registry:foreground_app_verifier_registration"
+ios_app_switcher = "glassbox.verification.registry:ios_app_switcher_verifier_registration"
+ios_control_center = "glassbox.verification.registry:ios_control_center_verifier_registration"
+ios_home_screen = "glassbox.verification.registry:ios_home_screen_verifier_registration"
+ios_notification_center = "glassbox.verification.registry:ios_notification_center_verifier_registration"
+navigation_back = "glassbox.verification.registry:navigation_back_verifier_registration"
+scene_progressed = "glassbox.verification.registry:scene_progressed_verifier_registration"
+tap_target_effect = "glassbox.verification.registry:tap_target_effect_verifier_registration"
+text_inserted = "glassbox.verification.registry:text_inserted_verifier_registration"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["glassbox"]
+
+# ─── pytest ────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["skills"]
+python_files = ["test_*.py", "*_test.py"]
+python_functions = ["test_*"]
+markers = [
+    "smoke: 烟测,跑得快,基础链路验证",
+    "regression: 完整回归,跑得慢",
+    "feature(name): 标注用例属于哪个 feature 走查",
+]
+addopts = [
+    "-ra",                          # 跑完显示失败/skip 摘要
+    "--strict-markers",
+    "--tb=short",
+]
+
+
+# ─── ruff ──────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP", "SIM", "RUF"]
+ignore = [
+    "E501",    # line length(line-length 已经设 100,留余地)
+    "RUF001",  # 全角中文标点与 ASCII 混淆 —— 本仓库注释/字符串本就是中文,纯噪音
+    "RUF002",  # 同上(docstring)
+    "RUF003",  # 同上(comment)
+]

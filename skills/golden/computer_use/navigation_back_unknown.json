@@ -1,0 +1,8 @@
+{
+  "case_id": "navigation_back_unknown_001",
+  "action": "back",
+  "expected_status": "unknown",
+  "before_texts": ["设置", "通用"],
+  "after_texts": ["设置", "通用"],
+  "metadata": {}
+}

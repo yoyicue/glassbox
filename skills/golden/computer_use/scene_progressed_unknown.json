@@ -1,0 +1,8 @@
+{
+  "case_id": "scene_progressed_unknown_001",
+  "action": "scroll",
+  "expected_status": "unknown",
+  "before_texts": ["设置", "通用"],
+  "after_texts": ["设置", "通用"],
+  "metadata": {}
+}

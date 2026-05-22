@@ -1,0 +1,906 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from glassbox.action import ActionOrchestrator, RiskPolicy, RuntimeRecoveryPolicy
+from glassbox.cognition import Box, UIElement
+from glassbox.effector import MockEffector
+from glassbox.ios.springboard import IOSSpringboardProvider
+from glassbox.obs.artifacts import ArtifactStore
+from glassbox.perception.source import Frame
+from glassbox.perception.stable import StabilityPolicy
+from glassbox.phone import Phone
+
+
+class _Source:
+    resolution = (32, 32)
+
+    def __init__(self):
+        self.count = 0
+
+    def snapshot(self):
+        value = min(self.count, 255)
+        self.count += 1
+        return Frame(img=np.full((32, 32, 3), value, dtype=np.uint8), ts=float(self.count))
+
+
+class _ReopenSource(_Source):
+    def __init__(self):
+        super().__init__()
+        self.opens = 0
+        self.closes = 0
+
+    def open(self):
+        self.opens += 1
+
+    def close(self):
+        self.closes += 1
+
+
+class _OCR:
+    def __init__(self, text_frames: list[list[str]]):
+        self.text_frames = text_frames
+        self.index = 0
+
+    def recognize(self, image):
+        del image
+        texts = self.text_frames[min(self.index, len(self.text_frames) - 1)]
+        self.index += 1
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=1, y=1 + i * 4, w=20, h=3),
+                text=text,
+                confidence=0.95,
+                element_id=i,
+            )
+            for i, text in enumerate(texts)
+        ]
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def _make_phone(
+    tmp_path: Path,
+    text_frames: list[list[str]],
+    *,
+    connected: bool = True,
+    guarded: bool = False,
+    trace_level: str = "standard",
+    semantic_fail_fast: bool = False,
+):
+    store = ArtifactStore(tmp_path, run_id="run", trace_level=trace_level)
+    orchestrator = ActionOrchestrator(
+        store,
+        risk_policy=RiskPolicy(guarded=guarded),
+        semantic_fail_fast=semantic_fail_fast,
+    )
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR(text_frames),
+        effector=MockEffector(_connected=connected),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+        springboard_provider=IOSSpringboardProvider(),
+    )
+    return phone, orchestrator, store
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_control_center_success(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["勿扰模式", "未在播放"]],
+    )
+
+    result = phone.control_center()
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "succeeded"
+    assert result.semantic_verifier == "ios_control_center_opened"
+    assert result.attempt_id == "act_000000"
+    assert (store.run_dir / "manifest.json").exists()
+    assert (store.run_dir / "audit.jsonl").exists()
+    assert (store.run_dir / "actions.jsonl").exists()
+    assert (store.run_dir / "attempt_groups.jsonl").exists()
+    assert (store.run_dir / "review_timeline.json").exists()
+    assert (store.run_dir / "report.md").exists()
+    report_md = (store.run_dir / "report.md").read_text(encoding="utf-8")
+    report_html = (store.run_dir / "report.html").read_text(encoding="utf-8")
+    assert "![before](frames/" in report_md
+    assert "Diff summary:" in report_md
+    assert "<img src='frames/" in report_html
+    assert "<summary>Diff summary</summary>" in report_html
+    manifest = json.loads((store.run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["harness_version"]
+    assert manifest["device"] == {
+        "name": None,
+        "model": None,
+        "os_version": None,
+        "locale": None,
+    }
+    assert manifest["privacy_mode"] == "sandbox_phone"
+    assert manifest["preflight"]["status"] == "passed"
+    assert manifest["observation_producer"] == {
+        "mode": "scoped_source_owner",
+        "continuous_recorder_feeds_buffer": False,
+        "audit_writer": "action_orchestrator",
+        "frame_capture_event": "promoted_ledger_frame_only",
+        "source_owner": "action_orchestrator",
+        "raw_frame_source": "phone.perceive_snapshot",
+    }
+    assert manifest["observation_buffer"]["min_retention_ms"] == 10000
+    assert manifest["observation_buffer"]["min_retention_frames"] == 120
+    assert manifest["artifact_metrics"]["frames_promoted"] == 3
+    assert manifest["artifact_metrics"]["frame_files_saved"] == 3
+    assert manifest["artifact_metrics"]["scene_files_saved"] == 3
+    assert manifest["artifact_metrics"]["actions_projected"] == 1
+
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert len(actions) == 1
+    action = actions[0]
+    assert action["actor"] == "agent"
+    assert action["command_result"]["transport_ok"] is True
+    assert action["semantic"]["status"] == "succeeded"
+    assert action["semantic"]["matched_frame_id"] == action["after"]["frame_id"]
+    assert action["semantic"]["matched_scene_id"] == action["after"]["scene_id"]
+    assert action["before_requested"]["screenshot"].startswith("frames/")
+    assert action["before_command"]["frame_id"] != action["before_requested"]["frame_id"]
+    assert action["before_command"]["screenshot"].startswith("frames/")
+    assert action["after"]["screenshot"].startswith("frames/")
+    assert action["diff"]["frame"].startswith("diffs/")
+    assert action["verification"].startswith("verifications/")
+    assert action["observation"]["started_ms_after_command"] >= 0
+    assert action["observation"]["duration_ms"] >= 0
+    assert action["observation"]["frame_ids"] == [action["after"]["frame_id"]]
+    assert action["observation"]["scene_ids"] == [action["after"]["scene_id"]]
+
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert all(e["run_id"] == "run" for e in audit)
+    assert next(e for e in audit if e["type"] == "observation.producer_configured")["payload"][
+        "mode"
+    ] == "scoped_source_owner"
+    assert next(e for e in audit if e["type"] == "attempt_group.started")["actor"] == "agent"
+    assert next(e for e in audit if e["type"] == "action.started")["actor"] == "agent"
+    assert any(e["type"] == "run.preflight" for e in audit)
+    assert next(e for e in audit if e["type"] == "run.finished")["payload"]["artifact_metrics"][
+        "actions_projected"
+    ] == 1
+    assert [item.source for item in orchestrator.observation_buffer.snapshot()] == [
+        "preflight",
+        "before_requested",
+        "before_command",
+        "after",
+    ]
+    frame_events = [e for e in audit if e["type"] == "frame.captured"]
+    assert len(frame_events) == 3
+    assert {e["payload"]["observation_role"] for e in frame_events} == {
+        "before_requested",
+        "before_command",
+        "after",
+    }
+
+
+@pytest.mark.smoke
+def test_orchestrator_can_reopen_source_before_fresh_after_observation(tmp_path):
+    source = _ReopenSource()
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store)
+    phone = Phone(
+        source=source,
+        ocr=_OCR([["设置"], ["设置"], ["天气", "日历", "照片", "App Store"]]),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+
+    result = phone._execute_action(
+        "home",
+        lambda: phone.effector.home(),
+        fresh_source_reopen=True,
+        fresh_delay_ms=0,
+        settle_strategy="stream_until_match",
+        stream_timeout_ms=1,
+        sample_interval_ms=1,
+    )
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    assert source.closes == 1
+    assert source.opens == 1
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_represents_transport_ok_semantic_failure(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"]],
+    )
+
+    result = phone.control_center()
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "failed"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["command_result"]["transport_ok"] is True
+    assert actions[0]["semantic"]["status"] == "failed"
+    assert "required semantic markers" in actions[0]["semantic"]["reason"]
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_can_fail_fast_on_semantic_failure(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"]],
+        semantic_fail_fast=True,
+    )
+
+    with pytest.raises(RuntimeError, match="semantic failed"):
+        phone.control_center()
+    orchestrator.close()
+
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["command_result"]["transport_ok"] is True
+    assert actions[0]["semantic"]["status"] == "failed"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_disqualifying_state_suppresses_retry(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["滑动来关机", "SOS"]],
+    )
+
+    result = phone.control_center()
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "failed"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["semantic"]["disqualifying_state"] == "ios_power_off_screen"
+    assert actions[0]["semantic"]["retry_allowed"] is False
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "disqualifying_state.detected" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_recents_home_unexpected_suppresses_retry(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"], ["主屏幕"], ["天气", "日历", "照片", "App Store"]],
+    )
+    phone.perceive_cache_diff = 0.0
+
+    result = phone._execute_action(
+        "recents",
+        lambda: phone.effector.recents(),
+        retry_budget=1,
+    )
+    orchestrator.close()
+
+    assert result.semantic_status == "failed"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    assert len(actions) == 1
+    assert actions[0]["semantic"]["disqualifying_state"] == "ios_home_unexpected"
+    assert actions[0]["semantic"]["retry_allowed"] is False
+    assert groups[0]["retry_count"] == 0
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "disqualifying_state.detected" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_permission_dialog_semantic_requires_approval(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["想要访问您的照片", "不允许", "允许访问"]],
+    )
+
+    result = phone._execute_action(
+        "tap",
+        lambda: phone.effector.tap(10, 10),
+        x=10,
+        y=10,
+        idempotent=True,
+        retry_budget=1,
+    )
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "approval_required"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    assert len(actions) == 1
+    assert actions[0]["semantic"]["disqualifying_state"] == "ios_system_permission_dialog"
+    assert actions[0]["semantic"]["retry_allowed"] is False
+    assert groups[0]["retry_count"] == 0
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "disqualifying_state.detected" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_transport_failure_is_transport_failed(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"]],
+        connected=False,
+    )
+
+    result = phone.control_center()
+    orchestrator.close()
+
+    assert result.ok is False
+    assert result.semantic_status == "transport_failed"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["after"] is None
+    assert actions[0]["semantic"]["verification_skipped"] is False
+    assert actions[0]["command_result"]["transport_ok"] is False
+    assert result.semantic_verification_skipped is False
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_command_exception_closes_attempt_and_group(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"], ["主屏幕"]],
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        phone._execute_action("key", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    orchestrator.close()
+
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert actions[0]["status"] == "exception"
+    assert actions[0]["semantic"]["status"] == "exception"
+    assert actions[0]["semantic"]["reason"] == "command raised RuntimeError: boom"
+    assert groups[0]["group_status"] == "exception"
+    assert groups[0]["attempt_ids"] == ["act_000000"]
+    assert any(e["type"] == "action.exception" for e in audit)
+    assert any(e["type"] == "attempt_group.finished" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_verifier_exception_closes_attempt_and_group(tmp_path):
+    class RaisingVerifier:
+        name = "raising_verifier"
+        version = "test"
+        success_markers = ()
+
+        def verify(self, input):
+            del input
+            raise RuntimeError("verifier boom")
+
+    from glassbox.verification.registry import VerifierRegistry
+
+    registry = VerifierRegistry()
+    registry.register(RaisingVerifier())
+    registry.map_action("control_center", "raising_verifier")
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store, registry=registry)
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR([["主屏幕"], ["主屏幕"], ["主屏幕"], ["勿扰模式"]]),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+
+    with pytest.raises(RuntimeError, match="verifier boom"):
+        phone.control_center()
+    orchestrator.close()
+
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert actions[0]["status"] == "exception"
+    assert actions[0]["semantic"]["reason"] == "verifier raised RuntimeError: verifier boom"
+    assert actions[0]["after"] is not None
+    assert groups[0]["group_status"] == "exception"
+    assert any(e["type"] == "verifier.started" for e in audit)
+    assert any(e["type"] == "verifier.finished" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_unexpected_escape_finalizes_group_interrupted(tmp_path, monkeypatch):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"]],
+    )
+
+    def explode(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("orchestrator escaped")
+
+    monkeypatch.setattr(orchestrator, "_run_attempt", explode)
+
+    with pytest.raises(RuntimeError, match="orchestrator escaped"):
+        phone.control_center()
+    orchestrator.close()
+
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert groups[0]["group_status"] == "interrupted"
+    assert groups[0]["attempt_ids"] == ["act_000000"]
+    assert any(e["type"] == "attempt_group.interrupted" for e in audit)
+    assert any(e["type"] == "attempt_group.finished" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_preflight_records_missing_video(tmp_path):
+    class FirstSnapshotMissing(_Source):
+        def snapshot(self):
+            if self.count == 0:
+                self.count += 1
+                return None
+            return super().snapshot()
+
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store)
+    phone = Phone(
+        source=FirstSnapshotMissing(),
+        ocr=_OCR([["主屏幕"], ["勿扰模式"]]),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+
+    result = phone.control_center()
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    manifest = json.loads((store.run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["preflight"]["status"] == "failed"
+    assert manifest["preflight"]["error"] == "no video frame captured"
+    assert manifest["preflight"]["recovery"]["attempted"] is False
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_preflight_recovery_hook_can_recover_missing_video(tmp_path):
+    class RecoverableSource(_Source):
+        def __init__(self):
+            super().__init__()
+            self.recovered = False
+
+        def snapshot(self):
+            if not self.recovered:
+                return None
+            return super().snapshot()
+
+    source = RecoverableSource()
+    recovery_calls: list[str] = []
+
+    def recover(phone, reason, payload):
+        del phone, payload
+        recovery_calls.append(reason)
+        source.recovered = True
+        return True
+
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(
+        store,
+        recovery_policy=RuntimeRecoveryPolicy(recover, max_attempts=1),
+    )
+    phone = Phone(
+        source=source,
+        ocr=_OCR([["主屏幕"], ["主屏幕"], ["勿扰模式"]]),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+
+    result = phone.control_center()
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    assert recovery_calls == ["no video frame captured"]
+    manifest = json.loads((store.run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["preflight"]["status"] == "passed"
+    assert manifest["preflight"]["recovery"]["recovered"] is True
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "run.recovery.started" for e in audit)
+    assert any(e["type"] == "run.recovery.finished" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_preflight_detects_lock_screen(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["输入密码", "Face ID"], ["主屏幕"], ["勿扰模式"]],
+    )
+
+    result = phone.control_center()
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    manifest = json.loads((store.run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["preflight"]["status"] == "failed"
+    assert manifest["preflight"]["disqualifying_state"] == "ios_lock_screen"
+    assert manifest["preflight"]["recovery"]["attempted"] is False
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_guarded_policy_blocks_high_risk_action(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["密码"]],
+        guarded=True,
+    )
+
+    result = phone.type("password", verify=False)
+    orchestrator.close()
+
+    assert result.ok is False
+    assert result.semantic_status == "blocked"
+    assert phone.effector.actions == []
+    approvals = _read_jsonl(store.run_dir / "approvals.jsonl")
+    assert approvals[0]["decision"] == "denied"
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "approval.requested" for e in audit)
+    assert any(e["type"] == "approval.denied" for e in audit)
+    assert next(e for e in audit if e["type"] == "approval.denied")["actor"] == "runtime"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_records_approved_high_risk_action(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["密码"], ["密码"], ["password"]],
+        guarded=True,
+    )
+
+    result = phone._execute_action(
+        "type",
+        lambda: phone.effector.type("password"),
+        text="password",
+        approved=True,
+        approved_by="human",
+    )
+    orchestrator.close()
+
+    assert result.ok is True
+    approvals = _read_jsonl(store.run_dir / "approvals.jsonl")
+    assert approvals[0]["decision"] == "approved"
+    assert approvals[0]["decided_by"] == "human"
+    assert approvals[0]["run_id"] == "run"
+    assert approvals[0]["requested_at"]
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["before_requested"]["frame_id"] != actions[0]["before_command"]["frame_id"]
+    frame_roles = [
+        e["payload"]["observation_role"]
+        for e in _read_jsonl(store.run_dir / "audit.jsonl")
+        if e["type"] == "frame.captured"
+    ]
+    assert "before_command" in frame_roles
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "approval.approved" for e in audit)
+    assert next(e for e in audit if e["type"] == "approval.approved")["actor"] == "human"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_retries_unknown_idempotent_attempts(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["输入框"], ["输入框"], ["输入框"], ["abc"]],
+    )
+
+    result = phone._execute_action(
+        "type",
+        lambda: phone.effector.type("abc"),
+        text="abc",
+        idempotent=True,
+        retry_budget=1,
+    )
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [a["attempt_id"] for a in actions] == ["act_000000", "act_000001"]
+    assert actions[0]["semantic"]["status"] == "unknown"
+    assert actions[1]["semantic"]["status"] == "succeeded"
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    assert groups[0]["attempt_ids"] == ["act_000000", "act_000001"]
+    assert groups[0]["retry_count"] == 1
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "action.retry_scheduled" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_unknown_policy_fail_raises_after_recording(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["输入框"], ["输入框"]],
+    )
+
+    with pytest.raises(RuntimeError, match="semantic unknown"):
+        phone._execute_action(
+            "type",
+            lambda: phone.effector.type("abc"),
+            text="abc",
+            unknown_policy="fail",
+        )
+    orchestrator.close()
+
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["semantic"]["status"] == "unknown"
+    assert actions[0]["observation"]["settle_strategy"] == "stable_after"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_records_crawler_actor(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["勿扰模式"]],
+    )
+
+    phone._execute_action(
+        "control_center",
+        lambda: phone.effector.control_center(),
+        actor="crawler",
+    )
+    orchestrator.close()
+
+    action = _read_jsonl(store.run_dir / "actions.jsonl")[0]
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert action["actor"] == "crawler"
+    assert next(e for e in audit if e["type"] == "action.started")["actor"] == "crawler"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_no_after_is_verification_skipped(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"]],
+    )
+
+    result = phone._execute_action(
+        "key",
+        lambda: phone.effector.key(0, 0),
+        modifier=0,
+        keycode=0,
+        settle_strategy="no_after",
+    )
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "no_after_scene"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["after"] is None
+    assert actions[0]["semantic"]["verification_skipped"] is True
+    assert actions[0]["semantic"]["reason"] == "GUI verification skipped by no_after strategy"
+    assert result.semantic_verification_skipped is True
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_stream_until_match_records_observation_hit(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"], ["主屏幕"], ["动画中"], ["勿扰模式"]],
+    )
+    phone.perceive_cache_diff = 0.0
+
+    result = phone._execute_action(
+        "control_center",
+        lambda: phone.effector.control_center(),
+        settle_strategy="stream_until_match",
+        stream_timeout_ms=500,
+        sample_interval_ms=1,
+        max_stream_frames=4,
+    )
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "succeeded"
+    action = _read_jsonl(store.run_dir / "actions.jsonl")[0]
+    assert action["observation"]["after_mode"] == "window"
+    assert action["observation"]["matched_by_observation"]["kind"] == "success_marker"
+    assert action["observation"]["matched_by_observation"]["matched_evidence"] == ["勿扰模式"]
+    assert action["observation"]["sample_interval_ms"] == 1
+    assert action["observation"]["timeout_ms"] == 500
+    assert action["observation"]["max_frames"] == 4
+    assert action["observation"]["frame_count"] == 2
+    assert action["observation"]["frame_ids"] == [item["frame_id"] for item in action["after_window"]]
+    assert action["observation"]["scene_ids"] == [item["scene_id"] for item in action["after_window"]]
+    assert action["semantic"]["observation_match"]["kind"] == "success_marker"
+    assert len(action["after_window"]) == 2
+    assert action["after_window"][-1]["screenshot"].startswith("frames/")
+    assert (store.run_dir / action["after_window"][-1]["screenshot"]).exists()
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "observation.match_found" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_stream_until_match_stops_on_disqualifying_state(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"], ["主屏幕"], ["滑动来关机", "SOS"], ["勿扰模式"]],
+    )
+    phone.perceive_cache_diff = 0.0
+
+    result = phone._execute_action(
+        "control_center",
+        lambda: phone.effector.control_center(),
+        settle_strategy="stream_until_match",
+        stream_timeout_ms=500,
+        sample_interval_ms=1,
+        max_stream_frames=4,
+    )
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "failed"
+    action = _read_jsonl(store.run_dir / "actions.jsonl")[0]
+    assert action["semantic"]["disqualifying_state"] == "ios_power_off_screen"
+    assert action["semantic"]["retry_allowed"] is False
+    assert action["observation"]["matched_by_observation"]["kind"] == "disqualifying_state"
+    assert action["observation"]["matched_by_observation"]["state"] == "ios_power_off_screen"
+    assert action["observation"]["frame_count"] == 1
+    assert action["semantic"]["observation_match"]["kind"] == "disqualifying_state"
+    assert len(action["after_window"]) == 1
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "observation.disqualifying_state_found" for e in audit)
+    assert any(e["type"] == "disqualifying_state.detected" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_fixed_delay_after_records_timing_contract(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["勿扰模式"]],
+    )
+
+    result = phone._execute_action(
+        "control_center",
+        lambda: phone.effector.control_center(),
+        settle_strategy="fixed_delay_after",
+        fixed_delay_ms=1,
+    )
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    action = _read_jsonl(store.run_dir / "actions.jsonl")[0]
+    assert action["observation"]["after_mode"] == "single_frame"
+    assert action["observation"]["fixed_delay_ms"] == 1
+    assert action["observation"]["frame_count"] == 1
+    assert action["observation"]["duration_ms"] >= 0
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_records_stability_metadata(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["勿扰模式"], ["勿扰模式"]],
+    )
+    phone.stability_policy = StabilityPolicy(
+        enabled=True,
+        timeout=0.2,
+        diff_threshold=1.0,
+        consecutive=1,
+        poll_interval=0.001,
+    )
+
+    phone.control_center()
+    orchestrator.close()
+
+    action = _read_jsonl(store.run_dir / "actions.jsonl")[0]
+    assert action["observation"]["settle_strategy"] == "stable_after"
+    assert action["observation"]["stability_score"] == 1.0
+    assert action["observation"]["stable_policy"]["consecutive"] == 1
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_after_observation_failure_is_unknown(tmp_path):
+    class RaisingAfterOCR(_OCR):
+        def recognize(self, image):
+            if self.index >= 2:
+                raise RuntimeError("ocr unavailable")
+            return super().recognize(image)
+
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store)
+    phone = Phone(
+        source=_Source(),
+        ocr=RaisingAfterOCR([["主屏幕"], ["主屏幕"]]),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+
+    result = phone.control_center()
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "no_after_scene"
+    action = _read_jsonl(store.run_dir / "actions.jsonl")[0]
+    assert action["after"] is None
+    assert action["semantic"]["reason"] == "after observation captured no frames"
+    assert result.semantic_verification_skipped is False
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "after_observation.failed" for e in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_open_app_is_single_outer_semantic_action(tmp_path, monkeypatch):
+    import glassbox.ios.springboard as springboard
+
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["设置"]],
+    )
+
+    def fake_open_app(inner_phone, labels, **kwargs):
+        del kwargs
+        assert inner_phone is phone
+        assert labels == ("Settings", "设置")
+        assert inner_phone.action_orchestrator is None
+        return True
+
+    monkeypatch.setattr(springboard, "open_app_from_springboard", fake_open_app)
+
+    result = phone.open_app("Settings", aliases=("设置",))
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert len(actions) == 1
+    assert actions[0]["op"] == "open_app"
+    assert actions[0]["semantic"]["verifier"] == "foreground_app_matches"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_summary_trace_keeps_ledger_without_png_frames(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["勿扰模式"]],
+        trace_level="summary",
+    )
+
+    result = phone.control_center()
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    assert list((store.run_dir / "frames").glob("*.png")) == []
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["before_requested"]["frame_id"] == "frm_000000"
+    assert actions[0]["before_requested"]["screenshot"] is None
+    scene_payload = json.loads((store.run_dir / actions[0]["after"]["scene"]).read_text())
+    assert scene_payload["texts"] == ["勿扰模式"]
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_action_can_raise_trace_level(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"], ["勿扰模式"]],
+        trace_level="summary",
+    )
+
+    result = phone._execute_action(
+        "control_center",
+        lambda: phone.effector.control_center(),
+        trace_level="full",
+    )
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    manifest = json.loads((store.run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["trace_level"] == "summary"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    action = actions[0]
+    assert action["observation"]["trace_level"] == "full"
+    assert action["before_requested"]["screenshot"].startswith("frames/")
+    assert action["before_command"]["screenshot"].startswith("frames/")
+    assert action["after"]["screenshot"].startswith("frames/")
+    scene_payload = json.loads((store.run_dir / action["after"]["scene"]).read_text())
+    assert "elements" in scene_payload

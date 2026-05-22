@@ -1,0 +1,8 @@
+{
+  "case_id": "ios_notification_center_opened_negative_001",
+  "action": "notification_center",
+  "expected_status": "failed",
+  "before_texts": ["主屏幕"],
+  "after_texts": ["主屏幕", "设置"],
+  "metadata": {}
+}

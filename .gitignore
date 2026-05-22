@@ -1,0 +1,53 @@
+inputs/
+
+# 敏感配置 —— API key 等,绝不入 git。模板见 .env.example
+.env
+.env.*
+!.env.example
+
+# Run artifacts
+recordings/
+reports/
+artifacts/
+.cache/
+*.allure/
+
+# App-specific local content is intentionally not part of the framework.
+profiles/
+assets/walkthroughs/
+
+# UTG screen-memory store (runtime data, per-app)
+memory/utg/
+memory/runtime/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Tool/runtime caches
+.ida-mcp/
+.device/
+.xcodebuildmcp/
+.mcp.json
+
+# 图标检测插件目录:drop-in 后端,不入库(保持核心无额外依赖、MIT 干净)
+glassbox/cognition/icon_backends/*
+!glassbox/cognition/icon_backends/README.md
+
+# 自动生成的运行日志
+runs.tsv

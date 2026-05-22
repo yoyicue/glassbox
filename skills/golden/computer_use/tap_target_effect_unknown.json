@@ -1,0 +1,8 @@
+{
+  "case_id": "tap_target_effect_unknown_001",
+  "action": "tap",
+  "expected_status": "unknown",
+  "before_texts": ["蓝牙", "关闭"],
+  "after_texts": ["蓝牙", "关闭"],
+  "metadata": {"target": "蓝牙"}
+}

@@ -1,0 +1,443 @@
+"""Actuation reliability profile indexed by platform control buckets."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Literal
+
+from glassbox.action.actuation import ActuationMethod
+
+ControlActuability = Literal["unknown", "actuatable", "unactuatable"]
+
+
+@dataclass
+class CalibratedOffset:
+    space: Literal["roi_normalized", "frame_px"]
+    mean: tuple[float, float]
+    variance: tuple[float, float]
+    n: int
+    confidence: float
+    calibration_version: int
+    last_updated: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "space": self.space,
+            "mean": list(self.mean),
+            "variance": list(self.variance),
+            "n": self.n,
+            "confidence": self.confidence,
+            "calibration_version": self.calibration_version,
+            "last_updated": self.last_updated,
+        }
+
+
+@dataclass
+class MethodStats:
+    command_tries: int = 0
+    landed_attempts: int = 0
+    semantic_ok: int = 0
+    by_label: dict[str, int] = field(default_factory=dict)
+    offset: CalibratedOffset | None = None
+    last_outcome: str = "unknown"
+    updated_at: str = ""
+    source: str = "learned"
+
+    def record(self, *, landing_signal: str | None, label: str) -> None:
+        self.command_tries += 1
+        if landing_signal == "landed":
+            self.landed_attempts += 1
+        if label == "landed_ok":
+            self.semantic_ok += 1
+        self.by_label[label] = self.by_label.get(label, 0) + 1
+        self.last_outcome = label
+        self.updated_at = datetime.now().astimezone().isoformat()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "command_tries": self.command_tries,
+            "landed_attempts": self.landed_attempts,
+            "semantic_ok": self.semantic_ok,
+            "by_label": dict(sorted(self.by_label.items())),
+            "offset": self.offset.to_dict() if self.offset else None,
+            "last_outcome": self.last_outcome,
+            "updated_at": self.updated_at,
+            "source": self.source,
+        }
+
+
+@dataclass
+class ControlClassEntry:
+    methods: dict[ActuationMethod, MethodStats] = field(default_factory=dict)
+    actuability: ControlActuability = "unknown"
+    calibration_version: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "methods": {method: stats.to_dict() for method, stats in sorted(self.methods.items())},
+            "actuability": self.actuability,
+            "calibration_version": self.calibration_version,
+        }
+
+
+class ActuationProfile:
+    """In-memory profile with deterministic JSON export."""
+
+    schema_version = 1
+
+    def __init__(
+        self,
+        *,
+        platform: str = "ios",
+        os_version: str = "unknown",
+        device_model: str = "unknown",
+    ):
+        self.platform = platform
+        self.os_version = os_version
+        self.device_model = device_model
+        self.entries: dict[tuple[str, str, str, str, str, str], ControlClassEntry] = {}
+
+    def record_attempt(
+        self,
+        *,
+        control_bucket: dict[str, str] | None,
+        method: str | None,
+        landing_signal: str | None,
+        label: str | None,
+    ) -> None:
+        if not control_bucket or method not in {"mouse_tap", "keyboard_focus_activate"} or not label:
+            return
+        key = self._key(control_bucket)
+        entry = self.entries.setdefault(key, ControlClassEntry())
+        stats = entry.methods.setdefault(method, MethodStats())  # type: ignore[arg-type]
+        stats.record(landing_signal=landing_signal, label=label)
+        self._refresh_actuability(entry, method=method)
+
+    def record_correction_pair(
+        self,
+        *,
+        control_bucket: dict[str, str] | None,
+        method: str | None,
+        missed_point: dict[str, Any] | None,
+        landed_point: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if not control_bucket or method != "mouse_tap":
+            return None
+        if not isinstance(missed_point, dict) or not isinstance(landed_point, dict):
+            return None
+        try:
+            missed_x = float(missed_point["x"])
+            missed_y = float(missed_point["y"])
+            landed_x = float(landed_point["x"])
+            landed_y = float(landed_point["y"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        space = str(landed_point.get("space") or missed_point.get("space") or "frame_px")
+        if space not in {"frame_px", "roi_normalized"}:
+            space = "frame_px"
+        delta = (landed_x - missed_x, landed_y - missed_y)
+        key = self._key(control_bucket)
+        entry = self.entries.setdefault(key, ControlClassEntry())
+        stats = entry.methods.setdefault("mouse_tap", MethodStats())
+        stats.offset = _updated_offset(stats.offset, delta=delta, space=space)
+        return {
+            "control_bucket": control_bucket,
+            "method": method,
+            "missed_target_point": missed_point,
+            "landed_target_point": landed_point,
+            "delta": [delta[0], delta[1]],
+            "space": space,
+        }
+
+    def entry_for_bucket(self, control_bucket: dict[str, str] | None) -> ControlClassEntry | None:
+        if not control_bucket:
+            return None
+        return self.entries.get(self._key(control_bucket))
+
+    def offset_for_bucket(
+        self,
+        control_bucket: dict[str, str] | None,
+        *,
+        method: str = "mouse_tap",
+        min_samples: int = 1,
+        min_confidence: float = 0.2,
+    ) -> CalibratedOffset | None:
+        entry = self.entry_for_bucket(control_bucket)
+        if entry is None:
+            return None
+        stats = entry.methods.get(method)  # type: ignore[arg-type]
+        if stats is None or stats.offset is None:
+            return None
+        offset = stats.offset
+        if offset.n < min_samples or offset.confidence < min_confidence:
+            return None
+        return offset
+
+    def should_skip_bucket(
+        self,
+        control_bucket: dict[str, str] | None,
+        *,
+        method: str = "mouse_tap",
+    ) -> tuple[bool, str | None]:
+        entry = self.entry_for_bucket(control_bucket)
+        if entry is None:
+            return False, None
+        stats = entry.methods.get(method)  # type: ignore[arg-type]
+        if stats is None:
+            return False, None
+        if _method_is_unactuatable(stats):
+            return True, "unactuatable"
+        return False, None
+
+    def best_method_for_bucket(
+        self,
+        control_bucket: dict[str, str] | None,
+        *,
+        default: str = "mouse_tap",
+    ) -> str:
+        entry = self.entry_for_bucket(control_bucket)
+        if entry is None:
+            return default
+        scored = [
+            (method, _method_score(stats))
+            for method, stats in entry.methods.items()
+            if stats.command_tries > 0 and not _method_is_unactuatable(stats)
+        ]
+        if not scored:
+            return default
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return scored[0][0]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "platform": self.platform,
+            "os_version": self.os_version,
+            "device_model": self.device_model,
+            "entries": [
+                {
+                    "key": {
+                        "platform": key[0],
+                        "os_version": key[1],
+                        "device_model": key[2],
+                        "control_role": key[3],
+                        "size_bucket": key[4],
+                        "region_zone": key[5],
+                    },
+                    "value": entry.to_dict(),
+                }
+                for key, entry in sorted(self.entries.items())
+            ],
+        }
+
+    def apply_seed(self, payload: dict[str, Any]) -> None:
+        seeded = ActuationProfile.from_dict({
+            **payload,
+            "platform": payload.get("platform") or self.platform,
+            "os_version": payload.get("os_version") or self.os_version,
+            "device_model": payload.get("device_model") or self.device_model,
+        })
+        for key, entry in seeded.entries.items():
+            target = self.entries.setdefault(key, ControlClassEntry())
+            target.actuability = entry.actuability
+            target.calibration_version = entry.calibration_version
+            for method, stats in entry.methods.items():
+                if method not in target.methods:
+                    stats.source = "seed"
+                    target.methods[method] = stats
+
+    def save(self, path: str | Path) -> None:
+        Path(path).write_text(
+            json.dumps(self.to_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    def _key(self, control_bucket: dict[str, str]) -> tuple[str, str, str, str, str, str]:
+        return (
+            self.platform,
+            self.os_version,
+            self.device_model,
+            str(control_bucket.get("control_role") or "unknown"),
+            str(control_bucket.get("size_bucket") or "unknown"),
+            str(control_bucket.get("region_zone") or "unknown"),
+        )
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> ActuationProfile:
+        profile = cls(
+            platform=str(payload.get("platform") or "ios"),
+            os_version=str(payload.get("os_version") or "unknown"),
+            device_model=str(payload.get("device_model") or "unknown"),
+        )
+        for item in payload.get("entries", []) or []:
+            if not isinstance(item, dict):
+                continue
+            key_payload = item.get("key") or {}
+            value_payload = item.get("value") or {}
+            if not isinstance(key_payload, dict) or not isinstance(value_payload, dict):
+                continue
+            key = (
+                str(key_payload.get("platform") or profile.platform),
+                str(key_payload.get("os_version") or profile.os_version),
+                str(key_payload.get("device_model") or profile.device_model),
+                str(key_payload.get("control_role") or "unknown"),
+                str(key_payload.get("size_bucket") or "unknown"),
+                str(key_payload.get("region_zone") or "unknown"),
+            )
+            entry = ControlClassEntry(
+                actuability=str(value_payload.get("actuability") or "unknown"),  # type: ignore[arg-type]
+                calibration_version=int(value_payload.get("calibration_version", 0) or 0),
+            )
+            for method, stats_payload in (value_payload.get("methods") or {}).items():
+                if method not in {"mouse_tap", "keyboard_focus_activate"} or not isinstance(stats_payload, dict):
+                    continue
+                offset_payload = stats_payload.get("offset")
+                offset = _offset_from_dict(offset_payload) if isinstance(offset_payload, dict) else None
+                entry.methods[method] = MethodStats(  # type: ignore[literal-required]
+                    command_tries=int(stats_payload.get("command_tries", 0) or 0),
+                    landed_attempts=int(stats_payload.get("landed_attempts", 0) or 0),
+                    semantic_ok=int(stats_payload.get("semantic_ok", 0) or 0),
+                    by_label={str(k): int(v) for k, v in (stats_payload.get("by_label") or {}).items()},
+                    offset=offset,
+                    last_outcome=str(stats_payload.get("last_outcome") or "unknown"),
+                    updated_at=str(stats_payload.get("updated_at") or ""),
+                    source=str(stats_payload.get("source") or "learned"),
+                )
+            profile.entries[key] = entry
+        return profile
+
+    @staticmethod
+    def _refresh_actuability(entry: ControlClassEntry, *, method: str) -> None:
+        stats = entry.methods.get(method)  # type: ignore[arg-type]
+        if stats is None:
+            return
+        if any(method_stats.semantic_ok > 0 for method_stats in entry.methods.values()):
+            entry.actuability = "actuatable"
+            return
+        if entry.methods and all(_method_is_unactuatable(method_stats) for method_stats in entry.methods.values()):
+            entry.actuability = "unactuatable"
+
+
+def actuation_profile_path(
+    *,
+    platform: str,
+    device_model: str,
+    os_version: str = "unknown",
+    profile_dir: str | Path | None = None,
+) -> Path:
+    base = Path(profile_dir) if profile_dir else Path(__file__).resolve().parents[2] / "memory" / "actuation"
+    safe = "_".join(_safe_part(part) for part in (platform, os_version, device_model))
+    return base / f"{safe}.json"
+
+
+def load_actuation_profile(
+    *,
+    platform: str = "ios",
+    device_model: str = "unknown",
+    os_version: str = "unknown",
+    profile_dir: str | Path | None = None,
+) -> ActuationProfile:
+    path = actuation_profile_path(
+        platform=platform,
+        os_version=os_version,
+        device_model=device_model,
+        profile_dir=profile_dir,
+    )
+    if not path.exists():
+        return ActuationProfile(platform=platform, os_version=os_version, device_model=device_model)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        profile = ActuationProfile.from_dict(payload)
+    except Exception as exc:
+        print(f"[actuation] failed to load {path}: {exc} — cold start")
+        return ActuationProfile(platform=platform, os_version=os_version, device_model=device_model)
+    if (
+        profile.platform != platform
+        or profile.os_version != os_version
+        or profile.device_model != device_model
+    ):
+        return ActuationProfile(platform=platform, os_version=os_version, device_model=device_model)
+    return profile
+
+
+def save_actuation_profile(profile: ActuationProfile, *, profile_dir: str | Path | None = None) -> Path:
+    path = actuation_profile_path(
+        platform=profile.platform,
+        os_version=profile.os_version,
+        device_model=profile.device_model,
+        profile_dir=profile_dir,
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    profile.save(path)
+    return path
+
+
+def _updated_offset(
+    current: CalibratedOffset | None,
+    *,
+    delta: tuple[float, float],
+    space: str,
+) -> CalibratedOffset:
+    now = datetime.now().astimezone().isoformat()
+    if current is None or current.space != space:
+        return CalibratedOffset(
+            space=space,  # type: ignore[arg-type]
+            mean=delta,
+            variance=(0.0, 0.0),
+            n=1,
+            confidence=0.5,
+            calibration_version=0,
+            last_updated=now,
+        )
+    old_n = current.n
+    new_n = old_n + 1
+    mean_x = current.mean[0] + (delta[0] - current.mean[0]) / new_n
+    mean_y = current.mean[1] + (delta[1] - current.mean[1]) / new_n
+    var_x = ((old_n - 1) * current.variance[0] + (delta[0] - current.mean[0]) * (delta[0] - mean_x)) / max(1, old_n)
+    var_y = ((old_n - 1) * current.variance[1] + (delta[1] - current.mean[1]) * (delta[1] - mean_y)) / max(1, old_n)
+    variance = (max(0.0, var_x), max(0.0, var_y))
+    confidence = min(0.95, 0.3 + 0.15 * new_n)
+    return CalibratedOffset(
+        space=current.space,
+        mean=(mean_x, mean_y),
+        variance=variance,
+        n=new_n,
+        confidence=confidence,
+        calibration_version=current.calibration_version,
+        last_updated=now,
+    )
+
+
+def _method_is_unactuatable(stats: MethodStats) -> bool:
+    if stats.command_tries < 3 or stats.semantic_ok > 0:
+        return False
+    negative = stats.by_label.get("missed", 0) + stats.by_label.get("landed_noop", 0)
+    return negative >= stats.command_tries
+
+
+def _method_score(stats: MethodStats) -> tuple[float, float, int]:
+    command_tries = max(1, stats.command_tries)
+    semantic_rate = stats.semantic_ok / command_tries
+    landing_rate = stats.landed_attempts / command_tries
+    return semantic_rate, landing_rate, stats.command_tries
+
+
+def _offset_from_dict(payload: dict[str, Any]) -> CalibratedOffset:
+    mean = payload.get("mean") or [0.0, 0.0]
+    variance = payload.get("variance") or [0.0, 0.0]
+    return CalibratedOffset(
+        space=str(payload.get("space") or "frame_px"),  # type: ignore[arg-type]
+        mean=(float(mean[0]), float(mean[1])),
+        variance=(float(variance[0]), float(variance[1])),
+        n=int(payload.get("n", 0) or 0),
+        confidence=float(payload.get("confidence", 0.0) or 0.0),
+        calibration_version=int(payload.get("calibration_version", 0) or 0),
+        last_updated=str(payload.get("last_updated") or ""),
+    )
+
+
+def _safe_part(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in value) or "unknown"

@@ -1,0 +1,8 @@
+{
+  "case_id": "text_inserted_positive_001",
+  "action": "type",
+  "expected_status": "succeeded",
+  "before_texts": ["输入框"],
+  "after_texts": ["输入框", "abc"],
+  "metadata": {"text": "abc"}
+}

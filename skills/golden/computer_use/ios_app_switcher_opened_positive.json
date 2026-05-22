@@ -1,0 +1,8 @@
+{
+  "case_id": "ios_app_switcher_opened_positive_001",
+  "action": "recents",
+  "expected_status": "succeeded",
+  "before_texts": ["主屏幕"],
+  "after_texts": ["App 切换器"],
+  "metadata": {}
+}

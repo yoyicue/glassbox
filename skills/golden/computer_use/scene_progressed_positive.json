@@ -1,0 +1,8 @@
+{
+  "case_id": "scene_progressed_positive_001",
+  "action": "scroll",
+  "expected_status": "succeeded",
+  "before_texts": ["设置", "通用"],
+  "after_texts": ["辅助功能", "显示与亮度"],
+  "metadata": {}
+}

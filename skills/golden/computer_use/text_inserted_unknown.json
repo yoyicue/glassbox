@@ -1,0 +1,8 @@
+{
+  "case_id": "text_inserted_unknown_001",
+  "action": "type",
+  "expected_status": "unknown",
+  "before_texts": ["输入框"],
+  "after_texts": ["输入框"],
+  "metadata": {"text": "abc"}
+}

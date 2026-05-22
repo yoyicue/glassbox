@@ -1,0 +1,254 @@
+# ruff: noqa: F403,F405,I001
+
+from __future__ import annotations
+
+from skills.smoke.ios_settings_walkthrough_support import *
+
+@pytest.mark.smoke
+def test_settings_root_requires_top_title_and_no_back_button():
+    root = _scene(
+        _el("设置", 198, 72, w=48),
+        _el("无线局域网", 80, 370, w=86),
+        _el("蓝牙", 80, 424, w=40),
+        _el("通用", 80, 725, w=40),
+    )
+    child = _scene(
+        _el("<", 18, 72, w=14, ty="nav_back"),
+        _el("通用", 198, 72, w=48),
+        _el("管理iPhone的整体设置和偏好设置，例如软件", 32, 138, w=360),
+        _el("无线局域网", 240, 210, w=86),
+    )
+
+    assert _is_settings_root(_Phone(root))
+    assert not _is_settings_root(_Phone(child))
+
+@pytest.mark.smoke
+def test_settings_root_accepts_scrolled_root_viewport():
+    root = _scene(
+        _el("设置", 198, 72, w=48),
+        _el("通知", 80, 210, w=40),
+        _el("专注模式", 80, 318, w=72),
+        _el("屏幕时间", 80, 372, w=72),
+        _el("面容ID与密码", 80, 480, w=110),
+        _el("隐私与安全性", 80, 588, w=110),
+        _el("钱包与 Apple Pay", 80, 642, w=138),
+        _el("Game Center", 80, 696, w=104),
+        _el("Q 搜索", 198, 900, w=54),
+    )
+
+    assert _is_settings_root(_Phone(root))
+
+@pytest.mark.smoke
+def test_settings_root_rejects_text_back_affordance_even_without_nav_back_type():
+    child = _scene(
+        _el("<", 18, 72, w=14, ty="text"),
+        _el("辅助功能", 172, 78, w=76),
+        _el("通用", 80, 340, w=40),
+        _el("辅助功能", 80, 400, w=72),
+        _el("无线局域网", 80, 460, w=86),
+    )
+
+    assert not _is_settings_root(_Phone(child))
+
+@pytest.mark.smoke
+def test_settings_detail_recognizer_handles_game_center_without_back_ocr():
+    scene = _scene(
+        _el("Game Center", 178, 78, w=110),
+        _el("邀请朋友", 80, 160, w=72),
+        _el("共享朋友列表", 80, 250, w=110, ty="button"),
+        _el("允许 App访问你的Game Center朋友列表，改进游戏体验。", 32, 292, w=360),
+        _el("是否对他人可见", 80, 328, w=126),
+        _el("帮助朋友找到你", 80, 376, w=124, ty="button"),
+        _el("使用 Apple账户关联的电子邮件地址和电话号码，让Game", 32, 420, w=360),
+    )
+
+    assert _scene_looks_like_settings_detail(scene)
+
+@pytest.mark.smoke
+def test_expected_root_labels_are_unique_safe_and_counted_by_coverage():
+    assert len(EXPECTED_ROOT_NAV_TEXT) == len(set(EXPECTED_ROOT_NAV_TEXT))
+    assert len(EXPECTED_ROOT_NAV_TEXT_ZH) == len(set(EXPECTED_ROOT_NAV_TEXT_ZH))
+    assert len(SAFE_NAV_TEXT) == len(set(SAFE_NAV_TEXT))
+    assert set(EXPECTED_ROOT_NAV_TEXT_ZH) <= set(EXPECTED_ROOT_NAV_TEXT)
+    assert set(EXPECTED_ROOT_NAV_TEXT_ZH) <= set(SAFE_NAV_TEXT)
+
+    visits = [
+        PageVisit(path=("Settings",), title="设置", texts=("设置",)),
+        *[
+            PageVisit(path=("Settings", label), title=label, texts=(label,))
+            for label in EXPECTED_ROOT_NAV_TEXT_ZH
+        ],
+    ]
+    coverage = _root_coverage(visits)
+
+    assert coverage["visited"] == list(EXPECTED_ROOT_NAV_TEXT_ZH)
+    assert coverage["missing"] == []
+
+@pytest.mark.smoke
+def test_root_label_aliases_map_to_expected_root_coverage_labels():
+    for alias, canonical in ROOT_LABEL_ALIASES.items():
+        assert canonical in EXPECTED_ROOT_NAV_TEXT_ZH
+        assert _canonical_expected_root_label(alias) == canonical
+    for label in EXPECTED_ROOT_NAV_TEXT_ZH:
+        assert _canonical_expected_root_label(label) == label
+
+    visits = [
+        PageVisit(path=("Settings", alias), title=alias, texts=(alias,))
+        for alias in ROOT_LABEL_ALIASES
+    ]
+    coverage = _root_coverage(visits)
+
+    assert set(coverage["visited"]) == set(ROOT_LABEL_ALIASES.values())
+
+@pytest.mark.smoke
+def test_root_label_matching_handles_single_glyph_ocr_prefix_without_alias():
+    assert "必通用" not in ROOT_LABEL_ALIASES
+    assert _canonical_expected_root_label("必通用") == "通用"
+    assert _canonical_expected_root_label("多多通用") is None
+
+@pytest.mark.smoke
+def test_root_label_matching_handles_zero_letter_sos_ocr_without_alias():
+    assert "S0S" not in ROOT_LABEL_ALIASES
+    assert _canonical_expected_root_label("S0S") == "紧急 SOS"
+
+@pytest.mark.smoke
+def test_expected_root_labels_have_search_queries():
+    assert set(ROOT_SEARCH_QUERIES) == set(EXPECTED_ROOT_NAV_TEXT_ZH)
+    assert all(query.strip() for query in ROOT_SEARCH_QUERIES.values())
+
+@pytest.mark.smoke
+def test_wait_screen_settled_waits_until_frames_stabilize():
+    """滑入动画期间帧在动 → 等到连续两帧稳定才返回(防错位几何选候选)。"""
+    import numpy as np
+
+    from glassbox.perception.source import Frame
+
+    moving1 = Frame(img=np.zeros((80, 80, 3), dtype=np.uint8), ts=0.0)
+    moving2 = Frame(img=np.full((80, 80, 3), 110, dtype=np.uint8), ts=0.0)
+    settled = Frame(img=np.full((80, 80, 3), 200, dtype=np.uint8), ts=0.0)
+    frames = [moving1, moving2, settled, settled, settled]
+
+    class _Phone:
+        def __init__(self) -> None:
+            self.i = 0
+
+        def snapshot(self):
+            f = frames[min(self.i, len(frames) - 1)]
+            self.i += 1
+            return f
+
+    p = _Phone()
+    _wait_screen_settled(p, settle_s=0.0)
+    assert p.i >= 4   # 读过两帧运动帧,到连续稳定帧才停
+
+@pytest.mark.smoke
+def test_wait_screen_settled_noop_without_snapshot():
+    class _NoSnapshot:
+        pass
+
+    _wait_screen_settled(_NoSnapshot())   # 不抛异常即可
+
+@pytest.mark.smoke
+def test_scroll_to_vertical_boundary_uses_wheel_until_stable(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    phone = _ScrollingPhone([
+        _scene(_el("设置", 196, 72), _el("无线局域网", 54, 218)),
+        _scene(_el("设置", 196, 72), _el("通知", 54, 218)),
+        _scene(_el("设置", 196, 72), _el("通用", 54, 218)),
+    ])
+    phone.index = 2
+
+    _scroll_to_vertical_boundary(phone, direction="up", max_steps=5)
+
+    assert phone.index == 0
+
+@pytest.mark.smoke
+def test_settings_wheel_scroll_uses_conservative_default_ticks(monkeypatch):
+    monkeypatch.delenv("IOS_SETTINGS_WHEEL_TICKS_PER_SWIPE", raising=False)
+    monkeypatch.delenv("GLASSBOX_WHEEL_TICKS_PER_SCROLL", raising=False)
+    phone = _ScrollingPhone([
+        _scene(_el("设置", 196, 72), _el("无线局域网", 54, 218)),
+        _scene(_el("设置", 196, 72), _el("通知", 54, 218)),
+    ])
+
+    _wheel_scroll_down(phone)
+
+    assert phone.down_ticks == [15]   # 动量悬崖下的受控默认档
+    assert _settings_wheel_ticks_per_swipe() == 15
+
+@pytest.mark.smoke
+def test_settings_wheel_scroll_honors_env_ticks(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_WHEEL_TICKS_PER_SCROLL", "7")
+    monkeypatch.delenv("IOS_SETTINGS_WHEEL_TICKS_PER_SWIPE", raising=False)
+    assert _settings_wheel_ticks_per_swipe() == 7
+
+    monkeypatch.setenv("IOS_SETTINGS_WHEEL_TICKS_PER_SWIPE", "9")
+    assert _settings_wheel_ticks_per_swipe() == 9
+
+@pytest.mark.smoke
+def test_settings_wheel_scroll_supports_legacy_no_ticks_method(monkeypatch):
+    monkeypatch.delenv("IOS_SETTINGS_WHEEL_TICKS_PER_SWIPE", raising=False)
+    monkeypatch.delenv("GLASSBOX_WHEEL_TICKS_PER_SCROLL", raising=False)
+
+    class LegacyWheelPhone:
+        def __init__(self):
+            self.calls = 0
+
+        def wheel_scroll_down(self):
+            self.calls += 1
+
+    phone = LegacyWheelPhone()
+
+    _wheel_scroll_down(phone)
+
+    assert phone.calls == 1
+
+@pytest.mark.smoke
+def test_visible_page_signature_is_scoped_by_settings_path():
+    scene = _scene(
+        _el("<", 18, 72, w=14, ty="nav_back"),
+        _el("同样的内容", 80, 340, w=100),
+    )
+    visits: list[PageVisit] = []
+    seen = set()
+
+    assert _record_visible_page(
+        scene=scene,
+        path=("Settings", "通用", "页面A"),
+        visits=visits,
+        seen_sigs=seen,
+        depth=2,
+    )
+    assert _record_visible_page(
+        scene=scene,
+        path=("Settings", "通用", "页面B"),
+        visits=visits,
+        seen_sigs=seen,
+        depth=2,
+    )
+    assert not _record_visible_page(
+        scene=scene,
+        path=("Settings", "通用", "页面B"),
+        visits=visits,
+        seen_sigs=seen,
+        depth=2,
+    )
+
+    assert [visit.path for visit in visits] == [
+        ("Settings", "通用", "页面A"),
+        ("Settings", "通用", "页面B"),
+    ]
+
+@pytest.mark.smoke
+def test_root_coverage_reports_expected_visited_and_missing_pages():
+    visits = [
+        PageVisit(path=("Settings",), title="设置", texts=()),
+        PageVisit(path=("Settings", "无线局域网"), title="无线局域网", texts=()),
+        PageVisit(path=("Settings", "伴机息示"), title="待机显示", texts=()),
+    ]
+
+    coverage = _root_coverage(visits)
+
+    assert "无线局域网" in coverage["visited"]
+    assert "待机显示" in coverage["visited"]
+    assert "蓝牙" in coverage["missing"]

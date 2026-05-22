@@ -1,0 +1,8 @@
+{
+  "case_id": "ios_home_screen_visible_negative_001",
+  "action": "home",
+  "expected_status": "failed",
+  "before_texts": ["设置", "命令"],
+  "after_texts": ["设置", "命令", "向上轻扫", "停止服务"],
+  "metadata": {}
+}

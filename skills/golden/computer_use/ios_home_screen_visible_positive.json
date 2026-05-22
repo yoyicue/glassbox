@@ -1,0 +1,8 @@
+{
+  "case_id": "ios_home_screen_visible_positive_001",
+  "action": "home",
+  "expected_status": "succeeded",
+  "before_texts": ["设置", "命令"],
+  "after_texts": ["天气", "日历", "照片", "相机", "App Store"],
+  "metadata": {}
+}

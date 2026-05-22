@@ -1,0 +1,8 @@
+{
+  "case_id": "foreground_app_matches_unknown_001",
+  "action": "open_app",
+  "expected_status": "unknown",
+  "before_texts": ["主屏幕"],
+  "after_texts": ["其他 App"],
+  "metadata": {"app": "Settings", "aliases": ["设置"]}
+}

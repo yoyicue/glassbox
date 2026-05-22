@@ -1,0 +1,8 @@
+{
+  "case_id": "ios_notification_center_opened_positive_001",
+  "action": "notification_center",
+  "expected_status": "succeeded",
+  "before_texts": ["主屏幕"],
+  "after_texts": ["通知中心", "没有较早的通知"],
+  "metadata": {}
+}
