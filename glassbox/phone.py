@@ -1973,29 +1973,95 @@ class Phone:
                 strategy=strategy,
                 **self._picokvm_fresh_verify_kwargs("home"),
             )
-            if (
-                self._effector_backend() == "picokvm"
-                and result.semantic_verifier == "ios_home_screen_visible"
-                and result.semantic_status != "succeeded"
-            ):
-                close_app = getattr(self.effector, "close_foreground_app", None)
-                if callable(close_app):
-                    return self._execute_action(
-                        "home",
-                        close_app,
-                        strategy="home_indicator_drag_fallback",
-                        fallback_from=strategy,
-                        **self._picokvm_fresh_verify_kwargs("home"),
-                    )
+            if self._picokvm_home_needs_fallback(result):
+                return self._picokvm_home_pointer_fallback(
+                    fallback_from=strategy, last_result=result
+                )
             return result
         if strategy == "assistive_touch":
-            return self.assistive_touch_tap_menu_item(
-                "主屏幕",
-                open_menu=True,
-                settle_s=0.9,
-                primitive_name="assistive_touch.home",
-            )
+            return self._home_via_assistive_touch_menu()
         return self._unsupported_action("home", strategy=strategy)
+
+    def _picokvm_home_needs_fallback(self, result: ActionResult) -> bool:
+        return (
+            self._effector_backend() == "picokvm"
+            and result.semantic_verifier == "ios_home_screen_visible"
+            and result.semantic_status != "succeeded"
+        )
+
+    def _home_via_assistive_touch_menu(self) -> ActionResult:
+        return self.assistive_touch_tap_menu_item(
+            "主屏幕",
+            open_menu=True,
+            settle_s=0.9,
+            primitive_name="assistive_touch.home",
+        )
+
+    def _expects_assistive_touch(self) -> bool:
+        capabilities = self._backend_capabilities()
+        return bool(capabilities is not None and getattr(capabilities, "requires_assistive_touch", False))
+
+    def _picokvm_home_pointer_fallback(
+        self, *, fallback_from: str, last_result: ActionResult
+    ) -> ActionResult:
+        """Recover Home with pointer-only paths when keyboard Cmd-H did not land.
+
+        On PicoKVM rigs the hardware-keyboard Cmd-H can be accepted by the device
+        yet ignored by iOS, and the home-indicator drag is unreliable, while the
+        pure-pointer AssistiveTouch menu Home works. Prefer AssistiveTouch, then
+        the indicator drag, and return the best (most home-like) result seen.
+        """
+        result = last_result
+        if self._expects_assistive_touch():
+            at_result = self._verified_pointer_home(
+                self._home_via_assistive_touch_menu,
+                strategy="assistive_touch_home_fallback",
+                fallback_from=fallback_from,
+            )
+            if self._home_reached(at_result):
+                return at_result
+            result = at_result
+        close_app = getattr(self.effector, "close_foreground_app", None)
+        if callable(close_app):
+            drag_result = self._execute_action(
+                "home",
+                close_app,
+                strategy="home_indicator_drag_fallback",
+                fallback_from=fallback_from,
+                **self._picokvm_fresh_verify_kwargs("home"),
+            )
+            if self._home_reached(drag_result):
+                return drag_result
+            result = drag_result
+        return result
+
+    @staticmethod
+    def _home_reached(result: ActionResult) -> bool:
+        return result is not None and getattr(result, "semantic_status", None) == "succeeded"
+
+    def _verified_pointer_home(self, call, **metadata) -> ActionResult:
+        """Run a Home recovery that performs its own sub-taps, then verify the
+        home screen with a fresh frame.
+
+        Unlike :meth:`_execute_action`, this does not re-wrap the call in the
+        record/orchestrator path, so the AssistiveTouch menu's own taps are not
+        double-recorded or nested inside another action.
+        """
+        verify_kwargs = self._picokvm_fresh_verify_kwargs("home")
+        before_frame = self._last_frame
+        before_scene = self._last_scene
+        result = call()
+        if not verify_kwargs or result is None or not getattr(result, "ok", True):
+            return result
+        return self._verify_fresh_action_result(
+            "home",
+            result,
+            metadata={**metadata, **verify_kwargs},
+            before_frame=before_frame,
+            before_scene=before_scene,
+            delay_ms=int(verify_kwargs.get("_semantic_verify_delay_ms", 0) or 0),
+            reopen_source=bool(verify_kwargs.get("_semantic_verify_reopen_source", False)),
+        )
 
     def recents(self) -> ActionResult:
         strategy = self._system_action_strategy("recents")

@@ -889,25 +889,70 @@ def test_picokvm_meta_h_home_reports_failed_semantic_when_fresh_frame_is_not_hom
 
 
 @pytest.mark.smoke
-def test_picokvm_home_falls_back_to_indicator_drag_when_meta_h_does_not_reach_home():
-    eff, rpc = make_eff(semantic_verify_enabled=True)
+def test_picokvm_home_falls_back_to_assistive_touch_when_meta_h_does_not_reach_home(monkeypatch):
+    eff, _rpc = make_eff(semantic_verify_enabled=True)
     eff.config.keyboard_home_enabled = True
     eff.config.semantic_verify_timeout_ms = 1
     eff.config.semantic_verify_sample_interval_ms = 100
     source = FreshFrameSource()
     ocr = SequenceOCR([
-        ["“照片”新功能", "继续"],
-        ["天气", "日历", "照片", "App Store"],
+        ["设置", "通用", "通知"],                 # keyboard Cmd-H verify -> not home
+        ["天气", "日历", "照片", "App Store"],     # AssistiveTouch menu Home verify -> home
     ])
     phone = Phone(source=source, ocr=ocr, effector=eff, action_fail_fast=False)
+    at_calls: list[tuple] = []
+    monkeypatch.setattr(
+        phone,
+        "assistive_touch_tap_menu_item",
+        lambda *a, **k: (at_calls.append((a, k)), ActionResult(ok=True, backend="picokvm", connected=True))[1],
+    )
+    drag_calls: list[int] = []
+    monkeypatch.setattr(
+        eff,
+        "close_foreground_app",
+        lambda: (drag_calls.append(1), ActionResult(ok=True, backend="picokvm", connected=True))[1],
+    )
 
     result = phone.home()
 
     assert result.ok is True
     assert result.semantic_status == "succeeded"
     assert result.semantic_verifier == "ios_home_screen_visible"
-    assert any(params.get("buttons") == 1 for method, params in rpc.calls if method == "absMouseReport")
-    assert len(rpc.calls) > 14
+    assert len(at_calls) == 1            # pure-pointer AssistiveTouch menu Home was used
+    assert drag_calls == []              # reliable AssistiveTouch path avoids the indicator drag
+
+
+@pytest.mark.smoke
+def test_picokvm_home_falls_back_to_indicator_drag_when_pointer_home_does_not_reach_home(monkeypatch):
+    eff, rpc = make_eff(semantic_verify_enabled=True)
+    eff.config.keyboard_home_enabled = True
+    eff.config.semantic_verify_timeout_ms = 1
+    eff.config.semantic_verify_sample_interval_ms = 100
+    source = FreshFrameSource()
+    ocr = SequenceOCR([
+        ["“照片”新功能", "继续"],                 # keyboard Cmd-H verify -> not home
+        ["设置", "通用", "通知"],                 # AssistiveTouch menu Home verify -> not home
+        ["天气", "日历", "照片", "App Store"],     # indicator drag verify -> home
+    ])
+    phone = Phone(source=source, ocr=ocr, effector=eff, action_fail_fast=False)
+    # AssistiveTouch is attempted first; force it to miss so the chain falls
+    # through to the home-indicator drag.
+    monkeypatch.setattr(
+        phone,
+        "assistive_touch_tap_menu_item",
+        lambda *a, **k: ActionResult(ok=True, backend="picokvm", connected=True),
+    )
+
+    result = phone.home()
+
+    assert result.ok is True
+    assert result.semantic_status == "succeeded"
+    assert result.semantic_verifier == "ios_home_screen_visible"
+    # the indicator drag (close_foreground_app) ran: its captured start point appears
+    assert any(
+        method == "absMouseReport" and params.get("x") == 16102 and params.get("y") == 32506
+        for method, params in rpc.calls
+    )
 
 
 @pytest.mark.smoke

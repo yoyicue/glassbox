@@ -17,6 +17,7 @@ Walkthrough script example:
 from __future__ import annotations
 
 import contextlib
+import os
 from pathlib import Path
 
 import pytest
@@ -48,6 +49,24 @@ from glassbox.runtime import (
 
 # project root (derived from the conftest location)
 GLASSBOX_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _isolate_glassbox_env():
+    """Run the suite against true config defaults.
+
+    ``import glassbox`` auto-loads the repo-root ``.env`` (for local device runs
+    and API keys), which would otherwise leak ``GLASSBOX_*`` overrides into tests
+    that assert default configuration. Strip them for the session and restore
+    afterwards so a contributor's local ``.env`` cannot break the suite.
+    """
+    saved = {key: os.environ.pop(key) for key in list(os.environ) if key.startswith("GLASSBOX_")}
+    get_config.cache_clear()
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
+        get_config.cache_clear()
 
 
 # ─── FrameSource selection ───────────────────────────────────────────
