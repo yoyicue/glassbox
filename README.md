@@ -4,10 +4,6 @@ glassbox is an iOS-first computer-use runtime for driving a real device from
 screen observations. It wires frame capture, OCR/VLM perception, action
 execution, verification, recording, and screen memory behind pluggable seams.
 
-The default open-source tree includes PicoKVM, noop, and static-frame paths. It
-does not include any third-party target app, private profiles, or private
-transport bridges.
-
 ## Why this approach: minimal intrusiveness
 
 glassbox is **out-of-band**: it observes through the iPhone's HDMI output and
@@ -34,6 +30,35 @@ artifacts and no anti-tamper / jailbreak-detection surface, so the rig is safe
 to point at apps you cannot or should not modify. The tradeoff is external
 capture hardware (the PicoKVM) and HID-pointer semantics instead of native
 multi-touch.
+
+## Install
+
+```bash
+uv sync --extra dev
+uv run python -c "import glassbox"
+```
+
+For editable pip installs:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+## Quickstart
+
+Offline/static-frame development (no hardware needed):
+
+```bash
+GLASSBOX_FRAME_DIR=/path/to/png-frames uv run python -c "from glassbox.runtime import make_source; print(make_source())"
+```
+
+PicoKVM runtime (requires the [Hardware setup](#hardware-setup) below):
+
+```bash
+export GLASSBOX_PICOKVM=1
+export GLASSBOX_PICOKVM_BASE_URL=http://picokvm.local
+uv run glassbox-show-screen
+```
 
 ## Architecture
 
@@ -128,10 +153,11 @@ reaches the PicoKVM over plain HTTP:
   `POST /api/rpc`. The PicoKVM presents itself to the iPhone (through the
   adapter's USB-A host port) as a USB HID mouse + keyboard and injects the
   resulting pointer/key events. Because this is a HID pointer and not a touch
-  digitizer, the iPhone must have **AssistiveTouch / external pointer enabled**;
-  taps are pointer moves plus clicks, and swipes/drags are mouse drags. PicoKVM
-  logical coordinates (absolute, max 32767) are mapped to decoded frame pixels
-  via a calibrated linear fit.
+  digitizer, taps are pointer moves plus clicks and swipes/drags are mouse drags;
+  the controlled iPhone must be configured first (see
+  [iOS prerequisites](#ios-prerequisites-controlled-iphone)). PicoKVM logical
+  coordinates (absolute, max 32767) are mapped to decoded frame pixels via a
+  calibrated linear fit.
 - **Network:** both links to glassbox are plain HTTP to the PicoKVM, set with
   `GLASSBOX_PICOKVM_BASE_URL` (default `http://picokvm.local`). The controller
   host (macOS) only needs network reachability to the PicoKVM, not a direct
@@ -185,36 +211,10 @@ differently:
 In short: the geometry table is multi-model, but the validated PicoKVM rig is
 iPhone 17 Pro Max only.
 
-## Install
-
-```bash
-uv sync --extra dev
-uv run python -c "import glassbox"
-```
-
-For editable pip installs:
-
-```bash
-python -m pip install -e ".[dev]"
-```
-
-## Quickstart
-
-Offline/static-frame development:
-
-```bash
-GLASSBOX_FRAME_DIR=/path/to/png-frames uv run python -c "from glassbox.runtime import make_source; print(make_source())"
-```
-
-PicoKVM runtime:
-
-```bash
-export GLASSBOX_PICOKVM=1
-export GLASSBOX_PICOKVM_BASE_URL=http://picokvm.local
-uv run glassbox-show-screen
-```
-
 ## Backends
+
+These are the concrete implementations that ship for the seams in
+[Architecture](#architecture):
 
 | Surface | Built in | Notes |
 | --- | --- | --- |
@@ -223,6 +223,10 @@ uv run glassbox-show-screen
 | OCR | Apple Vision, ocrmac | PaddleOCR is optional through the `ocr` extra. |
 | VLM | Moonshot-compatible and SiliconFlow-compatible clients | VLM is opt-in with environment-provided API keys. |
 | Platform | iOS | Other platforms are extension seams, not built-in finished ports. |
+
+The default open-source tree includes the PicoKVM, noop, and static-frame paths
+above. It does not include any third-party target app, private profiles, or
+private transport bridges.
 
 ## Development
 
