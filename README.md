@@ -110,6 +110,34 @@ reaches the PicoKVM over plain HTTP:
   host (macOS) only needs network reachability to the PicoKVM, not a direct
   cable to the iPhone.
 
+### Device support and calibration
+
+Two layers decide which iPhone this works on, and they are calibrated
+differently:
+
+- **Geometry (parameterized).** `glassbox/perception/device.py` ships a `DEVICES`
+  table covering the iPhone 15 / 16 / 17 families (standard / Pro / Pro Max),
+  with both native pixel sizes and UIKit point sizes. The model is selected with
+  `GLASSBOX_PHONE_MODEL` (default `iphone_17_pro_max`) and drives the letterbox
+  coordinate transform — so this layer is not hard-coded to one phone.
+- **PicoKVM calibration (single-device).** The end-to-end PicoKVM path was only
+  brought up and calibrated on an **iPhone 17 Pro Max** (the bring-up rig, dated
+  2026-05-21). The device-specific values live in `PicoKVMEffectorConfig`:
+  - the logical-to-frame linear fit (`abs_to_phone_scale_x/y`,
+    `abs_origin_offset_x/y`), and
+  - the hard-coded logical gesture coordinates
+    (`keyboard_focus_x/y`, `close_app_drag_*`, etc.).
+
+  These depend on the exact HDMI output resolution and letterboxing of that
+  phone, so a different model (different aspect ratio or resolution) will be off
+  until re-calibrated. They are **not** code constants you must edit — every one
+  is overridable via `GLASSBOX_PICOKVM_*` environment variables. Moving to
+  another iPhone means re-measuring the linear fit and gesture anchors and
+  exporting the new values, not changing the source.
+
+In short: the geometry table is multi-model, but the validated PicoKVM rig is
+iPhone 17 Pro Max only.
+
 ## Install
 
 ```bash
