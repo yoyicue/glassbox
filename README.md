@@ -22,8 +22,10 @@ the least:
 - **No code injection or instrumentation.** The target app runs completely
   unmodified — glassbox sees exactly the rendered screen (HDMI) and acts exactly
   as a physical pointer/keyboard would (HID).
-- **One on-device setting.** Enable AssistiveTouch / external pointer (a built-in
-  accessibility toggle); nothing else on the phone is touched.
+- **Only built-in settings, no software.** Control rides on AssistiveTouch plus
+  system keyboard shortcuts, so a few stock accessibility/display toggles must be
+  set first (see [iOS prerequisites](#ios-prerequisites-controlled-iphone)) — but
+  nothing is installed on the phone.
 - **Controller is off-device.** All perception/cognition/action logic runs on
   macOS; the phone only mirrors video out and accepts HID in.
 
@@ -134,6 +136,26 @@ reaches the PicoKVM over plain HTTP:
   `GLASSBOX_PICOKVM_BASE_URL` (default `http://picokvm.local`). The controller
   host (macOS) only needs network reachability to the PicoKVM, not a direct
   cable to the iPhone.
+
+### iOS prerequisites (controlled iPhone)
+
+"Minimal intrusiveness" does not mean zero setup. Because control rides on the
+AssistiveTouch pointer and on system keyboard shortcuts, the controlled iPhone
+needs these stock settings configured before a run. None of them install
+anything — they are all built-in iOS toggles:
+
+| Setting | Path | Value | Why |
+| --- | --- | --- | --- |
+| AssistiveTouch | Accessibility › Touch › AssistiveTouch | **On** | Gives the HID mouse an on-screen pointer to drive; PicoKVM is a HID pointer, not a touch digitizer. |
+| AssistiveTouch tracking speed | Accessibility › Touch › AssistiveTouch › Tracking speed | **Slowest** (slider fully left) | Keeps pointer motion deterministic so the calibrated logical→pixel fit reproduces. |
+| AssistiveTouch tracking sensitivity | Accessibility › Touch › AssistiveTouch › Tracking sensitivity | **Highest** (slider fully right) | Same — matches the bring-up rig so the pointer lands where the calibration expects. |
+| Auto-Lock | Display & Brightness › Auto-Lock | **Never** | Keeps the screen awake through long automation runs. |
+| Full Keyboard Access | Accessibility › Keyboards › Full Keyboard Access | **On** | Enables the system keyboard shortcuts glassbox sends — `Cmd-H` (Home), `Cmd-[` (Back), `Cmd-Up` (App Switcher), `Cmd-C` (Control Center), `Cmd-N` (Notification Center). See [`docs/reference/ios_full_keyboard_access_commands.md`](docs/reference/ios_full_keyboard_access_commands.md). |
+
+The tracking-speed/sensitivity values come from the same single-device bring-up
+as the PicoKVM calibration below (iPhone 17 Pro Max); a different phone or
+different slider positions can shift where the pointer lands and require
+re-calibration.
 
 ### Device support and calibration
 
