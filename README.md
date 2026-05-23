@@ -84,10 +84,19 @@ navigation rows, reads page text, and returns via the visible back affordance.
 It exercises the full perception → action → verification pipeline and writes a
 JSON report plus artifacts.
 
+> **Note — `run_full` enables the VLM by default.** Unlike the bare runtime
+> (where VLM is opt-in), the Settings `run_full` helper sets
+> `GLASSBOX_ENABLE_VLM=1` for cold-start robustness, so it expects an API key. To
+> run it without a key, opt out explicitly:
+> `GLASSBOX_ENABLE_VLM=0 uv run python -m skills.regression.ios_settings.run_full --quick`.
+> Otherwise configure a key first (see [Local VLM config](#local-vlm-config)) —
+> without one the run fails fast at startup with a clear "Missing API key" error.
+
 ### Local VLM config
 
-VLM is opt-in. The runtime reads `.env` through `glassbox.config` and selects a
-client only when `GLASSBOX_ENABLE_VLM=1` is set.
+VLM is opt-in at the runtime level: `glassbox.config` reads `.env` and selects a
+client only when `GLASSBOX_ENABLE_VLM=1` is set. (The Settings `run_full` helper
+turns it on by default — see the note above.)
 
 ```dotenv
 GLASSBOX_ENABLE_VLM=1
