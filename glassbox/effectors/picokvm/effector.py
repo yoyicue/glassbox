@@ -408,6 +408,7 @@ class PicoKVMEffector:
             responses: list[PicoKVMRpcResponse] = []
             if focus:
                 if focus_x is None or focus_y is None:
+                    # Hover at the default focus point (no click — see below).
                     x = self.config.keyboard_focus_x
                     y = self.config.keyboard_focus_y
                     responses.extend([
@@ -415,11 +416,15 @@ class PicoKVMEffector:
                         self._call("absMouseReport", {"x": x, "y": y, "buttons": 0}),
                     ])
                     self._sleep_ms(self.config.click_move_settle_ms)
-                    responses.append(self._call("absMouseReport", {"x": x, "y": y, "buttons": 1}))
-                    self._sleep_ms(self.config.keyboard_focus_click_ms)
-                    responses.append(self._call("absMouseReport", {"x": x, "y": y, "buttons": 0}))
                 else:
-                    responses.extend(self._click_at(int(focus_x), int(focus_y)))
+                    # Hover, not click: iOS only delivers wheel scroll to the
+                    # control the pointer is hovering over; a click would activate
+                    # the row under the pointer and breaks wheel delivery
+                    # (verified on-device 2026-05-23). A plain absolute move
+                    # (buttons=0) establishes the scroll target.
+                    responses.append(self._abs_report(int(focus_x), int(focus_y), 0))
+                    responses.append(self._abs_report(int(focus_x), int(focus_y), 0))
+                    self._sleep_ms(self.config.click_move_settle_ms)
             for _idx in range(count):
                 responses.append(self._call("wheelReport", {"wheelY": step}))
                 self._sleep_ms(interval_ms)

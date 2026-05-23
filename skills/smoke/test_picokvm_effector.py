@@ -337,28 +337,27 @@ def test_picokvm_type_reports_partial_when_late_character_is_unsupported():
 
 
 @pytest.mark.smoke
-def test_picokvm_wheel_defaults_to_unsupported_but_experimental_path_primes_pointer():
-    eff, rpc = make_eff()
-    disabled = eff.scroll_wheel(3)
-    assert disabled.ok is False
-    assert disabled.unsupported is True
+def test_picokvm_wheel_off_by_default_but_hovers_then_scrolls_when_enabled():
+    # Wheel is OFF by default (iOS wheel under AssistiveTouch is intermittent).
+    eff, _ = make_eff()
+    assert eff.scroll_wheel(3).unsupported is True
 
+    # When opted in, the corrected mechanism HOVERS (no click) over the focus
+    # region then sends report-ID-2 wheel; wheelY=+1 = scroll down.
     eff, rpc = make_eff(wheel_enabled=True)
     enabled = eff.scroll_wheel(2, interval_ms=0, focus_x=960, focus_y=540)
     assert enabled.ok is True
     assert rpc.calls == [
         ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 0}),
         ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 0}),
-        ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 1}),
-        ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 0}),
-        ("wheelReport", {"wheelY": -1}),
-        ("wheelReport", {"wheelY": -1}),
+        ("wheelReport", {"wheelY": 1}),
+        ("wheelReport", {"wheelY": 1}),
         ("wheelReport", {"wheelY": 0}),
     ]
 
 
 @pytest.mark.smoke
-def test_picokvm_experimental_wheel_uses_captured_focus_click_when_no_focus_point():
+def test_picokvm_wheel_hovers_default_focus_when_no_focus_point():
     eff, rpc = make_eff(wheel_enabled=True)
 
     enabled = eff.scroll_wheel(1, interval_ms=0)
@@ -367,9 +366,7 @@ def test_picokvm_experimental_wheel_uses_captured_focus_click_when_no_focus_poin
     assert rpc.calls == [
         ("absMouseReport", {"x": 14435, "y": 11905, "buttons": 0}),
         ("absMouseReport", {"x": 14435, "y": 11905, "buttons": 0}),
-        ("absMouseReport", {"x": 14435, "y": 11905, "buttons": 1}),
-        ("absMouseReport", {"x": 14435, "y": 11905, "buttons": 0}),
-        ("wheelReport", {"wheelY": -1}),
+        ("wheelReport", {"wheelY": 1}),
         ("wheelReport", {"wheelY": 0}),
     ]
 
