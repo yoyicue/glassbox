@@ -967,8 +967,33 @@ def validate_benchmark(payload: Mapping[str, Any]) -> list[str]:
         for key in ("root_pages_expected", "root_pages_covered", "root_pages_blocked"):
             if key in task and not _is_non_negative_int(task.get(key)):
                 errors.append(f"tasks[{task_index}].{key} must be a non-negative integer")
-        if "root_pages_missing" in task and not isinstance(task.get("root_pages_missing"), list):
-            errors.append(f"tasks[{task_index}].root_pages_missing must be a list")
+        if "root_pages_missing" in task:
+            missing = task.get("root_pages_missing")
+            if not isinstance(missing, list):
+                errors.append(f"tasks[{task_index}].root_pages_missing must be a list")
+            elif any(not isinstance(text, str) for text in missing):
+                errors.append(f"tasks[{task_index}].root_pages_missing must be a list of strings")
+        # Coverage invariants. _metrics() computes root_pages_coverage as
+        # covered ÷ (expected − blocked); without these a well-typed but
+        # inconsistent artifact validates and reports coverage > 1.0.
+        expected = task.get("root_pages_expected")
+        covered = task.get("root_pages_covered")
+        blocked = task.get("root_pages_blocked")
+        if _is_non_negative_int(expected) and _is_non_negative_int(blocked) and blocked > expected:
+            errors.append(
+                f"tasks[{task_index}].root_pages_blocked ({blocked}) must not exceed "
+                f"root_pages_expected ({expected})"
+            )
+        if (
+            _is_non_negative_int(expected)
+            and _is_non_negative_int(covered)
+            and _is_non_negative_int(blocked)
+            and covered > expected - blocked
+        ):
+            errors.append(
+                f"tasks[{task_index}].root_pages_covered ({covered}) must not exceed reachable "
+                f"root_pages (expected − blocked = {expected - blocked})"
+            )
         if not isinstance(task.get("terminal_expected_state"), dict):
             errors.append(f"tasks[{task_index}].terminal_expected_state must be an object")
         else:

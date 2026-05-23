@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import pytest
-
 from types import SimpleNamespace
+
+import pytest
 
 from glassbox.cognition import Box, Scene, UIElement
 from glassbox.ios.springboard import (

@@ -548,6 +548,39 @@ def test_root_page_coverage_uses_entered_and_excludes_blocked(tmp_path):
     assert validate_benchmark(payload) == []
 
 
+def test_validate_benchmark_rejects_covered_exceeding_reachable(tmp_path):
+    """covered > expected − blocked would report root_pages_coverage > 1.0
+    (covered ÷ reachable in _metrics), so validation must reject it."""
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path)],
+        root_coverages=[{"expected": ["A", "B"], "entered": ["A"], "blocked": ["B"]}],
+    )
+    assert validate_benchmark(payload) == []  # consistent baseline
+    payload["tasks"][0]["root_pages_covered"] = 2  # reachable = 2 − 1 = 1
+    errors = validate_benchmark(payload)
+    assert any("root_pages_covered" in e and "must not exceed reachable" in e for e in errors)
+
+
+def test_validate_benchmark_rejects_blocked_exceeding_expected(tmp_path):
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path)],
+        root_coverages=[{"expected": ["A", "B"], "entered": ["A"]}],
+    )
+    payload["tasks"][0]["root_pages_blocked"] = 3  # > expected (2)
+    errors = validate_benchmark(payload)
+    assert any("root_pages_blocked" in e and "must not exceed" in e for e in errors)
+
+
+def test_validate_benchmark_rejects_non_string_missing(tmp_path):
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path)],
+        root_coverages=[{"expected": ["A", "B"], "entered": ["A"]}],
+    )
+    payload["tasks"][0]["root_pages_missing"] = ["B", 123]
+    errors = validate_benchmark(payload)
+    assert any("root_pages_missing must be a list of strings" in e for e in errors)
+
+
 def test_root_page_coverage_absent_without_expected_pages(tmp_path):
     payload = aggregate_benchmark([_run_dir(tmp_path)])
     assert payload["tasks"][0]["root_pages_expected"] == 0
