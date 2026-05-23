@@ -53,9 +53,11 @@ _BUILTIN_LOCALES: tuple[Locale, ...] = (
     # perception knobs are the same as base zh.
     Locale("zh-Hans", "CN", _ZH_OCR_LANGUAGES, DEFAULT_CONFUSION_CLASSES),
     Locale("en", "US", _EN_OCR_LANGUAGES, ()),
-    # China-region English (WLAN / Mobile Service) — section-alias overlay is
-    # Phase 2; perception knobs match base English.
+    # Greater-China English (CN + HK) — live-observed to show WLAN / Mobile
+    # Service. The section-alias overlay is in the Settings policy / vocab;
+    # perception knobs match base English.
     Locale("en", "CN", _EN_OCR_LANGUAGES, ()),
+    Locale("en", "HK", _EN_OCR_LANGUAGES, ()),
 )
 
 
@@ -76,16 +78,19 @@ class LocaleRegistry:
     def resolve(self, code: str) -> Locale:
         """Exact pack key, else fall back to that language's base pack.
 
-        Base = the bare-language key if registered, else the first-registered
-        pack of that language (registration order puts the base first).
+        Language tags may themselves contain hyphens (e.g. ``zh-Hans``), so the
+        region is stripped from the END (``rsplit``), not the first hyphen — i.e.
+        ``zh-Hans-ZZ`` falls back to ``zh-Hans``, not ``zh``. If the stripped
+        base is not a registered code, fall back to the first-registered pack of
+        that base language (registration order puts the base first).
         """
         if code in self._by_code:
             return self._by_code[code]
-        language = code.split("-", 1)[0]
-        if language in self._by_code:
-            return self._by_code[language]
+        base = code.rsplit("-", 1)[0]  # strip region overlay; keep multi-part lang
+        if base in self._by_code:
+            return self._by_code[base]
         for locale in self._by_code.values():
-            if locale.language == language:
+            if locale.language == base:
                 return locale
         raise KeyError(f"unknown locale {code!r}; registered={self.codes()}")
 

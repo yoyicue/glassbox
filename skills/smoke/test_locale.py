@@ -43,9 +43,14 @@ def test_region_overlay_and_language_fallback():
     # en-CN is a distinct pack key (China-region English).
     cfg = AgentConfig(_env_file=None, language="en", region="CN")
     assert resolve_locale(cfg).code == "en-CN"
-    # Unknown region falls back to the bare language pack.
-    assert DEFAULT_LOCALE_REGISTRY.resolve("en-ZZ").language == "en"
-    assert {"zh-Hans", "zh-Hans-CN", "en-US", "en-CN"}.issubset(
+    # Unknown region falls back to the base language pack.
+    assert DEFAULT_LOCALE_REGISTRY.resolve("en-ZZ").code == "en-US"
+    # Hyphenated language: region stripped from the END, so zh-Hans-ZZ -> zh-Hans
+    # (NOT "zh"). Guards the rsplit fallback.
+    assert DEFAULT_LOCALE_REGISTRY.resolve("zh-Hans-ZZ").code == "zh-Hans"
+    # en-HK resolves to its own pack (greater-China English), not en-US.
+    assert DEFAULT_LOCALE_REGISTRY.resolve("en-HK").code == "en-HK"
+    assert {"zh-Hans", "zh-Hans-CN", "en-US", "en-CN", "en-HK"}.issubset(
         set(DEFAULT_LOCALE_REGISTRY.codes())
     )
 

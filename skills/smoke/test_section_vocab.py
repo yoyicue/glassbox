@@ -15,6 +15,7 @@ _VOCABS = {
     "zh-Hans-CN": section_vocab_for("zh-Hans", "CN"),
     "en-US": section_vocab_for("en", "US"),
     "en-CN": section_vocab_for("en", "CN"),
+    "en-HK": section_vocab_for("en", "HK"),
 }
 
 
@@ -85,14 +86,16 @@ def test_zh_resolves_chinese_and_ocr_garble():
 
 
 @pytest.mark.smoke
-def test_english_and_china_region_overlay():
+def test_english_and_greater_china_region_overlay():
     en = _VOCABS["en-US"]
     assert en.resolve("General") is RootSection.GENERAL
     assert en.resolve("Wi-Fi") is RootSection.WIFI
+    assert en.resolve("WLAN") is None                    # not a US-English label
     assert en.resolve("Mobile Service") is None          # not a US-English label
-    en_cn = _VOCABS["en-CN"]
-    assert en_cn.resolve("WLAN") is RootSection.WIFI      # China-region English
-    assert en_cn.resolve("Mobile Service") is RootSection.CELLULAR
+    # Greater-China English (CN + HK, live-observed) accepts WLAN / Mobile Service.
+    for code in ("en-CN", "en-HK"):
+        assert _VOCABS[code].resolve("WLAN") is RootSection.WIFI
+        assert _VOCABS[code].resolve("Mobile Service") is RootSection.CELLULAR
 
 
 @pytest.mark.smoke

@@ -172,6 +172,19 @@ ROOT_LABEL_ALIASES = {
     "Wallet & Apple Pay": "钱包与 Apple Pay",
 }
 
+# Locale-overlay aliases, applied only when the active resolved PACK KEY matches
+# (NOT folded into the global map). Keyed by language+region pack key, not bare
+# region: greater-China *English* labels (WLAN / Mobile Service) are live-observed
+# in both en-CN and en-HK, but NOT in en-US or any zh pack (zh shows Chinese).
+_GREATER_CHINA_EN_OVERLAY = {
+    "WLAN": "无线局域网",
+    "Mobile Service": "蜂窝网络",
+}
+ROOT_LABEL_LOCALE_ALIASES: dict[str, dict[str, str]] = {
+    "en-CN": _GREATER_CHINA_EN_OVERLAY,
+    "en-HK": _GREATER_CHINA_EN_OVERLAY,
+}
+
 ROOT_SEARCH_QUERIES = {
     "无线局域网": "wuxianjuyuwang",
     "蓝牙": "lanya",
@@ -649,10 +662,29 @@ class SettingsPolicy:
         return canonical_label(
             text,
             EXPECTED_ROOT_NAV_TEXT_ZH,
-            aliases=ROOT_LABEL_ALIASES,
+            aliases=self._active_root_aliases(),
             fuzzy=0.82,
             max_leading_noise_chars=1,
         )
+
+    @staticmethod
+    def _active_root_aliases() -> dict[str, str]:
+        """Base aliases + the active locale PACK's overlay (if any).
+
+        Compatibility bridge: reads the active locale from the global config
+        (resolved pack key, e.g. ``en-CN``) rather than a per-instance injected
+        SectionVocab. Locale-pack-specific labels (China-region English WLAN /
+        Mobile Service) are accepted ONLY under their pack (``en-CN``) — a zh,
+        en-US, or zh-Hans-CN run does not resolve them. The full DI model
+        (`SettingsPolicy(sections=locale.app("settings").sections)`) is deferred.
+        """
+        from glassbox.config import get_config
+        from glassbox.locale import resolve_locale
+
+        overlay = ROOT_LABEL_LOCALE_ALIASES.get(resolve_locale(get_config()).code)
+        if not overlay:
+            return ROOT_LABEL_ALIASES
+        return {**ROOT_LABEL_ALIASES, **overlay}
 
     def is_safe_known_navigation_label(self, text: str) -> bool:
         if self.canonical_expected_root_label(text) is not None:

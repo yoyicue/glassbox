@@ -6,7 +6,44 @@ as a first-class seam. **English is the target default**, with Chinese (and
 China-region variants) as switchable packs — the global default is **flipped
 last**, only after parity (see Migration).
 
-### Implementation status (2026-05-24)
+### Implementation status (2026-05-24) — P1 + P2 done; P3 functional; P4 rig-gated
+- **P2a compatibility bridge (NOT the full DI model yet):** the live resolver
+  (`canonical_expected_root_label`, used by coverage/dedup) maps English UI text
+  to the canonical section; the greater-China English `WLAN` / `Mobile Service`
+  that broke the live English run resolve **only under the `en-CN` / `en-HK`
+  packs** (`ROOT_LABEL_LOCALE_ALIASES` overlay keyed by pack key, NOT folded into
+  the global map; a zh, en-US, *or zh-Hans-CN* run rejects them). Live-verified
+  on the test device (Hong Kong region, English): its root shows `WLAN` and
+  `Mobile Service` (same as mainland CN, NOT `Wi-Fi`/`Cellular`). The typed
+  `SectionVocab` (`sections.py`) wraps the same data.
+  **Caveat:** this reads the active locale from the **global config**
+  (`resolve_locale(get_config())`) inside the resolver — a *compatibility
+  bridge*, not the designed `SettingsPolicy(sections=locale.app("settings").
+  sections)` injection. So `DEFAULT_SETTINGS_POLICY` is not a true per-instance
+  locale-bound object: two locales can't run concurrently in one process, and
+  `SectionVocab` is not yet threaded into the live crawl path. Full DI is the
+  remaining 2a call-site rewire.
+  Tests: `skills/smoke/test_settings_english_resolution.py`.
+- **P2b (report — additive ids, still v0.1):** `root_coverage` now carries
+  `expected_ids`/`visited_ids`/`missing_ids` (stable `RootSection` tokens) beside
+  the zh labels, and the report gains a resolved `locale` pack-key tag. These are
+  **forward-compatible additions on the v0.1 structure** — the report is tagged
+  `schema_version: "0.1"`, NOT "0.2" (the breaking v0.2 contract below —
+  `path_ids`/`path_labels`/`raw_texts` primary + verifier dual-read — is not
+  emitted yet). zh label fields stay primary; existing reports/verifier
+  unchanged. Tests: `skills/smoke/test_report_locale_ids.py`.
+- **P3 (classifier):** English scene classification already works — the markers
+  are bilingual and the global CJK confusion folds are no-ops on Latin text, and
+  the real English blocker (clock-as-Back) shipped in `4594e74`. The remaining
+  P3 item (sourcing root markers from `locale.app().surfaces`/`sections` for
+  single-source cleanliness) is deferred as architectural, not functional.
+- **P4 (English end-to-end + flip):** the English resolution path works
+  end-to-end (proven by the resolution tests above); the production default stays
+  `zh-Hans`. The remaining P4 items — a clean **live** English 5-round drill-down
+  and the global default flip — are gated on the live rig (per "flip only after
+  both locales green in CI"), which is outside the (hardware-free) smoke suite.
+
+### Earlier status (Phase 1 / 2a-foundation)
 - **Done — Phase 1 (seam scaffold, wired):** `glassbox/locale.py` (`Locale`
   packs `zh-Hans` / `zh-Hans-CN` / `en-US` / `en-CN` + `LocaleRegistry` +
   `resolve_locale`); `AgentConfig.language`/`region` (default `zh-Hans`); OCR

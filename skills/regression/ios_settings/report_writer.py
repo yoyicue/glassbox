@@ -19,6 +19,18 @@ RejectedCandidate = settings_reporting.RejectedCandidate
 NavigationFailure = settings_reporting.NavigationFailure
 
 
+def _active_locale_code() -> str:
+    """Resolved pack key for the report's locale tag.
+
+    Uses the RESOLVED locale (after fallback), not the requested code, so the
+    tag matches what perception actually used — e.g. a requested ``en-ZZ`` that
+    falls back to ``en-US`` is tagged ``en-US``."""
+    from glassbox.config import get_config
+    from glassbox.locale import resolve_locale
+
+    return resolve_locale(get_config()).code
+
+
 def write_report(
     *,
     report_path: str | Path | None,
@@ -83,6 +95,13 @@ def build_report_payload(
     )
     return {
         "run_id": run_config.run_id,
+        # Still the v0.1 structure (zh labels primary; visits = path/title/texts).
+        # The language-neutral section ids in root_coverage["*_ids"] and this
+        # `locale` tag are forward-compatible ADDITIONS, not the breaking v0.2
+        # contract (path_ids/path_labels/raw_texts primary), which is not emitted
+        # yet — so this is tagged "0.1", not "0.2".
+        "schema_version": "0.1",
+        "locale": _active_locale_code(),
         "config": run_config.to_report_config(),
         "trace": trace_payload,
         "limits_hit": sorted(limits_hit),

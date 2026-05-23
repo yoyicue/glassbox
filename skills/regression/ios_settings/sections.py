@@ -104,8 +104,10 @@ _EN_DISPLAY: dict[RootSection, str] = {
     RootSection.WALLET: "Wallet & Apple Pay",
 }
 _EN_ALIASES: dict[RootSection, tuple[str, ...]] = {RootSection.WIFI: ("WiFi",)}
-# China-region English overlay: WLAN / Mobile Service (live-observed on no-SIM CN iPhone).
-_EN_CN_ALIASES: dict[RootSection, tuple[str, ...]] = {
+# Greater-China English overlay (live-observed in en-CN and en-HK): WLAN / Mobile
+# Service. Applied for these regions only; en-US shows Wi-Fi / Cellular.
+_GREATER_CHINA_EN_REGIONS = frozenset({"CN", "HK"})
+_GREATER_CHINA_EN_ALIASES: dict[RootSection, tuple[str, ...]] = {
     RootSection.WIFI: ("WLAN",),
     RootSection.CELLULAR: ("Mobile Service",),
 }
@@ -220,8 +222,8 @@ def _zh_vocab(code: str) -> SectionVocab:
 
 def _en_vocab(code: str, *, region: str | None) -> SectionVocab:
     aliases = {k: tuple(v) for k, v in _EN_ALIASES.items()}
-    if region == "CN":
-        for section, extra in _EN_CN_ALIASES.items():
+    if region in _GREATER_CHINA_EN_REGIONS:
+        for section, extra in _GREATER_CHINA_EN_ALIASES.items():
             aliases[section] = (*aliases.get(section, ()), *extra)
     return SectionVocab(
         code=code,

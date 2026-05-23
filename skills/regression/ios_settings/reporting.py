@@ -13,6 +13,20 @@ from skills.regression.ios_settings.policy import (
     EXPECTED_ROOT_NAV_TEXT_ZH,
     FAILURE_CATEGORY_KEYS,
 )
+from skills.regression.ios_settings.sections import ZH_CANON_TO_SECTION
+
+
+def _section_ids(labels: Iterable[str]) -> list[str]:
+    """Project Chinese canonical labels to stable RootSection id values.
+
+    Unknown labels are skipped — the id list is the language-neutral view of the
+    same coverage (report wire format v0.2, additive alongside the zh labels)."""
+    out: list[str] = []
+    for label in labels:
+        section = ZH_CANON_TO_SECTION.get(label)
+        if section is not None:
+            out.append(section.value)
+    return out
 
 # Soft limits are reportable perception/budget signals, not strict traversal blockers.
 # `settings_search_unavailable` is the Settings-search fallback degrading (it can
@@ -105,10 +119,18 @@ def computed_root_coverage(visits: Sequence[Any]) -> dict[str, list[str]]:
         if label is not None and root_visit_has_label_evidence(visit, label):
             visited.add(label)
     expected = list(EXPECTED_ROOT_NAV_TEXT_ZH)
+    visited_labels = [label for label in expected if label in visited]
+    missing_labels = [label for label in expected if label not in visited]
     return {
         "expected": expected,
-        "visited": [label for label in expected if label in visited],
-        "missing": [label for label in expected if label not in visited],
+        "visited": visited_labels,
+        "missing": missing_labels,
+        # Additive stable section ids (report wire format v0.2). The Chinese
+        # `expected`/`visited`/`missing` stay primary for zh compatibility; these
+        # parallel `*_ids` make en/zh reports comparable by language-neutral id.
+        "expected_ids": _section_ids(expected),
+        "visited_ids": _section_ids(visited_labels),
+        "missing_ids": _section_ids(missing_labels),
     }
 
 
