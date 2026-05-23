@@ -665,14 +665,35 @@ class SceneProgressedVerifier(BaseTextVerifier):
         texts = _all_texts(input.after_scenes)
         if disqualified := self._disqualify(input, texts):
             return disqualified
-        scene_changed = bool((input.scene_diff or {}).get("changed"))
+        scene_diff = input.scene_diff or {}
+        scene_changed = bool(scene_diff.get("changed"))
         frame_changed = bool((input.frame_diff or {}).get("changed"))
+        page_before = scene_diff.get("page_id_before")
+        page_after = scene_diff.get("page_id_after")
         if scene_changed:
             if _looks_like_transient_carousel_change(input):
                 return SemanticOutcome(
                     status="unknown",
                     verifier=self.name,
                     reason="scene text changed only in a likely transient carousel/review region",
+                    confidence=0.35,
+                    verifier_version=self.version,
+                    verifier_hash=_source_hash(self.__class__),
+                    matched_frame_id=_after_frame_id(input),
+                    matched_scene_id=_after_scene_id(input),
+                    deterministic=False,
+                    observation_match=input.matched_by_observation,
+                )
+            if page_before and page_after and page_before == page_after:
+                # Same page identity before and after: the text changed only
+                # because the page scrolled / reflowed, not because the action
+                # navigated. For a tap meant to open a new page this is NOT
+                # progress — a stale or mis-registered tap that merely scrolled
+                # the list would otherwise be scored a false success.
+                return SemanticOutcome(
+                    status="unknown",
+                    verifier=self.name,
+                    reason="scene text changed but page identity is unchanged (same-page scroll/reflow)",
                     confidence=0.35,
                     verifier_version=self.version,
                     verifier_hash=_source_hash(self.__class__),

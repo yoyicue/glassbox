@@ -276,3 +276,23 @@ def test_tap_intent_raises_when_no_match(mock_phone):
 
     with pytest.raises(AssertionError, match="tap_intent"):
         mock_phone.tap_intent("购买年度套餐")
+
+
+@pytest.mark.smoke
+def test_reground_tap_point_relocates_target_via_fresh_ocr(mock_phone):
+    mock_phone.ocr.elements = [
+        UIElement(type="list_item", box=Box(x=100, y=400, w=240, h=44), text="无线局域网", confidence=0.9),
+    ]
+    mock_phone.perceive()  # populate _last_scene the re-ground reads from
+    point = mock_phone._reground_tap_point(target="无线局域网")
+    assert point is not None
+    # the re-located point lands inside the element's box
+    assert 100 <= point.x <= 340
+    assert 400 <= point.y <= 444
+
+
+@pytest.mark.smoke
+def test_reground_tap_point_returns_none_when_target_missing(mock_phone):
+    mock_phone.ocr.elements = []
+    mock_phone.perceive()
+    assert mock_phone._reground_tap_point(target="不存在") is None

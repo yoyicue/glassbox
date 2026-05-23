@@ -527,6 +527,27 @@ def test_root_page_coverage_prefers_walkthrough_report(tmp_path):
     assert validate_benchmark(payload) == []
 
 
+def test_root_page_coverage_uses_entered_and_excludes_blocked(tmp_path):
+    # entered = actually opened; visible_only = seen on root but not entered;
+    # blocked = deliberately not entered (unsafe) and excluded from the denominator.
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path)],
+        root_coverages=[{
+            "expected": ["A", "B", "C", "D"],
+            "entered": ["A", "B"],
+            "visible_only": ["C"],
+            "blocked": ["D"],
+        }],
+    )
+    task = payload["tasks"][0]
+    assert task["root_pages_expected"] == 4
+    assert task["root_pages_covered"] == 2
+    assert task["root_pages_blocked"] == 1
+    assert task["root_pages_missing"] == ["C"]
+    assert payload["metrics"]["root_pages_coverage"] == 2 / 3  # entered / (expected - blocked)
+    assert validate_benchmark(payload) == []
+
+
 def test_root_page_coverage_absent_without_expected_pages(tmp_path):
     payload = aggregate_benchmark([_run_dir(tmp_path)])
     assert payload["tasks"][0]["root_pages_expected"] == 0

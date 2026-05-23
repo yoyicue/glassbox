@@ -927,6 +927,13 @@ def _record_visible_root_row_visits(
     seen_sigs: set[ViewportKey],
     phone=None,
 ) -> None:
+    # In drill-down (child navigation) mode every root section is meant to be
+    # opened, so do NOT pre-mark a visible row as "visited" — that would remove
+    # it from the tap candidates and the section would never be entered (it would
+    # show up as visible_only, not entered). Root-row visibility recording is only
+    # for the default root-coverage mode that does not enter sections.
+    if CHILD_NAVIGATION_ENABLED:
+        return
     settings_page_records.record_visible_root_row_visits(
         scene=scene,
         visits=visits,

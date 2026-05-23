@@ -48,6 +48,17 @@ _QUICK_ENV_OVERRIDES = {
     "IOS_SETTINGS_MIN_PAGES": "2",
 }
 
+# Drill-down: actually open each root section's detail page (depth 1) instead of
+# only recording which root rows are visible, and save a per-page screenshot.
+# This is what produces verifiable evidence that a section was entered, not just
+# seen on the scrolled root list.
+_DRILL_DOWN_ENV_OVERRIDES = {
+    "IOS_SETTINGS_CHILD_NAVIGATION_ENABLED": "1",
+    "IOS_SETTINGS_ROOT_COVERAGE_MODE": "0",
+    "IOS_SETTINGS_SAVE_VIEW_SNAPSHOTS": "1",
+    "IOS_SETTINGS_MAX_DEPTH": "1",
+}
+
 
 @contextlib.contextmanager
 def _temporary_env(env: dict[str, str]) -> Iterator[None]:
@@ -138,6 +149,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-diagnose", action="store_true", help="Skip the PicoKVM readiness preflight.")
     parser.add_argument("--skip-verify", action="store_true", help="Skip report verification.")
     parser.add_argument(
+        "--drill-down",
+        action="store_true",
+        help="Open each root section's detail page (depth 1) and save a per-page "
+        "screenshot, instead of only recording which root rows are visible. "
+        "Snapshots go under IOS_SETTINGS_ARTIFACT_DIR (or <report>.artifacts).",
+    )
+    parser.add_argument(
         "--memory-dir",
         type=Path,
         default=None,
@@ -166,6 +184,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.quick:
         env.update(_QUICK_ENV_OVERRIDES)
+    if args.drill_down:
+        env.update(_DRILL_DOWN_ENV_OVERRIDES)
+        env.setdefault("IOS_SETTINGS_ARTIFACT_DIR", str(report.with_suffix(".artifacts")))
 
     if report.exists():
         report.unlink()

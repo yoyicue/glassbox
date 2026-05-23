@@ -7,8 +7,34 @@ import pytest
 from skills.regression.ios_settings.policy import (
     EXPECTED_ROOT_NAV_TEXT_ZH,
 )
-from skills.regression.ios_settings.reporting import refresh_report_summaries
+from skills.regression.ios_settings.reporting import (
+    PageVisit,
+    RejectedCandidate,
+    classify_root_coverage,
+    refresh_report_summaries,
+)
 from skills.regression.ios_settings.verify_report import EXPECTED_MIN_VISITS, main, validate_report
+
+
+@pytest.mark.smoke
+def test_classify_root_coverage_splits_entered_visible_only_blocked():
+    expected = ["无线局域网", "蓝牙", "Face ID与密码", "通用"]
+    visits = [
+        # entered: detail page captured (more than the bare row label)
+        PageVisit(("Settings", "无线局域网"), "无线局域网", ("无线局域网", "接入无线局域网…", "kacier")),
+        # visible_only: bare root-row visibility record (single text == label)
+        PageVisit(("Settings", "蓝牙"), "蓝牙", ("蓝牙",)),
+    ]
+    rejected = [RejectedCandidate(("Settings",), "设置", "面容ID与密码", "unsafe_text")]
+    base = {"expected": expected, "visited": ["无线局域网", "蓝牙"], "missing": ["Face ID与密码", "通用"]}
+
+    result = classify_root_coverage(base, visits, rejected)
+
+    assert result["entered"] == ["无线局域网"]
+    assert result["visible_only"] == ["蓝牙"]
+    assert result["blocked"] == ["Face ID与密码"]
+    assert result["missing"] == ["Face ID与密码", "通用"]  # base keys preserved
+    assert result["visited"] == ["无线局域网", "蓝牙"]      # backward-compat ("seen")
 
 
 def _report(*, limits=None, visits=None, missing=None):

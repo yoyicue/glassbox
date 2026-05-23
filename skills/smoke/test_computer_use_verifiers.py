@@ -558,3 +558,74 @@ def test_computer_use_verifier_golden_cases(case):
         assert case.verifier_input().frame_diff is None
     if case.expected_disqualifying_state:
         assert outcome.disqualifying_state == case.expected_disqualifying_state
+
+
+@pytest.mark.smoke
+def test_scene_progressed_verifier_treats_same_page_scroll_as_unknown():
+    # A tap that merely scrolled the same page (page_id unchanged) is NOT
+    # navigation progress; it must not be scored a false success.
+    registry = VerifierRegistry()
+    verifier = registry.resolve("tap")
+    before = _scene("蓝牙", "蜂窝网络", "个人热点", page_id="settings/root")
+    after = _scene("设置", "无线局域网", "蓝牙", page_id="settings/root")
+    input_ = VerifierInput(
+        attempt_id="act_1",
+        attempt_group_id="grp_1",
+        action={"op": "tap", "args": [], "kwargs": {}, "metadata": {}},
+        before_requested=before,
+        before_command=before,
+        after_scenes=[after],
+        after_mode="single_frame",
+        frame_diff={"changed": True, "diff_ratio": 0.05},
+        scene_diff={
+            "changed": True,
+            "texts_added": ["设置", "无线局域网"],
+            "texts_removed": ["蜂窝网络", "个人热点"],
+            "texts_common": ["蓝牙"],
+            "page_id_before": "settings/root",
+            "page_id_after": "settings/root",
+            "scene_type_before": None,
+            "scene_type_after": None,
+        },
+        command_result={"transport_ok": True},
+        risk={"level": "medium"},
+        after_frame_ids=["frm_after"],
+        after_scene_ids=["scn_after"],
+    )
+    outcome = verifier.verify(input_)
+    assert outcome.status == "unknown"
+    assert "page identity is unchanged" in (outcome.reason or "")
+
+
+@pytest.mark.smoke
+def test_scene_progressed_verifier_still_succeeds_on_real_navigation():
+    registry = VerifierRegistry()
+    verifier = registry.resolve("tap")
+    before = _scene("蓝牙", "蜂窝网络", page_id="settings/root")
+    after = _scene("蜂窝网络", "无SIM卡", page_id="settings/cellular")
+    input_ = VerifierInput(
+        attempt_id="act_2",
+        attempt_group_id="grp_2",
+        action={"op": "tap", "args": [], "kwargs": {}, "metadata": {}},
+        before_requested=before,
+        before_command=before,
+        after_scenes=[after],
+        after_mode="single_frame",
+        frame_diff={"changed": True, "diff_ratio": 0.2},
+        scene_diff={
+            "changed": True,
+            "texts_added": ["无SIM卡"],
+            "texts_removed": ["蓝牙"],
+            "texts_common": ["蜂窝网络"],
+            "page_id_before": "settings/root",
+            "page_id_after": "settings/cellular",
+            "scene_type_before": None,
+            "scene_type_after": None,
+        },
+        command_result={"transport_ok": True},
+        risk={"level": "medium"},
+        after_frame_ids=["frm_after"],
+        after_scene_ids=["scn_after"],
+    )
+    outcome = verifier.verify(input_)
+    assert outcome.status == "succeeded"

@@ -94,6 +94,11 @@ _KEY_SPACE = 0x2C
 _KEY_DELETE = 0x2A  # backspace
 _KEY_ESC = 0x29
 
+# A retry re-grounds (re-locates) the target and taps its current position only
+# when it has drifted more than this (Manhattan, frame px) from where it was
+# first seen; smaller misses keep the candidate-point progression.
+_REGROUND_MIN_SHIFT_PX = 24
+
 # GlassboxHelper's Home-screen icon name — for the CJK clipboard A-dance.
 _HIDGLASSBOX_LABELS = ("GlassboxHelper",)
 
@@ -1060,6 +1065,38 @@ class Phone:
             "scene_type": self._last_scene.semantic_scene_type or self._last_scene.scene_type,
         }
 
+    def _reground_tap_point(self, *, target: str):
+        """Re-perceive and re-locate ``target``; return its current tap point.
+
+        P2: a fresh OCR read (``find_text``) relocates the element after a
+        drag-scroll / animation moved it. P1: if OCR cannot find it and a VLM is
+        wired, escalate to ``describe`` (VLM grounding) and retry the lookup.
+        Returns ``None`` when the target cannot be re-located.
+        """
+        if not target:
+            return None
+        try:
+            # Re-locate against the scene the prior attempt's fresh-frame
+            # verification already captured (no extra capture / no frame cost).
+            # P1: escalate to the VLM only when OCR cannot find the target.
+            element = self._locate_in_last_scene(target)
+            if element is None and self.kimi is not None:
+                self.describe()
+                element = self._locate_in_last_scene(target)
+        except Exception as exc:
+            logger.warning(f"reground tap target {target!r} failed: {exc}")
+            return None
+        if element is None:
+            return None
+        px, py = self._tap_point_for_element(element)
+        return Point(px, py)
+
+    def _locate_in_last_scene(self, target: str) -> UIElement | None:
+        scene = self._last_scene
+        if scene is None:
+            return None
+        return find_text(self._rows_before_nav_title(scene.elements), target, fuzzy_ratio=0.8)
+
     def _target_tap_plan(
         self,
         *,
@@ -1081,7 +1118,21 @@ class Phone:
         coordinate_space = self._coordinate_space()
 
         def build_command(point: Point, attempt_index: int) -> ActuationCommand:
-            px, py = self._to_phone(point.x, point.y)
+            # On a retry, re-perceive and re-locate the target. If it has DRIFTED
+            # from where we first saw it (drag-scroll overshoot / animation), tap
+            # its current position — the dominant fix for "tapped but nothing
+            # happened". If it has not moved, keep the candidate-point progression
+            # (small offsets) for ordinary targeting error.
+            regrounded = False
+            tap_point = point
+            if attempt_index > 0:
+                fresh = self._reground_tap_point(target=target)
+                if fresh is not None:
+                    orig_cx, orig_cy = element.box.center
+                    if abs(fresh.x - orig_cx) + abs(fresh.y - orig_cy) > _REGROUND_MIN_SHIFT_PX:
+                        tap_point = fresh
+                        regrounded = True
+            px, py = self._to_phone(tap_point.x, tap_point.y)
             return ActuationCommand(
                 call=lambda px=px, py=py: self.effector.tap(px, py),
                 kwargs={
@@ -1089,8 +1140,9 @@ class Phone:
                     "y": py,
                     "coordinate_space": coordinate_space,
                     "target_point": {"x": px, "y": py, "space": coordinate_space},
-                    "target_point_frame": point.to_dict(space="frame_px"),
+                    "target_point_frame": tap_point.to_dict(space="frame_px"),
                     "actuation_attempt_index": attempt_index,
+                    "regrounded": regrounded,
                 },
             )
 
@@ -1242,6 +1294,9 @@ class Phone:
         forbid_landing_retry: bool = False,
         landing_retry_budget: int | None = None,
         ignore_actuation_profile_skip: bool = False,
+        retry_budget: int | None = None,
+        unknown_policy: str | None = None,
+        idempotent: bool | None = None,
     ) -> ActionResult:
         """Tap a known perceived element through target-bearing actuation feedback."""
         label = target or element.text or element.type or "element"
@@ -1254,6 +1309,12 @@ class Phone:
             actuation_options["landing_retry_allowed"] = landing_retry_allowed
         if landing_retry_budget is not None:
             actuation_options["landing_retry_budget"] = landing_retry_budget
+        if retry_budget is not None:
+            actuation_options["retry_budget"] = retry_budget
+        if unknown_policy is not None:
+            actuation_options["unknown_policy"] = unknown_policy
+        if idempotent is not None:
+            actuation_options["idempotent"] = idempotent
         op, plan, metadata = self._target_actuation_plan(
             element=element,
             intent=intent or label,

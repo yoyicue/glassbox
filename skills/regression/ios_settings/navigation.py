@@ -192,6 +192,29 @@ def settings_row_target_element(phone, scene, row_hit: UIElement) -> UIElement:
 
 
 def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActions) -> bool:
+    label = (row_hit.text or "").strip()
+    tap_element = getattr(phone, "tap_element", None)
+    if callable(tap_element):
+        # Delegate to glassbox's actuation: same settings-aware first tap, but it
+        # verifies the effect and, on a landing retry, re-perceives and
+        # re-locates the row (robust to drag-scroll overshoot). The reliability
+        # lives in glassbox, not here.
+        result = tap_element(
+            row_hit,
+            intent=f"settings.row:{label}",
+            target=label,
+            via="settings.tap_row",
+            landing_retry_allowed=True,
+            landing_retry_budget=2,
+            # A row tap that leaves us on the same page (no navigation) scores
+            # `unknown`; retry it (re-grounding to the row's current position).
+            # Real navigations score `succeeded`, so they are never retried.
+            retry_budget=2,
+            unknown_policy="retry",
+            idempotent=True,
+        )
+        return actions.record_action_verdict(phone, result)
+    # Fallback for phones without the actuation path (e.g. MockEffector in tests).
     x, row_y = settings_row_tap_point(phone, row_hit)
     with actions.action_intent(phone, "settings.tap_row", text=row_hit.text, x=x, y=row_y):
         result = phone.tap_xy(x, row_y)

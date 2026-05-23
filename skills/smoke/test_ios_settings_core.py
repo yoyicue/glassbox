@@ -252,3 +252,23 @@ def test_root_coverage_reports_expected_visited_and_missing_pages():
     assert "无线局域网" in coverage["visited"]
     assert "待机显示" in coverage["visited"]
     assert "蓝牙" in coverage["missing"]
+
+
+@pytest.mark.smoke
+def test_drill_down_skips_root_row_prelisting(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        settings_page_records,
+        "record_visible_root_row_visits",
+        lambda **kwargs: calls.append(kwargs),
+    )
+
+    # Default (root-coverage) mode: visible root rows are recorded as visited.
+    monkeypatch.setattr(walkthrough, "CHILD_NAVIGATION_ENABLED", False)
+    walkthrough._record_visible_root_row_visits(scene=object(), visits=[], seen_sigs=set(), phone=None)
+    assert len(calls) == 1
+
+    # Drill-down: pre-marking is skipped so each section is actually entered.
+    monkeypatch.setattr(walkthrough, "CHILD_NAVIGATION_ENABLED", True)
+    walkthrough._record_visible_root_row_visits(scene=object(), visits=[], seen_sigs=set(), phone=None)
+    assert len(calls) == 1

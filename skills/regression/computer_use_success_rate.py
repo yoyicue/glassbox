@@ -399,7 +399,7 @@ def _root_page_coverage(
     """
     expected = list(dict.fromkeys(str(page) for page in expected_root_pages if str(page)))
     if not expected:
-        return 0, 0, []
+        return 0, 0, 0, []
     visited = [
         str(action.get("target") or "")
         for action in actions
@@ -409,16 +409,29 @@ def _root_page_coverage(
     ]
     covered = [page for page in expected if _contains_text(visited, page)]
     missing = [page for page in expected if page not in covered]
-    return len(covered), len(expected), missing
+    return len(covered), len(expected), 0, missing
 
 
-def _coverage_from_report(root_coverage: Mapping[str, Any]) -> tuple[int, int, list[str]]:
-    """Coverage from a walkthrough's own `root_coverage` (expected/visited)."""
+def _coverage_from_report(root_coverage: Mapping[str, Any]) -> tuple[int, int, int, list[str]]:
+    """Coverage from a walkthrough's own `root_coverage`.
+
+    Counts a page as **covered** only when it was actually *entered* (its detail
+    page was opened), not merely seen on the root list. Pages deliberately not
+    entered for safety are counted as **blocked** and excluded from `missing`
+    (they are surfaced separately, not treated as a coverage failure). Falls back
+    to `visited` for older reports without the entered/blocked breakdown.
+    """
     expected = [str(page) for page in (root_coverage.get("expected") or []) if str(page)]
-    visited = {str(page) for page in (root_coverage.get("visited") or [])}
-    missing = [page for page in expected if page not in visited]
-    covered = len(expected) - len(missing)
-    return covered, len(expected), missing
+    entered_list = root_coverage.get("entered")
+    if isinstance(entered_list, list):
+        entered = {str(page) for page in entered_list}
+    else:
+        entered = {str(page) for page in (root_coverage.get("visited") or [])}
+    blocked = {str(page) for page in (root_coverage.get("blocked") or [])}
+    covered = [page for page in expected if page in entered]
+    blocked_pages = [page for page in expected if page in blocked and page not in entered]
+    missing = [page for page in expected if page not in entered and page not in blocked]
+    return len(covered), len(expected), len(blocked_pages), missing
 
 
 def _group_actions(
@@ -601,16 +614,14 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     task_count = len(tasks)
     task_success = sum(1 for task in tasks if task.get("outcome") == "succeeded")
     recoveries = sum(_task_recovery_count(task) for task in tasks)
-    coverage_tasks = [task for task in tasks if _metric_int(task, "root_pages_expected") > 0]
-    root_pages_coverage = (
-        sum(
-            _metric_int(task, "root_pages_covered") / _metric_int(task, "root_pages_expected")
-            for task in coverage_tasks
-        )
-        / len(coverage_tasks)
-        if coverage_tasks
-        else 0.0
-    )
+    # Coverage = entered ÷ reachable, where reachable = expected − blocked
+    # (deliberately-blocked pages are unreachable and must not penalize coverage).
+    coverage_ratios = []
+    for task in tasks:
+        reachable = _metric_int(task, "root_pages_expected") - _metric_int(task, "root_pages_blocked")
+        if reachable > 0:
+            coverage_ratios.append(_metric_int(task, "root_pages_covered") / reachable)
+    root_pages_coverage = sum(coverage_ratios) / len(coverage_ratios) if coverage_ratios else 0.0
     vlm_calls = sum(
         _metric_int(action, "vlm_calls")
         for action in all_actions
@@ -716,9 +727,11 @@ def aggregate_run_dir(
         # Authoritative: the walkthrough already computed which top-level pages it
         # opened. Prefer it over matching the orchestrator action ledger (whose
         # row navigations are not recorded as matchable primary actions).
-        covered, expected_count, missing = _coverage_from_report(root_coverage)
+        covered, expected_count, blocked_count, missing = _coverage_from_report(root_coverage)
     else:
-        covered, expected_count, missing = _root_page_coverage(action_records, expected_root_pages)
+        covered, expected_count, blocked_count, missing = _root_page_coverage(
+            action_records, expected_root_pages
+        )
     return {
         "task": task,
         "round": round_index,
@@ -727,6 +740,7 @@ def aggregate_run_dir(
         "final_state": final_state,
         "root_pages_expected": expected_count,
         "root_pages_covered": covered,
+        "root_pages_blocked": blocked_count,
         "root_pages_missing": missing,
         "actions": action_records,
         "artifact_run_dir": str(run_dir),
@@ -950,7 +964,7 @@ def validate_benchmark(payload: Mapping[str, Any]) -> list[str]:
         if task.get("outcome") not in {"succeeded", "failed", "unknown"}:
             errors.append(f"tasks[{task_index}].outcome is invalid")
         _validate_final_state(task.get("final_state"), f"tasks[{task_index}].final_state", errors)
-        for key in ("root_pages_expected", "root_pages_covered"):
+        for key in ("root_pages_expected", "root_pages_covered", "root_pages_blocked"):
             if key in task and not _is_non_negative_int(task.get(key)):
                 errors.append(f"tasks[{task_index}].{key} must be a non-negative integer")
         if "root_pages_missing" in task and not isinstance(task.get("root_pages_missing"), list):
@@ -1135,6 +1149,8 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
             cmd.append("--quick")
         if args.skip_diagnose:
             cmd.append("--skip-diagnose")
+        if args.drill_down:
+            cmd.append("--drill-down")
         env = dict(os.environ)
         env["GLASSBOX_COMPUTER_USE_ARTIFACT_DIR"] = str(artifact_root)
         result = subprocess.run(cmd, cwd=Path(__file__).resolve().parents[2], env=env)
@@ -1200,6 +1216,12 @@ def main(argv: list[str] | None = None) -> int:
     run_settings.add_argument("--terminal-expected-state", default=None)
     run_settings.add_argument("--quick", action="store_true")
     run_settings.add_argument("--skip-diagnose", action="store_true")
+    run_settings.add_argument(
+        "--drill-down",
+        action="store_true",
+        help="Open each root section's detail page and screenshot it (real entry, "
+        "not root-row visibility).",
+    )
 
     args = parser.parse_args(argv)
     if args.cmd == "aggregate":

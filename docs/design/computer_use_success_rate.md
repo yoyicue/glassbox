@@ -106,9 +106,10 @@ auto-compared).** One JSON document per benchmark run:
       "terminal_expected_state": { "kind": "page_id|visible_text|…", "payload": {} },
       "outcome": "succeeded|failed|unknown",
       "final_state": { "page_id": "…", "is_anchor": true },
-      "root_pages_expected": 16,        // size of the task's expected top-level page set
-      "root_pages_covered": 14,         // expected pages opened by a succeeded primary action
-      "root_pages_missing": ["…"],      // expected pages not covered this round
+      "root_pages_expected": 17,        // size of the task's expected top-level page set
+      "root_pages_covered": 12,         // sections actually ENTERED (detail page opened)
+      "root_pages_blocked": 2,          // deliberately not entered (unsafe/protected); excluded from the denominator
+      "root_pages_missing": ["…"],      // reachable sections seen but not entered this round
       "actions": [
         {
           "seq": 0,
@@ -191,13 +192,27 @@ diffs):**
   `strategy_switches`. A retry of the same strategy increments `retries`.
 - `task_completion_rate` = rounds whose `final_state` satisfies the task's
   `terminal_expected_state` ÷ total rounds.
-- `root_pages_coverage` = mean over rounds (with `root_pages_expected > 0`) of
-  `root_pages_covered ÷ root_pages_expected`. A page is **covered** only when a
-  succeeded primary action opened it, so coverage measures *visited correctly*,
-  not merely *attempted*. `terminal_expected_state` (e.g. "ended at Settings
-  root") stays a separate, coarser end-state signal; coverage is what reflects
-  per-section traversal. Treated as higher-is-better in `compare` (regression on
-  a drop), like the success rates.
+- `root_pages_coverage` = mean over rounds of `root_pages_covered ÷ (expected −
+  blocked)`. The walkthrough's `root_coverage` classifies each expected section
+  (`reporting.classify_root_coverage`):
+  - **entered** — its detail page was actually opened (a page record richer than
+    the bare root-row label). This is what `root_pages_covered` counts.
+  - **visible_only** — the row was seen on the scrolled root list but not entered
+    (`record_visible_root_row_visits`). Counts as `missing` for coverage.
+  - **blocked** — deliberately not entered for safety (e.g. Face ID, Wallet,
+    flagged `unsafe_text` in `rejected_candidates`). **Excluded from the
+    denominator** so unreachable pages do not penalize coverage.
+  - **missing** — not seen at all.
+
+  So coverage measures **fraction of reachable sections actually entered**, not
+  root-row visibility. Mode matters: the default walkthrough mostly produces
+  `visible_only` (it scrolls the root and records visible rows — no per-section
+  screenshot, per-visit text is just the label), while `run_full --drill-down`
+  opens each section's detail page and saves a verifiable per-page screenshot
+  (`IOS_SETTINGS_SAVE_VIEW_SNAPSHOTS`), turning rows into `entered`.
+  `terminal_expected_state` (e.g. "ended at Settings root") stays a separate,
+  coarser end-state signal. `root_pages_coverage` is higher-is-better in
+  `compare` (regression on a drop), like the success rates.
 
 **Acceptance criteria:**
 

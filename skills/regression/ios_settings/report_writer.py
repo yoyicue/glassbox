@@ -59,6 +59,9 @@ def build_report_payload(
     root_coverage: dict[str, list[str]],
     trace_payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    root_coverage = settings_reporting.classify_root_coverage(
+        root_coverage, visits, rejected_candidates
+    )
     metrics = report_metrics(
         visits=visits,
         limits_hit=limits_hit,

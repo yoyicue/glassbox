@@ -108,6 +108,62 @@ def computed_root_coverage(visits: Sequence[Any]) -> dict[str, list[str]]:
     }
 
 
+def _label_entered(label: str, visits: Sequence[Any]) -> bool:
+    """A label is *entered* when a visit captured the section's own detail page,
+    not just its row label on the scrolled root list.
+
+    The root-row visibility record is ``PageVisit(texts=(label,))`` — a single
+    text equal to the label. A real entry has the page's own content (many
+    texts), so we require more than the bare row label plus label evidence.
+    """
+    for visit in visits:
+        path = _path(visit)
+        if len(path) < 2 or path[0] != "Settings":
+            continue
+        if DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(path[1]) != label:
+            continue
+        texts = _value(visit, "texts")
+        nonempty = (
+            [str(t).strip() for t in texts if str(t).strip()]
+            if isinstance(texts, (list, tuple))
+            else []
+        )
+        # The bare root-row visibility record is exactly one text (the row label);
+        # any richer page record means the section's detail page was opened.
+        if len(nonempty) > 1:
+            return True
+    return False
+
+
+def classify_root_coverage(
+    base: Mapping[str, Sequence[str]],
+    visits: Sequence[Any],
+    rejected_candidates: Sequence[Any],
+) -> dict[str, list[str]]:
+    """Enrich root_coverage with entered / visible_only / blocked.
+
+    Additive: keeps ``expected``/``visited``/``missing`` (``visited`` = "seen" =
+    entered ∪ visible_only ∪ blocked) and adds the breakdown so callers can tell
+    a real section entry from a row merely seen on the root list, and from a page
+    deliberately not entered for safety.
+    """
+    expected = list(base.get("expected", EXPECTED_ROOT_NAV_TEXT_ZH))
+    visited = set(base.get("visited", ()))
+    entered = {label for label in expected if _label_entered(label, visits)}
+    blocked: set[str] = set()
+    for candidate in rejected_candidates:
+        label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(str(_value(candidate, "text") or ""))
+        if label in expected and label not in entered:
+            blocked.add(label)
+    enriched = {key: list(value) for key, value in base.items()}
+    enriched["entered"] = [label for label in expected if label in entered]
+    enriched["blocked"] = [label for label in expected if label in blocked]
+    enriched["visible_only"] = [
+        label for label in expected if label in visited and label not in entered and label not in blocked
+    ]
+    return enriched
+
+
 def root_visit_has_label_evidence(visit: Any, label: str) -> bool:
     title = _value(visit, "title")
     if isinstance(title, str) and (
