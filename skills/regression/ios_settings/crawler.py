@@ -206,7 +206,14 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
             rejected_candidates=rejected_candidates,
             navigation_failures=navigation_failures,
         )
-        _return_to_settings_root(phone)
+        try:
+            _return_to_settings_root(phone)
+        except settings_recovery.SettingsRootUnreachable:
+            # Final cleanup return only; its failure (intermittent back-nav,
+            # e.g. stranded on Spotlight) must not mark the whole run as a crash
+            # — the crawl already gathered its coverage. Record it soft and let
+            # the normal report write proceed.
+            limits_hit.add("return_to_root_failed")
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
             raise
