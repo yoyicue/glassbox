@@ -618,6 +618,13 @@ def _enter_settings_search(phone) -> bool:
     opened = phone.perceive()
     if _scene_kind(opened, phone=phone) == "system_search":
         phone._ios_settings_search_unavailable = True
+        # The Settings-search tap opened iOS Spotlight instead. Dismiss it (Home)
+        # so we are not stranded on Spotlight — the caller's
+        # return_to_settings_root can then re-ground via SpringBoard rather than
+        # failing to back out of a system surface.
+        with suppress(Exception), _action_intent(phone, "settings_search.dismiss_spotlight_via_home"):
+            phone.home()
+        phone.invalidate_perceive_cache()
         return False
     return _is_settings_search_scene(opened)
 
