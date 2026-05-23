@@ -177,6 +177,13 @@ def build_full_run_env(
     env.setdefault("IOS_SETTINGS_MAX_CANDIDATES_PER_PAGE", "0")
     env.setdefault("IOS_SETTINGS_MIN_PAGES", str(len(EXPECTED_ROOT_NAV_TEXT_ZH) + 1))
     env.setdefault("IOS_SETTINGS_TRACE_ACTIONS", "1")
+    # Enable the VLM (Layer 3) for live cold-start runs. build_phone already
+    # creates the SpringBoard icon-map + wires phone.kimi; the only thing gating
+    # the springboard's VLM visual icon-grounding fallback (and the row-OCR
+    # recovery) is the default-off VLM. It only fires on a deterministic-path
+    # miss (icon-tap opened a non-target app / ambiguous row OCR), so cost stays
+    # bounded while precision improves. Override with GLASSBOX_ENABLE_VLM=0.
+    env.setdefault("GLASSBOX_ENABLE_VLM", "1")
     env.setdefault("GLASSBOX_ENABLE_MEMORY", "1")
     env.setdefault("GLASSBOX_MEMORY_BUNDLE", "com.apple." + "Preferences")
     if not reuse_memory:
