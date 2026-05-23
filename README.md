@@ -159,6 +159,38 @@ Boundary maturity is tracked in
 - **`glassbox-ai-session`** — long-lived JSONL observe-decide-act session.
 - **`glassbox-show-screen` / `glassbox-list-devices`** — demos.
 
+## Language and locale
+
+glassbox treats the controlled device's UI language as a **locale seam**: OCR
+vocabulary, Settings label resolution, and report display all key off the active
+locale rather than being hard-coded to one language.
+
+- **Default `zh-Hans`, English switchable.** Set with `GLASSBOX_LANGUAGE`
+  (default `zh-Hans`) plus an optional `GLASSBOX_REGION` overlay. Chinese is the
+  currently validated default; flipping the production default to English is the
+  last migration step (see the design doc below).
+- **OCR languages auto-select per locale.** A `zh-Hans` run drives Apple Vision
+  with `("zh-Hans", "en-US")`; an `en-*` run uses English only — fewer languages
+  reads cleaner and cheaper, since Latin OCR avoids CJK confusion.
+- **Region variants.** Greater-China English devices (`GLASSBOX_REGION=CN` or
+  `HK`) show `WLAN` / `Mobile Service` instead of `Wi-Fi` / `Cellular`; those
+  resolve and display correctly only under the `en-CN` / `en-HK` packs.
+- **Language-neutral section identity.** The Settings domain owns stable
+  `RootSection` ids; locale packs only map OCR text ↔ id ↔ display. Coverage
+  reports carry the primary label plus parallel `*_ids` (neutral tokens, so en
+  and zh reports compare by id) and `*_display` (rendered in the run's own
+  language), so an `en-HK` report reads in English without changing the internal
+  pivot.
+
+```bash
+# Run the Settings audit against an English (Hong Kong) device.
+GLASSBOX_LANGUAGE=en GLASSBOX_REGION=HK \
+  uv run python -m skills.regression.ios_settings.run_full --drill-down
+```
+
+Full design and the phased migration plan live in
+[`docs/design/locale_seam_english_first.md`](docs/design/locale_seam_english_first.md).
+
 ## Hardware setup
 
 The reference setup drives a real iPhone with a Luckfox PicoKVM sitting between
