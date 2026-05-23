@@ -125,10 +125,12 @@ class IOSPlatform:
     def supports(self, capability: str) -> bool:
         return getattr(self, capability, None) is not None
 
-    def create_springboard_icon_map(self):
+    def create_springboard_icon_map(self, path=None):
         from glassbox.ios.springboard_map import SpringboardIconMap
 
-        return SpringboardIconMap()
+        # A path persists the VLM icon map across runs (layout-keyed); None keeps
+        # it in-memory per run.
+        return SpringboardIconMap(path=path)
 
 
 def ios_platform_registration() -> PlatformRegistration:

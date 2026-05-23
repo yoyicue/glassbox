@@ -536,7 +536,14 @@ def build_phone(
         scene_classifiers.insert(0, _classify_platform_scene)
 
     icon_map_factory = getattr(platform, "create_springboard_icon_map", None)
-    icon_map = icon_map_factory() if callable(icon_map_factory) else None
+    icon_map = None
+    if callable(icon_map_factory):
+        # Pass the persist path so the VLM icon map survives across runs; tolerate
+        # factories that predate the path parameter.
+        try:
+            icon_map = icon_map_factory(path=getattr(cfg, "springboard_icon_map_path", None))
+        except TypeError:
+            icon_map = icon_map_factory()
 
     phone = Phone(
         source=source,

@@ -184,6 +184,13 @@ def build_full_run_env(
     # miss (icon-tap opened a non-target app / ambiguous row OCR), so cost stays
     # bounded while precision improves. Override with GLASSBOX_ENABLE_VLM=0.
     env.setdefault("GLASSBOX_ENABLE_VLM", "1")
+    # Persist the VLM SpringBoard icon map across runs (layout-keyed, multi-device
+    # safe). A stable cross-run path — NOT the per-run isolated memory dir — so the
+    # VLM icon-naming cost is paid once per Home layout, then reused on cold start.
+    env.setdefault(
+        "GLASSBOX_SPRINGBOARD_ICON_MAP_PATH",
+        str(Path.home() / ".cache" / "glassbox" / "springboard_icon_map.json"),
+    )
     env.setdefault("GLASSBOX_ENABLE_MEMORY", "1")
     env.setdefault("GLASSBOX_MEMORY_BUNDLE", "com.apple." + "Preferences")
     if not reuse_memory:

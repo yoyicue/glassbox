@@ -174,6 +174,12 @@ class AgentConfig(BaseSettings):
     kimi_cache_dir: str | None = None
     """Legacy Kimi describe cache directory. Prefer GLASSBOX_VLM_CACHE_DIR."""
 
+    springboard_icon_map_path: str | None = None
+    """JSON path for the VLM-built SpringBoard icon map. When set it PERSISTS the
+    icon→position map across runs (layout-keyed, drift-invalidated), so the VLM
+    icon-naming cost is paid once per Home layout, not every cold start. When
+    None the map is in-memory only (per run). env GLASSBOX_SPRINGBOARD_ICON_MAP_PATH."""
+
     enable_coldstart: bool = False
     """Enable the cold-start VLM annotator: a brand-new UTG node triggers one
     VLM annotation, fused onto OCR boxes (slow + billed, off by default).
