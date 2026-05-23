@@ -288,8 +288,14 @@ def _has_back_affordance(scene: Scene) -> bool:
             el.type == "nav_back"
             or _text(el) in {"<", "‹", "〈", "返回", "Back"}
         )
+        # The status-bar clock sits top-left and is sometimes typed `nav_back`;
+        # its OCR is noisy ("3:50C", "3:516", "21:23") so it can masquerade as a
+        # Back button and wrongly disqualify the Settings root. A real nav-bar
+        # Back affordance lives below the status bar, so require the element to
+        # sit in the nav-bar band (and still drop any time-pattern text).
+        and not _TIME_RE.match(_text(el))
+        and 50 <= el.box.center[1] <= 180
         and el.box.center[0] <= 120
-        and el.box.center[1] <= 180
         for el in scene.elements
     )
 

@@ -30,6 +30,26 @@ def test_ios_scene_classifier_settings_root():
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_english_root_with_statusbar_clock_typed_nav_back():
+    # Regression: the status-bar clock is sometimes OCR-typed as `nav_back` at
+    # the top-left (its text is noisy, e.g. "3:50C" / "3:516"). It must not be
+    # treated as a Back affordance and disqualify the (English) Settings root —
+    # a real Back button lives in the nav bar below the status bar.
+    scene = _scene(
+        _el("3:516", 85, 36, w=44, ty="nav_back"),  # status-bar clock, mis-typed
+        _el("Settings", 120, 147, w=110, ty="button"),
+        _el("Bluetooth", 80, 434, w=80),
+        _el("Battery", 80, 593, w=70, ty="button"),
+        _el("General", 80, 734, w=70, ty="button"),
+        _el("Accessibility", 80, 788, w=110),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 982))
+
+    assert classified.kind == "settings_root"
+
+
+@pytest.mark.smoke
 def test_apply_ios_classification_projects_metadata_to_scene():
     scene = _scene(
         _el("设置", 198, 72, w=48),
