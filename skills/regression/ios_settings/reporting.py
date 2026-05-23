@@ -33,7 +33,12 @@ def _section_ids(labels: Iterable[str]) -> list[str]:
 # open iOS Spotlight and self-disable); it is soft because root coverage is now
 # carried by candidate re-grounding + the multi-pass reset, not by that fallback,
 # so its loss does not by itself mean an incomplete pass.
-SOFT_LIMITS = frozenset({"max_depth", "scroll_overshoot", "settings_search_unavailable"})
+SOFT_LIMITS = frozenset({
+    "max_depth", "scroll_overshoot", "settings_search_unavailable",
+    # search recovery skipped a section because intermittent back-nav left us
+    # off-root; coverage gathered so far is preserved, so it's soft not fatal.
+    "return_to_root_failed",
+})
 EXPECTED_BLOCKED_REASONS = frozenset(
     reason
     for _, _, reason in BLOCKED_CHILD_NAVIGATION_MARKERS

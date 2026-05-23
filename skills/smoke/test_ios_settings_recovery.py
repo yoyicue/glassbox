@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from skills.smoke.ios_settings_walkthrough_support import *
 from glassbox.effector import ActionResult
+from skills.regression.ios_settings.recovery import SettingsRootUnreachable
 
 @pytest.mark.smoke
 def test_siri_page_suggestions_are_not_treated_as_settings_search():
@@ -716,7 +717,7 @@ def test_return_to_settings_root_stops_when_back_shortcut_semantically_fails(mon
         def invalidate_perceive_cache(self):
             pass
 
-    with pytest.raises(AssertionError, match="failed to return"):
+    with pytest.raises(SettingsRootUnreachable, match="failed to return"):
         _return_to_settings_root(SemanticFailedBackPhone())
 
 

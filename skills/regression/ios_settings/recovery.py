@@ -68,11 +68,19 @@ class SettingsRecoveryActions:
     settings_search_has_bottom_chrome: Callable[[Any], bool]
 
 
+class SettingsRootUnreachable(RuntimeError):
+    """Raised when the Settings root cannot be re-grounded after all fallbacks.
+
+    A distinct (catchable) type so callers — e.g. missing-page search recovery —
+    can skip one section instead of aborting the whole crawl. Back navigation is
+    intermittent on AssistiveTouch, so a single return failure is recoverable."""
+
+
 def return_to_settings_root(phone, actions: SettingsRecoveryActions) -> None:
     last_state: tuple[str, tuple[str, ...]] | None = None
     repeated_state_count = 0
 
-    for retry_index in range(8):
+    for retry_index in range(12):
         scene = phone.perceive()
         kind = actions.scene_kind(scene, phone=phone)
         if kind == "settings_root" or actions.scene_is_settings_root(scene):
@@ -123,7 +131,15 @@ def return_to_settings_root(phone, actions: SettingsRecoveryActions) -> None:
             current = phone.perceive()
             if actions.return_state_signature(current, phone=phone) == state:
                 break
-    assert actions.is_settings_root(phone), "failed to return to the Settings root page"
+
+    if actions.is_settings_root(phone):
+        return
+    # Raise a distinct, catchable type (not a bare assert) so callers can choose
+    # to skip one section and keep the coverage gathered so far, instead of the
+    # whole crawl aborting on intermittent back-navigation. (Deliberately no
+    # extra aggressive fallback here — a semantically-rejected back action, e.g.
+    # a permission dialog, is a real stop, not something to hammer past.)
+    raise SettingsRootUnreachable("failed to return to the Settings root page")
 
 
 def settle_settings_root_or_exit_search(

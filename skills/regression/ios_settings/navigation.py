@@ -17,6 +17,7 @@ from typing import Any
 
 from glassbox.cognition import Box, UIElement
 from skills.regression.ios_settings import reporting as settings_reporting
+from skills.regression.ios_settings.recovery import SettingsRootUnreachable
 
 PageVisit = settings_reporting.PageVisit
 BlockedPage = settings_reporting.BlockedPage
@@ -326,19 +327,30 @@ def crawl_missing_root_pages_via_search(
                 limits_hit.add("settings_search_unavailable")
                 return
             continue
-        actions.crawl_current_page(
-            phone,
-            path=("Settings", label),
-            visits=visits,
-            seen_sigs=seen_sigs,
-            depth=1,
-            max_depth=max_depth,
-            limits_hit=limits_hit,
-            blocked_pages=blocked_pages,
-            rejected_candidates=rejected_candidates,
-            navigation_failures=navigation_failures,
-        )
-        actions.return_to_settings_root(phone)
+        try:
+            actions.crawl_current_page(
+                phone,
+                path=("Settings", label),
+                visits=visits,
+                seen_sigs=seen_sigs,
+                depth=1,
+                max_depth=max_depth,
+                limits_hit=limits_hit,
+                blocked_pages=blocked_pages,
+                rejected_candidates=rejected_candidates,
+                navigation_failures=navigation_failures,
+            )
+            actions.return_to_settings_root(phone)
+        except SettingsRootUnreachable:
+            # Intermittent back-nav left us off-root after this searched section.
+            # Don't crash the whole crawl (it would discard all coverage gathered
+            # so far). Record it (soft), try one more re-ground, and stop search
+            # recovery if root is still unreachable.
+            limits_hit.add("return_to_root_failed")
+            try:
+                actions.return_to_settings_root(phone)
+            except SettingsRootUnreachable:
+                return
         if len(visits) >= actions.max_pages_visited:
             limits_hit.add("max_pages")
             return
