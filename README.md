@@ -4,9 +4,6 @@ glassbox is an iOS-first computer-use runtime for driving a real device from
 screen observations. It wires frame capture, OCR/VLM perception, action
 execution, verification, recording, and screen memory behind pluggable seams.
 
-New here? [ONBOARDING.md](ONBOARDING.md) walks you from parts to a verified
-first run.
-
 ## Why this approach: minimal intrusiveness
 
 glassbox is **out-of-band**: it observes through the iPhone's HDMI output and
@@ -49,6 +46,12 @@ python -m pip install -e ".[dev]"
 
 ## Quickstart
 
+Copy the local config template before hardware or VLM runs:
+
+```bash
+cp .env.example .env
+```
+
 Offline/static-frame development (no hardware needed):
 
 ```bash
@@ -80,6 +83,24 @@ The walkthrough never changes a setting: it foregrounds Settings, opens
 navigation rows, reads page text, and returns via the visible back affordance.
 It exercises the full perception → action → verification pipeline and writes a
 JSON report plus artifacts.
+
+### Local VLM config
+
+VLM is opt-in. The runtime reads `.env` through `glassbox.config` and selects a
+client only when `GLASSBOX_ENABLE_VLM=1` is set.
+
+```dotenv
+GLASSBOX_ENABLE_VLM=1
+GLASSBOX_VLM=moonshot          # or siliconflow
+MOONSHOT_API_KEY=...
+SILICONFLOW_API_KEY=...
+```
+
+`GLASSBOX_VLM=moonshot` uses the Moonshot Anthropic-compatible client; the
+SiliconFlow key is only needed when selecting `GLASSBOX_VLM=siliconflow`. The
+lower-level `make_vlm_client()` helper also accepts `VLM_BACKEND` /
+`KIMI_BACKEND` for direct-client compatibility, but normal runtime selection is
+the `GLASSBOX_*` pair above.
 
 ## Architecture
 
@@ -242,7 +263,7 @@ These are the concrete implementations that ship for the seams in
 | Frame source | AVFoundation, static PNG directory, PicoKVM H.264 stream | macOS is the primary controller platform. |
 | Effector | noop, PicoKVM | PicoKVM uses USB HID mouse/keyboard semantics with iOS AssistiveTouch/external pointer enabled. |
 | OCR | Apple Vision, ocrmac | PaddleOCR is optional through the `ocr` extra. |
-| VLM | Moonshot-compatible and SiliconFlow-compatible clients | VLM is opt-in with environment-provided API keys. |
+| VLM | Moonshot-compatible and SiliconFlow-compatible clients | VLM is opt-in: set `GLASSBOX_ENABLE_VLM=1`, choose `GLASSBOX_VLM=moonshot` or `siliconflow`, and provide the matching API key. |
 | Platform | iOS | Other platforms are extension seams, not built-in finished ports. |
 
 The default open-source tree includes the PicoKVM, noop, and static-frame paths
