@@ -19,6 +19,8 @@ def ordered_label_candidates(
     viewport. The result is a small closed set around the target row's expected
     position in `labels`, suitable for a local VLM choice prompt.
     """
+    if max_candidates <= 0:
+        return ()
     label_index = {label: idx for idx, label in enumerate(labels)}
     excluded = set(exclude)
     anchors = sorted(
@@ -26,7 +28,7 @@ def ordered_label_candidates(
         for label, y in observed
         if label in label_index
     )
-    if not anchors or max_candidates <= 0:
+    if not anchors:
         return tuple(label for label in labels if label not in excluded)[:max_candidates]
 
     before = [idx for y, idx in anchors if y < target_y]

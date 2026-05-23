@@ -484,6 +484,45 @@ def test_computer_use_runtime_semantic_plan_retries_same_strategy_on_transport_f
 
 
 @pytest.mark.smoke
+def test_computer_use_runtime_semantic_plan_does_not_retry_non_idempotent_transport_failure(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["主屏幕"],
+            ["主屏幕"],
+        ],
+    )
+    calls = []
+
+    def flaky_call():
+        calls.append("target_tap")
+        return ActionResult.failed(
+            backend="test",
+            connected=False,
+            error="transport down",
+        )
+
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=False,
+    )
+    plan = SemanticActionPlan(spec, [BoundStrategy(spec.strategies[0], flaky_call)])
+
+    result = phone._execute_action("tap", plan, transport_retry_budget=1)
+    orchestrator.close()
+
+    assert result.semantic_status == "transport_failed"
+    assert calls == ["target_tap"]
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["command"]["strategy"] for action in actions] == ["target_tap"]
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert not any(event["type"] == "action.retry_scheduled" for event in audit)
+
+
+@pytest.mark.smoke
 def test_computer_use_runtime_semantic_plan_resets_transport_retry_budget_after_recovery(tmp_path):
     recoveries = []
 
@@ -1132,6 +1171,48 @@ def test_computer_use_runtime_stuck_detector_recovers_after_repeated_failure(tmp
     assert [event["payload"]["count"] for event in observed] == [1, 2, 3]
     assert sum(1 for event in audit if event["type"] == "stuck_detector.recovery.started") == 1
     assert sum(1 for event in audit if event["type"] == "stuck_detector.recovery.finished") == 1
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_success_clears_stuck_detector_progress(tmp_path):
+    recoveries = []
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(
+        store,
+        recovery_policy=RuntimeRecoveryPolicy(
+            lambda _phone, reason, payload: recoveries.append((reason, payload["recovery"])) or True,
+            max_attempts=1,
+        ),
+        stuck_detector=StuckLoopDetector(threshold=2),
+    )
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR([["主屏幕"]] * 12),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("noop"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["主屏幕"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(spec, [BoundStrategy(spec.strategies[0], lambda: ActionResult(ok=True, backend="test", connected=True))])
+
+    first = phone.control_center()
+    progress = phone._execute_action("tap", plan)
+    second = phone.control_center()
+    orchestrator.close()
+
+    assert first.semantic_status == "failed"
+    assert progress.semantic_status == "succeeded"
+    assert second.semantic_status == "failed"
+    assert recoveries == []
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    observed = [event for event in audit if event["type"] == "stuck_detector.observed"]
+    assert [event["payload"]["count"] for event in observed] == [1, 1]
 
 
 @pytest.mark.smoke

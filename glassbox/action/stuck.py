@@ -72,6 +72,7 @@ class StuckLoopDetector:
     def reset(self) -> None:
         self._last_key = None
         self._count = 0
+        self._fired_keys.clear()
 
 
 __all__ = ["StuckDecision", "StuckLoopDetector", "StuckSample"]

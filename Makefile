@@ -4,7 +4,7 @@ ROUNDS ?= 1
 OUT ?= artifacts/computer_use_success_rate/benchmark.json
 ARTIFACT_ROOT ?= artifacts/computer_use_success_rate/runs
 REPORT_DIR ?= artifacts/computer_use_success_rate/reports
-TERMINAL_EXPECTED_STATE ?= {"kind":"unknown","payload":{}}
+TERMINAL_EXPECTED_STATE ?= {"kind":"page_id","payload":{"page_id":"settings/root"}}
 COMPUTER_USE_SUCCESS_RATE ?= uv run python -m skills.regression.computer_use_success_rate
 
 computer-use-success-rate-ios-settings:

@@ -375,8 +375,8 @@ def test_status_normalization_keeps_stable_metric_buckets():
     assert normalize_status("skipped") == "blocked"
 
 
-def test_semantic_verdict_uses_scene_progress_evidence_for_unknown_status():
-    assert semantic_verdict("unknown", {"verifier": "scene_progressed", "confidence": 0.7}) == "succeeded"
+def test_semantic_verdict_keeps_scene_progress_in_stable_unknown_bucket():
+    assert semantic_verdict("unknown", {"verifier": "scene_progressed", "confidence": 0.7}) == "unknown"
     assert semantic_verdict("unknown", {"verifier": "scene_progressed", "confidence": 0.2}) == "unknown"
     assert semantic_verdict("failed", {"verifier": "scene_progressed", "confidence": 0.7}) == "failed"
 
@@ -478,6 +478,24 @@ def test_task_completion_rate_supports_visible_text_terminal_state(tmp_path):
     assert payload["tasks"][0]["outcome"] == "succeeded"
     assert payload["tasks"][0]["final_state"]["visible_texts"] == ["设置"]
     assert payload["metrics"]["task_completion_rate"] == 1.0
+
+
+def test_task_completion_rate_supports_element_terminal_states(tmp_path):
+    appeared = aggregate_benchmark(
+        [_run_dir(tmp_path / "appeared", status="succeeded")],
+        terminal_expected_state={"kind": "element_appears", "payload": {"role": "text", "text": "设置"}},
+    )
+    gone = aggregate_benchmark(
+        [_run_dir(tmp_path / "gone", status="succeeded")],
+        terminal_expected_state={"kind": "element_gone", "payload": {"text": "不存在"}},
+    )
+
+    assert validate_benchmark(appeared) == []
+    assert validate_benchmark(gone) == []
+    assert appeared["tasks"][0]["outcome"] == "succeeded"
+    assert gone["tasks"][0]["outcome"] == "succeeded"
+    assert appeared["metrics"]["task_completion_rate"] == 1.0
+    assert gone["metrics"]["task_completion_rate"] == 1.0
 
 
 def test_validate_benchmark_recomputes_metrics(tmp_path):
@@ -631,6 +649,19 @@ def test_aggregate_benchmark_excludes_recovery_actions_from_success_denominators
     assert payload["metrics"]["recoveries"] == 1
 
 
+def test_aggregate_benchmark_honors_explicit_recovery_role(tmp_path):
+    run_dir = _run_dir(tmp_path, status="succeeded")
+    actions = [json.loads(line) for line in (run_dir / "actions.jsonl").read_text(encoding="utf-8").splitlines()]
+    actions[-1]["role"] = "recovery"
+    _append_jsonl(run_dir / "actions.jsonl", *actions)
+
+    payload = aggregate_benchmark([run_dir])
+
+    assert validate_benchmark(payload) == []
+    assert payload["tasks"][0]["actions"][0]["role"] == "recovery"
+    assert payload["metrics"]["action_success_rate"] == 0.0
+
+
 def test_aggregate_benchmark_deduplicates_recovered_primary_and_recovery_action(tmp_path):
     payload = aggregate_benchmark([_run_dir(tmp_path, status="recovered_with_recovery_action")])
 
@@ -638,6 +669,7 @@ def test_aggregate_benchmark_deduplicates_recovered_primary_and_recovery_action(
     actions = payload["tasks"][0]["actions"]
     assert [action["role"] for action in actions] == ["primary", "recovery"]
     assert actions[0]["recovered"] is True
+    assert actions[1]["recovered"] is False
     assert payload["metrics"]["recoveries"] == 1
 
 
@@ -1114,3 +1146,4 @@ def test_make_entrypoint_wraps_ios_settings_success_rate_harness():
     assert "skills.regression.computer_use_success_rate" in makefile
     assert "run-ios-settings" in makefile
     assert "--rounds $(ROUNDS)" in makefile
+    assert 'TERMINAL_EXPECTED_STATE ?= {"kind":"page_id","payload":{"page_id":"settings/root"}}' in makefile

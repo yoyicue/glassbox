@@ -46,12 +46,16 @@ VLM_TRIGGER_VALUES = {
 }
 
 DEFAULT_TERMINAL_EXPECTED_STATE = {"kind": "unknown", "payload": {}}
+IOS_SETTINGS_TERMINAL_EXPECTED_STATE = {
+    "kind": "page_id",
+    "payload": {"page_id": "settings/root"},
+}
 
 
 def _json_default(value: Any) -> str:
     if isinstance(value, Path):
         return str(value)
-    return str(value)
+    raise TypeError(f"object is not JSON serializable: {type(value).__name__}")
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -143,16 +147,9 @@ def normalize_status(status: Any) -> str:
 
 
 def semantic_verdict(raw_status: Any, semantic: Mapping[str, Any] | None = None) -> str:
-    """Normalize an action verdict using semantic verifier evidence."""
-    raw = _raw_status(raw_status)
-    verdict = normalize_status(raw)
-    if verdict != "unknown" or not isinstance(semantic, Mapping):
-        return verdict
-    verifier = str(semantic.get("verifier") or "")
-    confidence = float(semantic.get("confidence", 0.0) or 0.0)
-    if verifier == "scene_progressed" and confidence >= 0.5:
-        return "succeeded"
-    return verdict
+    """Normalize an action verdict into the stable compare bucket."""
+    del semantic
+    return normalize_status(_raw_status(raw_status))
 
 
 def _raw_status(status: Any) -> str:
@@ -176,6 +173,9 @@ def _action_intent(action: Mapping[str, Any]) -> str:
 
 
 def _action_role(action: Mapping[str, Any], group: Mapping[str, Any] | None = None) -> str:
+    explicit = str(action.get("role") or (group or {}).get("role") or "")
+    if explicit in {"primary", "recovery"}:
+        return explicit
     actor = str(action.get("actor") or (group or {}).get("actor") or "")
     intent = _action_intent(action)
     if actor == "runtime" or intent.startswith(("return.", "recovery.")) or ".recovery" in intent:
@@ -318,6 +318,7 @@ def _final_state(run_dir: Path, actions: list[dict[str, Any]]) -> dict[str, Any]
                 "scene_id": after.get("scene_id"),
                 "is_anchor": bool(page_id in {"home", "settings/root"}),
                 "visible_texts": _scene_texts(scene),
+                "elements": scene.get("elements") if isinstance(scene.get("elements"), list) else [],
             }
     return {"page_id": None, "is_anchor": False}
 
@@ -357,7 +358,33 @@ def _terminal_expected_state_met(
         any_ok = not any_of or any(_contains_text(texts, wanted) for wanted in any_of)
         all_ok = all(_contains_text(texts, wanted) for wanted in all_of)
         return any_ok and all_ok
+    if kind in {"element_appears", "element_gone"}:
+        query = payload.get("target_identity") if isinstance(payload.get("target_identity"), Mapping) else payload
+        matched = _final_state_element_matches(final_state, query)
+        return matched if kind == "element_appears" else not matched
     return None
+
+
+def _final_state_element_matches(final_state: Mapping[str, Any], query: Mapping[str, Any]) -> bool:
+    text = str(query.get("text") or query.get("label") or query.get("intent") or "")
+    role = str(query.get("role") or query.get("type") or "")
+    elements = final_state.get("elements")
+    if isinstance(elements, list):
+        for element in elements:
+            if not isinstance(element, Mapping):
+                continue
+            element_text = str(element.get("text") or "")
+            element_role = str(element.get("role") or element.get("type") or "")
+            if role and element_role != role:
+                continue
+            if text and not _contains_text([element_text], text):
+                continue
+            if role or text:
+                return True
+    if text:
+        texts = [str(item) for item in final_state.get("visible_texts", []) or []]
+        return _contains_text(texts, text)
+    return False
 
 
 def _group_actions(
@@ -459,8 +486,8 @@ def _action_record(
             else:
                 retry_count_same_strategy += 1
         previous_strategy = strategy
-    recovered = _recovery_finished_successfully(retry_events)
     role = _action_role(final, group)
+    recovered = role == "primary" and _recovery_finished_successfully(retry_events)
     return {
         "seq": seq,
         "role": role,
@@ -1007,7 +1034,7 @@ def _find_new_run_dirs(root: Path, before: set[Path]) -> list[Path]:
 
 def _run_ios_settings(args: argparse.Namespace) -> int:
     try:
-        terminal = _parse_json_arg(args.terminal_expected_state, DEFAULT_TERMINAL_EXPECTED_STATE)
+        terminal = _parse_json_arg(args.terminal_expected_state, IOS_SETTINGS_TERMINAL_EXPECTED_STATE)
     except (json.JSONDecodeError, ValueError) as exc:
         print(f"ERROR: --terminal-expected-state: {exc}")
         return 1

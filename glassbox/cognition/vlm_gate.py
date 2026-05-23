@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -53,8 +54,16 @@ def escalation_triggers(input_: VLMGateInput) -> list[VLMTrigger]:
     triggers: list[VLMTrigger] = []
     if input_.ocr_confidence is None:
         triggers.append("confidence_missing")
-    elif input_.ocr_confidence < input_.confidence_threshold:
-        triggers.append("low_confidence")
+    else:
+        try:
+            confidence = float(input_.ocr_confidence)
+        except (TypeError, ValueError):
+            triggers.append("confidence_missing")
+        else:
+            if not math.isfinite(confidence):
+                triggers.append("confidence_missing")
+            elif confidence < input_.confidence_threshold:
+                triggers.append("low_confidence")
     if not input_.target_found:
         triggers.append("target_missing")
     if input_.classifier_conflict:
@@ -107,7 +116,10 @@ class VLMEscalationGate:
             return None
         self.state.action_calls += 1
         self.state.attempt_calls[attempt_index] = self.state.attempt_calls.get(attempt_index, 0) + 1
-        return call()
+        try:
+            return call()
+        except Exception:
+            return None
 
     def audit_fields(self) -> dict[str, Any]:
         return self.state.audit_fields()

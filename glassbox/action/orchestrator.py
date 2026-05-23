@@ -17,7 +17,12 @@ from glassbox.action.actuation_profile import ActuationProfile, save_actuation_p
 from glassbox.action.policy import RiskDecision, RiskPolicy
 from glassbox.action.recovery import RuntimeRecoveryPolicy
 from glassbox.action.seeds import DEFAULT_RECOVERY_SEED, recovery_hint
-from glassbox.action.semantic_plan import ExpectedState, SemanticActionPlan, verify_expected_state
+from glassbox.action.semantic_plan import (
+    ExpectedState,
+    SemanticActionPlan,
+    semantic_transition_edge,
+    verify_expected_state,
+)
 from glassbox.action.stuck import StuckLoopDetector, StuckSample
 from glassbox.cognition.vlm_gate import VLMEscalationGate, VLMGateInput
 from glassbox.effector import ActionResult
@@ -455,16 +460,19 @@ class ActionOrchestrator:
                         metadata[key] = attempt_metadata[key]
                 attempts.append(attempt)
                 status = attempt.semantic.status
-                if status == "succeeded":
+                edge = semantic_transition_edge(
+                    status,
+                    disqualifying_state=bool(attempt.semantic.disqualifying_state),
+                )
+                if edge == "done":
                     terminal_reason = "expected state reached"
                     break
-                if attempt.semantic.disqualifying_state:
+                if edge == "terminate":
                     terminal_reason = attempt.semantic.disqualifying_state
+                    if not terminal_reason:
+                        terminal_reason = attempt.semantic.reason
                     break
-                if status in {"blocked", "approval_required", "exception"}:
-                    terminal_reason = attempt.semantic.disqualifying_state or attempt.semantic.reason
-                    break
-                if status == "transport_failed":
+                if edge == "retry_same" and spec.idempotent:
                     used_transport_retries = transport_retries_by_strategy.get(strategy_index, 0)
                     if used_transport_retries < transport_retry_budget:
                         transport_retries_by_strategy[strategy_index] = used_transport_retries + 1
@@ -605,7 +613,10 @@ class ActionOrchestrator:
         group_id: str,
     ) -> None:
         status = final.semantic.status
-        if status in {"succeeded", "blocked", "approval_required", "exception"}:
+        if status == "succeeded":
+            self.stuck_detector.reset()
+            return
+        if status in {"blocked", "approval_required", "exception"}:
             return
         if final.semantic.disqualifying_state:
             return

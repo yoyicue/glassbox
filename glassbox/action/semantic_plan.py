@@ -19,7 +19,6 @@ ExpectedStateKind = Literal["page_id", "visible_text", "element_appears", "eleme
 TerminalReason = Literal[
     "succeeded",
     "strategies_exhausted",
-    "recovered",
     "blocked",
     "approval_required",
     "exception",
@@ -265,7 +264,7 @@ class SemanticActionPlan:
                 elif escalate_vlm is not None:
                     vlm_budget_exhausted = True
 
-            edge = "terminate" if semantic.disqualifying_state else self._edge(status)
+            edge = semantic_transition_edge(status, disqualifying_state=bool(semantic.disqualifying_state))
             attempts.append(
                 SemanticAttempt(
                     index=attempt_index,
@@ -307,7 +306,7 @@ class SemanticActionPlan:
                 )
             if edge == "retry_same":
                 used = retry_counts.get(strategy_index, 0)
-                if used < transport_retry_budget:
+                if self.spec.idempotent and used < transport_retry_budget:
                     retry_counts[strategy_index] = used + 1
                     continue
                 strategy_index += 1
@@ -360,15 +359,22 @@ class SemanticActionPlan:
 
     @staticmethod
     def _edge(status: str) -> str:
-        if status == "succeeded":
-            return "done"
-        if status in {"failed", "partial", "unknown"}:
-            return "switch"
-        if status == "transport_failed":
-            return "retry_same"
-        if status in {"exception", "blocked", "approval_required"}:
-            return "terminate"
+        return semantic_transition_edge(status)
+
+
+def semantic_transition_edge(status: str, *, disqualifying_state: bool = False) -> str:
+    """Map verifier status to the P2 state-machine edge used by all runners."""
+    if disqualifying_state:
+        return "terminate"
+    if status == "succeeded":
+        return "done"
+    if status in {"failed", "partial", "unknown"}:
         return "switch"
+    if status == "transport_failed":
+        return "retry_same"
+    if status in {"exception", "blocked", "approval_required"}:
+        return "terminate"
+    return "switch"
 
 
 def verify_expected_state(expected: ExpectedState, scene: Any) -> SemanticOutcome:

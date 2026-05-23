@@ -278,6 +278,24 @@ def test_runner_retries_same_strategy_for_transport_failure_before_switching():
     assert run.strategy_switches == 0
 
 
+def test_runner_does_not_retry_transport_failure_for_non_idempotent_action():
+    calls: list[str] = []
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("element_appears", {"text": "Done"}),
+        recovery=None,
+        idempotent=False,
+    )
+    plan = _plan(spec, calls)
+
+    run = plan.run(lambda *_args: _outcome("transport_failed"), transport_retry_budget=1)
+
+    assert run.succeeded is False
+    assert calls == ["target_tap"]
+    assert run.attempts[0].edge == "retry_same"
+
+
 def test_runner_terminates_on_blocked_without_switch_or_recovery():
     calls: list[str] = []
     recoveries: list[str] = []
@@ -292,6 +310,46 @@ def test_runner_terminates_on_blocked_without_switch_or_recovery():
     assert run.terminal_reason == "blocked"
     assert calls == ["keyboard_combo"]
     assert recoveries == []
+
+
+def test_runner_terminates_on_approval_required_without_switch_or_recovery():
+    calls: list[str] = []
+    recoveries: list[str] = []
+    plan = _plan(_spec(), calls)
+
+    run = plan.run(
+        lambda *_args: _outcome("approval_required"),
+        recover=lambda name, _expected: recoveries.append(name) or True,
+    )
+
+    assert run.status == "approval_required"
+    assert run.terminal_reason == "approval_required"
+    assert calls == ["keyboard_combo"]
+    assert recoveries == []
+
+
+def test_runner_converts_command_exception_to_terminal_exception_outcome():
+    calls: list[str] = []
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery="recover_to_home_then_renavigate",
+        idempotent=True,
+    )
+
+    def broken_call():
+        calls.append("target_tap")
+        raise RuntimeError("boom")
+
+    plan = SemanticActionPlan(spec, [BoundStrategy(spec.strategies[0], broken_call)])
+
+    run = plan.run(lambda *_args: _outcome("succeeded"), recover=lambda *_args: True)
+
+    assert run.status == "exception"
+    assert run.terminal_reason == "exception"
+    assert calls == ["target_tap"]
+    assert run.attempts[0].semantic.verifier == "semantic_action_plan"
 
 
 def test_runner_terminates_on_disqualifying_state_without_switch_or_recovery():

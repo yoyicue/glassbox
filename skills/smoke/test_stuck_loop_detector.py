@@ -48,6 +48,18 @@ def test_stuck_detector_observe_and_recover_invokes_callback_once():
     assert calls == [("home_anchor", 2)]
 
 
+def test_stuck_detector_reset_allows_same_pair_to_fire_again():
+    detector = StuckLoopDetector(threshold=2)
+    sample = StuckSample("sig-a", "unknown")
+
+    assert detector.observe(sample).should_recover is False
+    assert detector.observe(sample).should_recover is True
+    detector.reset()
+
+    assert detector.observe(sample).should_recover is False
+    assert detector.observe(sample).should_recover is True
+
+
 def test_stuck_detector_rejects_invalid_threshold():
     with pytest.raises(ValueError):
         StuckLoopDetector(threshold=0)

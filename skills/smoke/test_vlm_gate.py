@@ -10,6 +10,7 @@ from glassbox.cognition.vlm_gate import VLMEscalationGate, VLMGateInput, escalat
     [
         (VLMGateInput(ocr_confidence=0.2), "low_confidence"),
         (VLMGateInput(ocr_confidence=None), "confidence_missing"),
+        (VLMGateInput(ocr_confidence=float("nan")), "confidence_missing"),
         (VLMGateInput(target_found=False, ocr_confidence=0.95), "target_missing"),
         (VLMGateInput(classifier_conflict=True, ocr_confidence=0.95), "classifier_conflict"),
         (VLMGateInput(verification_status="unknown", ocr_confidence=0.95), "verify_unknown"),
@@ -77,6 +78,18 @@ def test_attempt_budget_is_enforced_even_when_action_budget_remains():
     assert gate.escalate(VLMGateInput(target_found=False), lambda: "second", attempt_index=0) is None
     assert gate.escalate(VLMGateInput(target_found=False), lambda: "third", attempt_index=1) == "third"
     assert gate.audit_fields()["vlm_calls"] == 2
+
+
+def test_vlm_call_exception_degrades_without_raising():
+    gate = VLMEscalationGate()
+
+    def broken_call():
+        raise RuntimeError("vlm unavailable")
+
+    result = gate.escalate(VLMGateInput(target_found=False), broken_call)
+
+    assert result is None
+    assert gate.audit_fields()["vlm_calls"] == 1
 
 
 def test_escalation_triggers_reports_multiple_reasons_in_order():
