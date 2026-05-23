@@ -111,6 +111,13 @@ lower-level `make_vlm_client()` helper also accepts `VLM_BACKEND` /
 `KIMI_BACKEND` for direct-client compatibility, but normal runtime selection is
 the `GLASSBOX_*` pair above.
 
+To avoid paying the VLM icon-naming cost on every cold start, set
+`GLASSBOX_SPRINGBOARD_ICON_MAP_PATH` to a JSON file: the VLM-built SpringBoard
+icon→position map is then persisted across runs (layout-keyed and
+drift-invalidated), so it is rebuilt only when the Home layout changes. Unset, the
+map is in-memory per run. The Settings `run_full` helper defaults it to
+`~/.cache/glassbox/springboard_icon_map.json`.
+
 ## Architecture
 
 glassbox runs an **observe → decide → act → verify** loop against a live screen,
