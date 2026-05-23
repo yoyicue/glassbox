@@ -169,6 +169,29 @@ def test_ios_scene_classifier_system_search_is_not_settings_search():
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_today_widget_home_with_spotlight_is_springboard():
+    # Regression (live HK-English device): the Today/widget home (weather widget
+    # + app-label grid + bottom "Q Search" Spotlight pill) was mis-classified as
+    # `settings_detail` (grouped-control false-positive), which broke SpringBoard
+    # detection and the crawl's home() grounding. The bottom Spotlight pill marks
+    # it as Home, not a Settings detail page.
+    def _c(text, cx, cy, w=70, h=20, ty="text"):  # center-based placement
+        return _el(text, cx - w // 2, cy - h // 2, w=w, h=h, ty=ty)
+
+    scene = _scene(
+        _c("Shanghai", 92, 130), _c("23°", 88, 161), _c("SUNDAY", 286, 130),
+        _c("No Events Today", 323, 222, w=150), _c("H:27°L:23°", 95, 258, w=90),
+        _c("Weather", 124, 294), _c("Calendar", 329, 294),
+        _c("FaceTime", 73, 405), _c("Photos", 276, 405), _c("Camera", 380, 404),
+        _c("Notes", 73, 516), _c("Clock", 175, 516), _c("App Store", 379, 516),
+        _c("Wallet", 74, 626), _c("Settings", 176, 627), _c("RustDesk", 277, 626),
+        _c("Q Search", 227, 798, w=90),
+    )
+
+    assert classify_ios_scene(scene, viewport_size=(452, 988)).kind == "springboard"
+
+
+@pytest.mark.smoke
 def test_ios_scene_classifier_weather_widget_home_is_springboard():
     scene = _scene(
         _el("上海市", 52, 118, w=52),

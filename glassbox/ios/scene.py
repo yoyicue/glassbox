@@ -560,6 +560,16 @@ def _looks_like_settings_grouped_control_detail(scene: Scene, *, viewport_size: 
     title = _page_title(scene, viewport_size=(w, h))
     if not title or _has_settings_search_chrome(scene, viewport_size=(w, h)):
         return False
+    # A bottom Spotlight "Search" pill is a Home/SpringBoard signal — a Settings
+    # grouped-control DETAIL page never has one. Without this guard the Today/
+    # widget home (weather widget + app-label grid + a top "title") trips the
+    # left-rows heuristic and is mis-read as a Settings detail, which then breaks
+    # the SpringBoard icon-grid detection and the crawl's home() grounding.
+    if any(
+        _matches(_text(el), HOME_SEARCH_LABELS, fuzzy=0.78) and el.box.center[1] > h * 0.78
+        for el in scene.elements
+    ):
+        return False
     has_nav_title = any(
         _text(el) == title
         and el.box.center[1] <= h * 0.18
