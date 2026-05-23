@@ -668,8 +668,16 @@ class SettingsPolicy:
         if text.strip().casefold() in {value.casefold() for value in EXACT_UNSAFE_OR_NON_NAV_TEXT}:
             return True
         if allow_sensitive_root_labels:
+            # Match the override against the raw text AND its canonical root
+            # label. OCR often reads e.g. "面容ID与密码" (Chinese) which does not
+            # fuzzy-match the English "Face ID与密码" override but canonicalizes
+            # to it; without this it falls through to the "密码" substring rule
+            # and the row is wrongly dropped as unsafe at the root.
+            canonical = self.canonical_expected_root_label(text)
             for label in ROOT_ONLY_UNSAFE_OVERRIDES:
-                if self.matches_label(text, label):
+                if self.matches_label(text, label) or (
+                    canonical is not None and self.matches_label(canonical, label)
+                ):
                     return False
         if not self.is_root_only_unsafe_override(text) and self.is_exact_safe_navigation_label(text):
             return False
