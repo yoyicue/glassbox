@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,7 @@ from skills.regression.ios_settings.policy import (
     DEFAULT_SETTINGS_POLICY,
     EXPECTED_ROOT_NAV_TEXT_ZH,
     FAILURE_CATEGORY_KEYS,
+    ROOT_COVERAGE_ONLY_LABELS,
 )
 from skills.regression.ios_settings.reporting import (
     EXPECTED_BLOCKED_REASONS,
@@ -31,6 +34,30 @@ from skills.regression.ios_settings.reporting import (
 )
 
 _canonical_expected_root_label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label
+
+DEVICE_UNAVAILABLE_ENV = "IOS_SETTINGS_DEVICE_UNAVAILABLE_ROOT_LABELS"
+
+
+def entry_exempt_root_labels(extra: Iterable[str] = ()) -> set[str]:
+    """Canonical root labels that need not be ENTERED in an exhaustive pass.
+
+    Two distinct reasons, both legitimate (so an exhaustive run can still pass):
+    - ``ROOT_COVERAGE_ONLY_LABELS``: the crawler policy deliberately records
+      these as visible but never drills in (e.g. 钱包与 Apple Pay), so requiring
+      entry contradicts the crawler's own design.
+    - device-unavailable labels: sections this *device* cannot open regardless of
+      the crawler (e.g. 蜂窝网络 on a no-SIM iPhone). These are opt-in via
+      ``--device-unavailable-root`` / ``IOS_SETTINGS_DEVICE_UNAVAILABLE_ROOT_LABELS``
+      and default to none, so a capable device still requires them and a real
+      navigation regression is never silently hidden.
+    """
+    labels: set[str] = set()
+    env_value = os.getenv(DEVICE_UNAVAILABLE_ENV, "")
+    for raw in (*ROOT_COVERAGE_ONLY_LABELS, *env_value.split(","), *extra):
+        text = (raw or "").strip()
+        if text:
+            labels.add(_canonical_expected_root_label(text) or text)
+    return labels
 
 UNSAFE_PATH_PATTERNS = tuple(
     re.compile(pattern, re.IGNORECASE)
@@ -83,9 +110,11 @@ def validate_report(
     *,
     require_exhaustive: bool = True,
     expected_run_id: str | None = None,
+    device_unavailable_root: Iterable[str] = (),
 ) -> list[str]:
     """Return human-readable validation errors. Empty list means pass."""
     errors: list[str] = []
+    entry_exempt = entry_exempt_root_labels(device_unavailable_root)
 
     if expected_run_id is not None and report.get("run_id") != expected_run_id:
         errors.append("report run_id does not match expected run")
@@ -156,8 +185,11 @@ def validate_report(
         errors.append("root_coverage.visited does not match visits")
     if missing != computed_root["missing"]:
         errors.append("root_coverage.missing does not match visits")
-    if require_exhaustive and computed_root["missing"]:
-        errors.append(f"missing expected root pages: {computed_root['missing']}")
+    unentered_required = [
+        label for label in computed_root["missing"] if label not in entry_exempt
+    ]
+    if require_exhaustive and unentered_required:
+        errors.append(f"missing expected root pages: {unentered_required}")
 
     blocked_pages = report.get("blocked_pages")
     if not isinstance(blocked_pages, list):
@@ -346,9 +378,17 @@ def validate_report(
             errors.append(f"navigation_failures[{idx}] path does not start at Settings: {' > '.join(path_key)}")
         if path_key not in visit_paths:
             errors.append(f"navigation failure path was not visited: {' > '.join(path_key)}")
+        # A failure on an entry-exempt root section (ROOT_COVERAGE_ONLY by design,
+        # or device-unavailable like 蜂窝网络 on a no-SIM iPhone) is expected: the
+        # row legitimately cannot be entered, so the recovery attempt failing is
+        # not a regression. Skip the page-evidence and did-not-open checks for it.
+        text_entry_exempt = (
+            isinstance(text, str)
+            and (_canonical_expected_root_label(text) or text) in entry_exempt
+        )
         if not isinstance(text, str) or not text:
             errors.append(f"navigation_failures[{idx}] has invalid text")
-        elif text not in visit_texts_by_path.get(path_key, []):
+        elif not text_entry_exempt and text not in visit_texts_by_path.get(path_key, []):
             errors.append(
                 f"navigation_failures[{idx}] text was not present in visited page: "
                 f"{' > '.join(path_key)} > {text}"
@@ -356,7 +396,7 @@ def validate_report(
         if not isinstance(reason, str) or reason not in EXPECTED_NAVIGATION_FAILURE_REASONS:
             errors.append(f"navigation_failures[{idx}] has invalid reason: {reason!r}")
             continue
-        if require_exhaustive:
+        if require_exhaustive and not text_entry_exempt:
             errors.append(f"navigation candidate did not open: {' > '.join(path_key)} > {text}")
 
     return errors
@@ -527,13 +567,28 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Require the report to have the run_id generated for this run_full invocation.",
     )
+    parser.add_argument(
+        "--device-unavailable-root",
+        action="append",
+        default=[],
+        metavar="LABEL",
+        help="Root section this device cannot open (e.g. 蜂窝网络 on a no-SIM iPhone); "
+        "do not count it as a missing/failed page. Repeatable, or comma-separated. "
+        f"Also read from ${DEVICE_UNAVAILABLE_ENV}.",
+    )
     args = parser.parse_args(argv)
 
+    device_unavailable_root = [
+        token
+        for value in args.device_unavailable_root
+        for token in value.split(",")
+    ]
     report = json.loads(args.report.read_text(encoding="utf-8"))
     errors = validate_report(
         report,
         require_exhaustive=not args.allow_partial,
         expected_run_id=args.expected_run_id,
+        device_unavailable_root=device_unavailable_root,
     )
     if errors:
         for error in errors:

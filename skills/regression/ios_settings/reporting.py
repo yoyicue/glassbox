@@ -15,7 +15,11 @@ from skills.regression.ios_settings.policy import (
 )
 
 # Soft limits are reportable perception/budget signals, not strict traversal blockers.
-SOFT_LIMITS = frozenset({"max_depth", "scroll_overshoot"})
+# `settings_search_unavailable` is the Settings-search fallback degrading (it can
+# open iOS Spotlight and self-disable); it is soft because root coverage is now
+# carried by candidate re-grounding + the multi-pass reset, not by that fallback,
+# so its loss does not by itself mean an incomplete pass.
+SOFT_LIMITS = frozenset({"max_depth", "scroll_overshoot", "settings_search_unavailable"})
 EXPECTED_BLOCKED_REASONS = frozenset(
     reason
     for _, _, reason in BLOCKED_CHILD_NAVIGATION_MARKERS
