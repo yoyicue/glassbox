@@ -495,6 +495,18 @@ class Phone:
             and "back" in classified.safe_actions
         ):
             return True, "platform_settings_detail", nav_point or self._inferred_ios_nav_back_point()
+        # Last resort: a page the classifier positively tagged "unknown" (it ran
+        # and could not identify the scene — distinct from no classifier at all)
+        # is almost always a sub-page whose chrome defeats back/affordance
+        # detection, e.g. the Action-Button carousel with a live camera preview.
+        # iOS still draws the conventional top-left back chevron there, so a
+        # blind inferred-chevron tap climbs out instead of stranding recovery.
+        # Recognized roots/home keep returning no target (nothing to go back to).
+        if "unknown" in {
+            scene.platform_scene_kind,
+            getattr(classified, "platform_scene_kind", None),
+        }:
+            return True, "blind_inferred_back", self._inferred_ios_nav_back_point()
         return False, "no_parent_back_target", None
 
     def _visible_nav_back_in_scene(self, scene: Scene) -> UIElement | None:
@@ -1983,11 +1995,22 @@ class Phone:
             return self._unsupported_action("back_gesture", strategy=strategy)
         allowed, guard_reason, nav_back_point = self._picokvm_back_context()
         if not allowed:
-            return self._unsupported_action(
+            # Not finding a back target on the current scene is a recoverable
+            # miss, not a backend capability gap, so this must never fail-fast:
+            # recovery layers need to stay free to try another strategy (e.g. a
+            # blind top-left chevron tap). Record the same unsupported result as
+            # _unsupported_action would, just without raising.
+            result = self._failed_action_result(
+                error="unsupported action: back_gesture",
+                unsupported=True,
+            )
+            self._record_action(
                 "back_gesture",
+                result=result,
                 strategy=strategy,
                 guard=guard_reason,
             )
+            return result
         if nav_back_point is not None:
             x, y = nav_back_point
             px, py = self._to_phone(x, y)

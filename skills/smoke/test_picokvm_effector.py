@@ -630,6 +630,30 @@ def test_phone_back_guard_tolerates_missing_platform_scene_classifier():
 
 
 @pytest.mark.smoke
+def test_phone_back_guard_does_not_fail_fast_when_no_back_target():
+    """A guard miss (no back target on the current scene) is recoverable, not a
+    backend capability gap, so back_gesture must return a soft-failed result
+    instead of raising even under action_fail_fast — otherwise a stuck page
+    (e.g. the Action-Button carousel) crashes the whole recovery loop."""
+    eff, _rpc = make_eff()
+    source = FreshFrameSource()
+    ocr = SequenceOCR([["通知", "允许通知", "通知分组", "显示预览"]])
+    phone = Phone(
+        source=source,
+        ocr=ocr,
+        effector=eff,
+        action_fail_fast=True,
+        platform_scene_classifier=None,
+    )
+
+    result = phone.back_gesture()  # must not raise
+
+    assert result.ok is False
+    assert result.unsupported is True
+    assert result.error == "unsupported action: back_gesture"
+
+
+@pytest.mark.smoke
 def test_phone_back_allows_picokvm_settings_detail_classifier_fallback_without_nav_ocr(monkeypatch):
     eff, rpc = make_eff()
     phone = Phone(
@@ -672,6 +696,56 @@ def test_phone_back_allows_picokvm_settings_detail_classifier_fallback_without_n
         "absMouseReport",
         "absMouseReport",
     ]
+
+
+@pytest.mark.smoke
+def test_phone_back_blind_taps_chevron_on_unknown_classified_subpage(monkeypatch):
+    """A page the classifier positively tags "unknown" (e.g. the Action-Button
+    carousel, whose live camera preview defeats chrome/back detection) still has
+    the conventional top-left chevron. back_gesture must climb out via a blind
+    inferred-chevron tap rather than stranding the recovery loop — this is the
+    core intelligence that keeps a stuck sub-page from crashing a fresh run."""
+    eff, rpc = make_eff()
+
+    class _UnknownClassifier:
+        def classify(self, _scene, *, viewport_size=None):
+            return SceneClassification(
+                page_id=None,
+                platform_scene_kind="unknown",
+                confidence=0.2,
+                source="platform",
+                safe_actions=(),
+            )
+
+    phone = Phone(
+        source=object(),
+        ocr=object(),
+        effector=eff,
+        action_fail_fast=True,  # even fail-fast must not raise; it taps instead
+        platform_scene_classifier=_UnknownClassifier(),
+    )
+    carousel = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        elements=[
+            UIElement(type="button", box=Box(x=166, y=606, w=112, h=24), text="静音模式", confidence=0.9),
+            UIElement(type="text", box=Box(x=120, y=646, w=210, h=22), text="为通话和提醒切换静音和响铃。", confidence=0.9),
+        ],
+    )
+    monkeypatch.setattr(phone, "perceive", lambda: carousel)
+    monkeypatch.setattr(phone, "_viewport_size", lambda: (448, 990))
+
+    result = phone.back_gesture()
+
+    assert result.ok is True
+    # a single blind chevron tap (move/move/down/up), no Meta+[ keyboard fallback
+    assert [method for method, _params in rpc.calls] == [
+        "absMouseReport",
+        "absMouseReport",
+        "absMouseReport",
+        "absMouseReport",
+    ]
+    assert not any(method == "keyboardReport" for method, _params in rpc.calls)
 
 
 @pytest.mark.smoke
