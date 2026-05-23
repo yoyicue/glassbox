@@ -1382,6 +1382,12 @@ def test_root_child_crawl_returns_one_level_after_blocked_page(monkeypatch):
         def wheel_scroll_down(self, *, ticks=None):
             pass
 
+        def swipe_up(self, **kwargs):
+            pass
+
+        def swipe_down(self, **kwargs):
+            pass
+
     phone = Phone()
     blocked: list[BlockedPage] = []
 

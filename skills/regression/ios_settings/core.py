@@ -25,6 +25,7 @@ wrappers for existing callers while new code should call the focused modules.
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Iterable
 from contextlib import suppress
@@ -77,6 +78,10 @@ MAX_DEPTH = RUN_CONFIG.max_depth
 MAX_SCROLLS_PER_PAGE = RUN_CONFIG.max_scrolls_per_page
 ROOT_COVERAGE_MODE = RUN_CONFIG.root_coverage_mode
 MAX_CHILD_SCROLLS_PER_PAGE = RUN_CONFIG.max_child_scrolls_per_page
+# Times the root crawl may reset to the top and re-pass when expected sections
+# remain missing after a fling overshoot. Each reset is one extra top→bottom
+# pass; the union of passes converges on full coverage despite fling variance.
+MAX_ROOT_SCROLL_RESETS = int(os.getenv("IOS_SETTINGS_MAX_ROOT_SCROLL_RESETS", "2"))
 CHILD_NAVIGATION_ENABLED = RUN_CONFIG.child_navigation_enabled
 STRICT_CHILD_CANDIDATE_AUDIT = RUN_CONFIG.strict_child_candidate_audit
 MAX_CANDIDATES_PER_PAGE = RUN_CONFIG.max_candidates_per_page
@@ -205,6 +210,22 @@ def _action_intent(phone, name: str, **metadata: Any):
 
 def _record_action_verdict(phone, result: Any) -> bool:
     verdict = action_verdict(result)
+    with suppress(Exception):
+        phone._ios_settings_last_action_verdict = verdict
+    return verdict.accepted
+
+
+def _accept_tolerating_unknown(phone, result: Any) -> bool:
+    """Accept a Settings Search focus/open tap unless it semantically failed.
+
+    These taps frequently score `unknown`: the search scene (search field +
+    keyboard) resembles the root closely, and focusing a field has no
+    verifiable scene change. Treat `unknown` as continue because each step is
+    confirmed by a downstream check (search scene appears, a query types, a
+    result matches). A genuine failure (transport error, `failed`, `partial`,
+    `approval_required`) is still rejected.
+    """
+    verdict = action_verdict(result, unknown_policy="continue")
     with suppress(Exception):
         phone._ios_settings_last_action_verdict = verdict
     return verdict.accepted
@@ -584,7 +605,13 @@ def _enter_settings_search(phone) -> bool:
     cx, cy = _bottom_tab_hit_point(phone, search_tab)
     with _action_intent(phone, "settings_root.open_search_tab", text=search_tab.text, x=cx, y=cy):
         result = phone.tap_xy(cx, cy)
-    if not _record_action_verdict(phone, result):
+    # Opening Settings Search commonly scores `unknown`: the search scene
+    # resembles the root closely enough that the semantic verifier cannot
+    # confirm the transition. Tolerate that and trust the re-perceived scene
+    # below; only a genuine failure aborts. Without this, an `unknown` verdict
+    # aborted the whole missing-page search recovery before a query was ever
+    # typed (observed live: 8/8 root searches lost).
+    if not _accept_tolerating_unknown(phone, result):
         return False
     time.sleep(1.0)
     phone.invalidate_perceive_cache()
@@ -601,12 +628,12 @@ def _tap_search_field(phone, scene) -> bool:
         cx, cy = field.box.center
         with _action_intent(phone, "settings_search.focus_search_field", text=field.text, x=cx, y=cy):
             result = phone.tap_xy(cx, cy)
-        return _record_action_verdict(phone, result)
+        return _accept_tolerating_unknown(phone, result)
     w, h = phone._viewport_size()
     x, y = int(w * 0.22), int(h * 0.94)
     with _action_intent(phone, "settings_search.focus_search_field_fallback", x=x, y=y):
         result = phone.tap_xy(x, y)
-    return _record_action_verdict(phone, result)
+    return _accept_tolerating_unknown(phone, result)
 
 
 def _clear_settings_search(phone) -> bool:
@@ -748,7 +775,13 @@ def _navigation_actions() -> settings_navigation.SettingsNavigationActions:
         scroll_down_confirmed=_scroll_down_confirmed,
         child_sampling_mode=_child_sampling_mode,
         scroll_budget_for_depth=_scroll_budget_for_depth,
+        scroll_to_top=_scroll_to_settings_root_top,
+        max_root_scroll_resets=MAX_ROOT_SCROLL_RESETS,
     )
+
+
+def _scroll_to_settings_root_top(phone) -> None:
+    _scroll_to_vertical_boundary(phone, direction="up", max_steps=6)
 
 
 def _open_root_label_via_search(phone, label: str) -> bool:

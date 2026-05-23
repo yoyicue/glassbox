@@ -71,6 +71,11 @@ class SettingsNavigationActions:
     scroll_down_confirmed: Callable[..., tuple[str, Any]]
     child_sampling_mode: Callable[[int], bool]
     scroll_budget_for_depth: Callable[[int], int]
+    # Closed-loop overshoot recovery: scroll the root list back to the top so a
+    # fresh forward pass can land on rows the previous fling jumped past. When
+    # None (e.g. minimal test facades) the multi-pass reset is skipped.
+    scroll_to_top: Callable[[Any], None] | None = None
+    max_root_scroll_resets: int = 2
 
 
 def open_root_label_via_search(phone, label: str, actions: SettingsNavigationActions) -> bool:
@@ -387,6 +392,7 @@ def crawl_current_page(
         return
 
     attempted: set[str] = set()
+    root_resets = 0
     scroll_budget = actions.scroll_budget_for_depth(depth)
     if scroll_budget <= 0 and depth > 0:
         return
@@ -431,6 +437,32 @@ def crawl_current_page(
             label = (cand.text or "").strip()
             if label in attempted:
                 continue
+            if depth == 0:
+                # Re-ground before each root tap. Entering/returning from a prior
+                # row — or a row that navigated but was mis-scored as same-page —
+                # can leave us off-root with the remaining candidates' captured
+                # coordinates stale, which silently dropped whole mid-band batches
+                # (a single bad row cascaded into the rest of the screen). Re-confirm
+                # we are on root and re-locate this row by its label in the live
+                # scene. If it has scrolled off, skip WITHOUT marking it attempted
+                # so the scroll/multi-pass recovery can still reach it.
+                current = phone.perceive()
+                if not actions.scene_is_settings_root(current):
+                    actions.return_to_settings_root(phone)
+                    current = phone.perceive()
+                relocated = next(
+                    (
+                        element
+                        for element in current.elements
+                        if (element.text or "").strip() == label
+                        and not actions.is_settings_section_header(current, element)
+                    ),
+                    None,
+                )
+                if relocated is None:
+                    continue
+                cand = relocated
+                scene = current
             attempted.add(label)
             before_texts = actions.texts(scene)
             if not actions.tap_settings_row(phone, cand):
@@ -535,6 +567,28 @@ def crawl_current_page(
         if outcome == "overshoot":
             limits_hit.add("scroll_overshoot")
         elif outcome == "stuck":
+            # Reached the bottom (or a jammed fling). On the root list the
+            # momentum fling overshoots non-deterministically, so a single
+            # top→bottom pass can skip a whole mid-band batch. If expected root
+            # sections are still missing, reset to the top and pass again: each
+            # pass's fling lands on different rows, and `attempted` dedups the
+            # rows already entered, so the union converges without depending on
+            # the brittle Settings-search recovery. Bounded by max_root_scroll_resets.
+            if (
+                depth == 0
+                and actions.scroll_to_top is not None
+                and root_resets < actions.max_root_scroll_resets
+                and actions.root_coverage(visits)["missing"]
+            ):
+                root_resets += 1
+                missing = actions.root_coverage(visits)["missing"]
+                print(
+                    f"[ios_settings] root scroll reset pass={root_resets} "
+                    f"missing={missing}",
+                    flush=True,
+                )
+                actions.scroll_to_top(phone)
+                continue
             break
     else:
         if depth > 0 and not actions.child_sampling_mode(depth):
