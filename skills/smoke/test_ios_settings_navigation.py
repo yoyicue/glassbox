@@ -265,6 +265,324 @@ def test_vlm_recover_root_label_resolves_when_ocr_unmatchable():
     assert _canonical_expected_root_label("乱码行") is None
     assert _vlm_recover_root_label(_Phone(), el) == "待机显示"
 
+
+@pytest.mark.smoke
+def test_unknown_root_candidate_uses_local_vlm_crop_before_rejection():
+    import cv2
+    import numpy as np
+
+    calls: list[tuple[int, int]] = []
+
+    class _FakeKimi:
+        def read_text_region(self, *, region_image: bytes) -> str:
+            arr = np.frombuffer(region_image, dtype=np.uint8)
+            crop = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            assert crop is not None
+            calls.append(crop.shape[:2])
+            return "待机显示"
+
+        def describe_scene(self, *args, **kwargs):
+            raise AssertionError("root candidate recovery must use a local row crop, not full-screen VLM")
+
+    class _Frame:
+        img = np.full((900, 500, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    scene = _scene(
+        _el("设置", 18, 126, w=68, h=36, ty="button"),
+        _el("P月l结机显示", 80, 420, w=120),
+    )
+    rejected: list[RejectedCandidate] = []
+
+    _reset_vlm_row_state()
+    _record_rejected_candidates(
+        rejected,
+        path=("Settings",),
+        scene=scene,
+        allow_sensitive_root_labels=True,
+        allow_known_without_affordance=True,
+        phone=_Phone(),
+    )
+
+    assert rejected == []
+    assert calls
+    assert all(height < _Frame.img.shape[0] for height, _width in calls)
+    assert all(height * width < _Frame.img.shape[0] * _Frame.img.shape[1] for height, width in calls)
+
+
+@pytest.mark.smoke
+def test_unknown_root_candidate_uses_local_vlm_choice_prompt():
+    import cv2
+    import numpy as np
+
+    calls: list[tuple[int, int, str]] = []
+
+    class _Response:
+        raw_content = "待机显示"
+
+    class _FakeKimi:
+        def chat(self, **kwargs):
+            arr = np.frombuffer(kwargs["image"], dtype=np.uint8)
+            crop = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            assert crop is not None
+            calls.append((*crop.shape[:2], kwargs["user_text"]))
+            return _Response()
+
+        def read_text_region(self, *, region_image: bytes) -> str:
+            raise AssertionError("choice prompt should run before raw OCR fallback")
+
+        def describe_scene(self, *args, **kwargs):
+            raise AssertionError("root candidate recovery must not use full-screen describe_scene")
+
+    class _Frame:
+        img = np.full((900, 500, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    scene = _scene(
+        _el("设置", 18, 126, w=68, h=36, ty="button"),
+        _el("浩机見示", 80, 420, w=120),
+    )
+    rejected: list[RejectedCandidate] = []
+
+    _reset_vlm_row_state()
+    _record_rejected_candidates(
+        rejected,
+        path=("Settings",),
+        scene=scene,
+        allow_sensitive_root_labels=True,
+        allow_known_without_affordance=True,
+        phone=_Phone(),
+    )
+
+    assert rejected == []
+    assert calls
+    assert all(height < _Frame.img.shape[0] for height, _width, _prompt in calls)
+    assert any("候选标签" in prompt and "待机显示" in prompt for _height, _width, prompt in calls)
+
+
+@pytest.mark.smoke
+def test_unknown_root_candidate_finds_confused_scene_element_for_vlm():
+    import numpy as np
+
+    class _Response:
+        raw_content = "待机显示"
+
+    class _FakeKimi:
+        def chat(self, **_kwargs):
+            return _Response()
+
+    class _Frame:
+        img = np.full((980, 450, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    scene = _scene(
+        _el("设置", 18, 126, w=68, h=36, ty="button"),
+        _el("操作按钮", 82, 834, w=70),
+        _el("供机見示", 76, 886, w=76),
+    )
+    rejected: list[RejectedCandidate] = []
+
+    _reset_vlm_row_state()
+    _record_rejected_candidates(
+        rejected,
+        path=("Settings",),
+        scene=scene,
+        allow_sensitive_root_labels=True,
+        allow_known_without_affordance=True,
+        phone=_Phone(),
+    )
+
+    assert rejected == []
+
+
+@pytest.mark.smoke
+def test_unknown_root_candidate_on_same_row_as_known_label_is_suppressed():
+    scene = _scene(
+        _el("设置", 18, 126, w=68, h=36, ty="button"),
+        _el("SDS", 38, 408, w=28),
+        _el("SOS紧急联络", 80, 406, w=106),
+    )
+    rejected: list[RejectedCandidate] = []
+
+    _record_rejected_candidates(
+        rejected,
+        path=("Settings",),
+        scene=scene,
+        allow_sensitive_root_labels=True,
+        allow_known_without_affordance=True,
+        phone=None,
+    )
+
+    assert rejected == []
+
+
+@pytest.mark.smoke
+def test_visible_root_row_vlm_recovery_only_spends_budget_on_navigation_like_rows(monkeypatch):
+    import numpy as np
+
+    calls: list[bytes] = []
+
+    class _FakeKimi:
+        def read_text_region(self, *, region_image: bytes) -> str:
+            calls.append(region_image)
+            return ""
+
+    class _Frame:
+        img = np.full((900, 500, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    monkeypatch.setattr(settings_page_records.settings_scene_state, "scene_is_settings_root", lambda scene: True)
+    visits = [PageVisit(path=("Settings",), title="设置", texts=("设置",))]
+    seen: set[tuple[tuple[str, ...], tuple[str, ...]]] = set()
+    scene = _scene(
+        _el("设置", 18, 126, w=68, h=36, ty="button"),
+        _el("Da Li", 76, 190, w=80),
+        _el("Apple 账户、iCloud等", 82, 220, w=180),
+        _el("无线局域网", 80, 320, w=90),
+        _el("P月l结机显示", 80, 420, w=120),
+    )
+
+    _reset_vlm_row_state()
+    _record_visible_root_row_visits(scene=scene, visits=visits, seen_sigs=seen, phone=_Phone())
+
+    assert len(calls) == 1
+
+
+@pytest.mark.smoke
+def test_visible_root_row_vlm_recovery_uses_catalog_order_prior(monkeypatch):
+    import numpy as np
+
+    prompts: list[str] = []
+
+    class _Response:
+        raw_content = "待机显示"
+
+    class _FakeKimi:
+        def chat(self, **kwargs):
+            prompts.append(kwargs["user_text"])
+            return _Response()
+
+    class _Frame:
+        img = np.full((980, 450, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    monkeypatch.setattr(settings_page_records.settings_scene_state, "scene_is_settings_root", lambda scene: True)
+    visited_labels = (
+        "无线局域网",
+        "蓝牙",
+        "蜂窝网络",
+        "通知",
+        "声音与触感",
+        "专注模式",
+        "屏幕使用时间",
+        "通用",
+        "辅助功能",
+        "Siri",
+        "操作按钮",
+    )
+    visits = [PageVisit(path=("Settings",), title="设置", texts=("设置",))]
+    visits.extend(PageVisit(path=("Settings", label), title=label, texts=(label,)) for label in visited_labels)
+    seen: set[tuple[tuple[str, ...], tuple[str, ...]]] = set()
+    scene = _scene(
+        _el("设置", 20, 126, w=68, h=36, ty="button"),
+        _el("操作按钮", 80, 835, w=70),
+        _el("P月 传机見示", 36, 885, w=114),
+        _el("Q", 48, 915, w=20),
+        _el("搜索", 74, 915, w=40),
+    )
+
+    _reset_vlm_row_state()
+    _record_visible_root_row_visits(scene=scene, visits=visits, seen_sigs=seen, phone=_Phone())
+
+    assert any(visit.path == ("Settings", "待机显示") for visit in visits)
+    assert prompts
+    assert "待机显示" in prompts[-1]
+    assert "无线局域网" not in prompts[-1]
+
+
+@pytest.mark.smoke
+def test_visible_root_row_vlm_recovery_skips_unsafe_root_values(monkeypatch):
+    import numpy as np
+
+    calls = 0
+
+    class _FakeKimi:
+        def chat(self, **_kwargs):
+            nonlocal calls
+            calls += 1
+            return type("_Response", (), {"raw_content": "钱包与 Apple Pay"})()
+
+    class _Frame:
+        img = np.full((980, 450, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    monkeypatch.setattr(settings_page_records.settings_scene_state, "scene_is_settings_root", lambda scene: True)
+    visits = [PageVisit(path=("Settings",), title="设置", texts=("设置",))]
+    seen: set[tuple[tuple[str, ...], tuple[str, ...]]] = set()
+    scene = _scene(
+        _el("设置", 20, 126, w=68, h=36, ty="button"),
+        _el("VPN", 80, 641, w=36),
+    )
+
+    _reset_vlm_row_state()
+    _record_visible_root_row_visits(scene=scene, visits=visits, seen_sigs=seen, phone=_Phone())
+
+    assert calls == 0
+    assert all(visit.path != ("Settings", "钱包与 Apple Pay") for visit in visits)
+
+
+@pytest.mark.smoke
+def test_visible_root_row_records_vlm_normalized_label_as_evidence(monkeypatch):
+    import numpy as np
+
+    class _Response:
+        raw_content = "待机显示"
+
+    class _FakeKimi:
+        def chat(self, **_kwargs):
+            return _Response()
+
+    class _Frame:
+        img = np.full((900, 500, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    monkeypatch.setattr(settings_page_records.settings_scene_state, "scene_is_settings_root", lambda scene: True)
+    visits = [PageVisit(path=("Settings",), title="设置", texts=("设置",))]
+    seen: set[tuple[tuple[str, ...], tuple[str, ...]]] = set()
+    scene = _scene(
+        _el("设置", 18, 126, w=68, h=36, ty="button"),
+        _el("浩机見示", 80, 420, w=120),
+    )
+
+    _reset_vlm_row_state()
+    _record_visible_root_row_visits(scene=scene, visits=visits, seen_sigs=seen, phone=_Phone())
+
+    assert visits[-1].path == ("Settings", "待机显示")
+    assert visits[-1].title == "待机显示"
+    assert "待机显示" in visits[-1].texts
+
+
 @pytest.mark.smoke
 def test_vlm_recover_root_label_noop_when_kimi_disabled():
     """VLM 关闭(默认)→ F 兜底直接 None,零行为变化。"""

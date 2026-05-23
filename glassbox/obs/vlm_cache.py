@@ -43,6 +43,10 @@ class CachedVLM:
         """Row-level OCR fallback — delegated to the wrapped client."""
         return self.inner.read_text_region(region_image=region_image)
 
+    def chat(self, **kwargs):
+        """Delegate non-describe VLM helpers such as local row-choice prompts."""
+        return self.inner.chat(**kwargs)
+
     def describe_scene(
         self,
         request: VLMRequest | None = None,

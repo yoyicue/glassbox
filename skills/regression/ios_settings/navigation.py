@@ -347,6 +347,7 @@ def crawl_current_page(
             scene=scene,
             allow_sensitive_root_labels=depth == 0,
             allow_known_without_affordance=depth == 0,
+            phone=phone,
         )
     if len(visits) >= actions.max_pages_visited:
         limits_hit.add("max_pages")
@@ -388,6 +389,7 @@ def crawl_current_page(
                 scene=scene,
                 allow_sensitive_root_labels=depth == 0,
                 allow_known_without_affordance=depth == 0,
+                phone=phone,
             )
         if actions.should_traverse_candidates(depth):
             all_candidates = actions.safe_navigation_candidates(

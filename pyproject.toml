@@ -44,6 +44,7 @@ glassbox-show-screen = "glassbox.demo.show_screen:main"
 glassbox-list-devices = "glassbox.demo.list_devices:main"
 glassbox-ai-session = "glassbox.ai_session:main"
 glassbox-mcp-server = "glassbox.mcp.server:main"
+glassbox-computer-use-success-rate = "skills.regression.computer_use_success_rate:main"
 
 [project.entry-points."glassbox.app_policies"]
 ios_settings = "glassbox.app_policies:ios_settings_app_policy"

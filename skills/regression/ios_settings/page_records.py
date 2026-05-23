@@ -6,11 +6,17 @@ drive the device; callers supply scenes and mutable result collections.
 
 from __future__ import annotations
 
+from glassbox.cognition.label_prior import ordered_label_candidates
+from glassbox.cognition.text_match import compact_text, confusion_compact
 from glassbox.ios.progress import screen_signature
 from skills.regression.ios_settings import reporting as settings_reporting
 from skills.regression.ios_settings import scene_state as settings_scene_state
 from skills.regression.ios_settings import vlm_rows
-from skills.regression.ios_settings.policy import DEFAULT_SETTINGS_POLICY
+from skills.regression.ios_settings.policy import (
+    DEFAULT_SETTINGS_POLICY,
+    EXPECTED_ROOT_NAV_TEXT_ZH,
+    ROOT_NAV_VISUAL_ORDER_ZH,
+)
 
 PageVisit = settings_reporting.PageVisit
 BlockedPage = settings_reporting.BlockedPage
@@ -48,6 +54,7 @@ def record_rejected_candidates(
     scene,
     allow_sensitive_root_labels: bool,
     allow_known_without_affordance: bool,
+    phone=None,
 ) -> None:
     if settings_scene_state.blocks_child_navigation(scene):
         return
@@ -61,6 +68,12 @@ def record_rejected_candidates(
         allow_sensitive_root_labels=allow_sensitive_root_labels,
         allow_known_without_affordance=allow_known_without_affordance,
     ):
+        if (
+            path == ("Settings",)
+            and rejected.reason == "unknown_navigation_label"
+            and _vlm_resolves_root_candidate(phone, scene, rejected.text)
+        ):
+            continue
         key = (path, rejected.text, rejected.reason)
         if key in existing:
             continue
@@ -71,6 +84,38 @@ def record_rejected_candidates(
             reason=rejected.reason,
         ))
         existing.add(key)
+
+
+def _vlm_resolves_root_candidate(phone, scene, text: str) -> bool:
+    """Return True when VLM row OCR maps an unknown root candidate to a known root row.
+
+    The report verifier treats unknown root candidates as policy gaps. Before
+    surfacing one, give the perception stack a chance to re-read that exact row
+    with the VLM. This keeps the policy strict while making the crawler smarter
+    about unstable OCR on Settings root rows.
+    """
+    target = compact_text(text)
+    target_confused = confusion_compact(text)
+    for element in scene.elements:
+        element_text = (element.text or "").strip()
+        if (
+            element_text != text
+            and compact_text(element_text) != target
+            and confusion_compact(element_text) != target_confused
+        ):
+            continue
+        if _same_row_has_known_root_label(scene, element):
+            return True
+        if phone is None:
+            return False
+        priors = _root_row_label_priors(scene, element, visited=())
+        return vlm_rows.recover_root_label(
+            phone,
+            element,
+            force=True,
+            candidate_labels=priors,
+        ) is not None
+    return False
 
 
 def record_navigation_failure(
@@ -100,8 +145,11 @@ def record_visible_page(
     seen_sigs: set[ViewportKey],
     depth: int,
     title_override: str | None = None,
+    evidence_text: str | None = None,
 ) -> bool:
     texts = settings_scene_state.texts(scene)
+    if evidence_text and evidence_text not in texts:
+        texts = [*texts, evidence_text]
     sig = screen_signature(texts)
     key = (path, sig)
     if key in seen_sigs:
@@ -131,19 +179,85 @@ def record_visible_root_row_visits(
         text = (element.text or "").strip()
         label = DEFAULT_SETTINGS_POLICY.visible_root_row_label(element)
         if label is None:
-            label = vlm_rows.recover_root_label(phone, element)
+            priors = _root_row_label_priors(scene, element, visited=visited)
+            if priors is not None:
+                label = vlm_rows.recover_root_label(
+                    phone,
+                    element,
+                    candidate_labels=priors,
+                )
         if label is None or label in visited:
             continue
         rows.append((element.box.center[1], label, text))
-    for _, label, text in sorted(rows):
+    for _, label, _text in sorted(rows):
         if label in visited:
             continue
-        if record_visible_page(
-            scene=scene,
-            path=("Settings", label),
-            visits=visits,
-            seen_sigs=seen_sigs,
-            depth=1,
-            title_override=text,
+        path = ("Settings", label)
+        key = (path, screen_signature([label]))
+        if key in seen_sigs:
+            continue
+        seen_sigs.add(key)
+        visits.append(PageVisit(path=path, title=label, texts=(label,)))
+        print(f"[ios_settings] visit {len(visits)} depth=1 path={' > '.join(path)}", flush=True)
+        visited.add(label)
+
+
+def _root_row_label_priors(scene, element, *, visited) -> tuple[str, ...] | None:
+    text = (element.text or "").strip()
+    if not text:
+        return None
+    cx, cy = element.box.center
+    if cx > 260 or cy < 70 or cy > 900:
+        return None
+    if DEFAULT_SETTINGS_POLICY.potential_navigation_row_text(element) is None:
+        return None
+    if DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text(
+        text,
+        allow_sensitive_root_labels=True,
+    ):
+        return None
+    visited_set = set(visited)
+    missing = tuple(label for label in EXPECTED_ROOT_NAV_TEXT_ZH if label not in visited_set)
+    if 0 < len(missing) <= 2:
+        return missing
+    observed: list[tuple[str, int]] = []
+    for other in scene.elements:
+        if other is element:
+            continue
+        label = DEFAULT_SETTINGS_POLICY.visible_root_row_label(other)
+        if label is None:
+            other_text = (other.text or "").strip()
+            ox, oy = other.box.center
+            if other_text and ox <= 260 and 70 <= oy <= 900:
+                label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(other_text)
+        if label is not None:
+            observed.append((label, other.box.center[1]))
+    if not observed:
+        return EXPECTED_ROOT_NAV_TEXT_ZH
+    return ordered_label_candidates(
+        ROOT_NAV_VISUAL_ORDER_ZH,
+        observed,
+        cy,
+        exclude=visited,
+        max_candidates=2,
+    )
+
+
+def _same_row_has_known_root_label(scene, element) -> bool:
+    _, cy = element.box.center
+    for other in scene.elements:
+        if other is element:
+            continue
+        text = (other.text or "").strip()
+        if not text:
+            continue
+        if abs(other.box.center[1] - cy) > 24:
+            continue
+        if other.box.center[0] <= element.box.center[0]:
+            continue
+        if DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(text) is not None or any(
+            DEFAULT_SETTINGS_POLICY.title_matches_navigation_label(text, label)
+            for label in EXPECTED_ROOT_NAV_TEXT_ZH
         ):
-            visited.add(label)
+            return True
+    return False

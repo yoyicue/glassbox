@@ -840,6 +840,7 @@ def _record_rejected_candidates(
     scene,
     allow_sensitive_root_labels: bool,
     allow_known_without_affordance: bool,
+    phone=None,
 ) -> None:
     settings_page_records.record_rejected_candidates(
         rejected_candidates,
@@ -847,6 +848,7 @@ def _record_rejected_candidates(
         scene=scene,
         allow_sensitive_root_labels=allow_sensitive_root_labels,
         allow_known_without_affordance=allow_known_without_affordance,
+        phone=phone,
     )
 
 

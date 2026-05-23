@@ -6,9 +6,19 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from glassbox.action import ActionOrchestrator, RiskPolicy, RuntimeRecoveryPolicy
+from glassbox.action import (
+    ActionOrchestrator,
+    BoundStrategy,
+    ExpectedState,
+    RiskPolicy,
+    RuntimeRecoveryPolicy,
+    SemanticActionPlan,
+    SemanticActionSpec,
+    StrategySpec,
+    StuckLoopDetector,
+)
 from glassbox.cognition import Box, UIElement
-from glassbox.effector import MockEffector
+from glassbox.effector import ActionResult, MockEffector
 from glassbox.ios.springboard import IOSSpringboardProvider
 from glassbox.obs.artifacts import ArtifactStore
 from glassbox.perception.source import Frame
@@ -42,8 +52,9 @@ class _ReopenSource(_Source):
 
 
 class _OCR:
-    def __init__(self, text_frames: list[list[str]]):
+    def __init__(self, text_frames: list[list[str]], *, confidence: float = 0.95):
         self.text_frames = text_frames
+        self.confidence = confidence
         self.index = 0
 
     def recognize(self, image):
@@ -55,7 +66,7 @@ class _OCR:
                 type="text",
                 box=Box(x=1, y=1 + i * 4, w=20, h=3),
                 text=text,
-                confidence=0.95,
+                confidence=self.confidence,
                 element_id=i,
             )
             for i, text in enumerate(texts)
@@ -74,6 +85,7 @@ def _make_phone(
     guarded: bool = False,
     trace_level: str = "standard",
     semantic_fail_fast: bool = False,
+    ocr_confidence: float = 0.95,
 ):
     store = ArtifactStore(tmp_path, run_id="run", trace_level=trace_level)
     orchestrator = ActionOrchestrator(
@@ -83,7 +95,7 @@ def _make_phone(
     )
     phone = Phone(
         source=_Source(),
-        ocr=_OCR(text_frames),
+        ocr=_OCR(text_frames, confidence=ocr_confidence),
         effector=MockEffector(_connected=connected),
         action_orchestrator=orchestrator,
         action_fail_fast=False,
@@ -215,6 +227,911 @@ def test_orchestrator_can_reopen_source_before_fresh_after_observation(tmp_path)
     assert result.semantic_status == "succeeded"
     assert source.closes == 1
     assert source.opens == 1
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_executes_semantic_action_plan_strategy_ladder(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["Still here"],
+            ["Done"],
+        ],
+    )
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("first_tap"), StrategySpec("second_tap")),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(spec.strategies[0], lambda: phone.effector.home()),
+            BoundStrategy(spec.strategies[1], lambda: phone.effector.home()),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    assert result.semantic_verifier == "expected_state"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["command"]["strategy"] for action in actions] == ["first_tap", "second_tap"]
+    assert [action["semantic"]["status"] for action in actions] == ["failed", "succeeded"]
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    assert groups[-1]["group_status"] == "succeeded"
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(event["type"] == "semantic_plan.strategy_failed" for event in audit)
+    assert any(event["type"] == "semantic_plan.finished" for event in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_semantic_plan_preserves_strategy_list_order(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["Done"],
+            ["Done"],
+            ["Done"],
+            ["Done"],
+        ],
+    )
+    calls: list[str] = []
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(
+            StrategySpec("listed_first_low_rank", reliability_rank=100),
+            StrategySpec("listed_second_high_rank", reliability_rank=1),
+        ),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(
+                spec.strategies[0],
+                lambda: calls.append("listed_first_low_rank") or phone.effector.home(),
+            ),
+            BoundStrategy(
+                spec.strategies[1],
+                lambda: calls.append("listed_second_high_rank") or phone.effector.home(),
+            ),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    assert calls == ["listed_first_low_rank"]
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["command"]["strategy"] for action in actions] == ["listed_first_low_rank"]
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    finished = next(event for event in audit if event["type"] == "semantic_plan.finished")
+    assert finished["payload"]["strategy_switches"] == 0
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_semantic_plan_skips_unsupported_capability(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["Done"],
+            ["Done"],
+            ["Done"],
+            ["Done"],
+        ],
+    )
+    phone.supports = lambda capability: capability != "missing_capability"
+    calls: list[str] = []
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(
+            StrategySpec("unsupported_first", capability="missing_capability"),
+            StrategySpec("supported_second", capability="tap"),
+        ),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(
+                spec.strategies[0],
+                lambda: pytest.fail("unsupported strategy should be skipped"),
+            ),
+            BoundStrategy(
+                spec.strategies[1],
+                lambda: calls.append("supported_second") or phone.effector.home(),
+            ),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    assert calls == ["supported_second"]
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert len(actions) == 1
+    assert actions[0]["command"]["strategy"] == "supported_second"
+    assert actions[0]["command"]["attempt_index"] == 0
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    skipped = next(event for event in audit if event["type"] == "semantic_plan.strategy_skipped")
+    assert skipped["payload"]["strategy"]["name"] == "unsupported_first"
+    assert skipped["payload"]["reason"] == "capability unsupported"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_semantic_plan_recovers_and_reattempts(tmp_path):
+    recoveries = []
+
+    def recover(_phone, reason, payload):
+        recoveries.append((reason, payload["semantic_action_spec"]["op"]))
+        return True
+
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(
+        store,
+        recovery_policy=RuntimeRecoveryPolicy(recover, max_attempts=1),
+    )
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR(
+            [
+                ["主屏幕"],
+                ["主屏幕"],
+                ["主屏幕"],
+                ["Still here"],
+                ["Still here"],
+                ["Done"],
+            ]
+        ),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Still here"]}),
+        recovery="recover_to_home_then_renavigate",
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [BoundStrategy(spec.strategies[0], lambda: phone.effector.home())],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    assert recoveries == [("visible text expectation unmet", "tap")]
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["semantic"]["status"] for action in actions] == ["failed", "succeeded"]
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(event["type"] == "semantic_plan.recovery.started" for event in audit)
+    finished = next(event for event in audit if event["type"] == "semantic_plan.finished")
+    assert finished["payload"]["recovered"] is True
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_semantic_plan_retries_same_strategy_on_transport_failure(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["Done"],
+        ],
+    )
+    calls = []
+
+    def flaky_call():
+        calls.append("target_tap")
+        if len(calls) == 1:
+            return ActionResult.failed(
+                backend="test",
+                connected=False,
+                error="transport down",
+            )
+        return ActionResult(ok=True, backend="test", connected=True)
+
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"), StrategySpec("fallback_tap")),
+        expected_state=ExpectedState("visible_text", {"any_of": ["主屏幕"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(spec.strategies[0], flaky_call),
+            BoundStrategy(spec.strategies[1], lambda: ActionResult(ok=True, backend="test", connected=True)),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan, transport_retry_budget=1)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    assert calls == ["target_tap", "target_tap"]
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["command"]["strategy"] for action in actions] == ["target_tap", "target_tap"]
+    assert [action["semantic"]["status"] for action in actions] == ["transport_failed", "succeeded"]
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    assert groups[-1]["retry_count"] == 1
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    retry = next(event for event in audit if event["type"] == "action.retry_scheduled")
+    assert retry["payload"]["kind"] == "transport"
+    assert retry["payload"]["strategy"] == "target_tap"
+    finished = next(event for event in audit if event["type"] == "semantic_plan.finished")
+    assert finished["payload"]["strategy_switches"] == 0
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_semantic_plan_resets_transport_retry_budget_after_recovery(tmp_path):
+    recoveries = []
+
+    def recover(_phone, reason, payload):
+        recoveries.append((reason, payload["semantic_action_spec"]["op"]))
+        return True
+
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(
+        store,
+        recovery_policy=RuntimeRecoveryPolicy(recover, max_attempts=1),
+    )
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR([["Done"]] * 12),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+    calls = []
+
+    def flaky_call():
+        calls.append("target_tap")
+        if len(calls) in {1, 2, 3}:
+            return ActionResult.failed(
+                backend="test",
+                connected=False,
+                error="transport down",
+            )
+        return ActionResult(ok=True, backend="test", connected=True)
+
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery="recover_to_home_then_renavigate",
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [BoundStrategy(spec.strategies[0], flaky_call)],
+    )
+
+    result = phone._execute_action("tap", plan, transport_retry_budget=1)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    assert calls == ["target_tap", "target_tap", "target_tap", "target_tap"]
+    assert recoveries == [("transport down", "tap")]
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["semantic"]["status"] for action in actions] == [
+        "transport_failed",
+        "transport_failed",
+        "transport_failed",
+        "succeeded",
+    ]
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    retry_events = [event for event in audit if event["type"] == "action.retry_scheduled"]
+    assert [event["payload"]["next_attempt_index"] for event in retry_events] == [1, 3]
+    assert any(event["type"] == "semantic_plan.recovery.started" for event in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_expected_state_uses_vlm_gate_before_strategy_switch(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["unclear"],
+        ],
+    )
+    phone.kimi = object()
+
+    def describe(scene_hint=None):
+        assert scene_hint == "expected_state:visible_text"
+        assert phone._last_scene is not None
+        phone._last_scene.elements[0].text = "Done"
+        phone._last_scene.vlm_status = "ok"
+        return phone._last_scene
+
+    phone.describe = describe
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("first_tap"), StrategySpec("second_tap")),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(spec.strategies[0], lambda: phone.effector.home()),
+            BoundStrategy(spec.strategies[1], lambda: phone.effector.home()),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert len(actions) == 1
+    assert actions[0]["semantic"]["verifier"] == "expected_state_vlm"
+    assert actions[0]["command"]["vlm_calls"] == 1
+    assert actions[0]["command"]["vlm_triggers"] == ["target_missing", "verify_unknown"]
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_expected_state_fast_path_does_not_call_vlm(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["Done"],
+            ["Done"],
+            ["Done"],
+            ["Done"],
+        ],
+    )
+    phone.kimi = object()
+
+    def describe(scene_hint=None):
+        raise AssertionError(f"VLM should not run on OCR-verified success, got {scene_hint!r}")
+
+    phone.describe = describe
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [BoundStrategy(spec.strategies[0], lambda: phone.effector.home())],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["semantic"]["verifier"] == "expected_state"
+    assert "vlm_calls" not in actions[0]["command"]
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_expected_state_vlm_gate_records_low_confidence(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["unclear"],
+        ],
+        ocr_confidence=0.4,
+    )
+    phone.kimi = object()
+
+    def describe(scene_hint=None):
+        assert scene_hint == "expected_state:visible_text"
+        assert phone._last_scene is not None
+        phone._last_scene.elements[0].text = "Done"
+        phone._last_scene.vlm_status = "ok"
+        return phone._last_scene
+
+    phone.describe = describe
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [BoundStrategy(spec.strategies[0], lambda: phone.effector.home())],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["semantic"]["verifier"] == "expected_state_vlm"
+    assert actions[0]["command"]["vlm_calls"] == 1
+    assert actions[0]["command"]["vlm_triggers"] == [
+        "low_confidence",
+        "target_missing",
+        "verify_unknown",
+    ]
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_expected_state_vlm_gate_records_confidence_missing(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            [],
+            [],
+            [],
+            [],
+        ],
+    )
+    phone.kimi = object()
+
+    def describe(scene_hint=None):
+        assert scene_hint == "expected_state:visible_text"
+        assert phone._last_scene is not None
+        phone._last_scene.elements.append(
+            UIElement(
+                type="text",
+                box=Box(x=1, y=1, w=20, h=3),
+                text="Done",
+                confidence=0.9,
+                element_id=0,
+            )
+        )
+        phone._last_scene.vlm_status = "ok"
+        return phone._last_scene
+
+    phone.describe = describe
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [BoundStrategy(spec.strategies[0], lambda: phone.effector.home())],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["semantic"]["verifier"] == "expected_state_vlm"
+    assert actions[0]["command"]["vlm_calls"] == 1
+    assert actions[0]["command"]["vlm_triggers"] == [
+        "confidence_missing",
+        "target_missing",
+        "verify_unknown",
+    ]
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_expected_state_records_vlm_cache_hit(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["unclear"],
+        ],
+    )
+
+    class _Kimi:
+        last_hit = False
+
+    phone.kimi = _Kimi()
+
+    def describe(scene_hint=None):
+        assert scene_hint == "expected_state:visible_text"
+        assert phone._last_scene is not None
+        phone.kimi.last_hit = True
+        phone._last_scene.elements[0].text = "Done"
+        phone._last_scene.vlm_status = "ok"
+        return phone._last_scene
+
+    phone.describe = describe
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [BoundStrategy(spec.strategies[0], lambda: phone.effector.home())],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["command"]["vlm_calls"] == 1
+    assert actions[0]["command"]["vlm_cache_hits"] == 1
+    assert "vlm_cache_misses" not in actions[0]["command"]
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_expected_state_vlm_gate_records_classifier_conflict(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["unclear"],
+        ],
+    )
+    phone.kimi = object()
+
+    def describe(scene_hint=None):
+        assert scene_hint == "expected_state:visible_text"
+        assert phone._last_scene is not None
+        phone._last_scene.elements[0].text = "Done"
+        phone._last_scene.vlm_status = "ok"
+        return phone._last_scene
+
+    phone.describe = describe
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"),),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [BoundStrategy(spec.strategies[0], lambda: phone.effector.home())],
+    )
+
+    result = phone._execute_action("tap", plan, classifier_conflict=True)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["semantic"]["verifier"] == "expected_state_vlm"
+    assert actions[0]["command"]["vlm_calls"] == 1
+    assert actions[0]["command"]["vlm_triggers"] == [
+        "target_missing",
+        "classifier_conflict",
+        "verify_unknown",
+    ]
+    assert actions[0]["command"]["last_vlm_trigger"] == "verify_unknown"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_vlm_disabled_falls_back_to_strategy_switch(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["Still here"],
+            ["Done"],
+        ],
+    )
+    phone.kimi = object()
+
+    def describe(scene_hint=None):
+        raise AssertionError(f"VLM should be disabled, got scene_hint={scene_hint!r}")
+
+    phone.describe = describe
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("first_tap"), StrategySpec("second_tap")),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(spec.strategies[0], lambda: phone.effector.home()),
+            BoundStrategy(spec.strategies[1], lambda: phone.effector.home()),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan, vlm_disabled=True)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["command"]["strategy"] for action in actions] == ["first_tap", "second_tap"]
+    assert actions[0]["command"]["vlm_calls"] == 0
+    assert actions[0]["command"]["vlm_triggers"] == ["target_missing", "verify_unknown"]
+    assert actions[1]["semantic"]["verifier"] == "expected_state"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_vlm_attempt_budget_zero_falls_back_to_strategy_switch(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [
+            ["主屏幕"],
+            ["主屏幕"],
+            ["主屏幕"],
+            ["Still here"],
+            ["Done"],
+        ],
+    )
+    phone.kimi = object()
+
+    def describe(scene_hint=None):
+        raise AssertionError(f"VLM attempt budget should block calls, got {scene_hint!r}")
+
+    phone.describe = describe
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("first_tap"), StrategySpec("second_tap")),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(spec.strategies[0], lambda: phone.effector.home()),
+            BoundStrategy(spec.strategies[1], lambda: phone.effector.home()),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan, max_vlm_calls_per_attempt=0)
+    orchestrator.close()
+
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["command"]["strategy"] for action in actions] == ["first_tap", "second_tap"]
+    assert actions[0]["command"]["vlm_calls"] == 0
+    assert actions[0]["command"]["vlm_triggers"] == ["target_missing", "verify_unknown"]
+    assert actions[0]["command"]["vlm_budget_exhausted"] is True
+    assert actions[1]["semantic"]["verifier"] == "expected_state"
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_semantic_plan_stops_on_approval_required(tmp_path):
+    recoveries = []
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"], ["想要访问您的照片", "不允许", "允许访问"]],
+    )
+    orchestrator.recovery_policy = RuntimeRecoveryPolicy(
+        lambda _phone, reason, _payload: recoveries.append(reason) or True,
+        max_attempts=1,
+    )
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("first_tap"), StrategySpec("second_tap")),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery="recover_to_home_then_renavigate",
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(spec.strategies[0], lambda: phone.effector.tap(10, 10)),
+            BoundStrategy(spec.strategies[1], lambda: phone.effector.tap(20, 20)),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "approval_required"
+    assert recoveries == []
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert len(actions) == 1
+    assert actions[0]["semantic"]["disqualifying_state"] == "ios_system_permission_dialog"
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    assert groups[-1]["group_status"] == "approval_required"
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert not any(event["type"] == "semantic_plan.strategy_failed" for event in audit)
+    assert not any(event["type"] == "semantic_plan.recovery.started" for event in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_semantic_plan_stops_on_blocked_state(tmp_path):
+    recoveries = []
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"], ["滑动来关机", "SOS"]],
+    )
+    orchestrator.recovery_policy = RuntimeRecoveryPolicy(
+        lambda _phone, reason, _payload: recoveries.append(reason) or True,
+        max_attempts=1,
+    )
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("first_tap"), StrategySpec("second_tap")),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery="recover_to_home_then_renavigate",
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(spec.strategies[0], lambda: phone.effector.tap(10, 10)),
+            BoundStrategy(spec.strategies[1], lambda: phone.effector.tap(20, 20)),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert result.semantic_status == "failed"
+    assert recoveries == []
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert len(actions) == 1
+    assert actions[0]["semantic"]["disqualifying_state"] == "ios_power_off_screen"
+    assert actions[0]["semantic"]["retry_allowed"] is False
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    assert groups[-1]["group_status"] == "failed"
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert not any(event["type"] == "semantic_plan.strategy_failed" for event in audit)
+    assert not any(event["type"] == "semantic_plan.recovery.started" for event in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_semantic_plan_exception_terminates_without_switch(tmp_path):
+    recoveries = []
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"]],
+    )
+    orchestrator.recovery_policy = RuntimeRecoveryPolicy(
+        lambda _phone, reason, _payload: recoveries.append(reason) or True,
+        max_attempts=1,
+    )
+    calls: list[str] = []
+
+    def boom():
+        calls.append("first_tap")
+        raise RuntimeError("semantic strategy boom")
+
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("first_tap"), StrategySpec("second_tap")),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery="recover_to_home_then_renavigate",
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(spec.strategies[0], boom),
+            BoundStrategy(
+                spec.strategies[1],
+                lambda: pytest.fail("exception should terminate before second strategy"),
+            ),
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="semantic strategy boom"):
+        phone._execute_action("tap", plan)
+    orchestrator.close()
+
+    assert calls == ["first_tap"]
+    assert recoveries == []
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert len(actions) == 1
+    assert actions[0]["status"] == "exception"
+    assert actions[0]["semantic"]["status"] == "exception"
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    assert groups[-1]["group_status"] == "exception"
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(event["type"] == "action.exception" for event in audit)
+    assert not any(event["type"] == "semantic_plan.strategy_failed" for event in audit)
+    assert not any(event["type"] == "semantic_plan.recovery.started" for event in audit)
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_shares_vlm_action_budget_across_strategy_switches(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"]] * 8,
+    )
+    phone.kimi = object()
+    describe_calls = []
+
+    def describe(scene_hint=None):
+        describe_calls.append(scene_hint)
+        return phone._last_scene
+
+    phone.describe = describe
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("first_tap"), StrategySpec("second_tap")),
+        expected_state=ExpectedState("visible_text", {"any_of": ["Done"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(spec.strategies[0], lambda: phone.effector.home()),
+            BoundStrategy(spec.strategies[1], lambda: phone.effector.home()),
+        ],
+    )
+
+    result = phone._execute_action("tap", plan, max_vlm_calls_per_action=1)
+    orchestrator.close()
+
+    assert result.semantic_status == "failed"
+    assert describe_calls == ["expected_state:visible_text"]
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert len(actions) == 2
+    assert actions[0]["command"]["vlm_calls"] == 1
+    assert actions[1]["command"]["vlm_calls"] == 1
+    assert actions[1]["command"]["vlm_budget_exhausted"] is True
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_stuck_detector_recovers_after_repeated_failure(tmp_path):
+    recoveries = []
+
+    def recover(_phone, reason, payload):
+        recoveries.append((reason, payload["recovery"]))
+        return True
+
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(
+        store,
+        recovery_policy=RuntimeRecoveryPolicy(recover, max_attempts=1),
+        stuck_detector=StuckLoopDetector(threshold=2),
+    )
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR([["主屏幕"]] * 12),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+
+    first = phone.control_center()
+    second = phone.control_center()
+    third = phone.control_center()
+    orchestrator.close()
+
+    assert first.semantic_status == "failed"
+    assert second.semantic_status == "failed"
+    assert third.semantic_status == "failed"
+    assert recoveries == [("required semantic markers were absent", "recover_to_home_then_renavigate")]
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    observed = [event for event in audit if event["type"] == "stuck_detector.observed"]
+    assert [event["payload"]["count"] for event in observed] == [1, 2, 3]
+    assert sum(1 for event in audit if event["type"] == "stuck_detector.recovery.started") == 1
+    assert sum(1 for event in audit if event["type"] == "stuck_detector.recovery.finished") == 1
 
 
 @pytest.mark.smoke

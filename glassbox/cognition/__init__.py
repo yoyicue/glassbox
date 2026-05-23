@@ -58,6 +58,12 @@ from glassbox.cognition.text_match import (
     text_contains,
     texts_match,
 )
+from glassbox.cognition.vlm_gate import (
+    VLMEscalationGate,
+    VLMGateInput,
+    VLMGateState,
+    escalation_triggers,
+)
 from glassbox.cognition.vlm_kimi import (
     KimiAnthropic,
     KimiResponse,
@@ -97,6 +103,9 @@ __all__ = [
     "TypeGuess",
     "UIElement",
     "VLMCacheKeyPayload",
+    "VLMEscalationGate",
+    "VLMGateInput",
+    "VLMGateState",
     "VLMRequest",
     "VLMResponse",
     "VLMResult",
@@ -107,6 +116,7 @@ __all__ = [
     "canonical_label",
     "compact_text",
     "enrich_scene",
+    "escalation_triggers",
     "find_button",
     "find_by_intent",
     "find_by_type",

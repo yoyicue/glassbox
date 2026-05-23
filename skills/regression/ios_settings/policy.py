@@ -106,6 +106,26 @@ EXPECTED_ROOT_NAV_TEXT_ZH = (
     "钱包与 Apple Pay",
 )
 
+ROOT_NAV_VISUAL_ORDER_ZH = (
+    "无线局域网",
+    "蓝牙",
+    "蜂窝网络",
+    "电池",
+    "通用",
+    "辅助功能",
+    "操作按钮",
+    "待机显示",
+    "Siri",
+    "通知",
+    "声音与触感",
+    "专注模式",
+    "屏幕使用时间",
+    "Face ID与密码",
+    "紧急 SOS",
+    "隐私与安全性",
+    "钱包与 Apple Pay",
+)
+
 ROOT_LABEL_ALIASES = {
     "伴机息示": "待机显示",
     "伴机見示": "待机显示",
@@ -763,6 +783,8 @@ class SettingsPolicy:
             return None
         cx, cy = element.box.center
         if cy < 260 or cy > 900 or cx > 260:
+            return None
+        if len(text) <= 3 and (text[0] in "([（【〈《" or text[-1] in ")]）】〉》"):
             return None
         if len(text) <= 1 or text.replace(":", "").isdigit():
             return None

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -16,7 +17,11 @@ from glassbox.action.actuation_profile import ActuationProfile, save_actuation_p
 from glassbox.action.policy import RiskDecision, RiskPolicy
 from glassbox.action.recovery import RuntimeRecoveryPolicy
 from glassbox.action.seeds import DEFAULT_RECOVERY_SEED, recovery_hint
+from glassbox.action.semantic_plan import ExpectedState, SemanticActionPlan, verify_expected_state
+from glassbox.action.stuck import StuckLoopDetector, StuckSample
+from glassbox.cognition.vlm_gate import VLMEscalationGate, VLMGateInput
 from glassbox.effector import ActionResult
+from glassbox.memory.signature import compute_signature
 from glassbox.obs.artifacts import ArtifactStore, StoredFrame, StoredScene
 from glassbox.obs.stream import ObservationBuffer
 from glassbox.verification import (
@@ -29,7 +34,7 @@ from glassbox.verification import (
 from glassbox.verification.verifiers import SemanticOutcome, detect_disqualifying_state
 
 ActionCallable = Callable[[], ActionResult]
-ActionCallOrPlan = ActionCallable | ActuationPlan
+ActionCallOrPlan = ActionCallable | ActuationPlan | SemanticActionPlan
 Observation = tuple[StoredFrame | None, StoredScene | None, Any, Any]
 OBSERVATION_PRODUCER_MODES = {"scoped_source_owner", "recorder_buffer"}
 ACTUATION_ATTRIBUTION_LABELS = {
@@ -138,6 +143,7 @@ class ActionOrchestrator:
         actuation_profile: ActuationProfile | None = None,
         actuation_profile_dir: str | None = None,
         recovery_seed: dict[str, Any] | None = None,
+        stuck_detector: StuckLoopDetector | None = None,
     ):
         if observation_producer_mode not in OBSERVATION_PRODUCER_MODES:
             expected = ", ".join(sorted(OBSERVATION_PRODUCER_MODES))
@@ -150,6 +156,7 @@ class ActionOrchestrator:
         self.actuation_profile = actuation_profile or ActuationProfile(platform=platform)
         self.actuation_profile_dir = actuation_profile_dir
         self.recovery_seed = recovery_seed or DEFAULT_RECOVERY_SEED
+        self.stuck_detector = stuck_detector or StuckLoopDetector()
         self.semantic_fail_fast = semantic_fail_fast
         self.observation_producer_mode = observation_producer_mode
         self._group_seq = 0
@@ -211,8 +218,11 @@ class ActionOrchestrator:
         self._preflight(phone)
         group_id = self._next_group_id()
         plan = call if isinstance(call, ActuationPlan) else None
+        semantic_plan = call if isinstance(call, SemanticActionPlan) else None
         if plan is not None:
             kwargs = {**kwargs, **plan.metadata()}
+        if semantic_plan is not None:
+            kwargs = {**kwargs, **semantic_plan.metadata()}
         metadata = self._action_metadata(op, kwargs)
         actor = self._actor(metadata)
         skipped = self._skip_decision(phone, op=op, metadata=metadata)
@@ -223,6 +233,16 @@ class ActionOrchestrator:
                 metadata=metadata,
                 actor=actor,
                 reason=skipped,
+                group_id=group_id,
+            )
+        if semantic_plan is not None:
+            return self._execute_semantic_plan(
+                phone,
+                op=op,
+                plan=semantic_plan,
+                kwargs=kwargs,
+                metadata=metadata,
+                actor=actor,
                 group_id=group_id,
             )
         retry_budget = int(metadata.get("retry_budget", 0) or 0)
@@ -326,6 +346,7 @@ class ActionOrchestrator:
             group_status=final.semantic.status,
             terminal_reason=final.semantic.disqualifying_state or final.semantic.reason,
         )
+        self._maybe_recover_stuck(phone, final, group_id=group_id)
 
         enriched = self._enrich_result(final.result, final.semantic, final.attempt_id, group_id)
         if final.command_exception is not None:
@@ -341,6 +362,228 @@ class ActionOrchestrator:
             raise RuntimeError(f"{op} semantic partial: {final.semantic.reason}")
         return enriched
 
+    def _execute_semantic_plan(
+        self,
+        phone,
+        *,
+        op: str,
+        plan: SemanticActionPlan,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        actor: str,
+        group_id: str,
+    ) -> ActionResult:
+        spec = plan.spec
+        self.store.audit.append(
+            "attempt_group.started",
+            actor=actor,
+            attempt_group_id=group_id,
+            payload={
+                "op": op,
+                "actor": actor,
+                "semantic_action_spec": spec.to_dict(),
+                "strategy_count": len(plan.bound),
+            },
+        )
+        self._open_groups[group_id] = {
+            "op": op,
+            "actor": actor,
+            "retry_budget": 0,
+            "landing_retry_budget": 0,
+            "attempt_ids": [],
+            "started_at": time.monotonic(),
+        }
+        attempts: list[AttemptExecution] = []
+        recovered = False
+        recovery_used = False
+        strategy_index = 0
+        attempt_index = 0
+        transport_retry_budget = self._int_metadata(
+            metadata,
+            "transport_retry_budget",
+            self._int_metadata(metadata, "retry_budget", 0),
+        )
+        transport_retries_by_strategy: dict[int, int] = {}
+        terminal_reason = "strategies exhausted"
+        try:
+            while strategy_index < len(plan.bound):
+                strategy = plan.bound[strategy_index]
+                if strategy.spec.capability and not getattr(phone, "supports", lambda _op: True)(
+                    strategy.spec.capability
+                ):
+                    self.store.audit.append(
+                        "semantic_plan.strategy_skipped",
+                        attempt_group_id=group_id,
+                        payload={
+                            "strategy": strategy.spec.to_dict(),
+                            "reason": "capability unsupported",
+                        },
+                    )
+                    strategy_index += 1
+                    continue
+                attempt_id = self._next_attempt_id()
+                self._open_groups[group_id]["attempt_ids"].append(attempt_id)
+                attempt_kwargs = {
+                    **kwargs,
+                    "strategy": strategy.spec.name,
+                    "semantic_action_strategy": strategy.spec.to_dict(),
+                    "expected_state": spec.expected_state.to_dict(),
+                    "idempotent": spec.idempotent,
+                    "attempt_index": attempt_index,
+                }
+                attempt_metadata = {**metadata, **attempt_kwargs}
+                attempt = self._run_attempt(
+                    phone,
+                    op=op,
+                    call=strategy.call,
+                    kwargs=attempt_kwargs,
+                    metadata=attempt_metadata,
+                    group_id=group_id,
+                    attempt_id=attempt_id,
+                    attempt_index=attempt_index,
+                    actor=actor,
+                )
+                for key in (
+                    "vlm_calls",
+                    "vlm_triggers",
+                    "last_vlm_trigger",
+                    "vlm_budget_exhausted",
+                    "vlm_cache_hits",
+                    "vlm_cache_misses",
+                ):
+                    if key in attempt_metadata:
+                        metadata[key] = attempt_metadata[key]
+                attempts.append(attempt)
+                status = attempt.semantic.status
+                if status == "succeeded":
+                    terminal_reason = "expected state reached"
+                    break
+                if attempt.semantic.disqualifying_state:
+                    terminal_reason = attempt.semantic.disqualifying_state
+                    break
+                if status in {"blocked", "approval_required", "exception"}:
+                    terminal_reason = attempt.semantic.disqualifying_state or attempt.semantic.reason
+                    break
+                if status == "transport_failed":
+                    used_transport_retries = transport_retries_by_strategy.get(strategy_index, 0)
+                    if used_transport_retries < transport_retry_budget:
+                        transport_retries_by_strategy[strategy_index] = used_transport_retries + 1
+                        self.store.audit.append(
+                            "action.retry_scheduled",
+                            attempt_id=attempt.attempt_id,
+                            attempt_group_id=group_id,
+                            payload={
+                                "kind": "transport",
+                                "reason": attempt.semantic.reason,
+                                "strategy": strategy.spec.name,
+                                "next_attempt_index": attempt_index + 1,
+                            },
+                        )
+                        attempt_index += 1
+                        continue
+                self.store.audit.append(
+                    "semantic_plan.strategy_failed",
+                    attempt_id=attempt.attempt_id,
+                    attempt_group_id=group_id,
+                    payload={
+                        "strategy": strategy.spec.name,
+                        "status": status,
+                        "reason": attempt.semantic.reason,
+                        "next_strategy_index": strategy_index + 1,
+                    },
+                )
+                strategy_index += 1
+                attempt_index += 1
+                if strategy_index < len(plan.bound):
+                    continue
+                if (
+                    spec.recovery is not None
+                    and spec.idempotent
+                    and not recovery_used
+                    and self.recovery_policy is not None
+                ):
+                    self.store.audit.append(
+                        "semantic_plan.recovery.started",
+                        attempt_id=attempt.attempt_id,
+                        attempt_group_id=group_id,
+                        payload={
+                            "recovery": spec.recovery,
+                            "reason": attempt.semantic.reason,
+                        },
+                    )
+                    recovery = self.recovery_policy.recover(
+                        phone,
+                        attempt.semantic.reason,
+                        {"semantic_action_spec": spec.to_dict()},
+                    )
+                    self.store.audit.append(
+                        "semantic_plan.recovery.finished",
+                        attempt_id=attempt.attempt_id,
+                        attempt_group_id=group_id,
+                        payload=recovery.to_dict(),
+                    )
+                    recovered = recovery.recovered
+                    recovery_used = True
+                    if recovered:
+                        strategy_index = 0
+                        transport_retries_by_strategy.clear()
+                        continue
+                terminal_reason = attempt.semantic.reason
+                break
+        except BaseException:
+            self._finalize_group(
+                group_id,
+                op=op,
+                actor=actor,
+                attempts=attempts,
+                group_status="interrupted",
+                terminal_reason="semantic plan exception before group conclusion",
+            )
+            raise
+
+        if not attempts:
+            result = phone._failed_action_result(error="semantic plan had no eligible strategies")
+            semantic = _semantic_exception(
+                "semantic_action_plan",
+                RuntimeError("semantic plan had no eligible strategies"),
+                phase="strategy selection",
+            )
+            attempt_id = self._next_attempt_id()
+            self._open_groups[group_id]["attempt_ids"].append(attempt_id)
+            attempts.append(AttemptExecution(attempt_id, result, semantic, {}))
+
+        final = attempts[-1]
+        self._finalize_group(
+            group_id,
+            op=op,
+            attempt_id=final.attempt_id,
+            actor=actor,
+            attempts=attempts,
+            group_status=final.semantic.status,
+            terminal_reason=terminal_reason,
+        )
+        self._maybe_recover_stuck(phone, final, group_id=group_id)
+        self.store.audit.append(
+            "semantic_plan.finished",
+            attempt_id=final.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "status": final.semantic.status,
+                "recovered": recovered,
+                "strategy_switches": self._strategy_switch_count(attempts),
+                "semantic_action_spec": spec.to_dict(),
+            },
+        )
+        enriched = self._enrich_result(final.result, final.semantic, final.attempt_id, group_id)
+        if final.command_exception is not None:
+            raise final.command_exception
+        if phone.action_fail_fast and not enriched.ok:
+            detail = enriched.error or "reported action failure"
+            raise RuntimeError(f"{op} failed: {detail}")
+        if self.semantic_fail_fast and final.semantic.status in {"failed", "blocked", "approval_required"}:
+            raise RuntimeError(f"{op} semantic {final.semantic.status}: {final.semantic.reason}")
+        return enriched
+
     def _skip_decision(self, phone, *, op: str, metadata: dict[str, Any]) -> str | None:
         if not self._landing_observation_enabled(metadata):
             return None
@@ -353,6 +596,68 @@ class ActionOrchestrator:
             method=str(metadata.get("actuation_method") or "mouse_tap"),
         )
         return reason if skip else None
+
+    def _maybe_recover_stuck(
+        self,
+        phone,
+        final: AttemptExecution,
+        *,
+        group_id: str,
+    ) -> None:
+        status = final.semantic.status
+        if status in {"succeeded", "blocked", "approval_required", "exception"}:
+            return
+        if final.semantic.disqualifying_state:
+            return
+        observation = final.action_payload.get("observation") if final.action_payload else None
+        signature = (
+            observation.get("screen_signature")
+            if isinstance(observation, dict)
+            else None
+        )
+        if not isinstance(signature, str) or not signature:
+            return
+        reason = final.semantic.disqualifying_state or final.semantic.reason or status
+        decision = self.stuck_detector.observe(StuckSample(signature, str(reason)))
+        self.store.audit.append(
+            "stuck_detector.observed",
+            attempt_id=final.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "screen_signature": signature,
+                "failure_reason": str(reason),
+                "count": decision.count,
+                "should_recover": decision.should_recover,
+                "recovery": decision.recovery,
+            },
+        )
+        if not decision.should_recover:
+            return
+        self.store.audit.append(
+            "stuck_detector.recovery.started",
+            attempt_id=final.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "recovery": decision.recovery,
+                "failure_reason": str(reason),
+            },
+        )
+        recovery = self.recovery_policy.recover(
+            phone,
+            str(reason),
+            {
+                "recovery": decision.recovery,
+                "screen_signature": signature,
+                "attempt_group_id": group_id,
+                "attempt_id": final.attempt_id,
+            },
+        )
+        self.store.audit.append(
+            "stuck_detector.recovery.finished",
+            attempt_id=final.attempt_id,
+            attempt_group_id=group_id,
+            payload=recovery.to_dict(),
+        )
 
     def _skipped_result(
         self,
@@ -766,6 +1071,12 @@ class ActionOrchestrator:
                     )
                     phase = "verifier"
                     semantic = verifier.verify(verifier_input)
+                    semantic = self._semantic_after_expected_state(
+                        phone,
+                        semantic,
+                        metadata,
+                        after[-1][3] if after else None,
+                    )
                     semantic = self._semantic_after_landing(
                         semantic,
                         landing_observation,
@@ -923,6 +1234,7 @@ class ActionOrchestrator:
             actor=actor,
         )
         after_mode = self._after_mode(str(metadata.get("settle_strategy"))) if after else "none"
+        screen_signature = self._screen_signature(after[-1][3]) if after else None
         observation_payload = {
             "settle_strategy": metadata.get("settle_strategy"),
             "after_mode": after_mode,
@@ -933,6 +1245,7 @@ class ActionOrchestrator:
             "scene_ids": [item[1].scene_id for item in after if item[1] is not None],
             "frame_count": len(after),
             "trace_level": self.store.effective_trace_level(trace_level_override),
+            "screen_signature": screen_signature,
         }
         observation_payload.update(after_observation_metadata or {})
         observation_payload["after_mode"] = after_mode
@@ -957,6 +1270,16 @@ class ActionOrchestrator:
             "verification": verification_file,
             "status": semantic.status,
         }
+        for key in (
+            "vlm_calls",
+            "vlm_triggers",
+            "last_vlm_trigger",
+            "vlm_budget_exhausted",
+            "vlm_cache_hits",
+            "vlm_cache_misses",
+        ):
+            if key in metadata:
+                action_payload["command"][key] = metadata[key]
         if landing_observation is not None or attempt_attribution is not None:
             action_payload["actuation"] = {
                 "landing_observation": landing_observation,
@@ -1213,6 +1536,154 @@ class ActionOrchestrator:
             return ratio, None
         return ratio, [x + int(xs.min()), y + int(ys.min()), int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1)]
 
+    def _semantic_after_expected_state(
+        self,
+        phone,
+        semantic: SemanticOutcome,
+        metadata: dict[str, Any],
+        after_scene: Any,
+    ) -> SemanticOutcome:
+        expected_payload = metadata.get("expected_state")
+        if not isinstance(expected_payload, dict):
+            return semantic
+        if semantic.disqualifying_state:
+            return semantic
+        if semantic.status in {"blocked", "approval_required", "exception", "transport_failed"}:
+            return semantic
+        try:
+            expected = ExpectedState.from_dict(expected_payload)
+        except Exception:
+            return semantic
+        expected_semantic = verify_expected_state(expected, after_scene)
+        if expected_semantic.status == "succeeded":
+            return replace(
+                expected_semantic,
+                observation_match=semantic.observation_match,
+                matched_frame_id=semantic.matched_frame_id,
+                matched_scene_id=semantic.matched_scene_id,
+            )
+        vlm_semantic = self._maybe_vlm_verify_expected_state(
+            phone,
+            expected,
+            semantic=semantic,
+            expected_semantic=expected_semantic,
+            metadata=metadata,
+            after_scene=after_scene,
+        )
+        if vlm_semantic is not None:
+            expected_semantic = vlm_semantic
+        return replace(
+            expected_semantic,
+            observation_match=semantic.observation_match,
+            matched_frame_id=semantic.matched_frame_id,
+            matched_scene_id=semantic.matched_scene_id,
+        )
+
+    def _maybe_vlm_verify_expected_state(
+        self,
+        phone,
+        expected: ExpectedState,
+        *,
+        semantic: SemanticOutcome,
+        expected_semantic: SemanticOutcome,
+        metadata: dict[str, Any],
+        after_scene: Any,
+    ) -> SemanticOutcome | None:
+        max_calls_per_action = self._int_metadata(metadata, "max_vlm_calls_per_action", 1)
+        used_action_calls = self._int_metadata(metadata, "vlm_calls", 0)
+        remaining_action_calls = max(0, max_calls_per_action - used_action_calls)
+        gate = VLMEscalationGate(
+            enabled=bool(getattr(phone, "kimi", None) is not None and not metadata.get("vlm_disabled")),
+            max_calls_per_action=remaining_action_calls,
+            max_calls_per_attempt=self._int_metadata(metadata, "max_vlm_calls_per_attempt", 1),
+        )
+        gate_input = VLMGateInput(
+            ocr_confidence=self._scene_confidence(after_scene),
+            target_found=expected_semantic.status == "succeeded",
+            classifier_conflict=bool(metadata.get("classifier_conflict", False)),
+            verification_status=(
+                "unknown"
+                if semantic.status == "unknown" or expected_semantic.status in {"unknown", "no_after_scene"}
+                else expected_semantic.status
+            ),
+        )
+
+        def call_vlm():
+            scene = phone.describe(scene_hint=f"expected_state:{expected.kind}")
+            self._record_vlm_cache_fields(metadata, getattr(phone, "kimi", None))
+            return scene
+
+        scene = gate.escalate(
+            gate_input,
+            call_vlm,
+            attempt_index=int(metadata.get("attempt_index", 0) or 0),
+        )
+        self._merge_vlm_audit_fields(metadata, gate.audit_fields())
+        if scene is None:
+            return None
+        vlm_semantic = verify_expected_state(expected, scene)
+        return replace(
+            vlm_semantic,
+            verifier="expected_state_vlm",
+            reason=f"{vlm_semantic.reason} after VLM escalation",
+        )
+
+    @staticmethod
+    def _int_metadata(metadata: dict[str, Any], key: str, default: int) -> int:
+        try:
+            return int(metadata.get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _scene_confidence(scene: Any) -> float | None:
+        if scene is None:
+            return None
+        values = [
+            float(value)
+            for element in getattr(scene, "elements", []) or []
+            for value in [getattr(element, "confidence", None)]
+            if isinstance(value, (int, float))
+        ]
+        if not values:
+            return None
+        return min(values)
+
+    @staticmethod
+    def _merge_vlm_audit_fields(metadata: dict[str, Any], fields: dict[str, Any]) -> None:
+        metadata["vlm_calls"] = int(metadata.get("vlm_calls", 0) or 0) + int(fields.get("vlm_calls", 0) or 0)
+        triggers = list(metadata.get("vlm_triggers") or [])
+        for trigger in fields.get("vlm_triggers", []) or []:
+            if trigger not in triggers:
+                triggers.append(trigger)
+        metadata["vlm_triggers"] = triggers
+        metadata["last_vlm_trigger"] = fields.get("last_vlm_trigger") or (
+            triggers[-1] if triggers else None
+        )
+        metadata["vlm_budget_exhausted"] = bool(
+            metadata.get("vlm_budget_exhausted") or fields.get("vlm_budget_exhausted")
+        )
+
+    @staticmethod
+    def _record_vlm_cache_fields(metadata: dict[str, Any], kimi: Any) -> None:
+        if getattr(kimi, "last_hit", False):
+            metadata["vlm_cache_hits"] = int(metadata.get("vlm_cache_hits", 0) or 0) + 1
+            return
+        metadata["vlm_cache_misses"] = int(metadata.get("vlm_cache_misses", 0) or 0) + 1
+
+    @staticmethod
+    def _strategy_switch_count(attempts: list[AttemptExecution]) -> int:
+        switches = 0
+        previous: str | None = None
+        for attempt in attempts:
+            command = attempt.action_payload.get("command") if attempt.action_payload else None
+            strategy = command.get("strategy") if isinstance(command, dict) else None
+            strategy_name = str(strategy or "")
+            if previous is not None and strategy_name != previous:
+                switches += 1
+            previous = strategy_name
+        return switches
+
     @staticmethod
     def _semantic_after_landing(
         semantic: SemanticOutcome,
@@ -1308,6 +1779,15 @@ class ActionOrchestrator:
             label=payload.get("label"),
         )
         return payload
+
+    @staticmethod
+    def _screen_signature(scene: Any) -> str | None:
+        if scene is None:
+            return None
+        with contextlib.suppress(Exception):
+            sig = compute_signature(scene)
+            return json.dumps(sig.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
+        return None
 
     @staticmethod
     def _attribution_label(

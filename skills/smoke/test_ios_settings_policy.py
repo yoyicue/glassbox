@@ -178,6 +178,12 @@ def test_ios_settings_policy_owns_labels_candidates_and_blocked_pages():
 
 
 @pytest.mark.smoke
+def test_ios_settings_policy_filters_short_ocr_noise_from_navigation_rows():
+    assert DEFAULT_SETTINGS_POLICY.potential_navigation_row_text(_el("（②", 70, 420, w=40)) is None
+    assert DEFAULT_SETTINGS_POLICY.potential_navigation_row_text(_el("O）", 70, 420, w=40)) is None
+
+
+@pytest.mark.smoke
 def test_ios_settings_policy_counts_wallet_root_but_does_not_navigate_it():
     scene = _scene(
         _el("设置", 198, 72, w=48),
