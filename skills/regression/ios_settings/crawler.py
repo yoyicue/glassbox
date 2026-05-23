@@ -129,7 +129,10 @@ def crawl_high_value_child_settings(
                 )
                 try:
                     _return_to_settings_root(traced_phone)
-                except AssertionError:
+                except settings_recovery.SettingsRootUnreachable:
+                    # Soft return-failure path: record it and stop the child
+                    # audit gracefully instead of letting the distinct recovery
+                    # exception fall through to the crash/re-raise handler below.
                     return_root_failed = True
                     limits_hit.add("return_root_failed")
                     break

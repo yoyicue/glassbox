@@ -105,3 +105,48 @@ def test_crawl_readonly_settings_report_keeps_trace_payload_after_success(monkey
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["trace"]["action_count"] == 1
     assert payload["metrics"]["hid_call_count"] == 1
+
+
+@pytest.mark.smoke
+def test_try_return_to_settings_root_absorbs_unreachable(monkeypatch):
+    """The "try" variant must report False (not propagate) when the recovery
+    raises its distinct SettingsRootUnreachable — return_to_settings_root no
+    longer raises AssertionError, so the old catch was dead."""
+    def _raise(_phone):
+        raise settings_core.settings_recovery.SettingsRootUnreachable("nope")
+
+    monkeypatch.setattr(settings_core, "_return_to_settings_root", _raise)
+    assert settings_core._try_return_to_settings_root(object()) is False
+
+
+@pytest.mark.smoke
+def test_child_audit_records_return_root_failed_not_exception(monkeypatch):
+    """Child audit's soft return_root_failed path must catch the distinct
+    SettingsRootUnreachable; otherwise it falls through to exception + re-raise."""
+    monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
+    monkeypatch.setattr(crawler, "_open_settings_from_home_if_visible", lambda phone: None)
+    monkeypatch.setattr(crawler, "_open_target_root_page", lambda phone, label: True)
+    monkeypatch.setattr(crawler, "_crawl_current_page", lambda phone, **kwargs: None)
+
+    calls = {"n": 0}
+
+    def _return(_phone):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return  # initial reset to root succeeds
+        raise crawler.settings_recovery.SettingsRootUnreachable("stranded after target")
+
+    monkeypatch.setattr(crawler, "_return_to_settings_root", _return)
+
+    result = crawler.crawl_high_value_child_settings(
+        object(),
+        target_root_labels=["蓝牙"],
+        max_depth=1,
+        max_pages=8,
+        max_child_scrolls_per_page=1,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+    )
+    assert result.return_root_failed is True
+    assert "return_root_failed" in result.limits_hit
+    assert "exception" not in result.limits_hit

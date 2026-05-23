@@ -351,7 +351,10 @@ def _ensure_settings_root(phone) -> bool:
 def _try_return_to_settings_root(phone) -> bool:
     try:
         _return_to_settings_root(phone)
-    except AssertionError:
+    except settings_recovery.SettingsRootUnreachable:
+        # return_to_settings_root signals an unrecoverable return via this
+        # distinct type (no longer a bare assert); the "try" variant absorbs it
+        # and reports False so bootstrap can fall back instead of crashing.
         return False
     return _is_settings_root(phone)
 
