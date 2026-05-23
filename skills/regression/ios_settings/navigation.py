@@ -462,15 +462,31 @@ def crawl_current_page(
                 if not actions.scene_is_settings_root(current):
                     actions.return_to_settings_root(phone)
                     current = phone.perceive()
-                relocated = next(
-                    (
-                        element
-                        for element in current.elements
-                        if (element.text or "").strip() == label
-                        and not actions.is_settings_section_header(current, element)
-                    ),
-                    None,
-                )
+                # Re-locate this row in the live scene. Match by canonical section
+                # first (a garbled/variant OCR of e.g. "Bluetooth" still maps to
+                # the same row), then exact text, then a fuzzy fallback. Exact-text
+                # only dropped mid-band rows whose OCR drifted between frames
+                # (notably under English OCR) — the cascade this re-ground exists
+                # to prevent.
+                candidate_canon = actions.canonical_expected_root_label(label)
+                relocated = None
+                for element in current.elements:
+                    etext = (element.text or "").strip()
+                    if not etext or actions.is_settings_section_header(current, element):
+                        continue
+                    if etext == label or (
+                        candidate_canon is not None
+                        and actions.canonical_expected_root_label(etext) == candidate_canon
+                    ):
+                        relocated = element
+                        break
+                if relocated is None:
+                    rows = [
+                        e for e in current.elements
+                        if (e.text or "").strip()
+                        and not actions.is_settings_section_header(current, e)
+                    ]
+                    relocated = actions.match_any(rows, [label])
                 if relocated is None:
                     continue
                 cand = relocated
