@@ -501,6 +501,41 @@ def _requires_post_open_target_label(labels: Iterable[str]) -> bool:
     return any(str(label).strip() in {"设置", "Settings"} for label in labels)
 
 
+def _climb_out_to_target(
+    phone,
+    labels: Iterable[str],
+    *,
+    settle_s: float,
+    max_steps: int = 4,
+) -> bool:
+    """Tap Back to escape an unrecognized sub-page; accept if the target surfaces.
+
+    A launch can reopen the target app on a sub-page whose chrome defeats
+    detection (e.g. Settings stuck on the Action-Button carousel with a live
+    camera preview). Going Home would not clear that app's nav stack, so the
+    next reopen would land here again. back_gesture can climb such pages (it
+    blind-taps the top-left chevron on unknown scenes), so try a few steps and
+    accept once the target app's root is recognizable.
+    """
+    back = getattr(phone, "back_gesture", None)
+    if not callable(back):
+        return False
+    for _ in range(max_steps):
+        try:
+            result = back()
+        except Exception:
+            return False
+        if getattr(result, "ok", False) is not True:
+            return False
+        scene = _perceive_after_settle(phone, settle_s)
+        if is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
+            return False  # climbed past the app to Home — it was the wrong app
+        classified = classify_ios_scene(scene, viewport_size=_viewport_size(phone))
+        if classified.kind.startswith("settings_") or _scene_has_target_label(scene, labels):
+            return True
+    return False
+
+
 def _opened_expected_app_or_recover(
     phone,
     scene: Scene,
@@ -514,6 +549,11 @@ def _opened_expected_app_or_recover(
         return True
     classified = classify_ios_scene(scene, viewport_size=_viewport_size(phone))
     if classified.kind.startswith("settings_") or _scene_has_target_label(scene, app_labels):
+        return True
+    # An "unknown" scene may be the target app reopened onto a sub-page whose
+    # chrome defeats detection. Try climbing out before giving up — recovering
+    # Home leaves that app's nav stack intact, so a reopen would just loop here.
+    if classified.kind == "unknown" and _climb_out_to_target(phone, app_labels, settle_s=settle_s):
         return True
     logger.warning(
         "springboard tap opened a non-target app for labels={} kind={}; recovering Home",

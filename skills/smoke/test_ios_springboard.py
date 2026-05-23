@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import pytest
 
+from types import SimpleNamespace
+
 from glassbox.cognition import Box, Scene, UIElement
 from glassbox.ios.springboard import (
+    _opened_expected_app_or_recover,
     find_springboard_icon,
     is_ios_home_screen,
     open_app_from_springboard,
@@ -794,3 +797,84 @@ def test_open_app_via_spotlight_requires_target_label_after_return(monkeypatch):
             self.actions.append(("type", (text,)))
 
     assert not open_app_via_spotlight(FakePhone(), ("设置", "Settings"), settle_s=0.0)
+
+
+@pytest.mark.smoke
+def test_opened_settings_climbs_out_of_unknown_subpage_instead_of_recovering_home():
+    """Settings reopened onto the Action-Button carousel classifies as unknown.
+    Recovering Home would not clear Settings' nav stack, so the next reopen would
+    loop here forever; instead back_gesture climbs out and the Settings root is
+    accepted as the opened target."""
+    carousel = _scene(
+        UIElement(type="button", box=Box(x=166, y=606, w=112, h=24), text="静音模式", confidence=0.9),
+        _el("为通话和提醒切换静音和响铃。", 120, 646, 210, 22),
+    )
+    root = _scene(
+        _el("设置", 198, 72, 48),
+        _el("无线局域网", 80, 370, 86),
+        _el("蓝牙", 80, 424, 40),
+        _el("蜂窝网络", 80, 478, 68),
+        _el("通用", 80, 725, 40),
+    )
+
+    class FakePhone:
+        def __init__(self):
+            self.scene = carousel
+            self.home_calls = 0
+            self.back_calls = 0
+
+        def perceive(self):
+            return self.scene
+
+        def back_gesture(self):
+            self.back_calls += 1
+            self.scene = root  # blind chevron tap pops the carousel → Settings root
+            return SimpleNamespace(ok=True)
+
+        def home(self):
+            self.home_calls += 1
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 448, 990
+
+    phone = FakePhone()
+    assert _opened_expected_app_or_recover(phone, carousel, ("设置", "Settings"), settle_s=0) is True
+    assert phone.back_calls == 1
+    assert phone.home_calls == 0
+
+
+@pytest.mark.smoke
+def test_opened_wrong_app_recovers_home_when_climb_does_not_surface_target():
+    """A genuinely wrong-app launch whose pages never resolve to the target:
+    climbing Back a bounded number of times surfaces neither the target nor
+    Home, so the open is rejected and Home is recovered (no infinite loop)."""
+    other = _scene(_el("某第三方页面", 120, 300, 160, 24))
+
+    class FakePhone:
+        def __init__(self):
+            self.home_calls = 0
+            self.back_calls = 0
+
+        def perceive(self):
+            return other  # never resolves to Settings
+
+        def back_gesture(self):
+            self.back_calls += 1
+            return SimpleNamespace(ok=True)
+
+        def home(self):
+            self.home_calls += 1
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 448, 990
+
+    phone = FakePhone()
+    assert _opened_expected_app_or_recover(phone, other, ("设置", "Settings"), settle_s=0) is False
+    assert phone.home_calls == 1
+    assert phone.back_calls == 4  # bounded by max_steps
