@@ -387,6 +387,40 @@ def _final_state_element_matches(final_state: Mapping[str, Any], query: Mapping[
     return False
 
 
+def _root_page_coverage(
+    actions: list[Mapping[str, Any]],
+    expected_root_pages: Iterable[str],
+) -> tuple[int, int, list[str]]:
+    """Coverage of the expected top-level pages by this run.
+
+    A page is *covered* when a primary action that opened it succeeded — i.e. a
+    `role == "primary"`, `verdict == "succeeded"` action whose target carries the
+    page label. This ties coverage to success, not mere attempts.
+    """
+    expected = list(dict.fromkeys(str(page) for page in expected_root_pages if str(page)))
+    if not expected:
+        return 0, 0, []
+    visited = [
+        str(action.get("target") or "")
+        for action in actions
+        if action.get("role") == "primary"
+        and action.get("verdict") == "succeeded"
+        and action.get("target")
+    ]
+    covered = [page for page in expected if _contains_text(visited, page)]
+    missing = [page for page in expected if page not in covered]
+    return len(covered), len(expected), missing
+
+
+def _coverage_from_report(root_coverage: Mapping[str, Any]) -> tuple[int, int, list[str]]:
+    """Coverage from a walkthrough's own `root_coverage` (expected/visited)."""
+    expected = [str(page) for page in (root_coverage.get("expected") or []) if str(page)]
+    visited = {str(page) for page in (root_coverage.get("visited") or [])}
+    missing = [page for page in expected if page not in visited]
+    covered = len(expected) - len(missing)
+    return covered, len(expected), missing
+
+
 def _group_actions(
     actions: list[dict[str, Any]],
     groups: list[dict[str, Any]],
@@ -567,6 +601,16 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     task_count = len(tasks)
     task_success = sum(1 for task in tasks if task.get("outcome") == "succeeded")
     recoveries = sum(_task_recovery_count(task) for task in tasks)
+    coverage_tasks = [task for task in tasks if _metric_int(task, "root_pages_expected") > 0]
+    root_pages_coverage = (
+        sum(
+            _metric_int(task, "root_pages_covered") / _metric_int(task, "root_pages_expected")
+            for task in coverage_tasks
+        )
+        / len(coverage_tasks)
+        if coverage_tasks
+        else 0.0
+    )
     vlm_calls = sum(
         _metric_int(action, "vlm_calls")
         for action in all_actions
@@ -583,6 +627,7 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         "task_completion_rate": task_success / task_count if task_count else 0.0,
         "action_success_rate": succeeded / denominator if denominator else 0.0,
         "unknown_rate": unknown / denominator if denominator else 0.0,
+        "root_pages_coverage": root_pages_coverage,
         "recoveries": recoveries,
         "strategy_switches": sum(
             _metric_int(action, "strategy_switches")
@@ -637,6 +682,8 @@ def aggregate_run_dir(
     task: str,
     round_index: int,
     terminal_expected_state: Mapping[str, Any] | None = None,
+    expected_root_pages: Iterable[str] = (),
+    root_coverage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     _require_artifact_run_dir(run_dir)
     manifest = _read_required_json(run_dir / "manifest.json")
@@ -665,12 +712,22 @@ def aggregate_run_dir(
 
     terminal = dict(terminal_expected_state or DEFAULT_TERMINAL_EXPECTED_STATE)
     final_state = _final_state(run_dir, actions)
+    if isinstance(root_coverage, Mapping):
+        # Authoritative: the walkthrough already computed which top-level pages it
+        # opened. Prefer it over matching the orchestrator action ledger (whose
+        # row navigations are not recorded as matchable primary actions).
+        covered, expected_count, missing = _coverage_from_report(root_coverage)
+    else:
+        covered, expected_count, missing = _root_page_coverage(action_records, expected_root_pages)
     return {
         "task": task,
         "round": round_index,
         "terminal_expected_state": terminal,
         "outcome": _task_outcome(action_records, final_state, terminal),
         "final_state": final_state,
+        "root_pages_expected": expected_count,
+        "root_pages_covered": covered,
+        "root_pages_missing": missing,
         "actions": action_records,
         "artifact_run_dir": str(run_dir),
         "artifact_run_id": manifest.get("run_id") or run_dir.name,
@@ -691,14 +748,19 @@ def aggregate_benchmark(
     task: str = "computer_use_run",
     terminal_expected_state: Mapping[str, Any] | None = None,
     config: Mapping[str, Any] | None = None,
+    expected_root_pages: Iterable[str] = (),
+    root_coverages: list[Mapping[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
     run_dirs = [Path(path) for path in run_dirs]
+    expected_root_pages = tuple(expected_root_pages)
     tasks = [
         aggregate_run_dir(
             run_dir,
             task=task,
             round_index=index,
             terminal_expected_state=terminal_expected_state,
+            expected_root_pages=expected_root_pages,
+            root_coverage=root_coverages[index] if root_coverages and index < len(root_coverages) else None,
         )
         for index, run_dir in enumerate(run_dirs)
     ]
@@ -756,6 +818,9 @@ def aggregate_benchmark_manifest(manifest_path: Path) -> dict[str, Any]:
         _validate_expected_state(terminal, f"task manifest tasks[{index}].terminal_expected_state", terminal_errors)
         if terminal_errors:
             raise ValueError(terminal_errors[0])
+        raw_expected_pages = entry.get("expected_root_pages", [])
+        if not isinstance(raw_expected_pages, list) or not all(isinstance(p, str) for p in raw_expected_pages):
+            raise ValueError(f"task manifest tasks[{index}].expected_root_pages must be a list of strings")
         run_dirs.append(run_dir)
         tasks.append(
             aggregate_run_dir(
@@ -763,6 +828,7 @@ def aggregate_benchmark_manifest(manifest_path: Path) -> dict[str, Any]:
                 task=str(entry.get("task") or "computer_use_run"),
                 round_index=round_index,
                 terminal_expected_state=terminal,
+                expected_root_pages=raw_expected_pages,
             )
         )
     config = manifest.get("config") if isinstance(manifest.get("config"), Mapping) else {}
@@ -884,6 +950,11 @@ def validate_benchmark(payload: Mapping[str, Any]) -> list[str]:
         if task.get("outcome") not in {"succeeded", "failed", "unknown"}:
             errors.append(f"tasks[{task_index}].outcome is invalid")
         _validate_final_state(task.get("final_state"), f"tasks[{task_index}].final_state", errors)
+        for key in ("root_pages_expected", "root_pages_covered"):
+            if key in task and not _is_non_negative_int(task.get(key)):
+                errors.append(f"tasks[{task_index}].{key} must be a non-negative integer")
+        if "root_pages_missing" in task and not isinstance(task.get("root_pages_missing"), list):
+            errors.append(f"tasks[{task_index}].root_pages_missing must be a list")
         if not isinstance(task.get("terminal_expected_state"), dict):
             errors.append(f"tasks[{task_index}].terminal_expected_state must be an object")
         else:
@@ -983,6 +1054,7 @@ def compare_benchmarks(
         "task_completion_rate",
         "action_success_rate",
         "unknown_rate",
+        "root_pages_coverage",
         "recoveries",
         "strategy_switches",
         "retries",
@@ -996,7 +1068,7 @@ def compare_benchmarks(
         cand = float(cand_metrics.get(key, 0.0) or 0.0)
         delta = cand - base
         lines.append(f"{key}: baseline={base:.6g} candidate={cand:.6g} delta={delta:+.6g}")
-        if key in {"task_completion_rate", "action_success_rate"} and delta < -tolerance:
+        if key in {"task_completion_rate", "action_success_rate", "root_pages_coverage"} and delta < -tolerance:
             rc = 1
         if key == "unknown_rate" and delta > tolerance:
             rc = 1
@@ -1047,6 +1119,7 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
     artifact_root = args.artifact_root.expanduser().resolve()
     artifact_root.mkdir(parents=True, exist_ok=True)
     run_dirs: list[Path] = []
+    root_coverages: list[Mapping[str, Any] | None] = []
     for index in range(args.rounds):
         before = {path for path in artifact_root.iterdir() if path.is_dir()}
         report = args.report_dir.expanduser().resolve() / f"ios-settings-{index:03d}.json"
@@ -1072,6 +1145,11 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
             print(f"ERROR: round {index} wrote no computer-use artifact run under {artifact_root}")
             return 1
         run_dirs.append(new_dirs[-1])
+        report_payload = _read_json(report) if report.exists() else {}
+        coverage = report_payload.get("root_coverage")
+        root_coverages.append(coverage if isinstance(coverage, Mapping) else None)
+
+    from skills.regression.ios_settings.policy import EXPECTED_ROOT_NAV_TEXT_ZH
 
     try:
         payload = aggregate_benchmark(
@@ -1079,6 +1157,8 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
             task="settings_readonly_walkthrough",
             terminal_expected_state=terminal,
             config={"rounds": args.rounds, "task_set": "ios_settings"},
+            expected_root_pages=EXPECTED_ROOT_NAV_TEXT_ZH,
+            root_coverages=root_coverages,
         )
     except ValueError as exc:
         print(f"ERROR: {exc}")

@@ -106,6 +106,9 @@ auto-compared).** One JSON document per benchmark run:
       "terminal_expected_state": { "kind": "page_id|visible_text|…", "payload": {} },
       "outcome": "succeeded|failed|unknown",
       "final_state": { "page_id": "…", "is_anchor": true },
+      "root_pages_expected": 16,        // size of the task's expected top-level page set
+      "root_pages_covered": 14,         // expected pages opened by a succeeded primary action
+      "root_pages_missing": ["…"],      // expected pages not covered this round
       "actions": [
         {
           "seq": 0,
@@ -147,6 +150,7 @@ auto-compared).** One JSON document per benchmark run:
     "task_completion_rate": 0.0,
     "action_success_rate": 0.0,
     "unknown_rate": 0.0,
+    "root_pages_coverage": 0.0,
     "recoveries": 0,
     "strategy_switches": 0,
     "retries": 0,
@@ -187,6 +191,13 @@ diffs):**
   `strategy_switches`. A retry of the same strategy increments `retries`.
 - `task_completion_rate` = rounds whose `final_state` satisfies the task's
   `terminal_expected_state` ÷ total rounds.
+- `root_pages_coverage` = mean over rounds (with `root_pages_expected > 0`) of
+  `root_pages_covered ÷ root_pages_expected`. A page is **covered** only when a
+  succeeded primary action opened it, so coverage measures *visited correctly*,
+  not merely *attempted*. `terminal_expected_state` (e.g. "ended at Settings
+  root") stays a separate, coarser end-state signal; coverage is what reflects
+  per-section traversal. Treated as higher-is-better in `compare` (regression on
+  a drop), like the success rates.
 
 **Acceptance criteria:**
 

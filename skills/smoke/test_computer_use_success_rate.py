@@ -498,6 +498,52 @@ def test_task_completion_rate_supports_element_terminal_states(tmp_path):
     assert gone["metrics"]["task_completion_rate"] == 1.0
 
 
+def test_root_page_coverage_counts_successfully_visited_pages(tmp_path):
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path)],
+        expected_root_pages=["Settings", "无线局域网"],
+    )
+    task = payload["tasks"][0]
+    assert task["root_pages_expected"] == 2
+    assert task["root_pages_covered"] == 1          # the succeeded primary opened "Settings"
+    assert task["root_pages_missing"] == ["无线局域网"]
+    assert payload["metrics"]["root_pages_coverage"] == 0.5
+    assert validate_benchmark(payload) == []
+
+
+def test_root_page_coverage_prefers_walkthrough_report(tmp_path):
+    # The walkthrough's own root_coverage is authoritative; the orchestrator
+    # action ledger does not record row navigations as matchable primary actions.
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path)],
+        expected_root_pages=["ignored-when-report-present"],
+        root_coverages=[{"expected": ["无线局域网", "蓝牙", "通用"], "visited": ["无线局域网", "通用"]}],
+    )
+    task = payload["tasks"][0]
+    assert task["root_pages_expected"] == 3
+    assert task["root_pages_covered"] == 2
+    assert task["root_pages_missing"] == ["蓝牙"]
+    assert payload["metrics"]["root_pages_coverage"] == 2 / 3
+    assert validate_benchmark(payload) == []
+
+
+def test_root_page_coverage_absent_without_expected_pages(tmp_path):
+    payload = aggregate_benchmark([_run_dir(tmp_path)])
+    assert payload["tasks"][0]["root_pages_expected"] == 0
+    assert payload["metrics"]["root_pages_coverage"] == 0.0
+
+
+def test_root_page_coverage_drop_fails_compare(tmp_path):
+    baseline = aggregate_benchmark([_run_dir(tmp_path / "b")], expected_root_pages=["Settings"])
+    candidate = aggregate_benchmark(
+        [_run_dir(tmp_path / "c")],
+        expected_root_pages=["Settings", "无线局域网"],
+    )
+    rc, lines = compare_benchmarks(baseline, candidate)
+    assert rc == 1
+    assert any("root_pages_coverage" in line for line in lines)
+
+
 def test_validate_benchmark_recomputes_metrics(tmp_path):
     payload = aggregate_benchmark([_run_dir(tmp_path)])
     payload["metrics"]["action_success_rate"] = 0.0
