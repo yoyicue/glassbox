@@ -35,7 +35,6 @@ UNSAFE_OR_NON_NAV_TEXT = (
     "私有无线局域网地址", "Private Wi-Fi Address", "无线局域网地址", "Wi-Fi Address",
     "配置IP", "Configure IP", "IP地址", "IP Address",
     "自动", "Auto",
-    "打开", "关闭", "开", "关", "On", "Off",
     "搜索", "Search",
     "编辑", "Edit",
     "删除", "Delete",
@@ -222,7 +221,13 @@ ROOT_COVERAGE_ONLY_LABELS = (
     "钱包与 Apple Pay",
     "Wallet & Apple Pay",
 )
-EXACT_UNSAFE_OR_NON_NAV_TEXT = {"App"}
+# Whole-label-only non-nav tokens. These are toggle/picker *state values*, not
+# topics: a row is non-navigational only when its ENTIRE label is the token.
+# Kept out of the substring tier (UNSAFE_OR_NON_NAV_TEXT) because as substrings
+# they over-match real English nav rows ("On" inside "NotificatiOns"/
+# "ActiOnButtOn") and even Chinese ("关" inside "关于本机"/About). Matched on
+# compacted+casefolded text so OCR spacing/case doesn't slip a toggle through.
+EXACT_UNSAFE_OR_NON_NAV_TEXT = {"App", "打开", "关闭", "开", "关", "On", "Off"}
 BLOCKED_CHILD_NAVIGATION_MARKERS = (
     ("输入密码", (), "authentication required"),
     ("输入iPhone密码", (), "authentication required"),
@@ -697,7 +702,9 @@ class SettingsPolicy:
         *,
         allow_sensitive_root_labels: bool = False,
     ) -> bool:
-        if text.strip().casefold() in {value.casefold() for value in EXACT_UNSAFE_OR_NON_NAV_TEXT}:
+        if compact_text(text).casefold() in {
+            compact_text(value).casefold() for value in EXACT_UNSAFE_OR_NON_NAV_TEXT
+        }:
             return True
         if allow_sensitive_root_labels:
             # Match the override against the raw text AND its canonical root

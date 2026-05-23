@@ -604,6 +604,22 @@ def test_unsafe_navigation_text_matches_spaceless_ocr_form():
     assert _is_unsafe_navigation_text("GameCenter")
     assert _is_unsafe_navigation_text("iClOud")
 
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("toggle", ["On", "Off", "打开", "关闭", "开", "关"])
+def test_toggle_state_value_is_unsafe_only_as_whole_label(toggle):
+    """开关「状态值」整行才算非导航;不能作为子串误伤真实导航行。"""
+    assert _is_unsafe_navigation_text(toggle)
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("label", [
+    "NotificatiOns", "ActiOnButtOn", "Notifications", "Action Button", "关于本机", "Connections",
+])
+def test_nav_rows_containing_state_substrings_stay_safe(label):
+    """「On/关」曾在子串档,误伤含这些字的导航行(Notifications/操作按钮/关于本机)。"""
+    assert not _is_unsafe_navigation_text(label)
+
 @pytest.mark.smoke
 def test_long_english_safe_navigation_labels_are_not_filtered_by_length():
     scene = _scene(
