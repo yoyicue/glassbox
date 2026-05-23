@@ -724,6 +724,12 @@ class SettingsPolicy:
         return any(self.matches_label(text, label) for label in ROOT_ONLY_UNSAFE_OVERRIDES)
 
     def blocked_child_navigation_reason(self, scene) -> str | None:
+        # The Settings ROOT is never a "blocked child page": its sibling rows
+        # (e.g. a "Notifications" row next to a "Sounds & Haptics" row) can
+        # spuriously match a child page_marker+row_marker pair and falsely block
+        # the root, aborting the crawl. Detail pages still classify normally.
+        if self.scene_is_settings_root(scene):
+            return None
         texts = stable_visible_texts(self.texts(scene))
         joined = "\n".join(texts)
         for page_marker, row_markers, reason in BLOCKED_CHILD_NAVIGATION_MARKERS:
