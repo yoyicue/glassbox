@@ -167,14 +167,20 @@ def picokvm_effector_registration() -> BackendRegistration:
     return BackendRegistration(name="picokvm", factory=_picokvm_effector_factory)
 
 
+def _ocr_languages(cfg: AgentConfig) -> tuple[str, ...]:
+    # Locale-driven OCR recognition languages. Default (zh-Hans) resolves to
+    # ("zh-Hans", "en-US") — identical to the previous hardcoded default.
+    from glassbox.locale import resolve_locale
+
+    return resolve_locale(cfg).ocr_languages
+
+
 def _ocrmac_factory(*, cfg: AgentConfig):
-    _ = cfg
-    return LegacyUIElementOCRAdapter(AppleVisionOCR())
+    return LegacyUIElementOCRAdapter(AppleVisionOCR(languages=list(_ocr_languages(cfg))))
 
 
 def _vision_ocr_factory(*, cfg: AgentConfig):
-    _ = cfg
-    return LegacyUIElementOCRAdapter(VisionOCR())
+    return LegacyUIElementOCRAdapter(VisionOCR(languages=_ocr_languages(cfg)))
 
 
 def select_ocr_backend(cfg: AgentConfig) -> str:

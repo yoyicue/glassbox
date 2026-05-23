@@ -61,13 +61,41 @@ _CONFUSION_TRANS = str.maketrans({
 TextNormalizer = Callable[[str | None], str]
 
 
+# Public, single-source name for the zh (CJK) confusion folds. Locale packs
+# reference THIS — never copy the tuple — so there is one source of truth.
+DEFAULT_CONFUSION_CLASSES: tuple[str, ...] = _CONFUSION_CLASSES
+
+
+def _confusion_trans(classes: Iterable[str]):
+    return str.maketrans({ch: cls[0] for cls in classes for ch in cls})
+
+
+class Normalizer:
+    """Parameterized confusion-fold normalizer (locale-bound).
+
+    `Normalizer(classes)` builds a compactor that folds each OCR visual-confusion
+    class to its representative. This is the locale-driven replacement for the
+    module-global `confusion_compact`; the global stays as the zh compatibility
+    default (Phase 1), call sites migrate to a locale-bound `Normalizer` later.
+    An empty `classes` (e.g. English) means compact-only, no folding.
+    """
+
+    def __init__(self, classes: Iterable[str] = DEFAULT_CONFUSION_CLASSES) -> None:
+        self.classes: tuple[str, ...] = tuple(classes)
+        self._trans = _confusion_trans(self.classes)
+
+    def __call__(self, s: str | None) -> str:
+        return compact_text(s).translate(self._trans)
+
+
 def confusion_compact(s: str | None) -> str:
     """Compact text with OCR visual-confusion characters folded to a canonical
     representative (see `_CONFUSION_CLASSES`).
 
     `待机見示` / `侍机显示` → `待机显示`;`S0S` → `SOS`. Lets a single confused
     glyph in a short label still match exactly instead of dropping below a
-    fuzzy threshold."""
+    fuzzy threshold. (zh compatibility default; prefer a locale-bound
+    `Normalizer` in new code.)"""
     return compact_text(s).translate(_CONFUSION_TRANS)
 
 

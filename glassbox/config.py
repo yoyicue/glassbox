@@ -131,6 +131,16 @@ class AgentConfig(BaseSettings):
     platform: str = "ios"
     """Controlled phone platform provider selector."""
 
+    # ─── Locale (device language + region) ───────────────────────────
+    language: str = "zh-Hans"
+    """Device UI language pack (see glassbox/locale.py). Default zh-Hans keeps
+    current behavior; English-first is the migration target and the global
+    default flip is the last step. env GLASSBOX_LANGUAGE."""
+
+    region: str | None = None
+    """Optional region overlay (e.g. "CN") for region-specific label variants
+    such as China-region English WLAN / Mobile Service. env GLASSBOX_REGION."""
+
     # ─── OCR ────────────────────────────────────────────────────────
     ocr: Literal["vision", "ocrmac"] = "vision"
     """OCR engine: vision = direct PyObjC call (default) / ocrmac = legacy fallback path."""
