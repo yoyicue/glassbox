@@ -62,6 +62,21 @@ def test_canonical_label_falls_through_to_confusion_match():
 
 
 @pytest.mark.smoke
+@pytest.mark.parametrize("garbled,canonical", [
+    ("BluetOOth", "蓝牙"),          # "Bluetooth": lowercase oo read as OO
+    ("FaceID&PasscOde", "Face ID与密码"),  # "Passcode": o read as O (+ spacing)
+    ("DevelOper", "Developer"),     # "Developer": o read as O
+])
+def test_canonical_label_credits_case_flipped_english_aliases(garbled, canonical):
+    """Live English iOS OCR flips case on round glyphs (o↔O); the alias path
+    must still canonicalize so coverage credits the entered section. Guards the
+    o→O fold in ocr_compact_text — without it en-HK undercounted 蓝牙 / Face ID."""
+    aliases = {"Bluetooth": "蓝牙", "Face ID & Passcode": "Face ID与密码", "Developer": "Developer"}
+    labels = ("蓝牙", "Face ID与密码", "Developer")
+    assert canonical_label(garbled, labels, aliases=aliases) == canonical
+
+
+@pytest.mark.smoke
 def test_canonical_label_confusion_fallback_respects_fuzzy_threshold():
     assert canonical_label("隐私与安全", ("隐私与安全性",), fuzzy=0.99) is None
 

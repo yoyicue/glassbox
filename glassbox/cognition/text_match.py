@@ -38,7 +38,12 @@ MINUS_ALIASES: frozenset[str] = frozenset({
 
 # replace minus aliases with ASCII `-` across the whole text
 _MINUS_TRANS = str.maketrans({c: "-" for c in MINUS_ALIASES})
-_OCR_CONFUSABLE_TRANS = str.maketrans({"0": "O", "〇": "O"})
+# Fold the full "O0〇o" confusion class (see _CONFUSION_CLASSES below) to its
+# representative "O". Crucially this includes lowercase o→O: live English iOS
+# OCR flips case on round glyphs ("Bluetooth"→"BluetOOth", "Passcode"→
+# "PasscOde", "Developer"→"DevelOper"), and without folding it the alias path in
+# canonical_label() failed to credit those entered sections in coverage.
+_OCR_CONFUSABLE_TRANS = str.maketrans({"0": "O", "〇": "O", "o": "O"})
 _SPACE_RE = re.compile(r"\s+")
 
 # —— OCR 形近字混淆类 ——————————————————————————————————————————————
