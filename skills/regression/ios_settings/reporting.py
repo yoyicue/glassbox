@@ -13,7 +13,11 @@ from skills.regression.ios_settings.policy import (
     EXPECTED_ROOT_NAV_TEXT_ZH,
     FAILURE_CATEGORY_KEYS,
 )
-from skills.regression.ios_settings.sections import ZH_CANON_TO_SECTION
+from skills.regression.ios_settings.sections import (
+    ZH_CANON_TO_SECTION,
+    SectionVocab,
+    section_vocab_for,
+)
 
 
 def _section_ids(labels: Iterable[str]) -> list[str]:
@@ -26,6 +30,36 @@ def _section_ids(labels: Iterable[str]) -> list[str]:
         section = ZH_CANON_TO_SECTION.get(label)
         if section is not None:
             out.append(section.value)
+    return out
+
+
+def _active_section_vocab() -> SectionVocab:
+    """SectionVocab for the run's active locale (display labels live here).
+
+    Compatibility bridge: reads language/region off the global config — same
+    pattern as policy._active_root_aliases — so the report's display labels track
+    the run's locale (en-HK → "Mobile Service") without threading a DI'd vocab
+    through the whole crawl. zh stays the internal coverage pivot."""
+    from glassbox.config import get_config
+
+    cfg = get_config()
+    return section_vocab_for(cfg.language, cfg.region)
+
+
+def _section_display(labels: Iterable[str], vocab: SectionVocab) -> list[str]:
+    """Project Chinese canonical labels to the active locale's display labels.
+
+    Additive, parallel to `_section_ids`: same coverage rendered in the run's own
+    language (so an en-HK report reads in English). Unknown labels are skipped."""
+    out: list[str] = []
+    for label in labels:
+        section = ZH_CANON_TO_SECTION.get(label)
+        if section is None:
+            continue
+        try:
+            out.append(vocab.label(section))
+        except KeyError:
+            continue
     return out
 
 # Soft limits are reportable perception/budget signals, not strict traversal blockers.
@@ -192,6 +226,15 @@ def classify_root_coverage(
     enriched["visible_only"] = [
         label for label in expected if label in visited and label not in entered and label not in blocked
     ]
+    # Additive language-neutral ids + active-locale display labels (zh stays the
+    # internal coverage pivot). `*_ids` make en/zh reports comparable by stable
+    # RootSection token; `*_display` renders the same coverage in the run's own
+    # language so an en-HK report reads "Mobile Service", not "蜂窝网络".
+    vocab = _active_section_vocab()
+    for key in ("expected", "visited", "missing", "entered", "blocked", "visible_only"):
+        labels = enriched.get(key, [])
+        enriched[f"{key}_ids"] = _section_ids(labels)
+        enriched[f"{key}_display"] = _section_display(labels, vocab)
     return enriched
 
 

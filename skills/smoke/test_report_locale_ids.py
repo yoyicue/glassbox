@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from skills.regression.ios_settings.reporting import computed_root_coverage
+from glassbox.config import get_config
+from skills.regression.ios_settings.policy import EXPECTED_ROOT_NAV_TEXT_ZH
+from skills.regression.ios_settings.reporting import (
+    classify_root_coverage,
+    computed_root_coverage,
+)
 from skills.regression.ios_settings.sections import (
     EXPECTED_ROOT_SECTIONS,
     ZH_CANON_TO_SECTION,
@@ -12,6 +17,22 @@ from skills.regression.ios_settings.sections import (
 
 def _visit(*path: str, texts: tuple[str, ...] = ()):
     return {"path": list(path), "title": path[-1], "texts": list(texts or path)}
+
+
+@pytest.fixture
+def _locale(monkeypatch):
+    def _set(language: str | None, region: str | None):
+        for key, value in (("GLASSBOX_LANGUAGE", language), ("GLASSBOX_REGION", region)):
+            if value is None:
+                monkeypatch.delenv(key, raising=False)
+            else:
+                monkeypatch.setenv(key, value)
+        get_config.cache_clear()
+
+    yield _set
+    monkeypatch.delenv("GLASSBOX_LANGUAGE", raising=False)
+    monkeypatch.delenv("GLASSBOX_REGION", raising=False)
+    get_config.cache_clear()
 
 
 @pytest.mark.smoke
@@ -40,3 +61,41 @@ def test_coverage_ids_and_labels_stay_aligned():
     assert len(cov["expected"]) == len(cov["expected_ids"]) == 17
     for label, id_value in zip(cov["expected"], cov["expected_ids"], strict=True):
         assert ZH_CANON_TO_SECTION[label].value == id_value
+
+
+def _base_with_wifi_entered():
+    return (
+        {
+            "expected": list(EXPECTED_ROOT_NAV_TEXT_ZH),
+            "visited": ["无线局域网"],
+            "missing": [s for s in EXPECTED_ROOT_NAV_TEXT_ZH if s != "无线局域网"],
+        },
+        [_visit("Settings", "无线局域网", texts=("无线局域网", "WLAN", "Ask to Join Networks"))],
+    )
+
+
+@pytest.mark.smoke
+def test_classify_renders_active_locale_display_en_hk(_locale):
+    """The live report path (classify_root_coverage) renders coverage in the run's
+    own language: an en-HK run reads "WLAN" / "Mobile Service", not Chinese —
+    while the zh labels + neutral ids stay primary."""
+    _locale("en", "HK")
+    base, visits = _base_with_wifi_entered()
+    cov = classify_root_coverage(base, visits, [])
+    # zh labels stay primary (internal pivot unchanged).
+    assert cov["entered"] == ["无线局域网"]
+    # neutral ids are wired into the live path (were previously absent).
+    assert cov["entered_ids"] == [RootSection.WIFI.value]
+    assert RootSection.CELLULAR.value in cov["missing_ids"]
+    # display is the greater-China English the device actually shows.
+    assert cov["entered_display"] == ["WLAN"]
+    assert "Mobile Service" in cov["missing_display"]
+
+
+@pytest.mark.smoke
+def test_classify_display_is_chinese_under_zh(_locale):
+    _locale("zh-Hans", None)
+    base, visits = _base_with_wifi_entered()
+    cov = classify_root_coverage(base, visits, [])
+    assert cov["entered_display"] == ["无线局域网"]
+    assert cov["entered_ids"] == [RootSection.WIFI.value]

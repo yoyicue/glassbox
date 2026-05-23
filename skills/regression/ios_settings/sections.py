@@ -222,14 +222,20 @@ def _zh_vocab(code: str) -> SectionVocab:
 
 def _en_vocab(code: str, *, region: str | None) -> SectionVocab:
     aliases = {k: tuple(v) for k, v in _EN_ALIASES.items()}
+    display = dict(_EN_DISPLAY)
     if region in _GREATER_CHINA_EN_REGIONS:
-        for section, extra in _GREATER_CHINA_EN_ALIASES.items():
-            aliases[section] = (*aliases.get(section, ()), *extra)
+        for section, regional in _GREATER_CHINA_EN_ALIASES.items():
+            # Greater-China English devices SHOW the regional term (WLAN / Mobile
+            # Service), so it is the faithful display label here; keep the US term
+            # (Wi-Fi / Cellular) resolvable as an alias for robustness.
+            us_term = display[section]
+            display[section] = regional[0]
+            aliases[section] = (*aliases.get(section, ()), us_term, *regional[1:])
     return SectionVocab(
         code=code,
-        display=dict(_EN_DISPLAY),
+        display=display,
         aliases=aliases,
-        search={s: _EN_DISPLAY[s] for s in EXPECTED_ROOT_SECTIONS},
+        search={s: display[s] for s in EXPECTED_ROOT_SECTIONS},
     )
 
 
