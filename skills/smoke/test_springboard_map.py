@@ -58,6 +58,30 @@ def test_icon_map_cache_put_get_invalidate(tmp_path):
 
     cache.invalidate(_REGIONS)
     assert cache.get(_REGIONS) is None
+
+
+@pytest.mark.smoke
+def test_icon_map_cache_is_segmented_by_backend(tmp_path, monkeypatch):
+    """A map built by one detector must never be served to another: classical and
+    omniparser find different cell sets on the same Home screen, so reusing one
+    under the other would mis-place taps."""
+    path = tmp_path / "map.json"
+    entries = [IconMapEntry(app="设置", box=(280, 300, 60, 60))]
+
+    # build + persist while classical is active
+    monkeypatch.setenv("GLASSBOX_ICON_DETECTOR", "classical")
+    cache = SpringboardIconMap(path)
+    cache.put(layout_key(_REGIONS), entries)
+    assert cache.get(_REGIONS)[0].app == "设置"
+
+    # same regions, omniparser now active → cache miss (no cross-serve)
+    monkeypatch.setenv("GLASSBOX_ICON_DETECTOR", "omniparser")
+    assert SpringboardIconMap(path).get(_REGIONS) is None
+
+    # keys are namespaced and self-documenting
+    assert layout_key(_REGIONS, backend="classical").startswith("classical:")
+    assert layout_key(_REGIONS, backend="omniparser").startswith("omniparser:")
+    assert layout_key(_REGIONS, backend="classical") != layout_key(_REGIONS, backend="omniparser")
     assert SpringboardIconMap(path).get(_REGIONS) is None
 
 

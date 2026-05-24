@@ -225,3 +225,12 @@ def test_detect_icons_voted_drops_one_frame_noise():
     regions = detect_icons_voted(frames, min_frames=2)
     assert _near_icon(regions, 100, 100)            # 复现的 + 留下
     assert not _near_icon(regions, 55, 265)         # 单帧噪点被滤
+
+
+@pytest.mark.smoke
+def test_detect_icons_falls_back_to_classical_for_unknown_backend():
+    """A requested-but-unavailable backend (e.g. omniparser without its AGPL deps)
+    must degrade to the always-present classical detector, never raise."""
+    from glassbox.cognition.icon_detect import detect_icons
+    out = detect_icons(np.zeros((40, 40, 3), dtype=np.uint8), backend="nope_not_real")
+    assert isinstance(out, list)

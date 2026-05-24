@@ -142,6 +142,16 @@ def register_icon_backend(name: str, fn: IconBackend) -> None:
     _BACKENDS[name] = fn
 
 
+def active_icon_backend() -> str:
+    """The backend `detect_icons` uses when none is passed explicitly.
+
+    Env-driven (`GLASSBOX_ICON_DETECTOR`), default ``classical``. Exposed so the
+    Home icon-map cache can segment entries by the detector that built them — a
+    classical-built map (one cell set) must not be served to omniparser (a
+    different, usually larger cell set) and vice versa."""
+    return os.environ.get("GLASSBOX_ICON_DETECTOR", "classical").strip().lower()
+
+
 def _load_plugins() -> None:
     """Import every ``*.py`` under icon_backends/ once; each self-registers."""
     global _PLUGINS_LOADED
@@ -181,14 +191,20 @@ def detect_icons(
     directory's README). Backend-specific kwargs a backend does not understand
     are ignored, so all backends share this one signature.
     """
-    name = backend or os.environ.get("GLASSBOX_ICON_DETECTOR", "classical")
+    name = backend or active_icon_backend()
     if name != "classical":
         _load_plugins()
     fn = _BACKENDS.get(name)
     if fn is None:
-        raise ValueError(
-            f"unknown icon-detection backend {name!r}; available: {sorted(_BACKENDS)}"
+        # A requested-but-unavailable backend (e.g. ``omniparser`` set in the
+        # env on a machine that lacks the AGPL plugin/deps) must never break a
+        # run — fall back to the always-present classical detector.
+        from loguru import logger
+        logger.warning(
+            f"icon-detection backend {name!r} unavailable "
+            f"(have {sorted(_BACKENDS)}); falling back to classical"
         )
+        fn = _BACKENDS["classical"]
     return fn(frame_img, text_boxes=text_boxes, min_side=min_side,
               max_side=max_side, min_edge_fill=min_edge_fill)
 

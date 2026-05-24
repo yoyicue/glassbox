@@ -20,7 +20,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from glassbox.cognition.icon_detect import IconRegion, detect_icons_voted
+from glassbox.cognition.icon_detect import (
+    IconRegion,
+    active_icon_backend,
+    detect_icons_voted,
+)
 from glassbox.cognition.som import render_set_of_mark
 from glassbox.cognition.text_match import fuzzy_ratio, text_contains, texts_match
 
@@ -42,15 +46,22 @@ def _quantize_center(region: IconRegion, grid: int = 20) -> tuple[int, int]:
     return (cx // grid, cy // grid)
 
 
-def layout_key(regions: list[IconRegion]) -> str:
+def layout_key(regions: list[IconRegion], *, backend: str | None = None) -> str:
     """A layout fingerprint, tolerant of a few px of detector wobble.
 
     Keyed on quantized cell centers — independent of OCR. A changed Home layout
     (icons added / removed / rearranged) changes the key, so the cache for the
     old layout is simply never hit again.
+
+    The key is **namespaced by the detector backend** (default: the active one)
+    because different detectors find different cell sets on the same Home screen
+    (classical ≈ 11 cells, omniparser ≈ 17). Without the namespace, a map built
+    by one detector could be served to another; with it, the on-disk JSON keys
+    also self-document which detector built each entry (e.g. ``omniparser:1a2b…``).
     """
+    tag = backend or active_icon_backend()
     pts = sorted(_quantize_center(r) for r in regions)
-    return hashlib.sha1(repr(pts).encode("utf-8")).hexdigest()[:16]
+    return f"{tag}:{hashlib.sha1(repr(pts).encode('utf-8')).hexdigest()[:16]}"
 
 
 @dataclass(frozen=True)
