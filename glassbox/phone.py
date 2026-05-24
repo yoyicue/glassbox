@@ -34,7 +34,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -84,6 +84,13 @@ SceneClassifier = Callable[["Scene", tuple[int, int] | None], SceneClassificatio
 class PhoneGestureConfig:
     wheel_ticks_per_scroll: int = 90
     wheel_invert: bool = False
+
+
+def _add_optional_action_metadata(target: dict[str, Any], **items: Any) -> None:
+    for key, value in items.items():
+        if value is not None:
+            target[key] = value
+
 
 # HID modifiers / keycodes used by the keyboard helpers.
 _MOD_META_LEFT = 0x08
@@ -1745,6 +1752,17 @@ class Phone:
         end_hold_ms: int = 100,
         via: str = "swipe_xy",
         policy_action: str | None = None,
+        settle_strategy: str | None = None,
+        fixed_delay_ms: int | None = None,
+        window_duration_ms: int | None = None,
+        stream_timeout_ms: int | None = None,
+        sample_interval_ms: int | None = None,
+        max_stream_frames: int | None = None,
+        fresh_delay_ms: int | None = None,
+        fresh_source_reopen: bool | None = None,
+        expected_state: dict[str, Any] | None = None,
+        expect_visible: str | tuple[str, ...] | list[str] | None = None,
+        expect_page: str | None = None,
     ) -> ActionResult:
         px1, py1 = self._to_phone(x1, y1)
         px2, py2 = self._to_phone(x2, y2)
@@ -1760,6 +1778,20 @@ class Phone:
         }
         if policy_action:
             action_kwargs["policy_action"] = policy_action
+        _add_optional_action_metadata(
+            action_kwargs,
+            settle_strategy=settle_strategy,
+            fixed_delay_ms=fixed_delay_ms,
+            window_duration_ms=window_duration_ms,
+            stream_timeout_ms=stream_timeout_ms,
+            sample_interval_ms=sample_interval_ms,
+            max_stream_frames=max_stream_frames,
+            fresh_delay_ms=fresh_delay_ms,
+            fresh_source_reopen=fresh_source_reopen,
+            expected_state=expected_state,
+            expect_visible=expect_visible,
+            expect_page=expect_page,
+        )
         return self._execute_action(
             "swipe",
             lambda: self.effector.swipe(
@@ -1777,18 +1809,51 @@ class Phone:
         *,
         down_hold_ms: int = 200,
         up_hold_ms: int = 100,
+        settle_strategy: str | None = None,
+        fixed_delay_ms: int | None = None,
+        window_duration_ms: int | None = None,
+        stream_timeout_ms: int | None = None,
+        sample_interval_ms: int | None = None,
+        max_stream_frames: int | None = None,
+        fresh_delay_ms: int | None = None,
+        fresh_source_reopen: bool | None = None,
+        expected_state: dict[str, Any] | None = None,
+        expect_visible: str | tuple[str, ...] | list[str] | None = None,
+        expect_page: str | None = None,
     ) -> ActionResult:
         px1, py1 = self._to_phone(x1, y1)
         px2, py2 = self._to_phone(x2, y2)
+        action_kwargs = {
+            "x1": px1,
+            "y1": py1,
+            "x2": px2,
+            "y2": py2,
+            "coordinate_space": self._coordinate_space(),
+            "down_hold_ms": down_hold_ms,
+            "up_hold_ms": up_hold_ms,
+            "via": "drag_xy",
+        }
+        _add_optional_action_metadata(
+            action_kwargs,
+            settle_strategy=settle_strategy,
+            fixed_delay_ms=fixed_delay_ms,
+            window_duration_ms=window_duration_ms,
+            stream_timeout_ms=stream_timeout_ms,
+            sample_interval_ms=sample_interval_ms,
+            max_stream_frames=max_stream_frames,
+            fresh_delay_ms=fresh_delay_ms,
+            fresh_source_reopen=fresh_source_reopen,
+            expected_state=expected_state,
+            expect_visible=expect_visible,
+            expect_page=expect_page,
+        )
         return self._execute_action(
             "drag",
             lambda: self.effector.drag(
                 px1, py1, px2, py2,
                 down_hold_ms=down_hold_ms, up_hold_ms=up_hold_ms,
             ),
-            x1=px1, y1=py1, x2=px2, y2=py2,
-            coordinate_space=self._coordinate_space(),
-            down_hold_ms=down_hold_ms, up_hold_ms=up_hold_ms, via="drag_xy",
+            **action_kwargs,
         )
 
     def scroll_wheel(
@@ -1851,12 +1916,23 @@ class Phone:
             amount *= -1
         return self.scroll_wheel(-amount)
 
-    def _picokvm_drag_preset(self, method_name: str, *, via: str, policy_action: str) -> ActionResult | None:
+    def _picokvm_drag_preset(
+        self,
+        method_name: str,
+        *,
+        via: str,
+        policy_action: str,
+        **metadata: Any,
+    ) -> ActionResult | None:
         if self._effector_backend() != "picokvm":
             return None
         method = getattr(self.effector, method_name, None)
         if not callable(method):
             return None
+        action_metadata = {
+            **self._picokvm_fresh_verify_kwargs("drag"),
+            **{key: value for key, value in metadata.items() if value is not None},
+        }
         return self._execute_action(
             "drag",
             method,
@@ -1864,12 +1940,34 @@ class Phone:
             policy_action=policy_action,
             preset=f"picokvm.{method_name}",
             strategy="raw_hid_logical_drag",
-            **self._picokvm_fresh_verify_kwargs("drag"),
+            **action_metadata,
         )
 
-    def swipe_up(self, *, fraction: float = 0.55) -> ActionResult:
+    def swipe_up(
+        self,
+        *,
+        fraction: float = 0.55,
+        settle_strategy: str | None = None,
+        window_duration_ms: int | None = None,
+        stream_timeout_ms: int | None = None,
+        sample_interval_ms: int | None = None,
+        max_stream_frames: int | None = None,
+        expected_state: dict[str, Any] | None = None,
+        expect_visible: str | tuple[str, ...] | list[str] | None = None,
+        expect_page: str | None = None,
+    ) -> ActionResult:
         """Vertical upward touch swipe."""
-        preset = self._picokvm_drag_preset("list_scroll_up", via="swipe_up", policy_action="scroll")
+        metadata = {
+            "settle_strategy": settle_strategy,
+            "window_duration_ms": window_duration_ms,
+            "stream_timeout_ms": stream_timeout_ms,
+            "sample_interval_ms": sample_interval_ms,
+            "max_stream_frames": max_stream_frames,
+            "expected_state": expected_state,
+            "expect_visible": expect_visible,
+            "expect_page": expect_page,
+        }
+        preset = self._picokvm_drag_preset("list_scroll_up", via="swipe_up", policy_action="scroll", **metadata)
         if preset is not None:
             return preset
         w, h = self._viewport_size()
@@ -1881,11 +1979,34 @@ class Phone:
             int(h * max(0.15, 0.78 - fraction)),
             via="swipe_up",
             policy_action="scroll",
+            **metadata,
         )
 
-    def swipe_down(self, *, fraction: float = 0.55) -> ActionResult:
+    def swipe_down(
+        self,
+        *,
+        fraction: float = 0.55,
+        settle_strategy: str | None = None,
+        window_duration_ms: int | None = None,
+        stream_timeout_ms: int | None = None,
+        sample_interval_ms: int | None = None,
+        max_stream_frames: int | None = None,
+        expected_state: dict[str, Any] | None = None,
+        expect_visible: str | tuple[str, ...] | list[str] | None = None,
+        expect_page: str | None = None,
+    ) -> ActionResult:
         """Vertical downward touch swipe."""
-        preset = self._picokvm_drag_preset("list_scroll_down", via="swipe_down", policy_action="scroll")
+        metadata = {
+            "settle_strategy": settle_strategy,
+            "window_duration_ms": window_duration_ms,
+            "stream_timeout_ms": stream_timeout_ms,
+            "sample_interval_ms": sample_interval_ms,
+            "max_stream_frames": max_stream_frames,
+            "expected_state": expected_state,
+            "expect_visible": expect_visible,
+            "expect_page": expect_page,
+        }
+        preset = self._picokvm_drag_preset("list_scroll_down", via="swipe_down", policy_action="scroll", **metadata)
         if preset is not None:
             return preset
         w, h = self._viewport_size()
@@ -1897,6 +2018,7 @@ class Phone:
             int(h * min(0.90, 0.30 + fraction)),
             via="swipe_down",
             policy_action="scroll",
+            **metadata,
         )
 
     def _page_drag_xy(

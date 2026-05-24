@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import TracebackType
@@ -23,6 +24,12 @@ from glassbox.runtime import PhoneRuntime, build_phone, make_source
 
 AI_API_VERSION = "ai-api-v1"
 SUPPORTED_ARTIFACT_SCHEMA_VERSION = 1
+_AI_DEFAULT_STABLE_TIMEOUT_S = 5.0
+_AI_DEFAULT_STABLE_CONSECUTIVE = 3
+_AI_DEFAULT_EXPECT_TIMEOUT_S = 5.0
+_AI_DEFAULT_SCROLL_TIMEOUT_S = 10.0
+_AI_DEFAULT_SAMPLE_INTERVAL_S = 0.25
+_AI_DEFAULT_SCROLL_WINDOW_S = 1.2
 
 _APP_ALIASES: dict[str, tuple[str, tuple[str, ...]]] = {
     "com.apple.Preferences": ("设置", ("Settings",)),
@@ -363,7 +370,24 @@ class AIPhone:
         end_hold_ms: int = 100,
         expect_visible: str | None = None,
         expect_page: str | None = None,
+        expect_timeout_s: float = _AI_DEFAULT_EXPECT_TIMEOUT_S,
+        sample_interval_s: float = _AI_DEFAULT_SAMPLE_INTERVAL_S,
     ) -> ActionOutcome:
+        target_texts = _text_targets(expect_visible)
+        expected_state = _expected_state(expect_visible=target_texts, expect_page=expect_page)
+        wait_kwargs: dict[str, Any] = {}
+        if target_texts or expect_page:
+            # AI: expected swipes can animate/scroll after command ack; stream frames
+            # until the caller-provided target appears instead of trusting one early frame.
+            wait_kwargs.update(
+                settle_strategy="stream_until_match",
+                expected_state=expected_state,
+                expect_visible=target_texts,
+                expect_page=expect_page,
+                stream_timeout_ms=_seconds_to_ms(expect_timeout_s),
+                sample_interval_ms=_seconds_to_ms(sample_interval_s),
+                max_stream_frames=_max_frames(expect_timeout_s, sample_interval_s),
+            )
         result = self._phone.swipe_xy(
             int(x1),
             int(y1),
@@ -371,9 +395,16 @@ class AIPhone:
             int(y2),
             steps=int(steps),
             end_hold_ms=int(end_hold_ms),
+            **wait_kwargs,
         )
         outcome = self._action_outcome("swipe_xy", f"{int(x1)},{int(y1)}->{int(x2)},{int(y2)}", result)
-        return self._apply_expectation(outcome, expect_visible=expect_visible, expect_page=expect_page)
+        return self._apply_expectation(
+            outcome,
+            expect_visible=target_texts,
+            expect_page=expect_page,
+            timeout_s=expect_timeout_s,
+            sample_interval_s=sample_interval_s,
+        )
 
     def launch_app(
         self,
@@ -455,19 +486,57 @@ class AIPhone:
             )
         return self._action_outcome("close_app", None, close_app())
 
-    def scroll(self, direction: str = "down", *, until: str | None = None) -> ObservationSummary:
+    def scroll(
+        self,
+        direction: str = "down",
+        *,
+        until: str | Sequence[str] | None = None,
+        timeout_s: float = _AI_DEFAULT_SCROLL_TIMEOUT_S,
+        max_steps: int | None = None,
+        settle_timeout_s: float = _AI_DEFAULT_EXPECT_TIMEOUT_S,
+        sample_interval_s: float = _AI_DEFAULT_SAMPLE_INTERVAL_S,
+    ) -> ObservationSummary:
+        """Scroll and return a post-wait observation.
+
+        AI callers should use the returned ObservationSummary, and pass
+        ``until=...`` for any app-specific target text. The API does not know
+        names like "Skip Now"; it only waits for caller-provided targets.
+        """
         normalized = direction.lower()
         if normalized not in {"down", "up"}:
             raise ValueError("scroll direction must be 'down' or 'up'")
-        max_steps = 8 if until else 1
+        targets = _text_targets(until)
+        step_limit = max(1, int(max_steps if max_steps is not None else (8 if targets else 1)))
+        deadline = time.monotonic() + max(0.0, float(timeout_s))
         obs = self.observe()
-        for _idx in range(max_steps):
-            if until and until in obs.visible_texts:
+        for _idx in range(step_limit):
+            if targets and self._any_target_visible(targets, obs):
                 return obs
-            result = self._phone.swipe_up() if normalized == "down" else self._phone.swipe_down()
-            self._action_outcome("scroll", until, result)
-            obs = self.observe()
-            if until and until in obs.visible_texts:
+            remaining_s = max(0.0, deadline - time.monotonic()) if targets else settle_timeout_s
+            if targets and remaining_s <= 0:
+                return obs
+            action_kwargs = self._scroll_wait_kwargs(
+                targets,
+                timeout_s=min(float(settle_timeout_s), remaining_s) if targets else _AI_DEFAULT_SCROLL_WINDOW_S,
+                sample_interval_s=sample_interval_s,
+            )
+            # AI: scroll completion is judged by the observation below, not by
+            # the action outcome or the first post-command screenshot.
+            result = (
+                self._phone.swipe_up(**action_kwargs)
+                if normalized == "down"
+                else self._phone.swipe_down(**action_kwargs)
+            )
+            self._action_outcome("scroll", ", ".join(targets) if targets else None, result)
+            if targets:
+                obs = self._wait_for_targets(
+                    targets,
+                    timeout_s=min(float(settle_timeout_s), max(0.0, deadline - time.monotonic())),
+                    sample_interval_s=sample_interval_s,
+                )
+            else:
+                obs = self.observe()
+            if targets and self._any_target_visible(targets, obs):
                 return obs
         return obs
 
@@ -633,17 +702,25 @@ class AIPhone:
         self,
         outcome: ActionOutcome,
         *,
-        expect_visible: str | None,
+        expect_visible: str | Sequence[str] | None,
         expect_page: str | None,
+        timeout_s: float = _AI_DEFAULT_EXPECT_TIMEOUT_S,
+        sample_interval_s: float = _AI_DEFAULT_SAMPLE_INTERVAL_S,
     ) -> ActionOutcome:
-        if expect_visible is None and expect_page is None:
+        targets = _text_targets(expect_visible)
+        if not targets and expect_page is None:
             return outcome
-        obs = self.observe()
-        if expect_visible is not None and not self._goal_visible(expect_visible, obs):
+        obs = self._wait_for_expectation(
+            targets,
+            expect_page=expect_page,
+            timeout_s=timeout_s,
+            sample_interval_s=sample_interval_s,
+        )
+        if targets and not self._any_target_visible(targets, obs):
             updated = replace(
                 outcome,
                 semantic_status="unknown",
-                reason=f"expected visible text not observed after action: {expect_visible}",
+                reason=f"expected visible text not observed after action: {', '.join(targets)}",
                 semantic_verifier="ai_expectation",
                 semantic_confidence=0.0,
             )
@@ -669,6 +746,72 @@ class AIPhone:
         )
         self._last_action = verified
         return verified
+
+    def _scroll_wait_kwargs(
+        self,
+        targets: tuple[str, ...],
+        *,
+        timeout_s: float,
+        sample_interval_s: float,
+    ) -> dict[str, Any]:
+        if targets:
+            return {
+                "settle_strategy": "stream_until_match",
+                "expected_state": _expected_state(expect_visible=targets),
+                "expect_visible": targets,
+                "stream_timeout_ms": _seconds_to_ms(timeout_s),
+                "sample_interval_ms": _seconds_to_ms(sample_interval_s),
+                "max_stream_frames": _max_frames(timeout_s, sample_interval_s),
+            }
+        return {
+            "settle_strategy": "transient_window",
+            "window_duration_ms": _seconds_to_ms(timeout_s),
+            "sample_interval_ms": _seconds_to_ms(sample_interval_s),
+            "max_stream_frames": _max_frames(timeout_s, sample_interval_s),
+        }
+
+    def _wait_for_expectation(
+        self,
+        targets: tuple[str, ...],
+        *,
+        expect_page: str | None,
+        timeout_s: float,
+        sample_interval_s: float,
+    ) -> ObservationSummary:
+        deadline = time.monotonic() + max(0.0, float(timeout_s))
+        obs = self.observe()
+        while not self._expectation_met(targets, expect_page=expect_page, obs=obs) and time.monotonic() < deadline:
+            time.sleep(max(0.01, float(sample_interval_s)))
+            obs = self.observe()
+        return obs
+
+    def _wait_for_targets(
+        self,
+        targets: tuple[str, ...],
+        *,
+        timeout_s: float,
+        sample_interval_s: float,
+    ) -> ObservationSummary:
+        return self._wait_for_expectation(
+            targets,
+            expect_page=None,
+            timeout_s=timeout_s,
+            sample_interval_s=sample_interval_s,
+        )
+
+    def _expectation_met(
+        self,
+        targets: tuple[str, ...],
+        *,
+        expect_page: str | None,
+        obs: ObservationSummary,
+    ) -> bool:
+        if targets and not self._any_target_visible(targets, obs):
+            return False
+        return not (expect_page is not None and obs.page_id != expect_page)
+
+    def _any_target_visible(self, targets: tuple[str, ...], obs: ObservationSummary) -> bool:
+        return any(self._goal_visible(target, obs) for target in targets)
 
     def _artifact_path(self, rel_file: str | None) -> Path | None:
         return self.run_dir / rel_file if rel_file else None
@@ -1078,6 +1221,12 @@ def open_phone(
     wait: bool = False,
     timeout_s: float | None = None,
 ) -> AIPhone:
+    """Open an AI-facing phone handle.
+
+    The AI facade enables stable post-action observations by default so scripts
+    do not accidentally reason from a too-early action frame. Set
+    GLASSBOX_STABLE_AFTER_ACTION explicitly to override that behavior.
+    """
     if timeout_s is not None and not wait:
         raise ValueError("timeout_s is only meaningful when wait=True")
     cfg = _ai_config(record=record, memory=memory)
@@ -1095,6 +1244,12 @@ def _ai_config(*, record: bool, memory: bool) -> AgentConfig:
         "enable_memory": bool(memory),
         "action_fail_fast": False,
     }
+    if "GLASSBOX_STABLE_AFTER_ACTION" not in os.environ:
+        updates["stable_after_action"] = True
+    if "GLASSBOX_STABLE_TIMEOUT" not in os.environ:
+        updates["stable_timeout"] = max(float(cfg.stable_timeout), _AI_DEFAULT_STABLE_TIMEOUT_S)
+    if "GLASSBOX_STABLE_CONSECUTIVE" not in os.environ:
+        updates["stable_consecutive"] = max(int(cfg.stable_consecutive), _AI_DEFAULT_STABLE_CONSECUTIVE)
     if record and not cfg.recording_dir:
         updates["recording_dir"] = str(Path(artifact_root) / "recordings")
     return cfg.model_copy(update=updates)
@@ -1124,6 +1279,35 @@ def _tuple_ints(value: Any, length: int) -> tuple[int, ...] | None:
     except TypeError:
         return None
     return items if len(items) == length else None
+
+
+def _text_targets(value: str | Sequence[str] | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    items = (value,) if isinstance(value, str) else tuple(str(item) for item in value)
+    return tuple(dict.fromkeys(item.strip() for item in items if item.strip()))
+
+
+def _expected_state(
+    *,
+    expect_visible: str | Sequence[str] | None = None,
+    expect_page: str | None = None,
+) -> dict[str, Any] | None:
+    targets = _text_targets(expect_visible)
+    if targets:
+        return {"kind": "visible_text", "payload": {"any_of": list(targets)}}
+    if expect_page:
+        return {"kind": "page_id", "payload": {"page_id": expect_page}}
+    return None
+
+
+def _seconds_to_ms(value: float) -> int:
+    return max(1, int(float(value) * 1000))
+
+
+def _max_frames(timeout_s: float, sample_interval_s: float) -> int:
+    interval_ms = _seconds_to_ms(sample_interval_s)
+    return max(1, int(_seconds_to_ms(timeout_s) / interval_ms) + 1)
 
 
 def _element_summary(element: Any) -> ObservationElement:
@@ -1160,6 +1344,7 @@ def _script_snippet(name: str, steps: tuple[str, ...] | list[str]) -> str:
         "",
         f"def run_{_safe_name(name)}():",
         "    with open_phone() as phone:",
+        "        # AI: trust returned observations, not raw action frames; scroll can settle late.",
     ]
     for step in steps:
         text = str(step)

@@ -2058,7 +2058,7 @@ class ActionOrchestrator:
                     )
                     break
                 frames.append(observation)
-                matched = self._lightweight_match(verifier, observation)
+                matched = self._lightweight_match(verifier, observation, metadata=metadata)
                 if matched is not None:
                     event_type = (
                         "observation.disqualifying_state_found"
@@ -2136,7 +2136,12 @@ class ActionOrchestrator:
         return True
 
     @staticmethod
-    def _lightweight_match(verifier, observation: Observation) -> dict[str, Any] | None:
+    def _lightweight_match(
+        verifier,
+        observation: Observation,
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         frame, scene_ref, _raw_frame, scene = observation
         if scene is None:
             return None
@@ -2155,6 +2160,8 @@ class ActionOrchestrator:
                 "frame_id": frame.frame_id if frame else None,
                 "scene_id": scene_ref.scene_id if scene_ref else None,
             }
+        if expected_match := ActionOrchestrator._lightweight_expected_match(metadata, scene, frame, scene_ref, texts):
+            return expected_match
         markers = tuple(getattr(verifier, "success_markers", ()) or ())
         hits = [marker for marker in markers if any(marker in text for text in texts)]
         minimum_hits = int(getattr(verifier, "min_marker_count", getattr(verifier, "minimum_hits", 1)) or 1)
@@ -2174,6 +2181,63 @@ class ActionOrchestrator:
             "frame_id": frame.frame_id if frame else None,
             "scene_id": scene_ref.scene_id if scene_ref else None,
         }
+
+    @staticmethod
+    def _lightweight_expected_match(
+        metadata: dict[str, Any] | None,
+        scene,
+        frame,
+        scene_ref,
+        texts: list[str],
+    ) -> dict[str, Any] | None:
+        if not isinstance(metadata, dict):
+            return None
+        expected_payload = metadata.get("expected_state")
+        if isinstance(expected_payload, dict):
+            try:
+                expected = ExpectedState.from_dict(expected_payload)
+                semantic = verify_expected_state(expected, scene)
+            except Exception:
+                semantic = None
+            if semantic is not None and semantic.status == "succeeded":
+                return {
+                    "kind": "expected_state",
+                    "verifier": "expected_state",
+                    "matched_evidence": semantic.matched_evidence,
+                    "frame_id": frame.frame_id if frame else None,
+                    "scene_id": scene_ref.scene_id if scene_ref else None,
+                }
+        expected_page = metadata.get("expect_page") or metadata.get("expected_page")
+        if expected_page and str(getattr(scene, "page_id", "") or "") == str(expected_page):
+            return {
+                "kind": "expected_page",
+                "verifier": "expected_state",
+                "matched_evidence": [str(expected_page)],
+                "frame_id": frame.frame_id if frame else None,
+                "scene_id": scene_ref.scene_id if scene_ref else None,
+            }
+        targets = ActionOrchestrator._metadata_text_targets(metadata)
+        hits = [target for target in targets if any(target in text for text in texts)]
+        if hits:
+            return {
+                "kind": "expected_visible",
+                "verifier": "expected_state",
+                "matched_evidence": hits,
+                "frame_id": frame.frame_id if frame else None,
+                "scene_id": scene_ref.scene_id if scene_ref else None,
+            }
+        return None
+
+    @staticmethod
+    def _metadata_text_targets(metadata: dict[str, Any]) -> tuple[str, ...]:
+        values: list[str] = []
+        for key in ("expect_visible", "expected_visible"):
+            raw = metadata.get(key)
+            if isinstance(raw, str):
+                values.append(raw)
+            elif isinstance(raw, (list, tuple)):
+                values.extend(str(item) for item in raw)
+        return tuple(dict.fromkeys(value.strip() for value in values if value.strip()))
 
     @staticmethod
     def _refs(item: Observation | None) -> dict[str, Any] | None:

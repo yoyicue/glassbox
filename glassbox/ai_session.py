@@ -74,16 +74,29 @@ class AISessionService:
                         int(request["y2"]),
                         steps=int(request.get("steps", 20)),
                         end_hold_ms=int(request.get("end_hold_ms", 100)),
+                        expect_visible=request.get("expect_visible"),
+                        expect_page=request.get("expect_page"),
+                        expect_timeout_s=float(request.get("expect_timeout_s", 5.0)),
+                        sample_interval_s=float(request.get("sample_interval_s", 0.25)),
                     )
                 ),
             }
         if command == "goto":
             return {"ok": True, "observation": _observation_payload(phone.goto(str(request["label"])))}
         if command == "scroll":
+            # AI session API: `until` is caller-provided generic text; do not
+            # infer completion from a raw action frame or hard-code app labels.
             return {
                 "ok": True,
                 "observation": _observation_payload(
-                    phone.scroll(str(request.get("direction") or "down"), until=request.get("until"))
+                    phone.scroll(
+                        str(request.get("direction") or "down"),
+                        until=request.get("until"),
+                        timeout_s=float(request.get("timeout_s", 10.0)),
+                        max_steps=request.get("max_steps"),
+                        settle_timeout_s=float(request.get("settle_timeout_s", 5.0)),
+                        sample_interval_s=float(request.get("sample_interval_s", 0.25)),
+                    )
                 ),
             }
         if command == "back":

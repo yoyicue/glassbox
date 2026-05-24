@@ -57,6 +57,7 @@ class FakePhone:
         self.scenes = scenes
         self.observe_calls = 0
         self.actions: list[tuple[str, str | None]] = []
+        self.action_kwargs: list[dict[str, object]] = []
         self._last_frame = Frame(
             img=np.zeros((40, 80, 3), dtype=np.uint8),
             ts=1.0,
@@ -83,6 +84,7 @@ class FakePhone:
 
     def swipe_xy(self, x1, y1, x2, y2, **_kw):
         self.actions.append(("swipe_xy", f"{x1},{y1}->{x2},{y2}"))
+        self.action_kwargs.append(dict(_kw))
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
     def close_foreground_app(self):
@@ -101,12 +103,14 @@ class FakePhone:
         self.actions.append(("home", None))
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
-    def swipe_up(self):
+    def swipe_up(self, **_kw):
         self.actions.append(("swipe_up", None))
+        self.action_kwargs.append(dict(_kw))
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
-    def swipe_down(self):
+    def swipe_down(self, **_kw):
         self.actions.append(("swipe_down", None))
+        self.action_kwargs.append(dict(_kw))
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
     def expect_text(self, target, **_kw):
@@ -200,6 +204,54 @@ def test_ai_facade_exposes_coordinate_primitives_and_cached_observation(tmp_path
         ("close_foreground_app", None),
         ("close_foreground_app", None),
     ]
+
+
+@pytest.mark.smoke
+def test_ai_swipe_expect_visible_uses_stream_until_match(tmp_path):
+    phone = _ai_phone(tmp_path, [_scene("Paywall"), _scene("Paywall"), _scene("Continue")])
+
+    outcome = phone.swipe_xy(1, 2, 3, 4, expect_visible="Continue")
+
+    assert outcome.semantic_status == "succeeded"
+    kwargs = phone._phone.action_kwargs[-1]
+    assert kwargs["settle_strategy"] == "stream_until_match"
+    assert kwargs["expect_visible"] == ("Continue",)
+    assert kwargs["expected_state"] == {"kind": "visible_text", "payload": {"any_of": ["Continue"]}}
+    assert kwargs["stream_timeout_ms"] >= 1
+    assert kwargs["max_stream_frames"] >= 1
+
+
+@pytest.mark.smoke
+def test_ai_scroll_until_polls_for_generic_target_text(tmp_path):
+    phone = _ai_phone(
+        tmp_path,
+        [
+            _scene("Paywall top"),
+            _scene("Paywall middle"),
+            _scene("Continue"),
+        ],
+    )
+
+    obs = phone.scroll("down", until="Continue", timeout_s=2, max_steps=2, settle_timeout_s=1, sample_interval_s=0.01)
+
+    assert "Continue" in obs.visible_texts
+    assert ("swipe_up", None) in phone._phone.actions
+    kwargs = phone._phone.action_kwargs[-1]
+    assert kwargs["settle_strategy"] == "stream_until_match"
+    assert kwargs["expect_visible"] == ("Continue",)
+    assert kwargs["expected_state"] == {"kind": "visible_text", "payload": {"any_of": ["Continue"]}}
+
+
+@pytest.mark.smoke
+def test_ai_scroll_without_target_uses_transient_window(tmp_path):
+    phone = _ai_phone(tmp_path, [_scene("Top"), _scene("Bottom")])
+
+    obs = phone.scroll(direction="down")
+
+    assert obs.visible_texts == ("Bottom",)
+    kwargs = phone._phone.action_kwargs[-1]
+    assert kwargs["settle_strategy"] == "transient_window"
+    assert kwargs["window_duration_ms"] >= 1
 
 
 @pytest.mark.smoke
@@ -335,6 +387,29 @@ def test_ai_explore_uses_policy_candidates_and_safety(tmp_path):
 def test_open_phone_rejects_timeout_without_wait():
     with pytest.raises(ValueError):
         open_phone(timeout_s=1)
+
+
+@pytest.mark.smoke
+def test_ai_config_enables_stable_post_action_wait_by_default(monkeypatch, tmp_path):
+    monkeypatch.delenv("GLASSBOX_STABLE_AFTER_ACTION", raising=False)
+    monkeypatch.delenv("GLASSBOX_STABLE_TIMEOUT", raising=False)
+    monkeypatch.delenv("GLASSBOX_STABLE_CONSECUTIVE", raising=False)
+    monkeypatch.setattr(
+        ai_module,
+        "get_config",
+        lambda: ai_module.AgentConfig(
+            computer_use_artifact_dir=str(tmp_path),
+            stable_after_action=False,
+            stable_timeout=3.0,
+            stable_consecutive=2,
+        ),
+    )
+
+    cfg = ai_module._ai_config(record=False, memory=False)
+
+    assert cfg.stable_after_action is True
+    assert cfg.stable_timeout >= 5.0
+    assert cfg.stable_consecutive >= 3
 
 
 @pytest.mark.smoke

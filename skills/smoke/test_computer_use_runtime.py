@@ -1718,6 +1718,34 @@ def test_computer_use_runtime_stream_until_match_records_observation_hit(tmp_pat
 
 
 @pytest.mark.smoke
+def test_computer_use_runtime_stream_until_match_can_use_expected_visible_metadata(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["主屏幕"], ["主屏幕"], ["Loading"], ["Done"]],
+    )
+    phone.perceive_cache_diff = 0.0
+
+    result = phone._execute_action(
+        "swipe",
+        lambda: phone.effector.home(),
+        settle_strategy="stream_until_match",
+        expect_visible="Done",
+        stream_timeout_ms=500,
+        sample_interval_ms=1,
+        max_stream_frames=4,
+    )
+    orchestrator.close()
+
+    assert result.ok is True
+    action = _read_jsonl(store.run_dir / "actions.jsonl")[0]
+    assert action["observation"]["matched_by_observation"]["kind"] == "expected_visible"
+    assert action["observation"]["matched_by_observation"]["matched_evidence"] == ["Done"]
+    assert action["observation"]["frame_count"] == 2
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(e["type"] == "observation.match_found" for e in audit)
+
+
+@pytest.mark.smoke
 def test_computer_use_runtime_stream_until_match_stops_on_disqualifying_state(tmp_path):
     phone, orchestrator, store = _make_phone(
         tmp_path,
