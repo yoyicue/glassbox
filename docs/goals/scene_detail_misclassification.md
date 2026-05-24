@@ -52,6 +52,26 @@ latent correctness risk, not a current outage.)
 - **Evidence/audit**: the wrong `scene_type`/`title` made the screenshot-evidence
   audit produce false gaps; any tooling trusting `scene_type` is unreliable.
 
+## Best practices (researched 2026-05-24)
+
+Industry/UX guidance converges on one canonical signal for this exact problem:
+
+- **The presence/absence of a visible Back/Up affordance is THE heuristic for
+  root-vs-pushed-detail.** A pushed detail view shows a back button; the app's
+  home/root does not. (Android: "if a screen is the topmost one… it should not
+  present an Up button"; iOS UINavigationController shows the back button once a
+  VC is pushed.) This directly supports Fix #2 below and explains why our
+  body-text heuristic is fragile — it ignores the canonical nav-bar signal.
+- **Higher-end direction:** state-aware agents model screens as a finite state
+  machine (each screen a state, actions as transitions) instead of reasoning only
+  over the current frame. glassbox's UTG/screen-memory is a partial version; a
+  detail-vs-root decision could also be corroborated by the transition that
+  produced the screen (tapped a root row → expect a detail).
+
+Sources: Android navigation principles (developer.android.com), iOS navigation
+patterns (frankrausch.com / CodePath), and state-aware GUI-agent research
+(Agent-SAMA, arXiv 2505.23596).
+
 ## Suggested approach
 
 - **Fix #1 (ordering / false-springboard):** make `_looks_like_springboard`
