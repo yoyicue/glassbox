@@ -161,14 +161,14 @@ Every stage is a **named boundary** — `FrameSource`, `Effector`, `OCR`, `VLM`,
 no core edits. Effector backends advertise capabilities (coordinate space,
 connection requirements, transport label, calibrated-crop and wheel defaults).
 Boundary maturity is tracked in
-[`docs/design/architecture_boundaries.md`](docs/design/architecture_boundaries.md)
+`docs/design/architecture_boundaries.md`
 (contract v2; 6 of 8 graduated, Platform and CrawlPolicy provisional).
 
 ### Entry surfaces
 
 - **`glassbox.ai`** — stable author-mode facade (`open_phone() -> AIPhone`,
   `ai-api-v1`); text-first `observe` / `tap` / `goto` / `explore` /
-  `save_report`. See [`docs/design/public_api.md`](docs/design/public_api.md).
+  `save_report`. See `docs/design/public_api.md`.
 - **`glassbox.phone.Phone`** — the low-level runtime object assembled by
   `runtime.py`.
 - **`glassbox-mcp-server`** — remote MCP (stdio) for agents.
@@ -205,7 +205,7 @@ GLASSBOX_LANGUAGE=en GLASSBOX_REGION=HK \
 ```
 
 Full design and the phased migration plan live in
-[`docs/design/locale_seam_english_first.md`](docs/design/locale_seam_english_first.md).
+`docs/design/locale_seam_english_first.md`.
 
 ## Hardware setup
 
@@ -266,7 +266,7 @@ anything — they are all built-in iOS toggles:
 | AssistiveTouch tracking speed | Accessibility › Touch › AssistiveTouch › Tracking speed | **Slowest** (slider fully left) | Keeps pointer motion deterministic so the calibrated logical→pixel fit reproduces. |
 | AssistiveTouch tracking sensitivity | Accessibility › Touch › AssistiveTouch › Tracking sensitivity | **Highest** (slider fully right) | Same — matches the bring-up rig so the pointer lands where the calibration expects. |
 | Auto-Lock | Display & Brightness › Auto-Lock | **Never** | Keeps the screen awake through long automation runs. |
-| Full Keyboard Access | Accessibility › Keyboards › Full Keyboard Access | **On** | Enables the system keyboard shortcuts glassbox sends — `Cmd-H` (Home), `Cmd-[` (Back), `Cmd-Up` (App Switcher), `Cmd-C` (Control Center), `Cmd-N` (Notification Center). See [`docs/reference/ios_full_keyboard_access_commands.md`](docs/reference/ios_full_keyboard_access_commands.md). |
+| Full Keyboard Access | Accessibility › Keyboards › Full Keyboard Access | **On** | Enables the system keyboard shortcuts glassbox sends — `Cmd-H` (Home), `Cmd-[` (Back), `Cmd-Up` (App Switcher), `Cmd-C` (Control Center), `Cmd-N` (Notification Center). See `docs/reference/ios_full_keyboard_access_commands.md`. |
 
 The tracking-speed/sensitivity values come from the same single-device bring-up
 as the PicoKVM calibration below (iPhone 17 Pro Max); a different phone or
