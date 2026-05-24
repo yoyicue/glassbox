@@ -900,7 +900,7 @@ def test_vlm_point_that_does_not_navigate_records_tap_no_navigation(monkeypatch)
 
     actions = replace(
         walkthrough._navigation_actions(),
-        scene_kind=lambda _scene: "settings_root",
+        scene_kind=lambda _scene, phone=None: "settings_root",
         scene_is_settings_root=lambda _scene: True,
         root_coverage_perceive=lambda phone, _depth: phone.perceive(),
         record_visible_page=lambda **_kwargs: True,
@@ -954,7 +954,7 @@ def test_vlm_point_synthetic_element_flows_through_picokvm_settings_row_projecti
 
     class _Response:
         def __init__(self):
-            self.parsed = {"action": "left_click", "coordinate": [40, 405]}
+            self.parsed = {"action": "left_click", "coordinate": [2000, 405]}
             self.raw_content = ""
 
     class _FakeKimi:
@@ -982,7 +982,7 @@ def test_vlm_point_synthetic_element_flows_through_picokvm_settings_row_projecti
     hit = _vlm_point_for_label(phone, "通用", scene_kind="settings_root")
 
     assert hit is not None
-    assert hit.box.center[0] != 40
+    assert hit.box.center[0] != 2000
     assert Phone._picokvm_settings_row_tap_point_for_element(phone, hit) == (224, 535)
 
 @pytest.mark.smoke

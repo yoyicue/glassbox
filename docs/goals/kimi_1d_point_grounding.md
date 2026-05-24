@@ -60,8 +60,9 @@ sibling that maps **label → the row's y**, used only as a fallback.
      (`{"action":"left_click","coordinate":[x,y]}`); parse from **both
      `resp.parsed` and `resp.raw_content`**, then normalize the three forms
      (0–1, 0–1000, absolute).
-   - Sanity-bound: reject points outside the list band (status bar / nav bar /
-     off-screen).
+   - Sanity-bound: reject points whose **row y** is outside the list band
+     (status bar / nav bar / off-screen). The raw `x` is deliberately not a
+     rejection signal because actuation discards it.
    - **Return a row-label-like synthetic `UIElement`** (fix #3): `type="text"`,
      left-aligned x, carrying the label text — so it flows through
      `Phone._picokvm_settings_row_tap_point_for_element` (phone.py:1031), which
@@ -73,7 +74,7 @@ sibling that maps **label → the row's y**, used only as a fallback.
    - First `labels = tuple(labels)` (fix: an iterable can be consumed across
      scroll rounds).
    - When `match_any` returns `None`, call
-     `vlm_point_for_label(phone, labels[0], scene_kind=actions.scene_kind(scene))`.
+    `vlm_point_for_label(phone, labels[0], scene_kind=actions.scene_kind(scene, phone=phone))`.
 
 3. **Wiring** (fix #1): `SettingsNavigationActions` has only `scene_is_settings_root`
    today — add a `scene_kind: Callable[..., str]` field and inject `_scene_kind`
@@ -130,6 +131,10 @@ sibling that maps **label → the row's y**, used only as a fallback.
   — 87 passed.
 - `PYTHONPATH=. uv run --extra dev pytest skills/smoke -q`
   — 1129 passed, 23 skipped (gitignored demo assets/profile fixtures absent).
+
+Live caveat: the original 7/7 measurement used full frames. P1 feeds Kimi a
+visible list-band crop and has offline parser/bounds/projection coverage; the
+crop prompt still needs real-device validation in a billed run.
 
 ## Constraints
 

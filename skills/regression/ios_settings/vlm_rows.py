@@ -157,7 +157,7 @@ def vlm_point_for_label(phone, label: str, *, scene_kind: str) -> UIElement | No
         return None
     x, y = point
     frame_h, frame_w = frame_img.shape[:2]
-    if not (0 <= x < frame_w and band.y <= y <= band.y2):
+    if not (band.y <= y <= band.y2):
         _POINT_CACHE[cache_key] = (None, "out_of_band")
         _record_point_grounding(phone, label=label, scene_kind=scene_kind, reason="out_of_band")
         return None

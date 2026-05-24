@@ -173,7 +173,7 @@ def open_visible_or_scroll_to_row(
         vlm_hit = actions.vlm_point_for_label(
             phone,
             labels[0],
-            scene_kind=actions.scene_kind(scene),
+            scene_kind=actions.scene_kind(scene, phone=phone),
         )
         if vlm_hit is not None:
             return vlm_hit
@@ -505,7 +505,7 @@ def crawl_current_page(
                     relocated = actions.vlm_point_for_label(
                         phone,
                         label,
-                        scene_kind=actions.scene_kind(current),
+                        scene_kind=actions.scene_kind(current, phone=phone),
                     )
                 if relocated is None:
                     continue
