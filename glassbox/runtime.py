@@ -27,6 +27,7 @@ from glassbox.cognition import HeuristicTyper
 from glassbox.config import AgentConfig, get_config
 from glassbox.effector import NOOP_CAPABILITIES, BackendCapabilities, Effector
 from glassbox.geometry import content_size_for_crop, effector_frame_resolution, make_device_geometry
+from glassbox.locale import select_locale_code
 from glassbox.memory import save_utg, wrap_with_memory_if_enabled
 from glassbox.obs import open_recorder, wrap_vlm_cache_if_enabled
 from glassbox.perception.letterbox import LetterboxCrop
@@ -510,7 +511,7 @@ def build_phone(
                     "name": device_geometry.model,
                     "model": device_geometry.model,
                     "os_version": None,
-                    "locale": None,
+                    "locale": select_locale_code(cfg),
                 },
             },
         )

@@ -6,7 +6,7 @@ as a first-class seam. **English is the target default**, with Chinese (and
 China-region variants) as switchable packs — the global default is **flipped
 last**, only after parity (see Migration).
 
-### Implementation status (2026-05-24) — P1 + P2 done; P3 functional; P4 rig-gated
+### Implementation status (2026-05-25) — P1 + P2 done; P3 functional; P4 live-validated on the rig (global flip still gated)
 - **P2a compatibility bridge (NOT the full DI model yet):** the live resolver
   (`canonical_expected_root_label`, used by coverage/dedup) maps English UI text
   to the canonical section; the greater-China English `WLAN` / `Mobile Service`
@@ -39,9 +39,22 @@ last**, only after parity (see Migration).
   single-source cleanliness) is deferred as architectural, not functional.
 - **P4 (English end-to-end + flip):** the English resolution path works
   end-to-end (proven by the resolution tests above); the production default stays
-  `zh-Hans`. The remaining P4 items — a clean **live** English 5-round drill-down
-  and the global default flip — are gated on the live rig (per "flip only after
-  both locales green in CI"), which is outside the (hardware-free) smoke suite.
+  `zh-Hans`. **Live English drill-down now validated (2026-05-25)** on the
+  Hong-Kong-region English rig: a single `en-HK` drill-down credited 15/17 root
+  sections (the two non-credited are by design — `CELLULAR` no-SIM device-inert,
+  `WALLET` blocked), with `WLAN`/`Mobile Service` resolving via the overlay,
+  en-US-only OCR (CJK garbling gone), and **zero** wasted multi-pass / search /
+  mis-tap tail (vs the zh-locale run on the same English device: 14/17, 2
+  multi-pass resets, 2 nav failures, 49→35 HID calls). `verify_report` passes on
+  coverage (the only remaining errors — `Camera`/`Wallpaper` — are the
+  pre-existing, locale-independent candidate-policy gap, identical under zh). The
+  English locale is selected **per live run** via `run_full --language en --region
+  HK` (sets `GLASSBOX_LANGUAGE`/`GLASSBOX_REGION` for that process only) — NOT
+  pinned in `.env`, because a `.env` `GLASSBOX_LANGUAGE` flips the *global*
+  `get_config` default for every caller including the smoke suite (which asserts
+  the zh-Hans default in `test_greater_china_english_is_pack_bound`). The in-code
+  **global default stays `zh-Hans`**. Remaining P4 items: a multi-round English
+  run + the global default flip, still gated on both-locale CI green.
 
 ### Earlier status (Phase 1 / 2a-foundation)
 - **Done — Phase 1 (seam scaffold, wired):** `glassbox/locale.py` (`Locale`

@@ -156,6 +156,19 @@ def main(argv: list[str] | None = None) -> int:
         "Snapshots go under IOS_SETTINGS_ARTIFACT_DIR (or <report>.artifacts).",
     )
     parser.add_argument(
+        "--language",
+        default=None,
+        help="Device UI language pack for this run (e.g. 'en'). Sets GLASSBOX_LANGUAGE "
+        "for this process only; the in-code global default (zh-Hans) is unchanged.",
+    )
+    parser.add_argument(
+        "--region",
+        default=None,
+        help="Optional device region overlay for this run (e.g. 'HK' / 'CN'). Sets "
+        "GLASSBOX_REGION for this process only. Needed for greater-China English "
+        "(WLAN / Mobile Service).",
+    )
+    parser.add_argument(
         "--memory-dir",
         type=Path,
         default=None,
@@ -182,6 +195,10 @@ def main(argv: list[str] | None = None) -> int:
         memory_dir=args.memory_dir.expanduser().resolve() if args.memory_dir else None,
         reuse_memory=args.reuse_memory,
     )
+    if args.language is not None:
+        env["GLASSBOX_LANGUAGE"] = args.language
+    if args.region is not None:
+        env["GLASSBOX_REGION"] = args.region
     if args.quick:
         env.update(_QUICK_ENV_OVERRIDES)
     if args.drill_down:
