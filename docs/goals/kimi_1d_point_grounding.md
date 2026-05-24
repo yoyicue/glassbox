@@ -1,8 +1,8 @@
 # Goal — VLM point-grounding fallback for 1D Settings lists
 
-Status: **open / ready to implement**. P1 designed; **peer-reviewed 2026-05-24,
-4 fixes + form notes incorporated below**. Empirically validated; bounded,
-fallback-only, 1D-only.
+Status: **P1 implemented on `feat/kimi-1d-point-grounding` (2026-05-24)**.
+Peer-reviewed design fixes incorporated below; implementation is empirically
+bounded, fallback-only, 1D-only, and covered by offline smoke tests.
 
 ## Motivation
 
@@ -118,10 +118,18 @@ sibling that maps **label → the row's y**, used only as a fallback.
 
 ## Phasing
 
-- **P1**: primitive + `open_visible_or_scroll_to_row` fallback + tests 1–9 +
-  the `vlm_kimi.py` comment fix.
+- **P1**: implemented — primitive + `open_visible_or_scroll_to_row` fallback +
+  root re-ground fallback + tests 1–9 + the `vlm_kimi.py` comment fix.
 - **P2 (optional)**: one call returns all visible rows' points (batch, cached by
   frame signature); extend to search/relocate recovery.
+
+## Verification
+
+- `PYTHONPATH=. uv run --extra dev ruff check glassbox skills`
+- `PYTHONPATH=. uv run --extra dev pytest skills/smoke/test_ios_settings_navigation.py -q`
+  — 87 passed.
+- `PYTHONPATH=. uv run --extra dev pytest skills/smoke -q`
+  — 1129 passed, 23 skipped (gitignored demo assets/profile fixtures absent).
 
 ## Constraints
 

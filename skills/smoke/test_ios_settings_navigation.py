@@ -597,6 +597,394 @@ def test_vlm_recover_root_label_noop_when_kimi_disabled():
                    text="乱码行", confidence=0.4)
     assert _vlm_recover_root_label(_Phone(), el) is None
 
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("parsed", "raw_content"),
+    [
+        ({"action": "left_click", "coordinate": [0.5, 0.5]}, ""),
+        ({"action": "left_click", "coordinate": [500, 500]}, ""),
+        (None, '{"action":"left_click","coordinate":[224,405]}'),
+        ({}, '{"action":"left_click","coordinate":[224,405]}'),
+    ],
+)
+def test_vlm_point_for_label_normalizes_coordinate_forms(parsed, raw_content):
+    import numpy as np
+
+    class _Response:
+        def __init__(self):
+            self.parsed = parsed
+            self.raw_content = raw_content
+
+    class _FakeKimi:
+        calls = 0
+
+        def chat(self, **kwargs):
+            self.calls += 1
+            assert kwargs["json_object"] is True
+            assert kwargs["image"]
+            return _Response()
+
+    class _Frame:
+        img = np.full((1000, 448, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        def __init__(self):
+            self.kimi = _FakeKimi()
+            self._last_frame = _Frame()
+
+    _reset_vlm_row_state()
+    phone = _Phone()
+
+    hit = _vlm_point_for_label(phone, "通用", scene_kind="settings_root")
+
+    assert hit is not None
+    assert hit.text == "通用"
+    assert hit.box.center[1] == 535
+    assert phone.kimi.calls == 1
+    assert phone._ios_settings_last_vlm_point_grounding["status"] == "hit"
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("scene_kind", ["springboard", "app_library", "springboard_or_app_library", "unknown"])
+def test_vlm_point_for_label_allowlist_rejects_non_settings_scenes(scene_kind):
+    import numpy as np
+
+    class _FakeKimi:
+        def chat(self, **_kwargs):
+            raise AssertionError("non-settings scenes must not call Kimi")
+
+    class _Frame:
+        img = np.full((1000, 448, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    _reset_vlm_row_state()
+
+    assert _vlm_point_for_label(_Phone(), "通用", scene_kind=scene_kind) is None
+
+
+@pytest.mark.smoke
+def test_open_visible_or_scroll_to_row_does_not_call_vlm_when_match_hits(monkeypatch):
+    from dataclasses import replace
+
+    scene = _scene(_el("通用", 80, 300, w=40))
+
+    class _Phone:
+        def perceive(self):
+            return scene
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("VLM fallback must only run after deterministic miss")
+
+    actions = replace(walkthrough._navigation_actions(), vlm_point_for_label=boom)
+
+    assert settings_navigation.open_visible_or_scroll_to_row(_Phone(), ("通用",), actions).text == "通用"
+
+
+@pytest.mark.smoke
+def test_vlm_point_for_label_rejects_out_of_band_point():
+    import numpy as np
+
+    class _Response:
+        def __init__(self):
+            self.parsed = {"action": "left_click", "coordinate": [224, 1200]}
+            self.raw_content = ""
+
+    class _FakeKimi:
+        def chat(self, **_kwargs):
+            return _Response()
+
+    class _Frame:
+        img = np.full((1000, 448, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    _reset_vlm_row_state()
+    phone = _Phone()
+
+    assert _vlm_point_for_label(phone, "通用", scene_kind="settings_root") is None
+    assert phone._ios_settings_vlm_point_failure_reason == "out_of_band"
+
+
+@pytest.mark.smoke
+def test_vlm_point_for_label_rejects_unsafe_label_without_kimi_call():
+    import numpy as np
+
+    class _FakeKimi:
+        def chat(self, **_kwargs):
+            raise AssertionError("unsafe labels must not call Kimi")
+
+    class _Frame:
+        img = np.full((1000, 448, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+
+    _reset_vlm_row_state()
+    phone = _Phone()
+
+    assert _vlm_point_for_label(phone, "密码", scene_kind="settings_root") is None
+    assert phone._ios_settings_vlm_point_failure_reason == "unsafe_label"
+
+
+@pytest.mark.smoke
+def test_vlm_point_for_label_cache_avoids_rebilling_stuck_frame():
+    import numpy as np
+
+    class _Response:
+        def __init__(self):
+            self.parsed = {"action": "left_click", "coordinate": [0.5, 0.5]}
+            self.raw_content = ""
+
+    class _FakeKimi:
+        def __init__(self):
+            self.calls = 0
+
+        def chat(self, **_kwargs):
+            self.calls += 1
+            return _Response()
+
+    class _Frame:
+        img = np.full((1000, 448, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        def __init__(self):
+            self.kimi = _FakeKimi()
+            self._last_frame = _Frame()
+
+    _reset_vlm_row_state()
+    phone = _Phone()
+
+    first = _vlm_point_for_label(phone, "通用", scene_kind="settings_root")
+    second = _vlm_point_for_label(phone, "通用", scene_kind="settings_root")
+
+    assert first is not None
+    assert second is not None
+    assert phone.kimi.calls == 1
+    assert phone._ios_settings_last_vlm_point_grounding["cached"] is True
+
+
+@pytest.mark.smoke
+def test_vlm_point_budget_is_separate_from_text_budget_but_total_capped():
+    import numpy as np
+
+    class _Response:
+        def __init__(self):
+            self.parsed = {"action": "left_click", "coordinate": [0.5, 0.5]}
+            self.raw_content = ""
+
+    class _FakeKimi:
+        def __init__(self):
+            self.calls = 0
+
+        def chat(self, **_kwargs):
+            self.calls += 1
+            return _Response()
+
+    class _Frame:
+        img = np.full((1000, 448, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        def __init__(self):
+            self.kimi = _FakeKimi()
+            self._last_frame = _Frame()
+
+    _reset_vlm_row_state()
+    settings_vlm_rows._row_calls = settings_vlm_rows._ROW_CALL_BUDGET
+    phone = _Phone()
+
+    assert _vlm_point_for_label(phone, "通用", scene_kind="settings_root") is not None
+
+    settings_vlm_rows._point_calls = (
+        settings_vlm_rows._ROW_TOTAL_CALL_BUDGET - settings_vlm_rows._row_calls
+    )
+    phone._last_frame = type("_Frame2", (), {
+        "img": np.full((1001, 448, 3), 220, dtype=np.uint8),
+    })()
+
+    assert _vlm_point_for_label(phone, "通知", scene_kind="settings_root") is None
+    assert phone._ios_settings_vlm_point_failure_reason == "budget_exhausted"
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("setup", "reason"),
+    [
+        ("no_kimi", "no_kimi_or_frame"),
+        ("parse_failed", "parse_failed"),
+        ("scene_rejected", "scene_kind_rejected"),
+    ],
+)
+def test_vlm_point_for_label_records_failure_reasons(setup, reason):
+    import numpy as np
+
+    class _Frame:
+        img = np.full((1000, 448, 3), 220, dtype=np.uint8)
+
+    class _ParseFailKimi:
+        def chat(self, **_kwargs):
+            return type("_Response", (), {"parsed": {}, "raw_content": "not json"})()
+
+    class _Phone:
+        def __init__(self):
+            self.kimi = None if setup == "no_kimi" else _ParseFailKimi()
+            self._last_frame = _Frame()
+
+    _reset_vlm_row_state()
+    phone = _Phone()
+    scene_kind = "springboard" if setup == "scene_rejected" else "settings_root"
+
+    assert _vlm_point_for_label(phone, "通用", scene_kind=scene_kind) is None
+    assert phone._ios_settings_vlm_point_failure_reason == reason
+    assert phone._ios_settings_last_vlm_point_grounding["reason"] == reason
+
+
+@pytest.mark.smoke
+def test_vlm_point_that_does_not_navigate_records_tap_no_navigation(monkeypatch):
+    import numpy as np
+    from dataclasses import replace
+
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    candidate_scene = _scene(
+        _el("设置", 18, 126, w=68, h=36, ty="button"),
+        _el("关于本机", 80, 300, w=72),
+        _el("›", 386, 300, w=12),
+    )
+    miss_scene = _scene(
+        _el("设置", 18, 126, w=68, h=36, ty="button"),
+        _el("乱码行", 80, 300, w=72),
+        _el("›", 386, 300, w=12),
+    )
+
+    class _Response:
+        def __init__(self):
+            self.parsed = {"action": "left_click", "coordinate": [0.5, 0.5]}
+            self.raw_content = ""
+
+    class _FakeKimi:
+        def chat(self, **_kwargs):
+            return _Response()
+
+    class _Frame:
+        img = np.full((1000, 448, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        def __init__(self):
+            self.kimi = _FakeKimi()
+            self._last_frame = _Frame()
+            self.perceive_calls = 0
+            self.tapped_vlm_row = False
+
+        def perceive(self):
+            self.perceive_calls += 1
+            return candidate_scene if self.perceive_calls <= 2 else miss_scene
+
+        def invalidate_perceive_cache(self):
+            pass
+
+    failures: list[NavigationFailure] = []
+
+    def record_failure(store, *, path, scene, text, reason):
+        store.append(NavigationFailure(path=path, title="设置", text=text, reason=reason))
+
+    def tap_row(phone, row):
+        assert row.type_source == "vlm_point_for_label"
+        phone.tapped_vlm_row = True
+        return True
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_kind=lambda _scene: "settings_root",
+        scene_is_settings_root=lambda _scene: True,
+        root_coverage_perceive=lambda phone, _depth: phone.perceive(),
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=lambda _scene, **_kwargs: [
+            _el("关于本机", 80, 300, w=72),
+        ],
+        tap_settings_row=tap_row,
+        same_page_after_tap=lambda *_args, **_kwargs: True,
+        is_settings_section_header=lambda *_args, **_kwargs: False,
+        canonical_expected_root_label=lambda _text: None,
+        record_navigation_failure=record_failure,
+        scroll_budget_for_depth=lambda _depth: 1,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", miss_scene),
+        scroll_to_top=None,
+        max_root_scroll_resets=0,
+        crawl_missing_root_pages_via_search=lambda *_args, **_kwargs: None,
+    )
+    phone = _Phone()
+
+    _reset_vlm_row_state()
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=failures,
+        actions=actions,
+    )
+
+    assert phone.tapped_vlm_row
+    assert [(item.path, item.text, item.reason) for item in failures] == [
+        (("Settings",), "关于本机", "tap_no_navigation"),
+    ]
+
+
+@pytest.mark.smoke
+def test_vlm_point_synthetic_element_flows_through_picokvm_settings_row_projection():
+    import numpy as np
+
+    from glassbox.phone import Phone
+
+    class _Response:
+        def __init__(self):
+            self.parsed = {"action": "left_click", "coordinate": [40, 405]}
+            self.raw_content = ""
+
+    class _FakeKimi:
+        def chat(self, **_kwargs):
+            return _Response()
+
+    class _Frame:
+        img = np.full((1000, 448, 3), 220, dtype=np.uint8)
+
+    class _Phone:
+        kimi = _FakeKimi()
+        _last_frame = _Frame()
+        _last_scene = _scene(_el("设置", 18, 126, w=68, h=36))
+        _last_scene.platform_scene_kind = "settings_root"
+
+        def _effector_backend(self):
+            return "picokvm"
+
+        def _viewport_size(self):
+            return 448, 1000
+
+    _reset_vlm_row_state()
+    phone = _Phone()
+
+    hit = _vlm_point_for_label(phone, "通用", scene_kind="settings_root")
+
+    assert hit is not None
+    assert hit.box.center[0] != 40
+    assert Phone._picokvm_settings_row_tap_point_for_element(phone, hit) == (224, 535)
+
 @pytest.mark.smoke
 def test_unsafe_navigation_text_matches_spaceless_ocr_form():
     """OCR 常把「Game Center」读成「GameCenter」—— 去空格后仍判为不安全项。"""
