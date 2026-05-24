@@ -36,9 +36,18 @@ sibling that maps **label → the row's y**, used only as a fallback.
    - **Scene gate = allowlist** `{settings_root, settings_detail}` — *not*
      "≠ springboard" (scene kinds also include `app_library`, `system_search`,
      `unknown`; only the two list scenes are safe to ground).
-   - Only when `phone.kimi` + `phone._last_frame` exist; reuse `_ROW_CALL_BUDGET`,
-     **plus a separate (frame-signature, label) cache** so a stuck frame doesn't
-     re-burn budget.
+   - Only when `phone.kimi` + `phone._last_frame` exist.
+   - **Separate budget counter** (fix #6): `recover_root_label`'s `_row_calls`
+     is already consumed by rejected-candidate OCR recovery (`page_records.py:112`,
+     `:184`) and could starve point grounding. Use a distinct `_point_calls`
+     counter; keep both under a module total cap (`reset_row_state` zeroes both).
+     Add a **(frame-signature, label) cache** so a stuck frame in a scroll loop
+     doesn't re-ask Kimi or re-burn budget.
+   - **Record a failure reason** (fix #7) whenever it does not return a point —
+     one of `no_kimi_or_frame` / `scene_kind_rejected` / `unsafe_label` /
+     `budget_exhausted` / `parse_failed` / `out_of_band` — to trace/log metadata.
+     Without it we can't tell "never triggered" from "parsed wrong" from "Kimi
+     pointed off" in production.
    - **Safety precondition in code** (fix #4): reject the label if
      `is_unsafe_navigation_text(label)` — `open_visible_or_scroll_to_row` does not
      guarantee its `labels` are safety-filtered, so the primitive must not become
@@ -101,10 +110,15 @@ sibling that maps **label → the row's y**, used only as a fallback.
 7. **PicoKVM**: the synthetic element is routed through
    `_picokvm_settings_row_tap_point_for_element` (mid-line x / row y), not tapped
    at Kimi's raw x/y — locks "safety/projection path unchanged".
+8. **Budget semantics**: exhausting the text-recovery counter does **not** block
+   point grounding (separate counters), and the module total cap is respected.
+9. **Failure reason recorded**: each non-grounding path sets its reason
+   (`scene_kind_rejected`, `unsafe_label`, `budget_exhausted`, `parse_failed`,
+   `out_of_band`, `no_kimi_or_frame`) in trace/log metadata.
 
 ## Phasing
 
-- **P1**: primitive + `open_visible_or_scroll_to_row` fallback + tests 1–7 +
+- **P1**: primitive + `open_visible_or_scroll_to_row` fallback + tests 1–9 +
   the `vlm_kimi.py` comment fix.
 - **P2 (optional)**: one call returns all visible rows' points (batch, cached by
   frame signature); extend to search/relocate recovery.
@@ -120,8 +134,9 @@ sibling that maps **label → the row's y**, used only as a fallback.
 
 ## Code touchpoints
 
-- `skills/regression/ios_settings/vlm_rows.py:24` — new primitive (share budget,
-  add frame+label cache, list-band crop, safety reject).
+- `skills/regression/ios_settings/vlm_rows.py:24` — new primitive: separate
+  `_point_calls` counter (don't share `_row_calls`) under a total cap,
+  (frame,label) cache, list-band crop, safety reject, failure-reason metadata.
 - `skills/regression/ios_settings/navigation.py:158` —
   `open_visible_or_scroll_to_row` fallback + `tuple(labels)`;
   `SettingsNavigationActions` gains `scene_kind` + `vlm_point_for_label`.
