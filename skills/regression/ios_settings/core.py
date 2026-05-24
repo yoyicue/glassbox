@@ -959,10 +959,6 @@ def _reset_vlm_row_state() -> None:
     settings_vlm_rows.reset_row_state()
 
 
-def _vlm_recover_root_label(phone, element) -> str | None:
-    return settings_vlm_rows.recover_root_label(phone, element)
-
-
 def _record_visible_root_row_visits(
     *,
     scene,

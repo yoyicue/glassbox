@@ -14,8 +14,9 @@ from skills.regression.ios_settings.policy import (
     FAILURE_CATEGORY_KEYS,
 )
 from skills.regression.ios_settings.sections import (
-    ZH_CANON_TO_SECTION,
     SectionVocab,
+    root_section_for_canonical_label,
+    root_section_ids_for_canonical_labels,
     section_vocab_for,
 )
 
@@ -25,12 +26,7 @@ def _section_ids(labels: Iterable[str]) -> list[str]:
 
     Unknown labels are skipped — the id list is the language-neutral view of the
     same coverage (report wire format v0.2, additive alongside the zh labels)."""
-    out: list[str] = []
-    for label in labels:
-        section = ZH_CANON_TO_SECTION.get(label)
-        if section is not None:
-            out.append(section.value)
-    return out
+    return root_section_ids_for_canonical_labels(labels)
 
 
 def _active_section_vocab() -> SectionVocab:
@@ -53,7 +49,7 @@ def _section_display(labels: Iterable[str], vocab: SectionVocab) -> list[str]:
     language (so an en-HK report reads in English). Unknown labels are skipped."""
     out: list[str] = []
     for label in labels:
-        section = ZH_CANON_TO_SECTION.get(label)
+        section = root_section_for_canonical_label(label)
         if section is None:
             continue
         try:

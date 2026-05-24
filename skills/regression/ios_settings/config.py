@@ -191,6 +191,10 @@ def build_full_run_env(
         "GLASSBOX_SPRINGBOARD_ICON_MAP_PATH",
         str(Path.home() / ".cache" / "glassbox" / "springboard_icon_map.json"),
     )
+    env.setdefault(
+        "GLASSBOX_VLM_CACHE_DIR",
+        str(Path.home() / ".cache" / "glassbox" / "vlm_describe"),
+    )
     env.setdefault("GLASSBOX_ENABLE_MEMORY", "1")
     env.setdefault("GLASSBOX_MEMORY_BUNDLE", "com.apple." + "Preferences")
     if not reuse_memory:

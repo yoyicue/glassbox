@@ -1,4 +1,9 @@
-"""CrawlPolicy registry and provisional Settings adapter."""
+"""CrawlPolicy registry for generic crawler/explorer drivers.
+
+The ``ios_settings`` adapter is a generic-runner policy. The live Settings
+regression harness remains the bespoke ``skills.regression.ios_settings``
+crawler, so edits here do not change that full regression path.
+"""
 
 from __future__ import annotations
 
@@ -120,6 +125,8 @@ class GenericCrawlPolicyAdapter:
 
 @dataclass
 class SettingsCrawlPolicyAdapter:
+    """Settings-flavored CrawlPolicy for the generic runner only."""
+
     settings_policy: Any
 
     def classify(self, scene) -> str:

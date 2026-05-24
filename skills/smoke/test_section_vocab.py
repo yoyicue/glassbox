@@ -7,6 +7,8 @@ from skills.regression.ios_settings.sections import (
     EXPECTED_ROOT_SECTIONS,
     ROOT_ONLY_UNSAFE_OVERRIDE,
     RootSection,
+    root_section_for_canonical_label,
+    root_section_ids_for_canonical_labels,
     section_vocab_for,
 )
 
@@ -83,6 +85,17 @@ def test_zh_resolves_chinese_and_ocr_garble():
     assert zh.resolve("通用") is RootSection.GENERAL
     # OCR garble inherited from the existing zh resolver:
     assert zh.resolve("待机見示") is RootSection.STANDBY
+
+
+@pytest.mark.smoke
+def test_canonical_label_projection_uses_shared_exit():
+    labels = ["无线局域网", "通用", "not a section"]
+    assert root_section_for_canonical_label("无线局域网") is RootSection.WIFI
+    assert root_section_for_canonical_label("not a section") is None
+    assert root_section_ids_for_canonical_labels(labels) == [
+        RootSection.WIFI.value,
+        RootSection.GENERAL.value,
+    ]
 
 
 @pytest.mark.smoke

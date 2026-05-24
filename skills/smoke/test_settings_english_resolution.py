@@ -13,8 +13,8 @@ import pytest
 from glassbox.config import get_config
 from skills.regression.ios_settings.policy import DEFAULT_SETTINGS_POLICY as P
 from skills.regression.ios_settings.sections import (
-    ZH_CANON_TO_SECTION,
     RootSection,
+    root_section_for_canonical_label,
     section_vocab_for,
 )
 
@@ -51,7 +51,7 @@ def _locale(monkeypatch):
 @pytest.mark.parametrize(("text", "section"), list(_EN_BASE.items()))
 def test_policy_resolves_standard_english(text, section):
     canon = P.canonical_expected_root_label(text)
-    assert canon is not None and ZH_CANON_TO_SECTION[canon] is section
+    assert canon is not None and root_section_for_canonical_label(canon) is section
 
 
 @pytest.mark.smoke
@@ -61,7 +61,7 @@ def test_greater_china_english_is_pack_bound(text, section, _locale):
     for region in ("CN", "HK"):
         _locale("en", region)
         canon = P.canonical_expected_root_label(text)
-        assert canon is not None and ZH_CANON_TO_SECTION[canon] is section, region
+        assert canon is not None and root_section_for_canonical_label(canon) is section, region
     # Rejected by zh default, en-US, AND zh-Hans-CN (language+region bound).
     for language, region in ((None, None), ("en", "US"), ("zh-Hans", "CN")):
         _locale(language, region)

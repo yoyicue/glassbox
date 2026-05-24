@@ -32,6 +32,7 @@ from skills.regression.ios_settings.reporting import (
     computed_root_coverage,
     path_has_root_label_evidence,
 )
+from skills.regression.ios_settings.sections import root_section_ids_for_canonical_labels
 
 _canonical_expected_root_label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label
 
@@ -185,6 +186,14 @@ def validate_report(
         errors.append("root_coverage.visited does not match visits")
     if missing != computed_root["missing"]:
         errors.append("root_coverage.missing does not match visits")
+    _validate_root_coverage_ids(
+        root_coverage,
+        expected=expected,
+        visited=reported_visited,
+        missing=missing,
+        require_exhaustive=require_exhaustive,
+        errors=errors,
+    )
     unentered_required = [
         label for label in computed_root["missing"] if label not in entry_exempt
     ]
@@ -400,6 +409,33 @@ def validate_report(
             errors.append(f"navigation candidate did not open: {' > '.join(path_key)} > {text}")
 
     return errors
+
+
+def _validate_root_coverage_ids(
+    root_coverage: dict[str, Any],
+    *,
+    expected: Any,
+    visited: Any,
+    missing: Any,
+    require_exhaustive: bool,
+    errors: list[str],
+) -> None:
+    for label_key, id_key, labels in (
+        ("expected", "expected_ids", expected),
+        ("visited", "visited_ids", visited),
+        ("missing", "missing_ids", missing),
+    ):
+        ids = root_coverage.get(id_key)
+        if ids is None and not require_exhaustive:
+            continue
+        if not isinstance(ids, list):
+            errors.append(f"root_coverage.{id_key} is missing or not a list")
+            continue
+        if not isinstance(labels, list):
+            continue
+        expected_ids = root_section_ids_for_canonical_labels(str(label) for label in labels)
+        if ids != expected_ids:
+            errors.append(f"root_coverage.{id_key} does not match root_coverage.{label_key}")
 
 
 def _validate_config_schema(config: dict[str, Any], *, errors: list[str]) -> None:

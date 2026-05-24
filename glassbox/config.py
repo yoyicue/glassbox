@@ -84,20 +84,17 @@ class AgentConfig(BaseSettings):
     wheel_ticks_per_scroll: int = 90
     """Default wheel report count for one semantic wheel scroll."""
 
-    wheel_interval_ms: int = 40
-    """Delay between synthetic mouse-wheel reports. env GLASSBOX_WHEEL_INTERVAL_MS."""
-
     wheel_invert: bool = False
     """Flip vertical wheel direction for effectors that do not declare their own default."""
 
     effector_crop_bbox: tuple[int, int, int, int] | None = None
-    """Generic calibrated content crop bbox (x, y, w, h) for plugin effectors."""
+    """Reserved plugin-effector crop bbox (x, y, w, h); no built-in consumer."""
 
     effector_crop_cache: str | None = None
-    """Generic path for the last-good calibrated crop JSON for plugin effectors."""
+    """Reserved plugin-effector last-good crop JSON path; no built-in consumer."""
 
     effector_crop_retries: int = 3
-    """Generic crop auto-detection retry count for plugin effectors."""
+    """Reserved plugin-effector crop retry count; no built-in consumer."""
 
     picokvm: bool = Field(
         default=False,
@@ -156,7 +153,8 @@ class AgentConfig(BaseSettings):
     specific App)."""
 
     crawl_policy: str = "generic"
-    """CrawlPolicy backend selector for generic crawler/explorer drivers."""
+    """CrawlPolicy backend selector for generic crawler/explorer drivers.
+    App-specific regression harnesses may use bespoke crawlers instead."""
 
     # ─── VLM Layer 3 / recording ─────────────────────────────────────
     enable_vlm: bool | None = None
@@ -235,9 +233,6 @@ class AgentConfig(BaseSettings):
     memory_bundle: str | None = None
     """Optional UTG bundle id override. Use this for system apps or glassbox
     walkthroughs without a profile, e.g. com.apple.Preferences."""
-
-    ios_device: str | None = None
-    """Optional devicectl device identifier/name for connected-iOS helpers."""
 
     # ─── Derived ─────────────────────────────────────────────────────
     def phone_size(self) -> tuple[int, int]:

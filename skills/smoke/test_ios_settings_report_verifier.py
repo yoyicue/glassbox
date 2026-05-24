@@ -13,6 +13,7 @@ from skills.regression.ios_settings.reporting import (
     classify_root_coverage,
     refresh_report_summaries,
 )
+from skills.regression.ios_settings.sections import root_section_ids_for_canonical_labels
 from skills.regression.ios_settings.verify_report import EXPECTED_MIN_VISITS, main, validate_report
 
 
@@ -79,6 +80,9 @@ def _report(*, limits=None, visits=None, missing=None):
             "expected": list(EXPECTED_ROOT_NAV_TEXT_ZH),
             "visited": visited,
             "missing": missing,
+            "expected_ids": root_section_ids_for_canonical_labels(EXPECTED_ROOT_NAV_TEXT_ZH),
+            "visited_ids": root_section_ids_for_canonical_labels(visited),
+            "missing_ids": root_section_ids_for_canonical_labels(missing),
         },
         "blocked_pages": [],
         "rejected_candidates": [],
@@ -149,6 +153,16 @@ def test_ios_settings_report_verifier_recomputes_root_coverage_from_visits():
     assert any("root_coverage.visited does not match visits" in error for error in errors)
     assert any("root_coverage.missing does not match visits" in error for error in errors)
     assert any("missing expected root pages" in error for error in errors)
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_checks_root_coverage_ids():
+    report = _report()
+    report["root_coverage"]["visited_ids"] = []
+
+    errors = validate_report(report)
+
+    assert any("root_coverage.visited_ids does not match root_coverage.visited" in error for error in errors)
 
 
 @pytest.mark.smoke

@@ -56,7 +56,7 @@ ROOT_ONLY_UNSAFE_OVERRIDE: frozenset[RootSection] = frozenset({RootSection.FACE_
 # Chinese canonical label (today's `EXPECTED_ROOT_NAV_TEXT_ZH`) → RootSection.
 # The zh vocab reuses the existing battle-tested zh resolver and maps through
 # this — so the rich OCR-garble alias coverage is inherited, not duplicated.
-ZH_CANON_TO_SECTION: dict[str, RootSection] = {
+_ZH_CANON_TO_SECTION: dict[str, RootSection] = {
     "无线局域网": RootSection.WIFI,
     "蓝牙": RootSection.BLUETOOTH,
     "蜂窝网络": RootSection.CELLULAR,
@@ -75,7 +75,30 @@ ZH_CANON_TO_SECTION: dict[str, RootSection] = {
     "电池": RootSection.BATTERY,
     "钱包与 Apple Pay": RootSection.WALLET,
 }
-_SECTION_TO_ZH_CANON: dict[RootSection, str] = {v: k for k, v in ZH_CANON_TO_SECTION.items()}
+_SECTION_TO_ZH_CANON: dict[RootSection, str] = {v: k for k, v in _ZH_CANON_TO_SECTION.items()}
+
+
+def root_section_for_canonical_label(label: str | None) -> RootSection | None:
+    """Return the stable section identity for today's Chinese canonical label.
+
+    This is the compatibility exit for code that still uses the live crawl's
+    Chinese canonical labels as its internal pivot. Report/verifier code should
+    call this rather than reaching into this module's private mapping directly.
+    """
+    text = (label or "").strip()
+    if not text:
+        return None
+    return _ZH_CANON_TO_SECTION.get(text)
+
+
+def root_section_ids_for_canonical_labels(labels: Iterable[str]) -> list[str]:
+    """Project Chinese canonical labels to stable RootSection wire tokens."""
+    out: list[str] = []
+    for label in labels:
+        section = root_section_for_canonical_label(label)
+        if section is not None:
+            out.append(section.value)
+    return out
 
 # Pinyin search queries (today's root_search_query), keyed by section.
 _ZH_SEARCH: dict[RootSection, str] = {
@@ -192,7 +215,7 @@ class SectionVocab:
 
             canon = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(text)
             if canon is not None:
-                return ZH_CANON_TO_SECTION.get(canon)
+                return root_section_for_canonical_label(canon)
         return None
 
     def vlm_candidates(self) -> tuple[VlmCandidate, ...]:
@@ -251,9 +274,10 @@ __all__ = [
     "COVERAGE_ONLY",
     "EXPECTED_ROOT_SECTIONS",
     "ROOT_ONLY_UNSAFE_OVERRIDE",
-    "ZH_CANON_TO_SECTION",
     "RootSection",
     "SectionVocab",
     "VlmCandidate",
+    "root_section_for_canonical_label",
+    "root_section_ids_for_canonical_labels",
     "section_vocab_for",
 ]

@@ -94,8 +94,21 @@ def test_full_run_env_uses_settings_run_contract_defaults(tmp_path):
     assert env["IOS_SETTINGS_CHILD_NAVIGATION_ENABLED"] == "0"
     assert env["IOS_SETTINGS_MAX_CANDIDATES_PER_PAGE"] == "0"
     assert env["IOS_SETTINGS_TRACE_ACTIONS"] == "1"
+    assert env["GLASSBOX_VLM_CACHE_DIR"] == str(Path.home() / ".cache" / "glassbox" / "vlm_describe")
     assert env["IOS_SETTINGS_MEMORY_REUSE"] == "0"
     assert env["GLASSBOX_MEMORY_DIR"] == str(report.with_suffix(".artifacts") / "abc" / "memory")
+
+
+@pytest.mark.smoke
+def test_full_run_env_preserves_explicit_vlm_cache_dir(tmp_path):
+    report = tmp_path / "full.json"
+    env = build_full_run_env(
+        report,
+        base_env={"GLASSBOX_VLM_CACHE_DIR": "/tmp/custom-vlm-cache"},
+        run_id="abc",
+    )
+
+    assert env["GLASSBOX_VLM_CACHE_DIR"] == "/tmp/custom-vlm-cache"
 
 
 @pytest.mark.smoke

@@ -10,8 +10,8 @@ from skills.regression.ios_settings.reporting import (
 )
 from skills.regression.ios_settings.sections import (
     EXPECTED_ROOT_SECTIONS,
-    ZH_CANON_TO_SECTION,
     RootSection,
+    root_section_for_canonical_label,
 )
 
 
@@ -48,7 +48,7 @@ def test_coverage_carries_stable_section_ids_alongside_labels():
     # v0.2 additive ids: language-neutral, derived from the same labels.
     assert set(cov["visited_ids"]) == {RootSection.WIFI.value, RootSection.GENERAL.value}
     assert cov["expected_ids"] == [s.value for s in
-                                   (ZH_CANON_TO_SECTION[lbl] for lbl in cov["expected"])]
+                                   (root_section_for_canonical_label(lbl) for lbl in cov["expected"])]
     # missing ids are the complement, all valid section tokens.
     assert RootSection.BLUETOOTH.value in cov["missing_ids"]
     assert set(cov["expected_ids"]) == {s.value for s in EXPECTED_ROOT_SECTIONS}
@@ -60,7 +60,8 @@ def test_coverage_ids_and_labels_stay_aligned():
     # Every expected label maps 1:1 to its id, same order.
     assert len(cov["expected"]) == len(cov["expected_ids"]) == 17
     for label, id_value in zip(cov["expected"], cov["expected_ids"], strict=True):
-        assert ZH_CANON_TO_SECTION[label].value == id_value
+        section = root_section_for_canonical_label(label)
+        assert section is not None and section.value == id_value
 
 
 def _base_with_wifi_entered():
