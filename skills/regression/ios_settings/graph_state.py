@@ -172,9 +172,15 @@ def _best_inbound_root_detail_edge(
 
 
 def _is_successful_root_outbound_edge(edge: ScreenEdge, root_ids: set[str]) -> bool:
+    # The destination must be a NON-root node, not merely a different node id.
+    # A no-SIM inert row (e.g. Mobile Service) can tap + coincide with a scroll
+    # re-render, producing a root→root edge to a *different* root-signature node;
+    # that is not entering a detail page, so requiring to_id ∉ root_ids (stricter
+    # than to_id != from_id) keeps coverage honest. Under-crediting a detail page
+    # mis-classified as root is the safe direction.
     return (
         edge.from_id in root_ids
-        and edge.to_id != edge.from_id
+        and edge.to_id not in root_ids
         and edge.action_op == "tap"
         and edge.success_count > 0
         and _edge_root_label(edge) is not None

@@ -39,6 +39,20 @@ def _ambiguous_child_scene() -> Scene:
     return _scene(_el("Loading", 160, 320, w=90))
 
 
+def _settings_root_scene_variant() -> Scene:
+    # A second, distinct root-signature node that still classifies settings_root
+    # (e.g. the root scrolled to a different band). Different visible rows ⇒ a
+    # different ScreenMemory node, but the same scene_type.
+    scene = _scene(
+        _el("设置", 198, 72, w=48),
+        _el("通用", 80, 300, w=40),
+        _el("辅助功能", 80, 360, w=72),
+        _el("操作按钮", 80, 420, w=72),
+    )
+    apply_ios_classification(scene, viewport_size=(448, 973))
+    return scene
+
+
 class _Phone:
     def __init__(self, memory: ScreenMemory | None):
         self.memory = memory
@@ -109,6 +123,32 @@ def test_graph_root_coverage_uses_successful_root_outbound_edges():
     assert "蓝牙" not in coverage["missing"]
     assert "蓝牙" in enriched["entered"]
     assert "蓝牙" in enriched["entered_graph"]
+
+
+@pytest.mark.smoke
+def test_graph_root_coverage_excludes_root_to_root_edges():
+    # A no-SIM inert row (e.g. Mobile Service / 蜂窝网络) can tap and coincide with
+    # a root re-render, producing a successful tap edge to a DIFFERENT root-
+    # signature node. Both ends are settings_root, so this is NOT entering a detail
+    # page and must never be credited as coverage (regression for the false
+    # "16/17" en-HK credit).
+    memory = ScreenMemory(UTG(bundle_id="com.apple.Preferences"))
+    root = _settings_root_scene()
+    root_variant = _settings_root_scene_variant()
+    memory.observe(root)
+    memory.observe(root_variant, last_action=("tap", {
+        "via": "settings.tap_row",
+        "target": "蜂窝网络",
+        "action_ok": True,
+    }))
+    phone = _Phone(memory)
+
+    assert settings_graph_state.root_entered_labels(phone) == set()
+    coverage = settings_page_records.root_coverage([], phone=phone)
+    enriched = settings_reporting.classify_root_coverage(coverage, [], [])
+    assert "蜂窝网络" not in coverage["visited"]
+    assert "蜂窝网络" not in enriched["entered_graph"]
+    assert "蜂窝网络" in coverage["missing"]
 
 
 @pytest.mark.smoke
