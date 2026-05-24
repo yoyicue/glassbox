@@ -17,6 +17,7 @@ from typing import Any
 from glassbox.cognition import UIElement
 from glassbox.ios.progress import same_visible_page, stable_visible_texts
 from glassbox.ios.scene import has_strong_ios_home_evidence, settings_detail_semantic_guess
+from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings.policy import DEFAULT_SETTINGS_POLICY
 
 _ROW_TAP_PRIOR_TTL_S = 12.0
@@ -59,6 +60,24 @@ def scene_kind(scene, phone=None) -> str:
         scene,
         viewport_size=viewport_size,
     )
+    graph_kind = settings_graph_state.graph_scene_kind(
+        scene,
+        phone,
+        base_kind=kind,
+        viewport_size=viewport_size,
+    )
+    if graph_kind is not None:
+        _record_contextual_scene_kind(
+            phone,
+            scene,
+            source="utg",
+            base_kind=kind,
+            label=graph_kind.label,
+            override=True,
+            evidence=graph_kind.evidence,
+            confidence=graph_kind.confidence,
+        )
+        return graph_kind.kind
     if kind in _HARD_COUNTER_KINDS:
         _clear_recent_row_tap_prior(phone)
         return kind
@@ -507,6 +526,7 @@ def _record_contextual_scene_kind(
     label: Any,
     override: bool,
     evidence: tuple[str, ...],
+    confidence: float | None = None,
 ) -> None:
     record = {
         "source": source,
@@ -529,5 +549,7 @@ def _record_contextual_scene_kind(
         if getattr(scene, "scene_type", None) in {None, "unknown", "springboard", "springboard_or_app_library"}:
             scene.scene_type = "settings_detail"
         scene.classification_source = source
-        scene.classification_confidence = 0.74 if source == "transition" else 0.82
+        scene.classification_confidence = confidence if confidence is not None else (
+            0.74 if source == "transition" else 0.82
+        )
         scene.classification_evidence = list(evidence)

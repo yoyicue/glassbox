@@ -1,6 +1,6 @@
 # Goal — Stop mis-classifying real Settings detail pages
 
-Status: **P1/P2 implemented; P3+ roadmap**. Found 2026-05-24 while auditing
+Status: **P1/P2/P3 implemented; P4+ roadmap**. Found 2026-05-24 while auditing
 drill-down screenshot evidence. Phased plan P1-P6 recorded below.
 
 ## Problem
@@ -132,6 +132,8 @@ Implemented in current working tree:
   `transition`, or `vlm`.
 
 ### P3 — Graph-Authoritative Settings Model
+
+Implemented in current working tree:
 
 - Promote screen-memory/UTG evidence to the authority for Settings scene kind
   and recovery: `settings/root --tap_row(Bluetooth)--> node` is a detail edge

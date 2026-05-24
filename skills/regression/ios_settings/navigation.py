@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from glassbox.cognition import Box, UIElement
+from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings import reporting as settings_reporting
 from skills.regression.ios_settings import scene_state as settings_scene_state
 from skills.regression.ios_settings.recovery import SettingsRootUnreachable
@@ -47,8 +48,8 @@ class SettingsNavigationActions:
     vlm_point_for_label: Callable[..., UIElement | None]
     wheel_scroll_up: Callable[[Any], None]
     wheel_scroll_down: Callable[[Any], None]
-    root_coverage: Callable[[list[PageVisit]], dict[str, list[str]]]
-    entry_exempt_sections: Callable[[list[PageVisit]], set[str]]
+    root_coverage: Callable[..., dict[str, list[str]]]
+    entry_exempt_sections: Callable[..., set[str]]
     open_root_label_via_search: Callable[[Any, str], bool]
     record_navigation_failure: Callable[..., None]
     crawl_current_page: Callable[..., None]
@@ -331,9 +332,9 @@ def crawl_missing_root_pages_via_search(
     if getattr(phone, "_ios_settings_search_unavailable", False):
         limits_hit.add("settings_search_unavailable")
         return
-    exempt = actions.entry_exempt_sections(visits)
+    exempt = actions.entry_exempt_sections(visits, phone=phone)
     for label in actions.expected_root_labels:
-        if label not in actions.root_coverage(visits)["missing"] or label in exempt:
+        if label not in actions.root_coverage(visits, phone=phone)["missing"] or label in exempt:
             continue  # device-unavailable / coverage-only → never searchable
         print(f"[ios_settings] search root page {label}", flush=True)
         if not actions.open_root_label_via_search(phone, label):
@@ -469,6 +470,10 @@ def crawl_current_page(
         for cand in candidates:
             label = (cand.text or "").strip()
             if label in attempted:
+                continue
+            if depth == 0 and settings_graph_state.is_inert_root_label(phone, label):
+                _record_inert_root_candidate(rejected_candidates, actions=actions, path=path, scene=scene, label=label)
+                attempted.add(label)
                 continue
             if depth == 0:
                 # Re-ground before each root tap. Entering/returning from a prior
@@ -635,8 +640,8 @@ def crawl_current_page(
             # waste — stop once only those remain.
             required_missing = [
                 label
-                for label in actions.root_coverage(visits)["missing"]
-                if label not in actions.entry_exempt_sections(visits)
+                for label in actions.root_coverage(visits, phone=phone)["missing"]
+                if label not in actions.entry_exempt_sections(visits, phone=phone)
             ]
             if (
                 depth == 0
@@ -668,3 +673,22 @@ def crawl_current_page(
             rejected_candidates=rejected_candidates,
             navigation_failures=navigation_failures,
         )
+
+
+def _record_inert_root_candidate(
+    rejected_candidates: list[RejectedCandidate],
+    *,
+    actions: SettingsNavigationActions,
+    path: tuple[str, ...],
+    scene,
+    label: str,
+) -> None:
+    key = (path, label, "inert_self_loop")
+    if any((candidate.path, candidate.text, candidate.reason) == key for candidate in rejected_candidates):
+        return
+    rejected_candidates.append(RejectedCandidate(
+        path=path,
+        title=actions.page_title(scene) or (path[-1] if path else ""),
+        text=label,
+        reason="inert_self_loop",
+    ))

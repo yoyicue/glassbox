@@ -47,6 +47,7 @@ from glassbox.ios.progress import (
 from glassbox.ios.safe_area import IOSSafeArea
 from glassbox.ios.springboard import open_app_from_springboard
 from skills.regression.ios_settings import bootstrap as settings_bootstrap
+from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings import navigation as settings_navigation
 from skills.regression.ios_settings import page_records as settings_page_records
 from skills.regression.ios_settings import policy as settings_policy
@@ -857,16 +858,16 @@ def _canonical_expected_root_label(text: str) -> str | None:
     return settings_scene_state.canonical_expected_root_label(text)
 
 
-def _root_coverage(visits: list[PageVisit]) -> dict[str, list[str]]:
-    return settings_page_records.root_coverage(visits)
+def _root_coverage(visits: list[PageVisit], *, phone=None) -> dict[str, list[str]]:
+    return settings_page_records.root_coverage(visits, phone=phone)
 
 
-def _entry_exempt_sections(visits: list[PageVisit]) -> set[str]:
+def _entry_exempt_sections(visits: list[PageVisit], *, phone=None) -> set[str]:
     """Canonical root labels the crawl should not keep chasing: coverage-only by
     design (e.g. 钱包) plus device-unavailable inferred from seen text (e.g.
     蜂窝网络 on a no-SIM phone). Reported coverage is unchanged — this only stops
     the multi-pass reset + search recovery from re-scanning unreachable rows."""
-    return set(settings_policy.ROOT_COVERAGE_ONLY_LABELS) | (
+    return set(settings_policy.ROOT_COVERAGE_ONLY_LABELS) | settings_graph_state.inert_root_labels(phone) | (
         settings_policy.detect_device_unavailable_root_labels(visits)
     )
 
@@ -1185,6 +1186,7 @@ def _write_report(
     rejected_candidates: list[RejectedCandidate],
     navigation_failures: list[NavigationFailure],
     *,
+    phone=None,
     trace_payload: dict[str, Any] | None = None,
 ) -> None:
     if not REPORT_PATH:
@@ -1199,7 +1201,7 @@ def _write_report(
         blocked_pages=blocked_pages,
         rejected_candidates=rejected_candidates,
         navigation_failures=navigation_failures,
-        root_coverage=_root_coverage(visits),
+        root_coverage=_root_coverage(visits, phone=phone),
         trace_payload=trace_payload,
     )
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 from glassbox.cognition.label_prior import ordered_label_candidates
 from glassbox.cognition.text_match import compact_text, confusion_compact
 from glassbox.ios.progress import screen_signature
+from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings import reporting as settings_reporting
 from skills.regression.ios_settings import scene_state as settings_scene_state
 from skills.regression.ios_settings import vlm_rows
@@ -26,8 +27,19 @@ NavigationFailure = settings_reporting.NavigationFailure
 ViewportKey = tuple[tuple[str, ...], tuple[str, ...]]
 
 
-def root_coverage(visits: list[PageVisit]) -> dict[str, list[str]]:
-    return DEFAULT_SETTINGS_POLICY.root_coverage(visits)
+def root_coverage(visits: list[PageVisit], *, phone=None) -> dict[str, list[str]]:
+    base = DEFAULT_SETTINGS_POLICY.root_coverage(visits)
+    graph_entered = settings_graph_state.root_entered_labels(phone)
+    if not graph_entered:
+        return base
+    expected = list(base["expected"])
+    visited = set(base["visited"]) | graph_entered
+    return {
+        **base,
+        "visited": [label for label in expected if label in visited],
+        "missing": [label for label in expected if label not in visited],
+        "entered_graph": [label for label in expected if label in graph_entered],
+    }
 
 
 def record_blocked_page(
@@ -173,7 +185,7 @@ def record_visible_root_row_visits(
 ) -> None:
     if not settings_scene_state.scene_is_settings_root(scene):
         return
-    visited = set(root_coverage(visits)["visited"])
+    visited = set(root_coverage(visits, phone=phone)["visited"])
     rows: list[tuple[int, str, str]] = []
     for element in scene.elements:
         text = (element.text or "").strip()

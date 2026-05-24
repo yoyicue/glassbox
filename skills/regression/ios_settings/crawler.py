@@ -231,6 +231,7 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
             blocked_pages,
             rejected_candidates,
             navigation_failures,
+            phone=phone,
             trace_payload=trace_payload,
         )
         report_written = True
@@ -246,6 +247,7 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
         blocked_pages,
         rejected_candidates,
         navigation_failures,
+        phone=phone,
         trace_payload=trace_payload,
     )
     return SettingsCrawlResult(

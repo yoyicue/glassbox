@@ -78,6 +78,7 @@ EXPECTED_REJECTED_REASONS = frozenset({
     "unknown_navigation_label",
     "missing_navigation_affordance",
     "section_header",
+    "inert_self_loop",
 })
 EXPECTED_NAVIGATION_FAILURE_REASONS = frozenset({"tap_no_navigation"})
 EXPECTED_MIN_VISITS = len(EXPECTED_ROOT_NAV_TEXT_ZH) + 1
@@ -210,7 +211,8 @@ def classify_root_coverage(
     """
     expected = list(base.get("expected", EXPECTED_ROOT_NAV_TEXT_ZH))
     visited = set(base.get("visited", ()))
-    entered = {label for label in expected if _label_entered(label, visits)}
+    graph_entered = set(base.get("entered_graph", ()))
+    entered = {label for label in expected if _label_entered(label, visits)} | graph_entered
     blocked: set[str] = set()
     for candidate in rejected_candidates:
         label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(str(_value(candidate, "text") or ""))
@@ -218,6 +220,7 @@ def classify_root_coverage(
             blocked.add(label)
     enriched = {key: list(value) for key, value in base.items()}
     enriched["entered"] = [label for label in expected if label in entered]
+    enriched["entered_graph"] = [label for label in expected if label in graph_entered]
     enriched["blocked"] = [label for label in expected if label in blocked]
     enriched["visible_only"] = [
         label for label in expected if label in visited and label not in entered and label not in blocked
@@ -227,7 +230,7 @@ def classify_root_coverage(
     # RootSection token; `*_display` renders the same coverage in the run's own
     # language so an en-HK report reads "Mobile Service", not "蜂窝网络".
     vocab = _active_section_vocab()
-    for key in ("expected", "visited", "missing", "entered", "blocked", "visible_only"):
+    for key in ("expected", "visited", "missing", "entered", "entered_graph", "blocked", "visible_only"):
         labels = enriched.get(key, [])
         enriched[f"{key}_ids"] = _section_ids(labels)
         enriched[f"{key}_display"] = _section_display(labels, vocab)
