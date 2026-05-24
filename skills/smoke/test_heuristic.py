@@ -60,6 +60,27 @@ def test_status_bar_time_with_trailing_glyph():
 
 
 @pytest.mark.smoke
+@pytest.mark.parametrize("clock", ["8:55", "8:55C", "9:30"])
+def test_status_bar_single_digit_hour_not_nav_back(clock):
+    """A 1-digit-hour clock (e.g. 8:55) must type as status_bar, never nav_back —
+    otherwise return-to-root recovery taps the clock instead of the chevron."""
+    el = _text_el(60, 30, 80, 28, clock)
+    scene = _scene([el])
+    HeuristicTyper(frame_size=(FRAME_W, FRAME_H)).upgrade(scene)
+    assert el.type == "status_bar"
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("glyph", ["<", "‹", "Back", "返回"])
+def test_real_back_glyph_still_nav_back(glyph):
+    """The time guard must not swallow genuine top-left Back affordances."""
+    el = _text_el(20, 70, 40, 30, glyph)
+    scene = _scene([el])
+    HeuristicTyper(frame_size=(FRAME_W, FRAME_H)).upgrade(scene)
+    assert el.type == "nav_back"
+
+
+@pytest.mark.smoke
 def test_status_bar_battery_percent():
     el = _text_el(FRAME_W - 100, 30, 60, 28, "87%")
     scene = _scene([el])

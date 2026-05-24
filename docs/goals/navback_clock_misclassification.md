@@ -1,6 +1,13 @@
 # Goal — Stop the status-bar clock being typed as a Back button
 
-Status: **open / ready to pick up**. Root cause located and reproduced 2026-05-24.
+Status: **complete** (2026-05-24). Fixed in core `glassbox/cognition/heuristic.py`:
+`rule_status_bar` now strips 1-digit-hour clocks via the shared
+`_STATUS_BAR_TIME_RE` (kept in sync with `scene._TIME_RE`), and `rule_nav_back`
+rejects time-pattern text as defense-in-depth. Regression tests added in
+`skills/smoke/test_heuristic.py` (1-digit clocks → status_bar; real back glyphs →
+nav_back). Full smoke 1103 passed, ruff clean. The optional recovery-selection
+hardening (#3 below) was not needed — fixing the type at the source resolves the
+live failure.
 
 ## Problem (live-reproduced)
 

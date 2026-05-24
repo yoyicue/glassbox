@@ -18,6 +18,7 @@ Design:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -26,6 +27,13 @@ from glassbox.cognition.base import ActionType, ElementType, Scene, UIElement
 
 if TYPE_CHECKING:
     pass
+
+# Status-bar clock pattern, tolerant of 1- or 2-digit hours ("8:55", "08:55"), a
+# dropped/garbled separator, and a trailing OCR glyph ("8:55C", moon emoji). Kept
+# in sync with glassbox.ios.scene._TIME_RE; defined here so the cognition layer
+# does not import upward from the iOS layer. A 1-digit hour previously slipped the
+# old hand-rolled HH:MM check and got mis-typed as a Back button.
+_STATUS_BAR_TIME_RE = re.compile(r"^\d{1,2}[:：.]?\d{2}[A-Za-z]?$")
 
 
 # ─── rule result ──────────────────────────────────────────────────────
@@ -63,11 +71,9 @@ def rule_status_bar(el: UIElement, frame_w: int, frame_h: int, **_) -> TypeGuess
     if not in_top_strip:
         return None
     text = (el.text or "").strip()
-    # time: 00:15, 23:56, 23:56C (a trailing moon emoji gets concatenated in by OCR)
-    is_time = (
-        len(text) >= 4
-        and text[:2].isdigit() and text[2] == ":" and text[3:5].isdigit()
-    )
+    # time: 8:55, 08:55, 23:56, 23:56C (1- or 2-digit hour; a trailing moon emoji
+    # gets concatenated in by OCR). Must strip here so rule_nav_back can't grab it.
+    is_time = bool(_STATUS_BAR_TIME_RE.match(text))
     has_percent = "%" in text
     has_signal = text.upper() in {"5G", "4G", "LTE", "3G"}
     if is_time or has_percent or has_signal:
@@ -83,6 +89,11 @@ def rule_nav_back(el: UIElement, frame_w: int, frame_h: int, **_) -> TypeGuess |
     in_top_bar = el.box.y2 < 110
     on_left = el.box.x < frame_w * 0.15
     text = (el.text or "").strip()
+    # Defense-in-depth: the status-bar clock sits top-left and OCRs as a short
+    # token ("8:55", "8:55C"); it must never be typed as a Back button even if the
+    # status-bar strip missed it (e.g. rule reordering).
+    if _STATUS_BAR_TIME_RE.match(text):
+        return None
     is_back_glyph = text in ("<", "‹", "←", "Back", "返回", "取消", "Cancel", "Close", "×", "✕", "X")
     short_label = 0 < len(text) <= 5
     if in_top_bar and on_left and (is_back_glyph or short_label):
