@@ -21,6 +21,7 @@ from skills.regression.ios_settings.policy import (
     EXPECTED_ROOT_NAV_TEXT_ZH,
     FAILURE_CATEGORY_KEYS,
     ROOT_COVERAGE_ONLY_LABELS,
+    detect_device_unavailable_root_labels,
 )
 from skills.regression.ios_settings.reporting import (
     EXPECTED_BLOCKED_REASONS,
@@ -116,6 +117,10 @@ def validate_report(
     """Return human-readable validation errors. Empty list means pass."""
     errors: list[str] = []
     entry_exempt = entry_exempt_root_labels(device_unavailable_root)
+    # Auto-exempt sections this device demonstrably cannot open (e.g. 蜂窝网络 on a
+    # no-SIM phone), inferred from the report's own captured text — so an
+    # exhaustive run passes without a manual --device-unavailable-root flag.
+    entry_exempt |= detect_device_unavailable_root_labels(report.get("visits") or [])
 
     if expected_run_id is not None and report.get("run_id") != expected_run_id:
         errors.append("report run_id does not match expected run")

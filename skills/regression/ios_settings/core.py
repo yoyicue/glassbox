@@ -758,6 +758,7 @@ def _navigation_actions() -> settings_navigation.SettingsNavigationActions:
         wheel_scroll_up=_wheel_scroll_up,
         wheel_scroll_down=_wheel_scroll_down,
         root_coverage=_root_coverage,
+        entry_exempt_sections=_entry_exempt_sections,
         open_root_label_via_search=_open_root_label_via_search,
         record_navigation_failure=_record_navigation_failure,
         crawl_current_page=_crawl_current_page,
@@ -856,6 +857,16 @@ def _canonical_expected_root_label(text: str) -> str | None:
 
 def _root_coverage(visits: list[PageVisit]) -> dict[str, list[str]]:
     return settings_page_records.root_coverage(visits)
+
+
+def _entry_exempt_sections(visits: list[PageVisit]) -> set[str]:
+    """Canonical root labels the crawl should not keep chasing: coverage-only by
+    design (e.g. 钱包) plus device-unavailable inferred from seen text (e.g.
+    蜂窝网络 on a no-SIM phone). Reported coverage is unchanged — this only stops
+    the multi-pass reset + search recovery from re-scanning unreachable rows."""
+    return set(settings_policy.ROOT_COVERAGE_ONLY_LABELS) | (
+        settings_policy.detect_device_unavailable_root_labels(visits)
+    )
 
 
 def _blocked_child_navigation_reason(scene) -> str | None:

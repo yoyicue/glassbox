@@ -45,6 +45,7 @@ class SettingsNavigationActions:
     wheel_scroll_up: Callable[[Any], None]
     wheel_scroll_down: Callable[[Any], None]
     root_coverage: Callable[[list[PageVisit]], dict[str, list[str]]]
+    entry_exempt_sections: Callable[[list[PageVisit]], set[str]]
     open_root_label_via_search: Callable[[Any, str], bool]
     record_navigation_failure: Callable[..., None]
     crawl_current_page: Callable[..., None]
@@ -311,9 +312,10 @@ def crawl_missing_root_pages_via_search(
     if getattr(phone, "_ios_settings_search_unavailable", False):
         limits_hit.add("settings_search_unavailable")
         return
+    exempt = actions.entry_exempt_sections(visits)
     for label in actions.expected_root_labels:
-        if label not in actions.root_coverage(visits)["missing"]:
-            continue
+        if label not in actions.root_coverage(visits)["missing"] or label in exempt:
+            continue  # device-unavailable / coverage-only → never searchable
         print(f"[ios_settings] search root page {label}", flush=True)
         if not actions.open_root_label_via_search(phone, label):
             actions.record_navigation_failure(
@@ -602,17 +604,25 @@ def crawl_current_page(
             # pass's fling lands on different rows, and `attempted` dedups the
             # rows already entered, so the union converges without depending on
             # the brittle Settings-search recovery. Bounded by max_root_scroll_resets.
+            # Only required sections drive another pass. Coverage-only (e.g. 钱包)
+            # and device-unavailable (e.g. 蜂窝网络 on a no-SIM phone, detected
+            # from seen text) can never be entered, so re-scanning for them is pure
+            # waste — stop once only those remain.
+            required_missing = [
+                label
+                for label in actions.root_coverage(visits)["missing"]
+                if label not in actions.entry_exempt_sections(visits)
+            ]
             if (
                 depth == 0
                 and actions.scroll_to_top is not None
                 and root_resets < actions.max_root_scroll_resets
-                and actions.root_coverage(visits)["missing"]
+                and required_missing
             ):
                 root_resets += 1
-                missing = actions.root_coverage(visits)["missing"]
                 print(
                     f"[ios_settings] root scroll reset pass={root_resets} "
-                    f"missing={missing}",
+                    f"missing={required_missing}",
                     flush=True,
                 )
                 actions.scroll_to_top(phone)

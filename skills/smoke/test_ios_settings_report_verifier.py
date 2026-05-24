@@ -6,6 +6,7 @@ import pytest
 
 from skills.regression.ios_settings.policy import (
     EXPECTED_ROOT_NAV_TEXT_ZH,
+    detect_device_unavailable_root_labels,
 )
 from skills.regression.ios_settings.reporting import (
     PageVisit,
@@ -122,6 +123,48 @@ def test_ios_settings_report_verifier_requires_run_id_in_strict_mode():
         "run_id" in error
         for error in validate_report(missing, require_exhaustive=False)
     )
+
+
+@pytest.mark.smoke
+def test_detect_device_unavailable_root_labels_no_sim():
+    """A 'No SIM' marker in seen text → 蜂窝网络 is device-unavailable; without it,
+    Cellular stays required (so a SIM'd device is unaffected)."""
+    assert detect_device_unavailable_root_labels(
+        [{"texts": ["Mobile Service", "No SIM"]}]
+    ) == {"蜂窝网络"}
+    assert detect_device_unavailable_root_labels(
+        [{"texts": ["Mobile Service", "中国移动"]}]
+    ) == set()
+
+
+def _report_without_cellular(*, root_texts):
+    visits = [
+        {"path": ["Settings"], "title": "设置", "texts": root_texts},
+        *[
+            {"path": ["Settings", label], "title": label, "texts": [label, "body line"]}
+            for label in EXPECTED_ROOT_NAV_TEXT_ZH
+            if label != "蜂窝网络"
+        ],
+    ]
+    return _report(visits=visits)
+
+
+@pytest.mark.smoke
+def test_verifier_auto_exempts_cellular_on_no_sim():
+    """No-SIM phone: 蜂窝网络 is unreachable and an exhaustive run must still pass,
+    with no manual --device-unavailable-root flag."""
+    report = _report_without_cellular(root_texts=["设置", "蜂窝网络", "No SIM"])
+    errors = validate_report(report)
+    assert not any("missing expected root pages" in e for e in errors), errors
+
+
+@pytest.mark.smoke
+def test_verifier_still_requires_cellular_when_no_marker():
+    """No no-SIM marker → 蜂窝网络 stays required, so a real nav regression is not
+    silently hidden."""
+    report = _report_without_cellular(root_texts=["设置", "蜂窝网络"])
+    errors = validate_report(report)
+    assert any("missing expected root pages" in e for e in errors)
 
 
 @pytest.mark.smoke

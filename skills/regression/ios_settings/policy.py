@@ -221,6 +221,31 @@ ROOT_COVERAGE_ONLY_LABELS = (
     "钱包与 Apple Pay",
     "Wallet & Apple Pay",
 )
+
+# A no-SIM iPhone shows one of these on the Mobile Service row and the row is
+# tap-inert (it does not open a detail page), so 蜂窝网络 is *device-unavailable*,
+# not a coverage miss. Detected from what the crawl actually saw — on a SIM'd
+# device none of these appear and Cellular stays a required, enterable section.
+_NO_SIM_MARKERS = (
+    "No SIM", "No SIM Card", "Insert a SIM",
+    "无 SIM", "无SIM", "未安装 SIM", "未插入 SIM", "无 SIM 卡",
+)
+
+
+def detect_device_unavailable_root_labels(visits) -> set[str]:
+    """Canonical root labels this *device* cannot open, inferred from seen text.
+
+    Today this is just 蜂窝网络 on a no-SIM device. Returns a set of canonical zh
+    labels so callers can treat them as entry-exempt without a manual flag."""
+    joined = "\n".join(
+        str(t)
+        for v in visits
+        for t in (getattr(v, "texts", None) if not isinstance(v, dict) else v.get("texts")) or ()
+    ).casefold()
+    out: set[str] = set()
+    if any(marker.casefold() in joined for marker in _NO_SIM_MARKERS):
+        out.add("蜂窝网络")
+    return out
 # Whole-label-only non-nav tokens. These are toggle/picker *state values*, not
 # topics: a row is non-navigational only when its ENTIRE label is the token.
 # Kept out of the substring tier (UNSAFE_OR_NON_NAV_TEXT) because as substrings
