@@ -501,7 +501,12 @@ def test_open_app_from_springboard_falls_back_to_spotlight_when_home_ocr_fails(m
     phone = FakePhone()
 
     assert open_app_from_springboard(phone, ("设置", "Settings"), settle_s=0.0)
+    # Cold-start scan retries home() while it makes progress (up to 3) before the
+    # Spotlight fallback; perceive never reports Home here, so it presses twice
+    # (2nd shows no progress -> stop), then Spotlight does its own home() press.
     assert phone.actions == [
+        ("home", None),
+        ("invalidate", None),
         ("home", None),
         ("invalidate", None),
         ("home", None),

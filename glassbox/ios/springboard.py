@@ -224,12 +224,29 @@ def _current_home_scene(phone) -> Scene | None:
     return scene if is_ios_home_screen(scene, viewport_size=_viewport_size(phone)) else None
 
 
-def _ensure_home_scene(phone, settle_s: float) -> Scene:
+def _ensure_home_scene(phone, settle_s: float, *, attempts: int = 1) -> Scene:
     scene = _current_home_scene(phone)
     if scene is not None:
         return scene
-    phone.home()
-    return _perceive_after_settle(phone, settle_s)
+    # A single home() can fail to reach a clean springboard from a dirty entry
+    # state (a foregrounded third-party app, a modal/permission sheet). Each
+    # press backgrounds the current surface, so retry — but only while a press
+    # keeps changing the screen: once home() stops making progress, more presses
+    # won't help, so fall through to the caller's wait/spotlight fallback.
+    scene = None
+    prev_sig = None
+    for i in range(max(1, attempts)):
+        phone.home()
+        scene = _perceive_after_settle(phone, settle_s)
+        if is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
+            if i:
+                print(f"[sb] reached Home after {i + 1} home() presses", flush=True)
+            return scene
+        sig = springboard_signature(scene)
+        if sig == prev_sig:
+            break  # another home() press did not change the screen
+        prev_sig = sig
+    return scene
 
 
 def _tap_icon_if_visible(
@@ -239,14 +256,33 @@ def _tap_icon_if_visible(
     *,
     settle_s: float,
 ) -> bool:
+    labels = tuple(labels)
     icon = find_springboard_icon(scene, labels, viewport_size=_viewport_size(phone))
     if icon is None:
+        print(f"[sb] ocr: no icon for {labels}", flush=True)
         return False
+    print(f"[sb] ocr: tap {labels} @{icon.tap_point}", flush=True)
     phone.tap_xy(*icon.tap_point)
     scene_after_tap = _perceive_after_settle(phone, settle_s)
     if is_ios_home_screen(scene_after_tap, viewport_size=_viewport_size(phone)):
+        print("[sb] ocr: tap stayed on Home", flush=True)
         return False
-    return _opened_expected_app_or_recover(phone, scene_after_tap, labels, settle_s=settle_s)
+    opened = _opened_expected_app_or_recover(phone, scene_after_tap, labels, settle_s=settle_s)
+    print(f"[sb] ocr: opened_expected={opened}", flush=True)
+    return opened
+
+
+# VLM icon-map builds are the only paid step in a SpringBoard scan. A multi-page
+# sweep would otherwise call build_icon_map once per Settings-less page (observed
+# ~1 build/page). Cap builds per cold-start scan; cache hits are free and do not
+# count. Reset at the start of each open_app_from_springboard scan.
+_ICON_MAP_BUILD_BUDGET = 4
+_icon_map_builds = 0
+
+
+def _reset_icon_map_build_budget() -> None:
+    global _icon_map_builds
+    _icon_map_builds = 0
 
 
 def _tap_icon_via_map_if_visible(
@@ -263,7 +299,10 @@ def _tap_icon_via_map_if_visible(
     VLM name them (cached per layout), and taps the matched cell. A tap that
     fails to leave Home invalidates the cached map for that layout.
     """
+    labels = tuple(labels)
     if icon_map is None or getattr(phone, "kimi", None) is None:
+        print(f"[sb] vlm-map: disabled (icon_map={icon_map is not None}, "
+              f"kimi={getattr(phone, 'kimi', None) is not None})", flush=True)
         return False
     from glassbox.cognition.icon_detect import detect_icons_voted
     from glassbox.ios.springboard_map import build_icon_map, match_entry
@@ -271,34 +310,49 @@ def _tap_icon_via_map_if_visible(
     try:
         frame = phone.snapshot()
     except Exception:
+        print("[sb] vlm-map: snapshot failed", flush=True)
         return False
     text_boxes = tuple(
         (e.box.x, e.box.y, e.box.w, e.box.h) for e in scene.elements if e.box
     )
     regions = detect_icons_voted([frame.img], text_boxes=text_boxes, min_frames=1)
     if not regions:
+        print("[sb] vlm-map: no icon regions detected", flush=True)
         return False
 
+    global _icon_map_builds
     entries = icon_map.get(regions)
+    print(f"[sb] vlm-map: regions={len(regions)} cache={'hit' if entries is not None else 'miss'}", flush=True)
     if entries is None:
+        if _icon_map_builds >= _ICON_MAP_BUILD_BUDGET:
+            print(f"[sb] vlm-map: build budget exhausted ({_ICON_MAP_BUILD_BUDGET})", flush=True)
+            return False
+        _icon_map_builds += 1
         try:
             key, entries = build_icon_map([frame.img], vlm=phone.kimi, text_boxes=text_boxes)
         except Exception as exc:
             logger.warning(f"springboard icon-map build failed: {exc}")
+            print(f"[sb] vlm-map: build failed: {exc}", flush=True)
             return False
         icon_map.put(key, entries)
+        print(f"[sb] vlm-map: built {len(entries)} entries: {[e.app for e in entries][:10]}", flush=True)
 
     entry = match_entry(entries, labels)
     if entry is None:
+        print(f"[sb] vlm-map: no match for {labels} among {[e.app for e in entries][:10]}", flush=True)
         return False
+    print(f"[sb] vlm-map: tap {entry.app!r} @{entry.center}", flush=True)
     phone.tap_xy(*entry.center)
     after = _perceive_after_settle(phone, settle_s)
     if is_ios_home_screen(after, viewport_size=_viewport_size(phone)):
+        print("[sb] vlm-map: tap stayed on Home (invalidate)", flush=True)
         icon_map.invalidate(regions)        # tap stayed on Home → map drifted
         return False
     if not _opened_expected_app_or_recover(phone, after, labels, settle_s=settle_s):
+        print("[sb] vlm-map: opened non-target (invalidate)", flush=True)
         icon_map.invalidate(regions)
         return False
+    print(f"[sb] vlm-map: opened {entry.app!r} OK", flush=True)
     return True
 
 
@@ -607,11 +661,17 @@ def open_app_from_springboard(
     the OCR-label path — OCR cannot read Home icon labels reliably.
     """
     app_labels = tuple(labels)
+    _reset_icon_map_build_budget()
+    print(f"[sb] open_app_from_springboard start labels={app_labels}", flush=True)
 
-    scene = _ensure_home_scene(phone, settle_s)
+    # Cold-start scan may enter from a dirty state (foregrounded app, modal), so
+    # retry home() while it makes progress. The Spotlight path keeps the default
+    # single press (it works from any surface).
+    scene = _ensure_home_scene(phone, settle_s, attempts=3)
     if not is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
         waited = wait_for_ios_home_screen(phone, timeout=2.0)
         if waited is None:
+            print("[sb] could not reach Home → spotlight fallback", flush=True)
             return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
         scene = waited
     if _tap_icon_any(phone, scene, app_labels, icon_map=icon_map, settle_s=settle_s):
@@ -667,6 +727,7 @@ def open_app_from_springboard(
             break
         forward_seen.add(sig)
 
+    print("[sb] all page sweeps failed → spotlight fallback", flush=True)
     return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
 
 
