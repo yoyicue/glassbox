@@ -1,0 +1,293 @@
+{
+  "scene_type": "unknown",
+  "confidence": 0.2,
+  "page_id": null,
+  "title": null,
+  "safe_actions": [
+    "trace",
+    "vlm_on_uncertain"
+  ],
+  "evidence": [],
+  "signature": [
+    "10:39L",
+    "Face ID & Passcode",
+    "Manage apps using Face ID and other iPhone",
+    "access settings, set up alternative",
+    "appearances and change your passcode.",
+    "Learn more...",
+    "Use Face ID For",
+    "iPhone Unlock",
+    "iTunes & App Store",
+    "Contactless & Payments",
+    "Password AutoFill",
+    "iPhone can recognise the unique, three-dimensional"
+  ],
+  "texts": [
+    "10:39L",
+    "Face ID & Passcode",
+    "Manage apps using Face ID and other iPhone",
+    "access settings, set up alternative",
+    "appearances and change your passcode.",
+    "Learn more...",
+    "Use Face ID For",
+    "iPhone Unlock",
+    "iTunes & App Store",
+    "Contactless & Payments",
+    "Password AutoFill",
+    "iPhone can recognise the unique, three-dimensional",
+    "features of your face to allow secure access to apps and",
+    "payments. About Face ID & Privacy...",
+    "Set Up Face ID",
+    "Attention",
+    "Require Attention for Face ID",
+    "TrueDepth camera provides an additional level of security",
+    "by verifying that you're looking at iPhone before",
+    "authenticating. Attention detection may not work with",
+    "some sunglasses. Face ID will always require attention",
+    "whoniini ro woarinnsmacl"
+  ],
+  "elements": [
+    {
+      "type": "status_bar",
+      "text": "10:39L",
+      "box": [
+        48,
+        28,
+        70,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "Face ID & Passcode",
+      "box": [
+        40,
+        234,
+        204,
+        24
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Manage apps using Face ID and other iPhone",
+      "box": [
+        40,
+        264,
+        350,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "access settings, set up alternative",
+      "box": [
+        40,
+        288,
+        264,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "appearances and change your passcode.",
+      "box": [
+        40,
+        310,
+        322,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Learn more...",
+      "box": [
+        40,
+        332,
+        107,
+        17
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Use Face ID For",
+      "box": [
+        40,
+        398,
+        130,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "iPhone Unlock",
+      "box": [
+        36,
+        440,
+        118,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "iTunes & App Store",
+      "box": [
+        40,
+        494,
+        152,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Contactless & Payments",
+      "box": [
+        40,
+        548,
+        192,
+        20
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "Password AutoFill",
+      "box": [
+        40,
+        602,
+        140,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "iPhone can recognise the unique, three-dimensional",
+      "box": [
+        40,
+        648,
+        324,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "features of your face to allow secure access to apps and",
+      "box": [
+        40,
+        662,
+        348,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "payments. About Face ID & Privacy...",
+      "box": [
+        40,
+        680,
+        228,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Set Up Face ID",
+      "box": [
+        40,
+        740,
+        116,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Attention",
+      "box": [
+        40,
+        813,
+        76,
+        17
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Require Attention for Face ID",
+      "box": [
+        40,
+        858,
+        222,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "TrueDepth camera provides an additional level of security",
+      "box": [
+        40,
+        900,
+        356,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "by verifying that you're looking at iPhone before",
+      "box": [
+        40,
+        916,
+        298,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "authenticating. Attention detection may not work with",
+      "box": [
+        40,
+        932,
+        332,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "some sunglasses. Face ID will always require attention",
+      "box": [
+        40,
+        950,
+        336,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "whoniini ro woarinnsmacl",
+      "box": [
+        40,
+        968,
+        174,
+        6
+      ],
+      "confidence": 0.5
+    }
+  ]
+}

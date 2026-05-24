@@ -17,6 +17,7 @@ from typing import Any
 
 from glassbox.cognition import Box, UIElement
 from skills.regression.ios_settings import reporting as settings_reporting
+from skills.regression.ios_settings import scene_state as settings_scene_state
 from skills.regression.ios_settings.recovery import SettingsRootUnreachable
 
 PageVisit = settings_reporting.PageVisit
@@ -232,12 +233,18 @@ def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActio
             unknown_policy="retry",
             idempotent=True,
         )
-        return actions.record_action_verdict(phone, result)
+        accepted = actions.record_action_verdict(phone, result)
+        if accepted:
+            settings_scene_state.record_settings_row_tap(phone, label)
+        return accepted
     # Fallback for phones without the actuation path (e.g. MockEffector in tests).
     x, row_y = settings_row_tap_point(phone, row_hit)
     with actions.action_intent(phone, "settings.tap_row", text=row_hit.text, x=x, y=row_y):
         result = phone.tap_xy(x, row_y)
-    return actions.record_action_verdict(phone, result)
+    accepted = actions.record_action_verdict(phone, result)
+    if accepted:
+        settings_scene_state.record_settings_row_tap(phone, label)
+    return accepted
 
 
 def _observed_path_label(

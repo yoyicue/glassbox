@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from glassbox.cognition import Box, Scene, UIElement
 from glassbox.ios.scene import apply_ios_classification, classify_ios_scene
+
+_GOLDEN_IOS_SCENE_DIR = Path(__file__).parents[1] / "golden" / "ios_scene" / "drill_aftersim"
 
 
 def _el(text: str, x: int, y: int, w: int = 80, h: int = 20, *, ty: str = "text") -> UIElement:
@@ -12,6 +17,44 @@ def _el(text: str, x: int, y: int, w: int = 80, h: int = 20, *, ty: str = "text"
 
 def _scene(*elements: UIElement) -> Scene:
     return Scene(frame_id=0, timestamp=0.0, elements=list(elements))
+
+
+def _scene_from_ocr_fixture(name: str) -> Scene:
+    payload = json.loads((_GOLDEN_IOS_SCENE_DIR / name).read_text(encoding="utf-8"))
+    elements = []
+    for raw in payload["elements"]:
+        x, y, w, h = raw["box"]
+        elements.append(
+            UIElement(
+                type=raw.get("type") or "text",
+                box=Box(x=x, y=y, w=w, h=h),
+                text=raw.get("text"),
+                confidence=float(raw.get("confidence", 1.0)),
+            )
+        )
+    return Scene(frame_id=0, timestamp=0.0, elements=elements)
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("fixture_name", "expected_title"),
+    [
+        ("view_0002.ocr.json", "WLAN"),
+        ("view_0007.ocr.json", "Bluetooth"),
+        ("view_0012.ocr.json", "Silent Mode"),
+        ("view_0025.ocr.json", "Face ID & Passcode"),
+        ("view_0029.ocr.json", "Privacy & Security"),
+    ],
+)
+def test_ios_scene_classifier_real_drill_detail_fixtures(fixture_name: str, expected_title: str):
+    scene = _scene_from_ocr_fixture(fixture_name)
+
+    classified = classify_ios_scene(scene)
+
+    assert classified.kind == "settings_detail"
+    assert classified.title == expected_title
+    assert "back" in classified.safe_actions
+    assert "semantic_settings_detail" in classified.evidence
 
 
 @pytest.mark.smoke

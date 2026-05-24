@@ -93,6 +93,24 @@ SETTINGS_HEALTH_DATA_MARKERS = (
 )
 HOME_SEARCH_LABELS = SETTINGS_SEARCH_LABELS
 _TIME_RE = re.compile(r"^\d{1,2}[:：.]?\d{2}[A-Za-z]?$")
+SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS = (
+    "无线局域网", "Wi-Fi", "WLAN", "蓝牙", "Bluetooth", "蜂窝网络", "Cellular",
+    "通知", "Notifications", "声音", "Sounds", "专注", "Focus",
+    "屏幕使用时间", "Screen Time", "通用", "General", "辅助功能", "Accessibility",
+    "操作按钮", "Action Button", "静音模式", "Silent Mode",
+    "面容ID", "Face ID", "Passcode", "密码", "隐私", "Privacy",
+    "Location Services", "Tracking", "Calendars", "Contacts", "Files & Folders",
+    "Devices", "iPhone Unlock", "Password AutoFill",
+)
+SETTINGS_DETAIL_SEMANTIC_COPY_MARKERS = (
+    "connect to", "view available networks", "manage settings", "nearby hotspots",
+    "learn more", "discoverable", "settings is open", "pair an apple watch",
+    "manage apps", "access settings", "change your passcode", "use face id",
+    "control which apps", "access your data", "location, camera", "microphone",
+    "safety protections", "switch between", "silent and ring", "alerts",
+    "接入", "可用网络", "附近热点", "进一步了解", "访问", "默认", "管理",
+    "控制哪些", "定位服务", "麦克风", "安全保护",
+)
 
 
 @dataclass(frozen=True)
@@ -115,6 +133,14 @@ class IOSSceneClassification:
             safe_actions=self.safe_actions,
             evidence=self.evidence,
         )
+
+
+@dataclass(frozen=True)
+class IOSSceneSemanticGuess:
+    kind: str
+    confidence: float
+    title: str | None = None
+    evidence: tuple[str, ...] = field(default_factory=tuple)
 
 
 def classify_ios_scene(
@@ -174,15 +200,6 @@ def classify_ios_scene(
             evidence=("suggestions_title", "app_category", "bottom_search_chrome"),
         )
 
-    if _looks_like_springboard(scene, viewport_size=(w, h)):
-        return IOSSceneClassification(
-            kind="springboard",
-            confidence=0.82,
-            title=title,
-            safe_actions=("scan_icons", "search_app"),
-            evidence=("icon_grid",),
-        )
-
     if _looks_like_settings_search_results(scene, viewport_size=(w, h)):
         return IOSSceneClassification(
             kind="settings_search_results",
@@ -190,15 +207,6 @@ def classify_ios_scene(
             title=title,
             safe_actions=("clear_search", "tap_settings_tab", "tap_root_result"),
             evidence=("search_result_rows",),
-        )
-
-    if _has_settings_search_chrome(scene, viewport_size=(w, h)):
-        return IOSSceneClassification(
-            kind="settings_search_home",
-            confidence=0.86,
-            title=title,
-            safe_actions=("clear_search", "tap_settings_tab", "type_query"),
-            evidence=("bottom_search_chrome",),
         )
 
     blocked = _blocked_safety_marker(scene)
@@ -209,6 +217,35 @@ def classify_ios_scene(
             title=title,
             safe_actions=("record_blocked",),
             evidence=(blocked,),
+        )
+
+    semantic_detail = settings_detail_semantic_guess(scene, viewport_size=(w, h))
+    if semantic_detail is not None:
+        return IOSSceneClassification(
+            kind="settings_detail",
+            confidence=semantic_detail.confidence,
+            page_id=f"settings/{semantic_detail.title}" if semantic_detail.title else None,
+            title=semantic_detail.title or title,
+            safe_actions=("back", "edge_back"),
+            evidence=semantic_detail.evidence,
+        )
+
+    if _looks_like_springboard(scene, viewport_size=(w, h)):
+        return IOSSceneClassification(
+            kind="springboard",
+            confidence=0.82,
+            title=title,
+            safe_actions=("scan_icons", "search_app"),
+            evidence=("icon_grid",),
+        )
+
+    if _has_settings_search_chrome(scene, viewport_size=(w, h)):
+        return IOSSceneClassification(
+            kind="settings_search_home",
+            confidence=0.86,
+            title=title,
+            safe_actions=("clear_search", "tap_settings_tab", "type_query"),
+            evidence=("bottom_search_chrome",),
         )
 
     if _looks_like_settings_detail(scene, viewport_size=(w, h)):
@@ -481,6 +518,206 @@ def _harness_console_evidence(scene: Scene) -> tuple[str, ...] | None:
     if len(hits) >= 2:
         return tuple(hits)
     return None
+
+
+def settings_detail_semantic_guess(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+) -> IOSSceneSemanticGuess | None:
+    """Classify ambiguous iOS Settings detail pages from OCR text and geometry.
+
+    This is deliberately a fallback, not a replacement for hard scene gates:
+    root/search/blocked/App Library/Home evidence wins before this can return.
+    """
+    w, h = _scene_size(scene, viewport_size)
+    if (
+        _blocked_safety_marker(scene) is not None
+        or _is_settings_root(scene, viewport_size=(w, h))
+        or _has_settings_search_chrome(scene, viewport_size=(w, h))
+        or _looks_like_settings_search_results(scene, viewport_size=(w, h))
+        or _looks_like_system_search(scene, viewport_size=(w, h))
+        or _app_library_evidence(scene, viewport_size=(w, h)) is not None
+        or _has_strong_home_evidence(scene, viewport_size=(w, h))
+    ):
+        return None
+
+    visible = [
+        el for el in scene.elements
+        if _text(el)
+        and el.type != "status_bar"
+        and not _TIME_RE.match(_text(el))
+        and 0 <= el.box.center[1] <= h
+    ]
+    if not visible:
+        return None
+
+    joined = "\n".join(_text(el) for el in visible).casefold()
+    noun_hits = _semantic_marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS)
+    copy_hits = _semantic_marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_COPY_MARKERS)
+    title = _semantic_detail_title_candidate(visible, viewport_size=(w, h))
+    has_back = _has_back_affordance(scene)
+    intro_copy_lines = sum(
+        1 for el in visible
+        if h * 0.10 <= el.box.center[1] <= h * 0.78
+        and (el.box.w >= w * 0.42 or len(_text(el)) >= 24)
+    )
+    left_rows = sum(
+        1 for el in visible
+        if h * 0.14 <= el.box.center[1] <= h * 0.97
+        and el.box.center[0] <= w * 0.48
+        and len(_text(el)) <= 36
+    )
+    grouped_rows = _semantic_grouped_row_bins(visible, viewport_size=(w, h))
+
+    evidence: list[str] = ["semantic_settings_detail"]
+    if title:
+        evidence.append("semantic_title")
+    if has_back:
+        evidence.append("back_affordance")
+    if noun_hits:
+        evidence.append(f"settings_nouns:{min(noun_hits, 4)}")
+    if copy_hits:
+        evidence.append(f"settings_copy:{min(copy_hits, 4)}")
+    if intro_copy_lines:
+        evidence.append(f"intro_copy:{min(intro_copy_lines, 4)}")
+    if grouped_rows:
+        evidence.append(f"grouped_rows:{min(grouped_rows, 6)}")
+
+    score = 0
+    score += 3 if title else 0
+    score += 3 if copy_hits else 0
+    score += 2 if noun_hits else 0
+    score += 2 if has_back else 0
+    score += 1 if intro_copy_lines else 0
+    score += 1 if left_rows >= 2 else 0
+    score += 1 if grouped_rows >= 3 else 0
+
+    if has_back and (copy_hits or noun_hits >= 2) and score >= 6:
+        return IOSSceneSemanticGuess(
+            kind="settings_detail",
+            confidence=0.80,
+            title=title,
+            evidence=tuple(evidence),
+        )
+    if title and copy_hits and noun_hits and intro_copy_lines and score >= 8:
+        return IOSSceneSemanticGuess(
+            kind="settings_detail",
+            confidence=0.76,
+            title=title,
+            evidence=tuple(evidence),
+        )
+    if title and copy_hits >= 2 and intro_copy_lines and (left_rows >= 2 or grouped_rows >= 3):
+        return IOSSceneSemanticGuess(
+            kind="settings_detail",
+            confidence=0.74,
+            title=title,
+            evidence=tuple(evidence),
+        )
+    return None
+
+
+def has_strong_ios_home_evidence(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+) -> bool:
+    return _has_strong_home_evidence(scene, viewport_size=_scene_size(scene, viewport_size))
+
+
+def _semantic_marker_hits(joined_casefold: str, markers: Iterable[str]) -> int:
+    hits = 0
+    seen: set[str] = set()
+    for marker in markers:
+        compact = marker.casefold()
+        if compact and compact not in seen and compact in joined_casefold:
+            seen.add(compact)
+            hits += 1
+    return hits
+
+
+def _semantic_detail_title_candidate(
+    visible: list[UIElement],
+    *,
+    viewport_size: tuple[int, int],
+) -> str | None:
+    w, h = viewport_size
+    candidates: list[UIElement] = []
+    ignored = {"编辑", "Edit", "完成", "Done", "搜索", "Search", "Q Search", "Q 搜索"}
+    for el in visible:
+        text = _text(el)
+        if not text or text in ignored or len(text) > 32:
+            continue
+        semantic_chars = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff& ]+", "", text).strip()
+        if len(semantic_chars) < 3:
+            continue
+        cx, cy = el.box.center
+        if not (h * 0.11 <= cy <= h * 0.72):
+            continue
+        if cx <= w * 0.56 or abs(cx - w / 2) <= w * 0.22:
+            candidates.append(el)
+    if not candidates:
+        return None
+    candidates.sort(key=lambda el: (el.box.center[1], abs(el.box.center[0] - w / 2), -el.box.w))
+    return _text(candidates[0])
+
+
+def _semantic_grouped_row_bins(
+    visible: list[UIElement],
+    *,
+    viewport_size: tuple[int, int],
+) -> int:
+    w, h = viewport_size
+    bins: set[int] = set()
+    for el in visible:
+        text = _text(el)
+        cx, cy = el.box.center
+        if not text or cy < h * 0.18 or cy > h * 0.97:
+            continue
+        if (
+            (cx <= w * 0.58 and len(text) <= 36)
+            or (cx >= w * 0.56 and len(text) <= 28 and not text_contains(text, "Search"))
+        ):
+            bins.add(round(cy / max(1, h * 0.055)))
+    return len(bins)
+
+
+def _has_strong_home_evidence(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:
+    w, h = viewport_size
+    if _app_library_evidence(scene, viewport_size=(w, h)) is not None:
+        return True
+    has_bottom_home_search = any(
+        _is_home_search_pill_text(_text(el))
+        and el.box.center[1] > h * 0.78
+        for el in scene.elements
+    )
+    if not has_bottom_home_search:
+        return False
+    labels = [
+        el for el in scene.elements
+        if _text(el)
+        and el.type not in {"status_bar", "nav_back", "tab_bar_item"}
+        and h * 0.12 <= el.box.center[1] <= h * 0.80
+        and el.box.w <= w * 0.45
+        and el.box.h <= h * 0.08
+        and len(_text(el)) <= 18
+    ]
+    if len(labels) < 4:
+        return False
+    rows = len({round(el.box.center[1] / max(1, h * 0.11)) for el in labels})
+    cols = len({round(el.box.center[0] / max(1, w * 0.18)) for el in labels})
+    spread_x = max(el.box.center[0] for el in labels) - min(el.box.center[0] for el in labels)
+    return rows >= 2 and cols >= 2 and spread_x >= w * 0.34
+
+
+def _is_home_search_pill_text(text: str) -> bool:
+    compact = re.sub(r"\s+", "", text)
+    if "搜索App" in compact or "SearchApp" in compact:
+        return False
+    return (
+        compact in {"搜索", "Q搜索", "Search", "QSearch"}
+        or _matches(text, HOME_SEARCH_LABELS, fuzzy=0.86)
+    )
 
 
 def _looks_like_settings_detail(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:
@@ -858,6 +1095,8 @@ def _looks_like_springboard(scene: Scene, *, viewport_size: tuple[int, int]) -> 
     if _looks_like_settings_health_data_detail(scene, viewport_size=(w, h)):
         return False
     if _looks_like_settings_detail_body(scene, viewport_size=(w, h)):
+        return False
+    if settings_detail_semantic_guess(scene, viewport_size=(w, h)) is not None:
         return False
     labels: list[UIElement] = []
     for el in scene.elements:

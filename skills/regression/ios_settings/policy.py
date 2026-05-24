@@ -18,6 +18,7 @@ from glassbox.ios.scene import (
     SETTINGS_TITLE_LABELS,
     IOSSceneClassification,
     classify_ios_scene,
+    settings_detail_semantic_guess,
 )
 
 ROOT_TITLE = SETTINGS_TITLE_LABELS
@@ -388,8 +389,13 @@ class SettingsPolicy:
         viewport_size: tuple[int, int] | None = None,
     ) -> bool:
         classified = self.classify_scene(scene, viewport_size=viewport_size)
-        if classified is not None and classified.kind != "unknown":
-            return classified.kind == "settings_detail"
+        if classified is not None:
+            if classified.kind == "settings_detail":
+                return True
+            if classified.kind in {"springboard", "springboard_or_app_library"}:
+                return settings_detail_semantic_guess(scene, viewport_size=viewport_size) is not None
+            if classified.kind != "unknown":
+                return False
         if self.scene_is_settings_root(scene, viewport_size=viewport_size) or self.is_settings_search_scene(
             scene,
             viewport_size=viewport_size,

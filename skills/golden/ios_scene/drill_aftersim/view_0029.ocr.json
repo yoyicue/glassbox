@@ -1,0 +1,307 @@
+{
+  "scene_type": "springboard",
+  "confidence": 0.82,
+  "page_id": null,
+  "title": null,
+  "safe_actions": [
+    "scan_icons",
+    "search_app"
+  ],
+  "evidence": [
+    "icon_grid"
+  ],
+  "signature": [
+    "10:39",
+    "I!I,",
+    "Privacy & Security",
+    "Control which apps can access your data,",
+    "location, camera and microphone, and manage",
+    "safety protections. Learn more...",
+    "Location Services",
+    "4 while using",
+    "Tracking",
+    "0",
+    ">",
+    "Calendars"
+  ],
+  "texts": [
+    "10:39",
+    "I!I,",
+    "Privacy & Security",
+    "Control which apps can access your data,",
+    "location, camera and microphone, and manage",
+    "safety protections. Learn more...",
+    "Location Services",
+    "4 while using",
+    "Tracking",
+    "0",
+    ">",
+    "Calendars",
+    "None",
+    "Contacts",
+    "None",
+    "Files & Folders",
+    "2apps",
+    "Focus",
+    "None",
+    "Health Data",
+    "None",
+    "Home",
+    "1 app"
+  ],
+  "elements": [
+    {
+      "type": "status_bar",
+      "text": "10:39",
+      "box": [
+        48,
+        28,
+        72,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "I!I,",
+      "box": [
+        56,
+        180,
+        34,
+        32
+      ],
+      "confidence": 0.3
+    },
+    {
+      "type": "button",
+      "text": "Privacy & Security",
+      "box": [
+        40,
+        250,
+        192,
+        26
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Control which apps can access your data,",
+      "box": [
+        40,
+        282,
+        326,
+        22
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "location, camera and microphone, and manage",
+      "box": [
+        38,
+        304,
+        366,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "safety protections. Learn more...",
+      "box": [
+        40,
+        326,
+        252,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Location Services",
+      "box": [
+        82,
+        414,
+        138,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "4 while using",
+      "box": [
+        80,
+        435,
+        78,
+        12
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "list_item",
+      "text": "Tracking",
+      "box": [
+        80,
+        482,
+        68,
+        20
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "0",
+      "box": [
+        372,
+        482,
+        14,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": ">",
+      "box": [
+        394,
+        482,
+        12,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Calendars",
+      "box": [
+        80,
+        570,
+        82,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "None",
+      "box": [
+        80,
+        592,
+        34,
+        10
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "Contacts",
+      "box": [
+        80,
+        637,
+        74,
+        17
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "None",
+      "box": [
+        80,
+        660,
+        34,
+        10
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Files & Folders",
+      "box": [
+        80,
+        704,
+        116,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "2apps",
+      "box": [
+        80,
+        726,
+        42,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Focus",
+      "box": [
+        80,
+        772,
+        50,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "None",
+      "box": [
+        80,
+        794,
+        34,
+        12
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "Health Data",
+      "box": [
+        80,
+        840,
+        94,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "None",
+      "box": [
+        80,
+        862,
+        34,
+        12
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Home",
+      "box": [
+        80,
+        908,
+        50,
+        19
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "1 app",
+      "box": [
+        80,
+        930,
+        34,
+        12
+      ],
+      "confidence": 1.0
+    }
+  ]
+}

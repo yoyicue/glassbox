@@ -186,6 +186,7 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
     phone, settings_core._ACTIVE_TRACE = settings_core._wrap_phone_with_trace_if_enabled(phone)
     trace = settings_core._ACTIVE_TRACE
     settings_vlm_rows.reset_row_state()
+    settings_scene_state.reset_scene_context_state()
 
     visits: list[settings_reporting.PageVisit] = []
     blocked_pages: list[settings_reporting.BlockedPage] = []

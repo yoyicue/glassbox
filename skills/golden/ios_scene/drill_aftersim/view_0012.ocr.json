@@ -1,0 +1,69 @@
+{
+  "scene_type": "unknown",
+  "confidence": 0.2,
+  "page_id": null,
+  "title": null,
+  "safe_actions": [
+    "trace",
+    "vlm_on_uncertain"
+  ],
+  "evidence": [],
+  "signature": [
+    "10:38 €",
+    "Silent Mode",
+    "Switch between Silent and Ring for calls",
+    "and alerts."
+  ],
+  "texts": [
+    "10:38 €",
+    "Silent Mode",
+    "Switch between Silent and Ring for calls",
+    "and alerts."
+  ],
+  "elements": [
+    {
+      "type": "button",
+      "text": "10:38 €",
+      "box": [
+        48,
+        28,
+        70,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Silent Mode",
+      "box": [
+        146,
+        608,
+        158,
+        26
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Switch between Silent and Ring for calls",
+      "box": [
+        80,
+        648,
+        288,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "and alerts.",
+      "box": [
+        186,
+        666,
+        78,
+        17
+      ],
+      "confidence": 1.0
+    }
+  ]
+}

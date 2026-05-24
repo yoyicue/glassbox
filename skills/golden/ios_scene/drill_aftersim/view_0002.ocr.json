@@ -1,0 +1,259 @@
+{
+  "scene_type": "springboard",
+  "confidence": 0.82,
+  "page_id": null,
+  "title": null,
+  "safe_actions": [
+    "scan_icons",
+    "search_app"
+  ],
+  "evidence": [
+    "icon_grid"
+  ],
+  "signature": [
+    "10:37 €",
+    "Edit",
+    "WLAN",
+    "Connect to WLAN, view available networks,",
+    "and manage settings for joining networks and",
+    "nearby hotspots. Learn more...",
+    "V kacier",
+    "•",
+    "My Networks",
+    "kacier_iptv",
+    "Networks *",
+    "Other..."
+  ],
+  "texts": [
+    "10:37 €",
+    "Edit",
+    "WLAN",
+    "Connect to WLAN, view available networks,",
+    "and manage settings for joining networks and",
+    "nearby hotspots. Learn more...",
+    "WLAN",
+    "V kacier",
+    "•",
+    "My Networks",
+    "kacier_iptv",
+    "Networks *",
+    "Other...",
+    "Apps Using WLAN & Mobile Data",
+    "Enable WAPI",
+    "Ask to Join Networks",
+    "Notify >",
+    "Known networks will be joined automatically. If no known",
+    "astwarke are avallakils vanwillke natifind af ausilakle"
+  ],
+  "elements": [
+    {
+      "type": "button",
+      "text": "10:37 €",
+      "box": [
+        50,
+        28,
+        68,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "Edit",
+      "box": [
+        378,
+        80,
+        34,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "WLAN",
+      "box": [
+        40,
+        236,
+        68,
+        20
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Connect to WLAN, view available networks,",
+      "box": [
+        40,
+        262,
+        336,
+        24
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "and manage settings for joining networks and",
+      "box": [
+        40,
+        288,
+        352,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "nearby hotspots. Learn more...",
+      "box": [
+        40,
+        310,
+        238,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "WLAN",
+      "box": [
+        60,
+        362,
+        52,
+        19
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "V kacier",
+      "box": [
+        36,
+        415,
+        74,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "•",
+      "box": [
+        336,
+        418,
+        12,
+        12
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "My Networks",
+      "box": [
+        38,
+        480,
+        110,
+        21
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "kacier_iptv",
+      "box": [
+        58,
+        528,
+        90,
+        21
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Networks *",
+      "box": [
+        40,
+        589,
+        108,
+        25
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Other...",
+      "box": [
+        60,
+        641,
+        60,
+        17
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Apps Using WLAN & Mobile Data",
+      "box": [
+        40,
+        728,
+        258,
+        20
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Enable WAPI",
+      "box": [
+        40,
+        815,
+        102,
+        21
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Ask to Join Networks",
+      "box": [
+        40,
+        906,
+        166,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Notify >",
+      "box": [
+        340,
+        906,
+        68,
+        20
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Known networks will be joined automatically. If no known",
+      "box": [
+        40,
+        950,
+        350,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "astwarke are avallakils vanwillke natifind af ausilakle",
+      "box": [
+        42,
+        966,
+        332,
+        10
+      ],
+      "confidence": 1.0
+    }
+  ]
+}

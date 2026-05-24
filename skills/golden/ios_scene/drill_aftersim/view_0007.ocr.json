@@ -1,0 +1,185 @@
+{
+  "scene_type": "unknown",
+  "confidence": 0.2,
+  "page_id": null,
+  "title": null,
+  "safe_actions": [
+    "trace",
+    "vlm_on_uncertain"
+  ],
+  "evidence": [],
+  "signature": [
+    "10:37 C",
+    "Bluetooth",
+    "Connect to accessories you can use for",
+    "activities such as streaming music, making",
+    "phone calls and gaming. Learn more...",
+    "This iPhone is discoverable as",
+    "iPhone\" while Bluetooth",
+    "Settings is open.",
+    "Devices",
+    "%",
+    "To pair an Apple Watch with your iPhone, go to the Apple",
+    "Watch app."
+  ],
+  "texts": [
+    "10:37 C",
+    "Bluetooth",
+    "Connect to accessories you can use for",
+    "activities such as streaming music, making",
+    "phone calls and gaming. Learn more...",
+    "Bluetooth",
+    "This iPhone is discoverable as",
+    "iPhone\" while Bluetooth",
+    "Settings is open.",
+    "Devices",
+    "%",
+    "To pair an Apple Watch with your iPhone, go to the Apple",
+    "Watch app."
+  ],
+  "elements": [
+    {
+      "type": "button",
+      "text": "10:37 C",
+      "box": [
+        50,
+        28,
+        68,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "Bluetooth",
+      "box": [
+        40,
+        235,
+        104,
+        22
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Connect to accessories you can use for",
+      "box": [
+        42,
+        264,
+        306,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "activities such as streaming music, making",
+      "box": [
+        40,
+        282,
+        332,
+        25
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "phone calls and gaming. Learn more...",
+      "box": [
+        40,
+        310,
+        296,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "Bluetooth",
+      "box": [
+        40,
+        362,
+        78,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "This iPhone is discoverable as",
+      "box": [
+        40,
+        406,
+        186,
+        12
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "iPhone\" while Bluetooth",
+      "box": [
+        228,
+        404,
+        156,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Settings is open.",
+      "box": [
+        40,
+        422,
+        106,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Devices",
+      "box": [
+        40,
+        457,
+        66,
+        19
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "%",
+      "box": [
+        104,
+        456,
+        34,
+        22
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "To pair an Apple Watch with your iPhone, go to the Apple",
+      "box": [
+        40,
+        498,
+        352,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Watch app.",
+      "box": [
+        40,
+        516,
+        72,
+        12
+      ],
+      "confidence": 1.0
+    }
+  ]
+}
