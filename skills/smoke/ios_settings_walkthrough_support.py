@@ -53,6 +53,7 @@ _settings_wheel_ticks_per_swipe = settings_scrolling.settings_wheel_ticks_per_sw
 _wait_screen_settled = settings_scrolling.wait_screen_settled
 _reset_vlm_row_state = settings_vlm_rows.reset_row_state
 _vlm_recover_root_label = settings_vlm_rows.recover_root_label
+_vlm_point_for_label = settings_vlm_rows.vlm_point_for_label
 
 
 def _crawl_current_page(phone, **kwargs):

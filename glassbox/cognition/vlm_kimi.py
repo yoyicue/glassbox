@@ -26,9 +26,10 @@ Usage (M3b):
         scene = phone.perceive()                 # Layer 1 + Layer 2
         enrich_scene(scene, frame_img, kimi)     # Layer 3
 
-    **Do not let Kimi return click coordinates directly** (measured offset
-    ~100px); only let it label known elements. See scripts/probe_kimi_grounding.py
-    for the evidence.
+    **Do not let Kimi return click coordinates directly** in general or 2D
+    screens (measured offset ~100px); only let it label known elements. The
+    Settings 1D-list row-y fallback is the bounded, measured exception and still
+    flows through Settings row projection before actuation.
 
 → call only at key decision points, not every frame
 """

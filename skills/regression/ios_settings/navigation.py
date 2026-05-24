@@ -41,7 +41,9 @@ class SettingsNavigationActions:
     find_search_query_suggestion: Callable[[Any, str], UIElement | None]
     is_settings_search_scene: Callable[[Any], bool]
     scene_is_settings_root: Callable[[Any], bool]
+    scene_kind: Callable[[Any], str]
     match_any: Callable[..., UIElement | None]
+    vlm_point_for_label: Callable[..., UIElement | None]
     wheel_scroll_up: Callable[[Any], None]
     wheel_scroll_down: Callable[[Any], None]
     root_coverage: Callable[[list[PageVisit]], dict[str, list[str]]]
@@ -160,11 +162,21 @@ def open_visible_or_scroll_to_row(
     labels: Iterable[str],
     actions: SettingsNavigationActions,
 ) -> UIElement | None:
+    labels = tuple(labels)
+    if not labels:
+        return None
     for attempt in range(5):
         scene = phone.perceive()
         hit = actions.match_any(scene.elements, labels)
         if hit is not None:
             return hit
+        vlm_hit = actions.vlm_point_for_label(
+            phone,
+            labels[0],
+            scene_kind=actions.scene_kind(scene, phone=phone),
+        )
+        if vlm_hit is not None:
+            return vlm_hit
         print(f"[scroll] seek-row attempt={attempt}", flush=True)
         if attempt == 2:
             actions.wheel_scroll_up(phone)
@@ -489,6 +501,12 @@ def crawl_current_page(
                         and not actions.is_settings_section_header(current, e)
                     ]
                     relocated = actions.match_any(rows, [label])
+                if relocated is None:
+                    relocated = actions.vlm_point_for_label(
+                        phone,
+                        label,
+                        scene_kind=actions.scene_kind(current, phone=phone),
+                    )
                 if relocated is None:
                     continue
                 cand = relocated
