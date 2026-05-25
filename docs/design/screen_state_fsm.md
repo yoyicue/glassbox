@@ -1,8 +1,11 @@
 # Design — Screen-state FSM as the authoritative navigation model
 
-Status: **design / proposal**. Ties together three open goals
-(`inert_row_detection`, `scene_detail_misclassification`, and the coverage/
-efficiency work) under one model.
+Status: **implemented (shipped as P3, 2026-05-25)**. All three phases below
+shipped in `skills/regression/ios_settings/graph_state.py` and are live-validated
+on the en-HK rig (honest 15/17, `verify_report` exit 0). This doc is kept as the
+design rationale; the remaining forward work lives in
+`docs/goals/scene_detail_misclassification.md` (P4-P6). The interactability phase
+absorbed and retired the separate `inert_row_detection` goal.
 
 ## Motivation
 
@@ -101,8 +104,13 @@ this`, so it must be a detail child — regardless of the frame heuristic.
 - **Cold-start**: first-ever run on a layout has no graph → must degrade exactly
   to today's single-frame behavior.
 
-## Relationship to existing goals
+## Relationship to goals (all three phases shipped as P3)
 
-- `inert_row_detection` → Phase 1.
-- `scene_detail_misclassification` → Phase 2.
-- coverage/efficiency (no-SIM exemption already shipped) → Phase 3 generalizes it.
+- Phase 1 (inert rows from edges) — shipped; the former `inert_row_detection`
+  goal is folded in and removed.
+- Phase 2 (kind from graph + affordance) — shipped; the classification bug in
+  `scene_detail_misclassification` is resolved (that goal now holds only the
+  P4-P6 forward roadmap).
+- Phase 3 (graph-driven coverage/exploration) — shipped; generalizes the no-SIM
+  exemption. Remaining scroll efficiency is tracked in
+  `docs/goals/scroll_overshoot_efficiency.md`.
