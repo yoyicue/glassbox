@@ -6,30 +6,25 @@ execution, verification, recording, and screen memory behind pluggable seams.
 
 ## Why this approach: minimal intrusiveness
 
-glassbox is **out-of-band**: it observes through the iPhone's HDMI output and
-acts through a USB HID mouse/keyboard. No glassbox code runs on the phone.
-Compared with the usual iOS automation approaches, it changes the target device
-the least:
+glassbox is **out-of-band** — it observes via HDMI and acts via USB HID, with no
+code on the phone — so it changes the target device less than typical iOS
+automation:
 
-- **No app or test runner installed.** No WebDriverAgent / Appium / XCUITest
-  runner, no companion app, no sideloading.
-- **No jailbreak, provisioning profile, or developer account.** It runs against
-  a stock retail device on stock iOS.
-- **No code injection or instrumentation.** The target app runs completely
-  unmodified — glassbox sees exactly the rendered screen (HDMI) and acts exactly
-  as a physical pointer/keyboard would (HID).
-- **Only built-in settings, no software.** Control rides on AssistiveTouch plus
-  system keyboard shortcuts, so a few stock accessibility/display toggles must be
-  set first (see [iOS prerequisites](#ios-prerequisites-controlled-iphone)) — but
-  nothing is installed on the phone.
-- **Controller is off-device.** All perception/cognition/action logic runs on
-  macOS; the phone only mirrors video out and accepts HID in.
+- **No app or test runner.** No WebDriverAgent / Appium / XCUITest, no companion
+  app, no sideloading.
+- **No jailbreak, profile, or developer account.** Stock retail device, stock iOS.
+- **No code injection or instrumentation.** The app runs unmodified; glassbox
+  sees the rendered screen (HDMI) and acts as a physical pointer/keyboard (HID).
+- **Built-in settings only.** Control rides on AssistiveTouch + system keyboard
+  shortcuts, so a few stock toggles must be set first (see
+  [iOS prerequisites](#ios-prerequisites-controlled-iphone)) — nothing is installed.
+- **Controller off-device.** All logic runs on macOS; the phone only mirrors
+  video out and accepts HID in.
 
-The payoff is high-fidelity observations and actions with no test-harness
-artifacts and no anti-tamper / jailbreak-detection surface, so the rig is safe
-to point at apps you cannot or should not modify. The tradeoff is external
-capture hardware (the PicoKVM) and HID-pointer semantics instead of native
-multi-touch.
+The payoff: high-fidelity observation/action with no test-harness artifacts or
+jailbreak-detection surface, safe to point at apps you cannot or should not
+modify. The tradeoff: external capture hardware (the PicoKVM) and HID-pointer
+semantics instead of native multi-touch.
 
 ## Install
 
