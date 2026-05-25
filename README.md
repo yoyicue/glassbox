@@ -182,9 +182,12 @@ vocabulary, Settings label resolution, and report display all key off the active
 locale rather than being hard-coded to one language.
 
 - **Default `zh-Hans`, English switchable.** Set with `GLASSBOX_LANGUAGE`
-  (default `zh-Hans`) plus an optional `GLASSBOX_REGION` overlay. Chinese is the
-  currently validated default; flipping the production default to English is the
-  last migration step (see the design doc below).
+  (default `zh-Hans`) plus an optional `GLASSBOX_REGION` overlay, or per run with
+  the `run_full --language` / `--region` flags (which set those env vars for that
+  process only). Chinese is the currently validated default; flipping the
+  production default to English is the last migration step (see the design doc
+  below). Do not pin `GLASSBOX_LANGUAGE` in `.env` before that flip — it changes
+  the global default for every caller, including the test suite.
 - **OCR languages auto-select per locale.** A `zh-Hans` run drives Apple Vision
   with `("zh-Hans", "en-US")`; an `en-*` run uses English only — fewer languages
   reads cleaner and cheaper, since Latin OCR avoids CJK confusion.
@@ -200,8 +203,8 @@ locale rather than being hard-coded to one language.
 
 ```bash
 # Run the Settings audit against an English (Hong Kong) device.
-GLASSBOX_LANGUAGE=en GLASSBOX_REGION=HK \
-  uv run python -m skills.regression.ios_settings.run_full --drill-down
+uv run python -m skills.regression.ios_settings.run_full --drill-down \
+  --language en --region HK
 ```
 
 Full design and the phased migration plan live in
