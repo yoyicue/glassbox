@@ -230,6 +230,18 @@ def classify_ios_scene(
             evidence=semantic_detail.evidence,
         )
 
+    if _looks_like_purchase_paywall(scene, viewport_size=(w, h)):
+        # A foreign app's in-app-purchase paywall (e.g. a drifted-into RemoteAC).
+        # Not Home and not a Settings page: return unknown so recovery backs out
+        # instead of "tapping the Settings icon" (which could hit Subscribe).
+        return IOSSceneClassification(
+            kind="unknown",
+            confidence=0.30,
+            title=title,
+            safe_actions=("edge_back", "back", "trace"),
+            evidence=("purchase_paywall",),
+        )
+
     if _looks_like_springboard(scene, viewport_size=(w, h)):
         return IOSSceneClassification(
             kind="springboard",
@@ -1076,6 +1088,48 @@ def _app_library_evidence(scene: Scene, *, viewport_size: tuple[int, int]) -> tu
     if bottom_home_search:
         return None
     return ("app_library_categories",)
+
+
+# In-app purchase / subscription paywalls (a foreign app's, e.g. a drifted-into
+# RemoteAC) trip the SpringBoard icon-grid heuristic — feature bullets + plan
+# cards + a device mockup spread like an app grid. Misreading one as Home is a
+# SAFETY bug: bootstrap would "tap the Settings icon" and could hit Subscribe /
+# Continue, triggering a purchase. These commerce tokens never appear on the iOS
+# Home screen, so they veto SpringBoard (the frame then falls through to unknown,
+# whose recovery backs out instead of tapping content).
+_PAYWALL_PRICE_RE = re.compile(
+    r"[$¥€£₩]\s?\d"
+    r"|\b(?:hk|us)\$|\b(?:rmb|cny|usd|eur|gbp)\b"
+    r"|/\s?(?:wk|week|mo|month|yr|year)\b"
+    r"|per\s+(?:week|month|year)\b"
+    r"|\b(?:weekly|monthly|yearly|annually)\b"
+    r"|free\s+trial",
+    re.IGNORECASE,
+)
+_PAYWALL_RESTORE_RE = re.compile(r"\brestore\b", re.IGNORECASE)
+_PAYWALL_CTA = (
+    "subscribe", "start free trial", "start free", "try free", "free for",
+    "unlock", "upgrade", "get pro", "go premium", "claim offer",
+)
+_PAYWALL_LEGAL = (
+    "terms of use", "terms of service", "terms & conditions", "privacy policy",
+    "auto-renew", "auto renew", "cancel anytime", "subscription",
+)
+
+
+def _looks_like_purchase_paywall(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:
+    blob = " ".join(t for t in (_text(el) for el in scene.elements) if t).casefold()
+    if not blob:
+        return False
+    categories = (
+        bool(_PAYWALL_PRICE_RE.search(blob)),
+        bool(_PAYWALL_RESTORE_RE.search(blob)),
+        any(cta in blob for cta in _PAYWALL_CTA),
+        any(legal in blob for legal in _PAYWALL_LEGAL),
+    )
+    # Require ≥2 distinct commerce signals so a lone word (e.g. a Settings page
+    # mentioning "Privacy") can never veto a real Home screen.
+    return sum(categories) >= 2
 
 
 def _looks_like_springboard(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:

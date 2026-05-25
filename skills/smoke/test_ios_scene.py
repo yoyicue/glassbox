@@ -261,6 +261,54 @@ def test_ios_scene_classifier_weather_widget_home_is_springboard():
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_app_paywall_is_unknown_not_springboard():
+    # A foreign app's in-app-purchase paywall (real OCR from a drifted-into
+    # RemoteAC "Premium" screen). Feature bullets + plan cards + a device mockup
+    # trip the SpringBoard icon-grid heuristic; misreading it as Home is a safety
+    # bug — bootstrap would "tap the Settings icon" and could hit Continue /
+    # Subscribe, triggering a purchase. The commerce tokens must route it to
+    # unknown so recovery backs out instead of tapping content.
+    scene = _scene(
+        _el("AC Remote Control", 165, 145, w=120),
+        _el("22.5°", 212, 245, w=40),
+        _el("Tap Continue to Access your", 118, 378, w=210),
+        _el("Premium AC Remote", 130, 408, w=190),
+        _el("All control modes", 62, 510, w=110),
+        _el("Timers & Schedules", 74, 545, w=120),
+        _el("Smart Mode", 65, 615, w=90),
+        _el("No ads", 49, 650, w=60),
+        _el("3-day free trial", 172, 700, w=100),
+        _el("$6.99/week", 184, 722, w=80),
+        _el("$29.99/year", 178, 780, w=90),
+        _el("Continue", 183, 862, w=80),
+        _el("Terms of Use", 46, 916, w=80),
+        _el("Privacy Policy", 179, 918, w=90),
+        _el("Restore", 337, 916, w=50),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 992))
+
+    assert classified.kind == "unknown"
+    assert "purchase_paywall" in classified.evidence
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_single_commerce_word_is_not_paywall():
+    # Guard the >=2-signal rule so a real Settings-ish surface that merely
+    # mentions one commerce-adjacent word is never vetoed as a paywall.
+    from glassbox.ios.scene import _looks_like_purchase_paywall
+
+    scene = _scene(
+        _el("设置", 198, 72, w=48),
+        _el("通用", 80, 300, w=42),
+        _el("隐私与安全性", 80, 360, w=120),
+        _el("Restore", 80, 420, w=50),
+    )
+
+    assert _looks_like_purchase_paywall(scene, viewport_size=(448, 973)) is False
+
+
+@pytest.mark.smoke
 def test_ios_scene_classifier_today_search_with_siri_suggestions_is_system_search():
     scene = _scene(
         _el("Siri建议", 42, 128, w=72),
