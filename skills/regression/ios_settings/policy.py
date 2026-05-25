@@ -68,6 +68,12 @@ EXPECTED_ROOT_NAV_TEXT = (
 
 SAFE_NAV_TEXT = (
     *EXPECTED_ROOT_NAV_TEXT,
+    # Top-level read-only Settings pages that are not in the curated 17-section
+    # coverage set but are safe to enter and observe. iOS does not always render a
+    # detectable disclosure chevron for these, so they need an explicit safe-known
+    # decision (otherwise they are rejected as unknown_navigation_label at root).
+    "相机", "Camera",
+    "墙纸", "Wallpaper",
     "关于本机", "About",
     "软件更新", "Software Update",
     "iPhone 储存空间", "iPhone Storage",

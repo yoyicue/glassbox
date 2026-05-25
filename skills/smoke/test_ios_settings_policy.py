@@ -184,6 +184,31 @@ def test_ios_settings_policy_filters_short_ocr_noise_from_navigation_rows():
 
 
 @pytest.mark.smoke
+def test_camera_and_wallpaper_are_safe_known_not_unknown_candidates():
+    # Top-level read-only pages (Camera / Wallpaper) lack a reliably-detected
+    # disclosure chevron, so without an explicit safe-known decision they were
+    # rejected as unknown_navigation_label at root and blocked the verifier. They
+    # are safe to enter and observe; a genuinely unknown row must still reject.
+    for label in ("Camera", "Wallpaper", "相机", "墙纸"):
+        assert DEFAULT_SETTINGS_POLICY.is_safe_known_navigation_label(label), label
+    scene = _scene(
+        _el("设置", 198, 72, w=48),
+        _el("Camera", 80, 500, w=70),
+        _el("Wallpaper", 80, 560, w=90),
+        _el("Frobnicate", 80, 620, w=90),
+    )
+    rejected = DEFAULT_SETTINGS_POLICY.rejected_candidate_rows(
+        scene,
+        allow_sensitive_root_labels=True,
+        allow_known_without_affordance=True,
+    )
+    # Camera/Wallpaper are no longer rejected; only the unknown sentinel remains.
+    assert [(item.text, item.reason) for item in rejected] == [
+        ("Frobnicate", "unknown_navigation_label"),
+    ]
+
+
+@pytest.mark.smoke
 def test_ios_settings_policy_counts_wallet_root_but_does_not_navigate_it():
     scene = _scene(
         _el("设置", 198, 72, w=48),
