@@ -8,8 +8,8 @@ Implemented baseline:
 - `ipad_mini_7` device geometry (1488×2266 pixels, 744×1133 points).
 - `ipados` platform variant with iPad safe-area geometry and split-view Settings
   scene classification.
-- PicoKVM iPad behavior: no AssistiveTouch requirement, wheel transport exposed
-  only as a bounded diagnostic path on the current rig, and crop-derived
+- PicoKVM iPad behavior: no AssistiveTouch requirement, wheel transport kept
+  behind an explicit opt-in diagnostic flag on the current rig, and crop-derived
   absolute-pointer calibration unless `GLASSBOX_PICOKVM_ABS_*` values are
   explicitly provided.
 - iPad Settings navigation hooks: sidebar-only root candidates, right-detail-pane
@@ -620,15 +620,17 @@ Settings back fallback is detail-pane aware.
   capability checks.
 
 ### 5. Replace the wheel assumption for Settings sidebar coverage
-The iPad profile exposes wheel transport, but the connected rig proved that
-ACKed `wheelReport` does not move the Settings sidebar. Do not build acceptance
-on wheel movement until a new HID path is proven. Current viable direction:
-use visible sidebar rows + top-search recovery for missing root sections, and
-keep wheel attempts bounded/diagnostic rather than authoritative. A future
-firmware/native relative-wheel path or real trackpad gesture may still replace
-this. If a later iPadOS hardware run proves semantic wheel movement, update this
-section with the report path, probe point, tick count, and before/after sidebar
-evidence before promoting wheel from diagnostic to accepted coverage machinery.
+The iPad profile no longer advertises wheel scrolling by default. `wheelReport`
+can still be explicitly enabled as a diagnostic transport, but the connected rig
+proved that ACKed wheel events do not move the Settings sidebar. Do not build
+acceptance on wheel movement until a new HID path is proven. Current viable
+direction: use visible sidebar rows + top-search recovery for missing root
+sections, and keep wheel attempts opt-in/diagnostic rather than authoritative. A
+future firmware/native relative-wheel path or real trackpad gesture may still
+replace this. If a later iPadOS hardware run proves semantic wheel movement,
+update this section with the report path, probe point, tick count, and
+before/after sidebar evidence before promoting wheel from diagnostic to accepted
+coverage machinery.
 
 ### 6. Platform seam: an iPadOS variant (implemented baseline)
 `glassbox/platforms.py` can select the `ipados` backend, which swaps in iPad

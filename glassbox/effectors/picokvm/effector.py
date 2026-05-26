@@ -45,8 +45,9 @@ class PicoKVMEffector:
     """Drive iOS through PicoKVM HID RPCs.
 
     iPhone targets need AssistiveTouch or external pointer support. iPadOS uses
-    the native pointer path, so wheel support is exposed for iPad device
-    geometry even when the iPhone-safe ``wheel_enabled`` default is false.
+    the native pointer path, but wheel support still stays behind the explicit
+    ``wheel_enabled`` diagnostic flag: the connected iPad ACKed wheel reports
+    without semantically scrolling the Settings sidebar.
     """
 
     coordinate_space = "frame_px"
@@ -126,7 +127,7 @@ class PicoKVMEffector:
         return self._device_model.startswith("ipad")
 
     def _wheel_available(self) -> bool:
-        return bool(self.config.wheel_enabled or self._is_ipad_target())
+        return bool(self.config.wheel_enabled)
 
     def _apply_ipad_crop_calibration(self, crop) -> None:
         """Derive a PicoKVM absolute-pointer fit from the detected iPad crop.

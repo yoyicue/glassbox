@@ -49,14 +49,16 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
    has been unreliable; harden it so any band the fling skips is deterministically
    reached via in-app search rather than re-flinging. (Watch the StandBy/search
    mis-tap failure mode observed live.)
-3. **iPad migration (hardware, the clean win).** iPad's native pointer consumes
-   the same Generic-Desktop mouse reports and the wheel mechanism is already
-   correct, so precise ~1-row/tick scrolling becomes dependable and overshoot
-   disappears. See `docs/design/ipad_mini_migration.md` (set `wheel_enabled=True`
-   for the iPad profile). This also unlocks native pointer + keyboard system-nav.
+3. **iPad migration (hardware, still useful but not a wheel win).** iPad's native
+   pointer consumes the same Generic-Desktop mouse reports, which removes the
+   AssistiveTouch dependency and makes pointer taps/key Home much cleaner. The
+   current connected iPad did not semantically scroll Settings from ACKed wheel
+   reports, so iPadOS coverage must come from visible rows, title-checked search,
+   and graph/search recovery. `wheel_enabled=True` is diagnostic only until a
+   hardware report proves before/after sidebar movement.
 
-Direction 3 makes 1 and 2 unnecessary; 1 and 2 are the value-now options if the
-rig stays an iPhone.
+Direction 3 reduces the iPhone-specific AssistiveTouch pain, but it does not make
+1 and 2 obsolete unless a future iPadOS HID path proves semantic scrolling.
 
 ## Acceptance
 
@@ -71,7 +73,8 @@ rig stays an iPhone.
 - No reliable precise-scroll path exists on **iPhone** from the PicoKVM side; the
   wheel is not restorable on demand. iOS ignores the HID digitizer/touchpad;
   only a Generic-Desktop mouse works, and AssistiveTouch is mandatory for it.
-- Keep the swipe path as the iPhone default; the wheel stays opt-in / iPad-only.
+- Keep the swipe path as the iPhone default; the wheel stays explicit opt-in /
+  diagnostic, including on iPadOS.
 - Background: `docs/design/ipad_mini_migration.md`; the on-device wheel/fling
   experiments are recorded in the project memory
   (`picokvm-scroll-overshoot-hardware-limit`, `ios-ignores-usb-hid-digitizer`).

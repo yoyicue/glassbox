@@ -55,8 +55,10 @@ class PicoKVMEffectorConfig(BaseSettings):
     worked ~5×, then stayed dead the rest of the session, even fresh at root).
     A drill-down with it enabled regressed (overshoot→stuck→search fallback), so
     the default scroll stays the swipe. The hover+positive-sign mechanism below
-    is kept correct for opt-in (set GLASSBOX_PICOKVM_WHEEL_ENABLED=1) and for iPad
-    targets, where the native pointer makes the wheel reliable."""
+    is kept correct for explicit opt-in (set GLASSBOX_PICOKVM_WHEEL_ENABLED=1).
+    iPadOS also keeps this behind explicit opt-in: the connected iPad ACKed
+    report-ID-2 wheel events but did not semantically scroll the Settings
+    sidebar, so wheel remains diagnostic until hardware proof says otherwise."""
 
     wheel_down_sign: Literal["negative", "positive"] = "positive"
     """wheelY=+1 scrolls content down a notch on iOS (verified on-device)."""
