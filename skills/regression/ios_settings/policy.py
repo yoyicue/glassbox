@@ -301,6 +301,7 @@ NAV_TITLE_ALIASES = {
     "主屏幕与 App 资源库": ("主屏幕", "Home Screen"),
     "钱包与 Apple Pay": ("钱包", "Wallet"),
     "操作按钮": ("静音模式", "Silent Mode"),
+    "Search": ("Search and Look Up",),
 }
 ROOT_ONLY_UNSAFE_OVERRIDES = (
     "Face ID与密码",
@@ -1617,7 +1618,10 @@ class IPadSettingsPolicy(SettingsPolicy):
         cx, cy = element.box.center
         if cy < int(h * 0.10) or cy > int(h * 0.96) or cx > sidebar_right:
             return None
-        if cy <= int(h * 0.18) and re.match(r"^[Qq]\s+", text):
+        if cy <= int(h * 0.18) and (
+            re.match(r"^[Qq]\s+", text)
+            or self.is_settings_search_affordance_text(text)
+        ):
             return None
         if len(text) <= 3 and (text[0] in "([（【〈《" or text[-1] in ")]）】〉》"):
             return None

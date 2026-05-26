@@ -439,7 +439,7 @@ def _visible_ipad_sidebar_root_candidate_for_label(phone, scene, label: str):
         cx, cy = element.box.center
         if cx > sidebar_right or cy < int(height * 0.10) or cy > int(height * 0.96):
             continue
-        if cy <= int(height * 0.18) and text.lower().startswith("q "):
+        if _is_ipad_sidebar_top_search_affordance(text, cy=cy, height=height):
             continue
         if (
             text == label
@@ -451,6 +451,13 @@ def _visible_ipad_sidebar_root_candidate_for_label(phone, scene, label: str):
         return None
     matches.sort(key=lambda element: (element.box.center[1], element.box.center[0]))
     return matches[0]
+
+
+def _is_ipad_sidebar_top_search_affordance(text: str, *, cy: float, height: int) -> bool:
+    if cy > int(height * 0.18):
+        return False
+    compact = "".join(str(text or "").split()).casefold()
+    return compact in {"search", "qsearch", "q搜索", "搜索"} or str(text or "").lower().startswith("q ")
 
 
 def _opened_requested_root(scene, label: str) -> bool:

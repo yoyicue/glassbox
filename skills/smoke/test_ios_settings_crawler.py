@@ -410,6 +410,35 @@ def test_ipad_child_audit_matches_visible_root_rows_by_canonical_label(monkeypat
 
 
 @pytest.mark.smoke
+def test_ipad_child_audit_search_root_ignores_top_search_field(monkeypatch):
+    policy = IPadSettingsPolicy()
+    monkeypatch.setattr(settings_core, "DEFAULT_SETTINGS_POLICY", policy)
+    monkeypatch.setattr(settings_scene_state, "DEFAULT_SETTINGS_POLICY", policy)
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=40, y=84, w=64, h=20), text="Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=66, y=609, w=52, h=12), text="Camera", confidence=0.9),
+            UIElement(type="text", box=Box(x=66, y=843, w=48, h=12), text="Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=406, y=44, w=88, h=14), text="Apple Pencil", confidence=0.9),
+            UIElement(type="text", box=Box(x=280, y=432, w=130, h=14), text="Bottom Left Corner", confidence=0.9),
+        ],
+    )
+    phone = SimpleNamespace(
+        device_geometry=SimpleNamespace(model="ipad_mini_7"),
+        perceive=lambda: scene,
+    )
+
+    candidate = crawler._visible_root_candidate_for_label(phone, "Search")
+
+    assert candidate is not None
+    assert candidate.text == "Search"
+    assert candidate.box.center[1] > 800
+
+
+@pytest.mark.smoke
 def test_child_audit_accepts_current_requested_root_before_search(monkeypatch):
     policy = IPadSettingsPolicy()
     monkeypatch.setattr(settings_core, "DEFAULT_SETTINGS_POLICY", policy)

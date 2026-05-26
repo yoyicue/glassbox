@@ -917,6 +917,13 @@ def test_extra_top_level_pages_are_safe_known_not_unknown_candidates():
 
 
 @pytest.mark.smoke
+def test_ipad_search_root_accepts_search_and_look_up_detail_title():
+    policy = IPadSettingsPolicy()
+
+    assert policy.title_matches_navigation_label("Search and Look Up", "Search")
+
+
+@pytest.mark.smoke
 def test_ipad_sidebar_search_page_does_not_match_top_search_field():
     policy = IPadSettingsPolicy()
     scene = Scene(
@@ -924,6 +931,7 @@ def test_ipad_sidebar_search_page_does_not_match_top_search_field():
         timestamp=0.0,
         viewport_size=(640, 989),
         elements=[
+            _el("Search", 34, 88, w=52),
             _el("Q Search", 34, 112, w=72),
             _el("Camera", 66, 620, w=52),
             _el("Search", 66, 820, w=58),

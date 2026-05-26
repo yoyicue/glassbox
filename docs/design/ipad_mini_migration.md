@@ -31,8 +31,8 @@ Implemented baseline:
 
 Remaining hardening: iPad SpringBoard real Home-folder modeling beyond visible
 and multi-page Home icons, broader split-view Settings inventory beyond the
-current twelve actionable shared roots plus the first fourteen extra safe top-level
-pages and six explicit blocked stop points, and a replacement for the disproven
+current twelve actionable shared roots plus the first fifteen extra safe top-level
+pages and seven explicit blocked stop points, and a replacement for the disproven
 Settings sidebar wheel-scroll assumption.
 
 Hardware corrections from the connected iPad mini rig (2026-05-25):
@@ -346,8 +346,8 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   `Multitasking & Gestures` are recorded as root-only coverage in the bounded
   sample. A broader four-target attempt including `Search`
   (`/tmp/ipad-settings-extra-inventory-4-2.json`) still failed to open the
-  `Search` settings page, so `Search` remains observed-but-not-accepted because
-  it is ambiguous with the top sidebar search field.
+  `Search` settings page at that point because it was ambiguous with the top
+  sidebar search field.
 - A third extra top-level inventory audit
   (`/tmp/ipad-settings-extra-inventory-pencil-home-1.json`) now passes for
   `Apple Pencil` and `Home Screen & App Library`. Both open with
@@ -373,8 +373,7 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   known issues, and `navigation_success_proxy_rate=1.0`. This also locks the
   related iPad top-search/detail-title fixes: `Q Search Apps` must not steal the
   page title, and an empty top-search `Suggestions`/`Recents` panel must not be
-  treated as normal sidebar root rows. `Search` remains observed but not accepted
-  because it is ambiguous with the sidebar search control.
+  treated as normal sidebar root rows.
   A later fresh-install read-only check
   (`/private/tmp/ipad-settings-apps-gamecenter-root-blocked-readonly-2.json`)
   upgrades `Apps` from root-only coverage to an explicit blocked stop point:
@@ -530,7 +529,7 @@ top-left point.
   `Touch ID & Passcode` open but do not traverse dynamic network/device rows or
   passcode/biometric controls.
 - Broader top-level Settings inventory beyond the shared-root gate now has
-  hardware proof for fourteen extra safe pages:
+  hardware proof for fifteen extra safe pages:
   `/tmp/ipad-settings-extra-inventory-camera-wallpaper-2.json` covers `Camera`
   and `Wallpaper`, and `/tmp/ipad-settings-extra-inventory-3-1.json` covers
   `Control Centre`, `Display & Brightness`, and `Multitasking & Gestures`;
@@ -546,8 +545,10 @@ top-left point.
   page is tapped. `/tmp/ipad-settings-extra-inventory-weather-2.json`
   covers `Weather` as root-only coverage, and
   `/tmp/ipad-settings-extra-inventory-books-translate-1.json` covers `Books`
-  and `Translate` as root-only coverage. `Search` remains observed but not
-  accepted after broader attempts failed to open it reliably.
+  and `Translate` as root-only coverage.
+  `/private/tmp/ipad-settings-extra-inventory-search-root-2.json` covers
+  `Search` as root-only coverage and an explicit read-only blocked stop point
+  with the actual iPadOS detail title `Search and Look Up`.
 - A later negative app-specific pass tried `Calculator`, `Files`, `Freeform`,
   `Maps`, `Notes`, and `Clock` as possible additional top-level targets. The
   connected iPad did not open those through the current root/search path:
@@ -636,8 +637,18 @@ top-left point.
   This also fixes the iPad split-view guard: pages with a live left sidebar can
   still be classified as blocked right-detail pages instead of being skipped as
   generic root surfaces.
+- A fresh-install Search root-only check
+  (`/private/tmp/ipad-settings-extra-inventory-search-root-2.json`) now accepts
+  the formerly ambiguous `Search` top-level page. The crawler ignores the iPad
+  sidebar's top search affordance when resolving visible root rows, accepts the
+  iPadOS detail title `Search and Look Up` as the `Search` root, and records
+  root-only coverage with `opened_target_roots=["Search"]`,
+  `target_failures=[]`, `target_roots_missing_child=[]`, `limits_hit=[]`, no
+  known issues, and `navigation_success_proxy_rate=1.0`. The page is also an
+  explicit read-only stop point (`app permission/access selector rows`), so the
+  crawler does not drill into app-specific search/privacy rows on the fresh iPad.
 - Remaining: keep broadening Settings sampling beyond the current twelve
-  actionable shared roots plus these first fourteen extra top-level pages and six
+  actionable shared roots plus these first fifteen extra top-level pages and seven
   explicit blocked stop points, and keep stale-detail/return semantics under
   real multi-level pages without turning the policy into a page-specific rule
   list. The General, Accessibility, Siri, Notifications, Focus, Display &
@@ -702,8 +713,8 @@ Core stayed; the iPad profile and iPadOS platform baseline now exist and are
 hardware-proved for Settings root coverage, nine-root split-view child
 traversal, broader General, Accessibility, Siri, Notifications, Focus, Display
 & Brightness, and Sounds & Haptics child samples, three additional safe-blocked
-Settings roots, fourteen extra safe top-level Settings pages beyond the
-shared-root gate, six extra pages that now stop as explicit read-only blocked
+Settings roots, fifteen extra safe top-level Settings pages beyond the
+shared-root gate, seven extra pages that now stop as explicit read-only blocked
 targets, keyboard Home, native pointer taps, and visible/multi-page Home-icon
 foregrounding.
 
