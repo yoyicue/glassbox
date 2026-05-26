@@ -124,7 +124,15 @@ def crawl_high_value_child_settings(
                     break
                 if not _open_target_root_page(traced_phone, label):
                     target_failures.append({"label": label, "reason": "target_root_not_opened"})
-                    _return_to_settings_root(traced_phone)
+                    try:
+                        _return_to_settings_root(traced_phone)
+                    except settings_recovery.SettingsRootUnreachable:
+                        # Same soft-failure contract as post-visit recovery:
+                        # keep the unopened target evidence instead of letting
+                        # a dirty Settings search state crash the probe.
+                        return_root_failed = True
+                        limits_hit.add("return_root_failed")
+                        break
                     continue
                 opened_targets.append(label)
                 try:

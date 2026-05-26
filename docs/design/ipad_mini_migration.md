@@ -442,6 +442,20 @@ top-left point.
   `/tmp/ipad-settings-extra-inventory-books-translate-1.json` covers `Books`
   and `Translate` as root-only coverage. `Search` remains observed but not
   accepted after broader attempts failed to open it reliably.
+- A later negative app-specific pass tried `Calculator`, `Files`, `Freeform`,
+  `Maps`, `Notes`, and `Clock` as possible additional top-level targets. The
+  connected iPad did not open those through the current root/search path:
+  `/private/tmp/ipad-settings-extra-inventory-calculator-1.json`,
+  `/private/tmp/ipad-settings-extra-inventory-files-2.json`,
+  `/private/tmp/ipad-settings-extra-inventory-freeform-2.json`,
+  `/private/tmp/ipad-settings-extra-inventory-maps-2.json`,
+  `/private/tmp/ipad-settings-extra-inventory-notes-2.json`, and
+  `/private/tmp/ipad-settings-extra-inventory-clock-2.json` all record
+  `target_root_not_opened`, so these labels are not accepted as extra safe
+  top-level pages. The first `Freeform` attempt also exposed a probe robustness
+  edge: if an unopened target leaves Settings in a dirty search state and return
+  recovery fails, the child audit now records `return_root_failed` instead of
+  crashing without a report.
 - Remaining: keep broadening Settings sampling beyond the current twelve
   actionable shared roots plus these first fourteen extra top-level pages, and keep
   stale-detail/return semantics under real multi-level pages without turning the

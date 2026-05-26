@@ -157,6 +157,39 @@ def test_child_audit_records_return_root_failed_not_exception(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_child_audit_records_return_root_failed_after_unopened_target(monkeypatch):
+    """Unopened targets can leave a dirty search state; report both facts."""
+    monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
+    monkeypatch.setattr(crawler, "_open_settings_from_home_if_visible", lambda phone: None)
+    monkeypatch.setattr(crawler, "_open_target_root_page", lambda phone, label: False)
+
+    calls = {"n": 0}
+
+    def _return(_phone):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return  # initial reset to root succeeds
+        raise crawler.settings_recovery.SettingsRootUnreachable("dirty search after miss")
+
+    monkeypatch.setattr(crawler, "_return_to_settings_root", _return)
+
+    result = crawler.crawl_high_value_child_settings(
+        object(),
+        target_root_labels=["Missing"],
+        max_depth=1,
+        max_pages=8,
+        max_child_scrolls_per_page=0,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+        allow_root_only_target_roots=True,
+    )
+    assert result.target_failures == [{"label": "Missing", "reason": "target_root_not_opened"}]
+    assert result.return_root_failed is True
+    assert "return_root_failed" in result.limits_hit
+    assert "exception" not in result.limits_hit
+
+
+@pytest.mark.smoke
 def test_ipad_child_audit_matches_visible_root_rows_by_canonical_label(monkeypatch):
     policy = IPadSettingsPolicy()
     monkeypatch.setattr(settings_core, "DEFAULT_SETTINGS_POLICY", policy)
