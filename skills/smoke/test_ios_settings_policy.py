@@ -588,6 +588,8 @@ def test_ipad_notifications_selector_root_allows_disclosure_children():
         viewport_size=(640, 989),
         elements=[
             _el("Q Search", 48, 90, w=72),
+            _el("Suggestions", 88, 142, w=86, h=14),
+            _el("Recents", 82, 184, w=68, h=14),
             _el("Notifications", 72, 332, w=112),
             _el("Notifications", 404, 44, w=90, h=14),
             _el("Display As", 280, 106, w=74, h=16),
@@ -596,6 +598,37 @@ def test_ipad_notifications_selector_root_allows_disclosure_children():
             _el("Off >", 572, 320, w=38, h=12),
             _el("Show Previews", 280, 366, w=100, h=12),
             _el("Always >", 546, 365, w=64, h=14),
+        ],
+    )
+
+    assert policy.blocked_child_navigation_reason(scene) is None
+    assert [
+        (candidate.text or "").strip()
+        for candidate in policy.safe_navigation_candidates(
+            scene,
+            allow_sensitive_root_labels=False,
+            allow_known_without_affordance=False,
+        )
+    ] == ["Scheduled Summary", "Show Previews"]
+
+
+@pytest.mark.smoke
+def test_ipad_notifications_selector_root_allows_exact_safe_children_without_chevron_ocr():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 48, 90, w=72),
+            _el("Notifications", 72, 332, w=112),
+            _el("Notifications", 404, 44, w=90, h=14),
+            _el("Display As", 280, 106, w=74, h=16),
+            _el("Count", 308, 226, w=34, h=10),
+            _el("Scheduled Summary", 280, 320, w=138, h=14),
+            _el("Off", 572, 320, w=26, h=12),
+            _el("Show Previews", 280, 366, w=100, h=12),
+            _el("Always", 546, 365, w=52, h=14),
         ],
     )
 

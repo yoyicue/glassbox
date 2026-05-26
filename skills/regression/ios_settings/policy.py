@@ -115,6 +115,8 @@ SAFE_NAV_TEXT = (
     "限定通信", "Communication Limits",
     "通信安全", "Communication Safety",
     "内容与隐私限制", "Content & Privacy Restrictions",
+    "定时推送摘要", "Scheduled Summary",
+    "显示预览", "Show Previews",
 )
 
 EXPECTED_ROOT_NAV_TEXT_ZH = (
@@ -1407,10 +1409,10 @@ class IPadSettingsPolicy(SettingsPolicy):
         )
         if reason not in self._RELAXABLE_SELECTOR_BLOCK_REASONS:
             return reason
-        if self._ipad_search_active(scene):
-            return reason
         if self._has_safe_detail_disclosure_candidate(scene):
             return None
+        if self._ipad_search_active(scene):
+            return reason
         return reason
 
     def _title_scoped_blocked_child_navigation_reason(self, scene) -> str | None:
@@ -1577,7 +1579,7 @@ class IPadSettingsPolicy(SettingsPolicy):
                 continue
             if self.is_settings_section_header(scene, element) or self.is_unsafe_navigation_text(text):
                 continue
-            if self.has_navigation_affordance(scene, element):
+            if self.has_navigation_affordance(scene, element) or self.is_exact_safe_navigation_label(text):
                 return True
         return False
 
