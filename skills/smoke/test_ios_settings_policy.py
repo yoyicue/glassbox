@@ -235,6 +235,42 @@ def test_ipad_settings_policy_blocks_game_center_onboarding_children():
 
 
 @pytest.mark.smoke
+def test_ipad_settings_policy_blocks_app_permission_access_children():
+    policy = IPadSettingsPolicy()
+    weather = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 34, 90, w=72, h=18),
+            _el("Weather", 420, 44, w=62, h=12),
+            _el("Allow Weather to Access", 280, 106, w=170, h=12),
+            _el("Location", 314, 142, w=58, h=12),
+            _el("Siri", 314, 186, w=24, h=16),
+            _el("Search", 314, 230, w=48, h=16),
+        ],
+    )
+    location = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Location", 418, 42, w=64, h=17),
+            _el("Allow Location Access", 280, 104, w=154, h=14),
+            _el("Never", 280, 142, w=42, h=12),
+            _el("While Using the App", 280, 230, w=130, h=12),
+            _el("Always", 280, 318, w=50, h=12),
+            _el("Precise Location", 280, 430, w=120, h=14),
+        ],
+    )
+
+    assert policy.blocked_child_navigation_reason(weather) == "app permission/access selector rows"
+    assert policy.safe_navigation_candidates(weather) == []
+    assert policy.blocked_child_navigation_reason(location) == "app permission/access selector rows"
+    assert policy.safe_navigation_candidates(location) == []
+
+
+@pytest.mark.smoke
 def test_ipad_detail_child_accepts_trailing_value_disclosure_affordance():
     policy = IPadSettingsPolicy()
     scene = Scene(

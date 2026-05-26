@@ -1409,7 +1409,15 @@ def _tap_top_left_back_fallback(phone) -> bool:
         w, h = phone._viewport_size()
     except Exception:
         w, h = 448, 973
-    x, y = max(18, int(w * 0.055)), max(56, int(h * 0.085))
+    x = max(18, int(w * 0.055))
+    if _is_ipad_target(phone):
+        try:
+            from glassbox.ipados.scene import sidebar_right_x
+
+            x = max(x, sidebar_right_x(w) + 24)
+        except Exception:
+            pass
+    y = max(56, int(h * 0.085))
     with _action_intent(phone, "return.tap_top_left_fallback", x=x, y=y):
         result = phone.tap_xy(x, y)
     return _record_action_verdict(phone, result)

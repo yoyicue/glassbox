@@ -2572,6 +2572,39 @@ def test_return_one_level_falls_back_to_top_left_when_back_ocr_missing(monkeypat
     assert phone.keys == [(0x08, 0x2F)]
     assert phone.taps == [(24, 82)]
 
+
+@pytest.mark.smoke
+def test_return_one_level_falls_back_to_ipad_detail_pane_back_point(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    ticks = iter([0.0, 1.0, 4.0, 4.0, 4.0])
+    monkeypatch.setattr(walkthrough.time, "monotonic", lambda: next(ticks))
+    child = _scene(
+        _el("Siri", 420, 78, w=42),
+        _el("Allow Safari to Access", 316, 160, w=180),
+    )
+    parent = _scene(
+        _el("Safari", 420, 78, w=56),
+        _el("Default Browser App", 340, 360, w=150),
+    )
+
+    class IPadTopLeftBackFallbackPhone(_TopLeftBackFallbackPhone):
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def _viewport_size(self):
+            return 640, 989
+
+    phone = IPadTopLeftBackFallbackPhone(child, parent)
+
+    assert _return_one_level(
+        phone,
+        parent_texts=["Safari", "Default Browser App"],
+        parent_title="Safari",
+        parent_is_root=False,
+    )
+    assert phone.keys == [(0x08, 0x2F)]
+    assert phone.taps == [(305, 84)]
+
+
 @pytest.mark.smoke
 def test_return_one_level_treats_unknown_back_shortcut_as_fallbackable(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)

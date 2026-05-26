@@ -456,6 +456,16 @@ top-left point.
   edge: if an unopened target leaves Settings in a dirty search state and return
   recovery fails, the child audit now records `return_root_failed` instead of
   crashing without a report.
+- On a fresh iPadOS install, do not over-drill app-specific Settings pages into
+  first-run permission/access panels. A bounded follow-up showed
+  `/private/tmp/ipad-settings-extra-child-safari-1.json` can reach
+  `Settings > Safari > Siri`, while Weather's first child path reaches a
+  Location permission selector (`/private/tmp/ipad-weather-location-inspect-1.json`).
+  Those are not good evidence for broad read-only Settings traversal on a
+  not-yet-authorized device. The policy now blocks the observed Safari/Weather
+  `Allow ... to Access` panels and `Allow Location Access` selector pages as app
+  permission/access rows; future broader child samples should prefer
+  settings-native, read-only pages.
 - Remaining: keep broadening Settings sampling beyond the current twelve
   actionable shared roots plus these first fourteen extra top-level pages, and keep
   stale-detail/return semantics under real multi-level pages without turning the
