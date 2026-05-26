@@ -600,6 +600,16 @@ top-left point.
   `/private/tmp/ipad-settings-assume-open-apple-pencil-root-only-5.json`) still
   failed with `settings_root_unreachable`, so they remain negative evidence; do
   not count them as Apple Pencil child/root coverage.
+  After the sidebar/root hardening, the same fresh-device-safe path now has a
+  positive hardware report:
+  `/private/tmp/ipad-settings-assume-open-apple-pencil-child-7.json` ran with
+  `--assume-settings-open`, opened only the already-visible Settings context,
+  reached `Settings > Apple Pencil > Bottom Left Corner` and
+  `Settings > Apple Pencil > Bottom Right Corner`, and passed with
+  `target_failures=[]`, `target_roots_missing_child=[]`, `limits_hit=[]`, no
+  navigation failures, and `navigation_success_proxy_rate=1.0`. This closes the
+  recent Apple Pencil assume-open regression without foregrounding unrelated
+  apps on the fresh iPad.
 - Screen Time has the same fresh-install boundary at `Always Allowed`: the page
   is an allowed-apps selector, not useful read-only Settings structure on a
   not-yet-authorized iPad. The policy now excludes that row from child
