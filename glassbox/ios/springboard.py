@@ -451,7 +451,8 @@ def _tap_target_inside_home_folder_if_visible(
     home_sig = springboard_signature(scene)
     if attempted_home_signatures is not None and home_sig in attempted_home_signatures:
         return False
-    folder = find_springboard_icon(scene, HOME_FOLDER_LABELS, viewport_size=_viewport_size(phone), fuzzy=0.78)
+    viewport_size = _viewport_size(phone)
+    folder = _find_home_folder_icon(scene, viewport_size=viewport_size)
     if folder is None:
         return False
     if attempted_home_signatures is not None:
@@ -463,6 +464,30 @@ def _tap_target_inside_home_folder_if_visible(
     phone.home()
     _perceive_after_settle(phone, settle_s)
     return False
+
+
+def _find_home_folder_icon(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None,
+) -> SpringboardIcon | None:
+    """Return a real Home-page folder candidate, not an App Library category."""
+    platform_kind = str(getattr(scene, "platform_scene_kind", "") or "")
+    if platform_kind in {"app_library", "system_search"} or platform_kind.startswith("settings"):
+        return None
+    classified = classify_ios_scene(scene, viewport_size=viewport_size)
+    if classified.kind in {
+        "app_library",
+        "system_search",
+        "settings_root",
+        "settings_search_results",
+        "settings_detail",
+        "settings_blocked_safety",
+    }:
+        return None
+    if classified.kind != "springboard" and not is_ios_home_screen(scene, viewport_size=viewport_size):
+        return None
+    return find_springboard_icon(scene, HOME_FOLDER_LABELS, viewport_size=viewport_size, fuzzy=0.78)
 
 
 def _tap_home_search_if_visible(phone, scene: Scene) -> bool:

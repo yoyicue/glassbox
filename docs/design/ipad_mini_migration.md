@@ -435,6 +435,10 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   `/tmp/ipad-springboard-games-folder-check-1.json` tapped it and left Home
   (`after_is_home=false`). The SpringBoard icon filter now excludes visible
   AssistiveTouch menu controls so they are not treated as app/folder icons.
+  The Home-folder helper is also code-gated against App Library/system-search
+  scenes, so category labels such as `Utilities`/`Other` are no longer treated
+  as real Home-folder candidates; unit coverage locks this distinction while
+  hardware proof still waits for an actual folder on the device.
 
 ## Why consider it
 
@@ -607,9 +611,10 @@ common false positives observed on the connected rig.
 - Files' two-column UI no longer masquerades as Settings top-search.
 - Current connected-device folder audit found no real Home folder to open:
   App Library category pages and the AssistiveTouch floating menu are explicitly
-  rejected as folder evidence. Treat visible/multi-page OCR-label Home icons as
-  accepted, but do not claim Home-folder foregrounding until a real folder exists
-  on the device and an open-folder report passes.
+  rejected as folder evidence in both hardware notes and code. Treat
+  visible/multi-page OCR-label Home icons as accepted, but do not claim
+  Home-folder foregrounding until a real folder exists on the device and an
+  open-folder report passes.
 
 ### 4. Native pointer + keyboard instead of AssistiveTouch (implemented baseline)
 iPad has a native pointer and does not need AssistiveTouch. The iPad profile uses

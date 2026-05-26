@@ -448,6 +448,55 @@ def test_open_app_from_springboard_tries_same_folder_page_once(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_open_app_from_springboard_does_not_treat_app_library_category_as_home_folder(monkeypatch):
+    monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
+
+    app_library = _scene(
+        _el("App Library", 100, 86, w=96),
+        _el("Suggestions", 92, 260, w=98),
+        _el("Recently Added", 300, 260, w=130),
+        _el("Utilities", 92, 560, w=80),
+        _el("Creativity", 300, 560, w=84),
+    )
+
+    class FakePhone:
+        def __init__(self):
+            self.actions: list[tuple[str, tuple | None]] = []
+
+        def _viewport_size(self):
+            return 640, 980
+
+        def home(self):
+            self.actions.append(("home", None))
+
+        def perceive(self):
+            return app_library
+
+        def invalidate_perceive_cache(self):
+            self.actions.append(("invalidate", None))
+
+        def tap_xy(self, x: int, y: int):
+            self.actions.append(("tap", (x, y)))
+
+        def swipe_right(self):
+            self.actions.append(("swipe_right", None))
+
+        def swipe_left(self):
+            self.actions.append(("swipe_left", None))
+
+        def key(self, modifier: int, keycode: int):
+            self.actions.append(("key", (modifier, keycode)))
+
+        def type(self, text: str):
+            self.actions.append(("type", (text,)))
+
+    phone = FakePhone()
+
+    assert not open_app_from_springboard(phone, ("Settings",), max_pages=0, settle_s=0.0)
+    assert not any(action[0] == "tap" for action in phone.actions)
+
+
+@pytest.mark.smoke
 def test_open_app_from_springboard_falls_back_when_icon_tap_does_not_leave_home(monkeypatch):
     monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
 
