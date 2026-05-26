@@ -66,6 +66,9 @@ def wheel_scroll_down(
     if _phone_supports(phone, "scroll_wheel") and hasattr(phone, "wheel_scroll_down"):
         with action_intent(phone, "scroll.down.wheel"):
             _settings_wheel_scroll(phone, settings_wheel_ticks_per_swipe() if ticks is None else ticks)
+    elif _is_ipad_target(phone):
+        with action_intent(phone, "scroll.down.ipad_unavailable"):
+            return
     else:
         with action_intent(phone, "scroll.down.swipe_fallback"):
             phone.swipe_up()
@@ -107,6 +110,9 @@ def wheel_scroll_up(phone, *, action_intent: ActionIntent) -> None:
     if _phone_supports(phone, "scroll_wheel") and hasattr(phone, "wheel_scroll_up"):
         with action_intent(phone, "scroll.up.wheel"):
             _settings_wheel_scroll(phone, -settings_wheel_ticks_per_swipe())
+    elif _is_ipad_target(phone):
+        with action_intent(phone, "scroll.up.ipad_unavailable"):
+            return
     else:
         with action_intent(phone, "scroll.up.swipe_fallback"):
             phone.swipe_down()

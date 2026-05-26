@@ -632,12 +632,14 @@ can still be explicitly enabled as a diagnostic transport, but the connected rig
 proved that ACKed wheel events do not move the Settings sidebar. Do not build
 acceptance on wheel movement until a new HID path is proven. Current viable
 direction: use visible sidebar rows + top-search recovery for missing root
-sections, and keep wheel attempts opt-in/diagnostic rather than authoritative. A
-future firmware/native relative-wheel path or real trackpad gesture may still
-replace this. If a later iPadOS hardware run proves semantic wheel movement,
-update this section with the report path, probe point, tick count, and
-before/after sidebar evidence before promoting wheel from diagnostic to accepted
-coverage machinery.
+sections. The Settings crawler also avoids falling back to PicoKVM swipe-drag on
+iPad when wheel is unavailable, so missing off-screen roots fall through to
+search instead of reintroducing the unproved scroll path. Keep wheel attempts
+opt-in/diagnostic rather than authoritative. A future firmware/native
+relative-wheel path or real trackpad gesture may still replace this. If a later
+iPadOS hardware run proves semantic wheel movement, update this section with the
+report path, probe point, tick count, and before/after sidebar evidence before
+promoting wheel from diagnostic to accepted coverage machinery.
 
 ### 6. Platform seam: an iPadOS variant (implemented baseline)
 `glassbox/platforms.py` can select the `ipados` backend, which swaps in iPad

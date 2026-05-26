@@ -209,6 +209,37 @@ def test_ipad_settings_wheel_clicks_sidebar_focus_before_wheel():
 
 
 @pytest.mark.smoke
+def test_ipad_settings_without_wheel_does_not_fallback_to_swipe():
+    class IPadNoWheelPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self) -> None:
+            self.swipes: list[str] = []
+
+        def supports(self, action: str) -> bool:
+            return False
+
+        def swipe_up(self) -> None:
+            self.swipes.append("up")
+
+        def swipe_down(self) -> None:
+            self.swipes.append("down")
+
+    phone = IPadNoWheelPhone()
+    intents: list[str] = []
+
+    def record_intent(_phone, label: str):
+        intents.append(label)
+        return nullcontext()
+
+    settings_scrolling.wheel_scroll_down(phone, action_intent=record_intent)
+    settings_scrolling.wheel_scroll_up(phone, action_intent=record_intent)
+
+    assert phone.swipes == []
+    assert intents == ["scroll.down.ipad_unavailable", "scroll.up.ipad_unavailable"]
+
+
+@pytest.mark.smoke
 def test_ipad_scroll_down_confirmed_does_not_retry_stuck_wheel(monkeypatch):
     monkeypatch.setattr(settings_scrolling.time, "sleep", lambda _seconds: None)
     scene = _scene(
