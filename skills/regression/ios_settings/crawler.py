@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from typing import Any
 
@@ -115,18 +115,23 @@ def crawl_high_value_child_settings(
                     _return_to_settings_root(traced_phone)
                     continue
                 opened_targets.append(label)
-                _crawl_current_page(
-                    traced_phone,
-                    path=("Settings", label),
-                    visits=visits,
-                    seen_sigs=set(),
-                    depth=1,
-                    max_depth=max_depth,
-                    limits_hit=limits_hit,
-                    blocked_pages=blocked_pages,
-                    rejected_candidates=rejected_candidates,
-                    navigation_failures=navigation_failures,
-                )
+                try:
+                    _crawl_current_page(
+                        traced_phone,
+                        path=("Settings", label),
+                        visits=visits,
+                        seen_sigs=set(),
+                        depth=1,
+                        max_depth=max_depth,
+                        limits_hit=limits_hit,
+                        blocked_pages=blocked_pages,
+                        rejected_candidates=rejected_candidates,
+                        navigation_failures=navigation_failures,
+                    )
+                except settings_recovery.SettingsRootUnreachable:
+                    return_root_failed = True
+                    limits_hit.add("return_root_failed")
+                    break
                 try:
                     _return_to_settings_root(traced_phone)
                 except settings_recovery.SettingsRootUnreachable:
@@ -262,24 +267,81 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
 def _open_target_root_page(phone, label: str) -> bool:
     _return_to_settings_root(phone)
     _scroll_to_vertical_boundary(phone, direction="up")
-    row = settings_navigation.open_visible_or_scroll_to_row(
-        phone,
-        (label,),
-        settings_core._navigation_actions(),
-    )
+    current = phone.perceive()
+    if _opened_requested_root(current, label):
+        return True
+    row = _visible_root_candidate_for_label(phone, label)
+    if row is None:
+        row = settings_navigation.open_visible_or_scroll_to_row(
+            phone,
+            (label,),
+            settings_core._navigation_actions(),
+        )
     if row is not None:
         before = phone.perceive()
         settings_navigation.tap_settings_row(phone, row, settings_core._navigation_actions())
         time.sleep(1.0)
         phone.invalidate_perceive_cache()
         after = phone.perceive()
-        if not settings_scene_state.same_page_after_tap(before, after, expected_title=label):
+        if _opened_requested_root(after, label):
             return True
-    return bool(settings_navigation.open_root_label_via_search(
+        if _wait_opened_requested_root(phone, label):
+            return True
+        if not _is_ipad_target(phone) and not settings_scene_state.same_page_after_tap(before, after, expected_title=label):
+            return True
+    if settings_navigation.open_root_label_via_search(
         phone,
         label,
         settings_core._navigation_actions(),
-    ))
+    ):
+        return True
+    return _wait_opened_requested_root(phone, label)
+
+
+def _visible_root_candidate_for_label(phone, label: str):
+    actions = settings_core._navigation_actions()
+    scene = phone.perceive()
+    if actions.is_settings_search_scene(scene):
+        return None
+    target = actions.canonical_expected_root_label(label) or label
+    candidates = actions.safe_navigation_candidates(
+        scene,
+        allow_sensitive_root_labels=True,
+        allow_known_without_affordance=True,
+    )
+    for candidate in candidates:
+        text = (candidate.text or "").strip()
+        if (
+            text == label
+            or actions.canonical_expected_root_label(text) == target
+            or actions.match_any((candidate,), (label,)) is not None
+        ):
+            return candidate
+    return None
+
+
+def _opened_requested_root(scene, label: str) -> bool:
+    requested = settings_scene_state.canonical_expected_root_label(label) or label
+    title = settings_scene_state.page_title(scene)
+    return (
+        settings_scene_state.canonical_expected_root_label(title) == requested
+        or settings_scene_state.title_matches_navigation_label(title, label)
+    )
+
+
+def _wait_opened_requested_root(phone, label: str, *, polls: int = 4, interval_s: float = 0.4) -> bool:
+    for _ in range(max(1, polls)):
+        time.sleep(interval_s)
+        with suppress(Exception):
+            phone.invalidate_perceive_cache()
+        if _opened_requested_root(phone.perceive(), label):
+            return True
+    return False
+
+
+def _is_ipad_target(phone) -> bool:
+    model = str(getattr(getattr(phone, "device_geometry", None), "model", "") or "")
+    return model.lower().replace("-", "_").startswith("ipad")
 
 
 def _open_settings_from_home_if_visible(phone) -> None:

@@ -100,6 +100,7 @@ class PicoKVMEffectorConfig(BaseSettings):
     keyboard_focus_x: int = 14435
     keyboard_focus_y: int = 11905
     keyboard_focus_click_ms: int = 100
+    keyboard_type_key_gap_ms: int = 40
     keyboard_shortcut_gap_ms: int = 500
     close_app_drag_start_x: int = 16102
     close_app_drag_start_y: int = 32506
@@ -162,6 +163,7 @@ class PicoKVMEffectorConfig(BaseSettings):
         "keyboard_focus_x",
         "keyboard_focus_y",
         "keyboard_focus_click_ms",
+        "keyboard_type_key_gap_ms",
         "keyboard_shortcut_gap_ms",
         "preset_drag_down_hold_ms",
         "preset_drag_up_hold_ms",

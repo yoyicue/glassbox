@@ -6,6 +6,7 @@ import pytest
 
 from glassbox.cognition import Box, Scene, UIElement
 from glassbox.ios.springboard import (
+    _icon_label_candidates,
     _opened_expected_app_or_recover,
     find_springboard_icon,
     is_ios_home_screen,
@@ -104,6 +105,58 @@ def test_ios_home_screen_rejects_hidagent_service_page():
     )
 
     assert not is_ios_home_screen(scene, viewport_size=(448, 973))
+
+
+@pytest.mark.smoke
+def test_ios_home_screen_rejects_clock_app_grid_like_world_clock():
+    scene = _scene(
+        _el("World Clock", 320, 78, w=94),
+        _el("Alarms", 410, 78, w=58),
+        _el("Stopwatch", 502, 78, w=84),
+        _el("Timers", 592, 78, w=54),
+        _el("San Francisco", 320, 166, w=110),
+        _el("London", 320, 252, w=66),
+        _el("Paris", 320, 338, w=48),
+        _el("Moscow", 320, 424, w=72),
+        _el("Beijing", 320, 510, w=66),
+        _el("12", 462, 192, w=20),
+        _el("11", 482, 224, w=20),
+        _el("10", 502, 256, w=20),
+        _el("9", 522, 288, w=20),
+        _el("8", 542, 320, w=20),
+    )
+
+    assert not is_ios_home_screen(scene, viewport_size=(640, 964))
+
+
+@pytest.mark.smoke
+def test_assistive_touch_menu_labels_are_not_home_icon_candidates():
+    scene = _scene(
+        _el("Home", 142, 620, w=54),
+        _el("Camera", 260, 620, w=62),
+        _el("Files", 502, 420, w=50),
+        _el("App Switcher", 368, 720, w=92),
+        _el("Notification", 462, 656, w=88),
+        _el("Centre", 462, 678, w=54),
+        _el("Device", 558, 720, w=58),
+        _el("Gestures", 368, 824, w=68),
+        _el("Control", 558, 824, w=62),
+        _el("Centre", 558, 846, w=54),
+    )
+
+    labels = [
+        (candidate.text or "").strip()
+        for candidate in _icon_label_candidates(scene, viewport_size=(640, 984))
+    ]
+
+    assert "Home" in labels
+    assert "Camera" in labels
+    assert "Files" in labels
+    assert "App Switcher" not in labels
+    assert "Device" not in labels
+    assert "Gestures" not in labels
+    assert "Control" not in labels
+    assert "Centre" not in labels
 
 
 @pytest.mark.smoke

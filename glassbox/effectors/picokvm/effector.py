@@ -44,9 +44,9 @@ _PICOKVM_DIRECT_ACTIONS = frozenset({
 class PicoKVMEffector:
     """Drive iOS through PicoKVM HID RPCs.
 
-    AssistiveTouch or iOS external pointer support must be enabled on the
-    target device. Current bring-up found PicoKVM wheel reports are accepted by
-    the RPC service but not consumed by iOS, so wheel support defaults off.
+    iPhone targets need AssistiveTouch or external pointer support. iPadOS uses
+    the native pointer path, so wheel support is exposed for iPad device
+    geometry even when the iPhone-safe ``wheel_enabled`` default is false.
     """
 
     coordinate_space = "frame_px"
@@ -58,12 +58,15 @@ class PicoKVMEffector:
         rpc: PicoKVMRpcClient | None = None,
         coordinate_space: str | None = None,
         device_geometry=None,
+        crop=None,
         **_kwargs,
     ):
         self.config = config or PicoKVMEffectorConfig()
         self.rpc = rpc or PicoKVMRpcClient(self.config)
         self.coordinate_space = coordinate_space or "frame_px"
         self._phone_size = getattr(device_geometry, "phone_size", None)
+        self._device_model = str(getattr(device_geometry, "model", "") or "").lower().replace("-", "_")
+        self._apply_ipad_crop_calibration(crop)
         self._connected = False
 
     def connect(self) -> None:
@@ -89,7 +92,7 @@ class PicoKVMEffector:
     def capabilities(self) -> BackendCapabilities:
         direct_actions = _PICOKVM_DIRECT_ACTIONS
         scroll_strategy = "unsupported"
-        if self.config.wheel_enabled:
+        if self._wheel_available():
             direct_actions = direct_actions | frozenset({"scroll_wheel", "wheel_scroll_down", "wheel_scroll_up"})
             scroll_strategy = "wheel"
         home_strategy = "unsupported"
@@ -114,10 +117,47 @@ class PicoKVMEffector:
             notification_center_strategy="unsupported",
             switch_input_source_strategy="unsupported",
             paste_strategy="unsupported",
-            requires_assistive_touch=True,
+            requires_assistive_touch=not self._is_ipad_target(),
             requires_connection=True,
             transport_label="picokvm-http",
         )
+
+    def _is_ipad_target(self) -> bool:
+        return self._device_model.startswith("ipad")
+
+    def _wheel_available(self) -> bool:
+        return bool(self.config.wheel_enabled or self._is_ipad_target())
+
+    def _apply_ipad_crop_calibration(self, crop) -> None:
+        """Derive a PicoKVM absolute-pointer fit from the detected iPad crop.
+
+        iPhone keeps the historical static fit. For iPad, the USB-C mirror is a
+        3:2 pillarboxed region inside a 16:9 HDMI frame, so the least surprising
+        default is the current crop bbox. Explicit GLASSBOX_PICOKVM_ABS_* values
+        still win for hand-measured calibration.
+        """
+        if not self._is_ipad_target() or self.coordinate_space != "frame_px" or crop is None:
+            return
+        fields_set = set(getattr(self.config, "model_fields_set", set()) or ())
+        calibration_fields = {
+            "abs_to_phone_scale_x",
+            "abs_to_phone_scale_y",
+            "abs_origin_offset_x",
+            "abs_origin_offset_y",
+        }
+        if fields_set & calibration_fields:
+            return
+        try:
+            x, y, w, h = crop.crop_bbox
+        except Exception:
+            return
+        if w <= 0 or h <= 0:
+            return
+        maxv = max(1, int(self.config.abs_logical_max))
+        self.config.abs_origin_offset_x = float(x)
+        self.config.abs_origin_offset_y = float(y)
+        self.config.abs_to_phone_scale_x = float(w) / maxv
+        self.config.abs_to_phone_scale_y = float(h) / maxv
 
     def preflight(self) -> PreflightResult:
         try:
@@ -392,12 +432,13 @@ class PicoKVMEffector:
         horizontal: int = 0,
         interval_ms: int = 40,
         focus: bool = True,
+        focus_click: bool = False,
         focus_x: int | None = None,
         focus_y: int | None = None,
     ) -> ActionResult:
         if horizontal:
             return self._failed("scroll_wheel", ValueError("picokvm_wheel_horizontal_unsupported"), unsupported=True)
-        if not self.config.wheel_enabled:
+        if not self._wheel_available():
             return self._failed("scroll_wheel", ValueError("picokvm_wheel_unavailable"), unsupported=True)
         try:
             count = abs(int(ticks))
@@ -408,7 +449,6 @@ class PicoKVMEffector:
             responses: list[PicoKVMRpcResponse] = []
             if focus:
                 if focus_x is None or focus_y is None:
-                    # Hover at the default focus point (no click — see below).
                     x = self.config.keyboard_focus_x
                     y = self.config.keyboard_focus_y
                     responses.extend([
@@ -416,15 +456,23 @@ class PicoKVMEffector:
                         self._call("absMouseReport", {"x": x, "y": y, "buttons": 0}),
                     ])
                     self._sleep_ms(self.config.click_move_settle_ms)
+                    if focus_click:
+                        responses.append(self._call("absMouseReport", {"x": x, "y": y, "buttons": 1}))
+                        self._sleep_ms(self.config.click_press_ms)
+                        responses.append(self._call("absMouseReport", {"x": x, "y": y, "buttons": 0}))
+                        self._sleep_ms(self.config.click_move_settle_ms)
                 else:
-                    # Hover, not click: iOS only delivers wheel scroll to the
-                    # control the pointer is hovering over; a click would activate
-                    # the row under the pointer and breaks wheel delivery
-                    # (verified on-device 2026-05-23). A plain absolute move
-                    # (buttons=0) establishes the scroll target.
+                    # Default to hover-only: on iPhone AssistiveTouch, clicking
+                    # the row can break wheel delivery. iPad Settings opts into
+                    # focus_click when native pointer focus needs activation.
                     responses.append(self._abs_report(int(focus_x), int(focus_y), 0))
                     responses.append(self._abs_report(int(focus_x), int(focus_y), 0))
                     self._sleep_ms(self.config.click_move_settle_ms)
+                    if focus_click:
+                        responses.append(self._abs_report(int(focus_x), int(focus_y), 1))
+                        self._sleep_ms(self.config.click_press_ms)
+                        responses.append(self._abs_report(int(focus_x), int(focus_y), 0))
+                        self._sleep_ms(self.config.click_move_settle_ms)
             for _idx in range(count):
                 responses.append(self._call("wheelReport", {"wheelY": step}))
                 self._sleep_ms(interval_ms)
@@ -439,7 +487,9 @@ class PicoKVMEffector:
             for ch in str(text):
                 modifier, keycode = char_to_key(ch)
                 responses.append(self._call("keyboardReport", {"modifier": modifier, "keys": [keycode]}))
+                self._sleep_ms(self.config.keyboard_type_key_gap_ms)
                 responses.append(self._call("keyboardReport", {"modifier": 0, "keys": []}))
+                self._sleep_ms(self.config.keyboard_type_key_gap_ms)
             return self._multi_result(responses, op="type")
         except Exception as exc:
             if responses:

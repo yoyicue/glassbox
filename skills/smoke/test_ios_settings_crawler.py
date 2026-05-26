@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from glassbox.cognition import Box, Scene, UIElement
 from skills.regression.ios_settings import core as settings_core
 from skills.regression.ios_settings import crawler
 from skills.regression.ios_settings import reporting as settings_reporting
+from skills.regression.ios_settings import scene_state as settings_scene_state
 from skills.regression.ios_settings.config import SettingsRunConfig
+from skills.regression.ios_settings.policy import IPadSettingsPolicy
 
 
 @pytest.mark.smoke
@@ -150,3 +154,128 @@ def test_child_audit_records_return_root_failed_not_exception(monkeypatch):
     assert result.return_root_failed is True
     assert "return_root_failed" in result.limits_hit
     assert "exception" not in result.limits_hit
+
+
+@pytest.mark.smoke
+def test_ipad_child_audit_matches_visible_root_rows_by_canonical_label(monkeypatch):
+    policy = IPadSettingsPolicy()
+    monkeypatch.setattr(settings_core, "DEFAULT_SETTINGS_POLICY", policy)
+    monkeypatch.setattr(settings_scene_state, "DEFAULT_SETTINGS_POLICY", policy)
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(744, 1133),
+        elements=[
+            UIElement(type="text", box=Box(x=48, y=72, w=72, h=28), text="Settings", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=220, w=52, h=24), text="WLAN", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=276, w=76, h=24), text="General", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=332, w=112, h=24), text="Accessibility", confidence=0.9),
+            UIElement(type="text", box=Box(x=418, y=76, w=96, h=28), text="VoiceOver", confidence=0.9),
+            UIElement(type="text", box=Box(x=384, y=180, w=86, h=24), text="Verbosity", confidence=0.9),
+        ],
+    )
+    phone = SimpleNamespace(
+        device_geometry=SimpleNamespace(model="ipad_mini_7"),
+        perceive=lambda: scene,
+    )
+
+    candidate = crawler._visible_root_candidate_for_label(phone, "辅助功能")
+
+    assert candidate is not None
+    assert candidate.text == "Accessibility"
+
+
+@pytest.mark.smoke
+def test_child_audit_accepts_current_requested_root_before_search(monkeypatch):
+    policy = IPadSettingsPolicy()
+    monkeypatch.setattr(settings_core, "DEFAULT_SETTINGS_POLICY", policy)
+    monkeypatch.setattr(settings_scene_state, "DEFAULT_SETTINGS_POLICY", policy)
+    monkeypatch.setattr(crawler, "_return_to_settings_root", lambda phone: None)
+    monkeypatch.setattr(crawler, "_scroll_to_vertical_boundary", lambda phone, *, direction: None)
+    monkeypatch.setattr(crawler, "_visible_root_candidate_for_label", lambda phone, label: pytest.fail("row lookup should not run"))
+    monkeypatch.setattr(
+        crawler.settings_navigation,
+        "open_root_label_via_search",
+        lambda phone, label, actions: pytest.fail("search fallback should not run"),
+    )
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=34, y=90, w=72, h=18), text="Q Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=167, w=76, h=16), text="Battery", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=335, w=92, h=16), text="Screen Time", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=368, w=112, h=16), text="Accessibility", confidence=0.9),
+            UIElement(type="text", box=Box(x=300, y=34, w=88, h=16), text="Daily Average", confidence=0.9),
+            UIElement(type="text", box=Box(x=302, y=60, w=78, h=22), text="47h 19m", confidence=0.9),
+            UIElement(type="text", box=Box(x=482, y=65, w=146, h=16), text="© 19% from last week", confidence=0.9),
+            UIElement(type="text", box=Box(x=320, y=348, w=76, h=18), text="Downtime", confidence=0.9),
+            UIElement(type="text", box=Box(x=320, y=403, w=78, h=18), text="App Limits", confidence=0.9),
+            UIElement(type="text", box=Box(x=330, y=456, w=112, h=18), text="Always Allowed", confidence=0.9),
+        ],
+    )
+    phone = SimpleNamespace(
+        device_geometry=SimpleNamespace(model="ipad_mini_7"),
+        perceive=lambda: scene,
+    )
+
+    assert crawler._open_target_root_page(phone, "屏幕使用时间") is True
+
+
+@pytest.mark.smoke
+def test_child_audit_rechecks_target_root_after_failed_fallback(monkeypatch):
+    policy = IPadSettingsPolicy()
+    monkeypatch.setattr(settings_core, "DEFAULT_SETTINGS_POLICY", policy)
+    monkeypatch.setattr(settings_scene_state, "DEFAULT_SETTINGS_POLICY", policy)
+    monkeypatch.setattr(crawler.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(crawler, "_return_to_settings_root", lambda phone: None)
+    monkeypatch.setattr(crawler, "_scroll_to_vertical_boundary", lambda phone, *, direction: None)
+    monkeypatch.setattr(crawler, "_visible_root_candidate_for_label", lambda phone, label: None)
+    monkeypatch.setattr(
+        crawler.settings_navigation,
+        "open_visible_or_scroll_to_row",
+        lambda phone, labels, actions: None,
+    )
+    monkeypatch.setattr(
+        crawler.settings_navigation,
+        "open_root_label_via_search",
+        lambda phone, label, actions: False,
+    )
+    initial = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=34, y=90, w=72, h=18), text="Q Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=335, w=122, h=16), text="Privacy & Security", confidence=0.9),
+            UIElement(type="text", box=Box(x=364, y=203, w=164, h=22), text="Privacy & Security", confidence=0.9),
+        ],
+    )
+    target = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=34, y=90, w=72, h=18), text="Q Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=335, w=92, h=16), text="Screen Time", confidence=0.9),
+            UIElement(type="text", box=Box(x=300, y=34, w=88, h=16), text="Daily Average", confidence=0.9),
+            UIElement(type="text", box=Box(x=302, y=60, w=78, h=22), text="47h 19m", confidence=0.9),
+            UIElement(type="text", box=Box(x=482, y=65, w=146, h=16), text="© 19% from last week", confidence=0.9),
+            UIElement(type="text", box=Box(x=320, y=348, w=76, h=18), text="Downtime", confidence=0.9),
+            UIElement(type="text", box=Box(x=320, y=403, w=78, h=18), text="App Limits", confidence=0.9),
+            UIElement(type="text", box=Box(x=330, y=456, w=112, h=18), text="Always Allowed", confidence=0.9),
+        ],
+    )
+    scenes = iter([initial, target])
+
+    class _Phone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return next(scenes, target)
+
+        def invalidate_perceive_cache(self):
+            pass
+
+    assert crawler._open_target_root_page(_Phone(), "屏幕使用时间") is True

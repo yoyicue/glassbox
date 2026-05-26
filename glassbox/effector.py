@@ -284,7 +284,8 @@ class Effector(Protocol):
     def page_slide_right(self) -> ActionResult: ...
     def scroll_wheel(self, ticks: int, *,
                      horizontal: int = 0, interval_ms: int = 40,
-                     focus: bool = True, focus_x: int | None = None,
+                     focus: bool = True, focus_click: bool = False,
+                     focus_x: int | None = None,
                      focus_y: int | None = None) -> ActionResult: ...
 
     # keyboard
@@ -349,9 +350,18 @@ class NoOpEffector:
     def page_slide_left(self):            return self._log("page_slide_left")
     def page_slide_right(self):           return self._log("page_slide_right")
     def scroll_wheel(self, ticks, *, horizontal=0, interval_ms=40,
-                     focus=True, focus_x=None, focus_y=None):
-        return self._log("scroll_wheel", ticks=ticks, horizontal=horizontal, interval_ms=interval_ms,
-                         focus=focus, focus_x=focus_x, focus_y=focus_y)
+                     focus=True, focus_click=False, focus_x=None, focus_y=None):
+        kwargs = dict(
+            ticks=ticks,
+            horizontal=horizontal,
+            interval_ms=interval_ms,
+            focus=focus,
+            focus_x=focus_x,
+            focus_y=focus_y,
+        )
+        if focus_click:
+            kwargs["focus_click"] = True
+        return self._log("scroll_wheel", **kwargs)
     def type(self, text):                 return self._log("type", text=text)
     def key(self, modifier, keycode):     return self._log("key", mod=modifier, kc=keycode)
     def set_clipboard(self, text):        return self._log("set_clipboard", text=text)
@@ -423,9 +433,18 @@ class MockEffector:
     def page_slide_left(self):            return self._record("page_slide_left")
     def page_slide_right(self):           return self._record("page_slide_right")
     def scroll_wheel(self, ticks, *, horizontal=0, interval_ms=40,
-                     focus=True, focus_x=None, focus_y=None):
-        return self._record("scroll_wheel", ticks=ticks, horizontal=horizontal, interval_ms=interval_ms,
-                            focus=focus, focus_x=focus_x, focus_y=focus_y)
+                     focus=True, focus_click=False, focus_x=None, focus_y=None):
+        kwargs = dict(
+            ticks=ticks,
+            horizontal=horizontal,
+            interval_ms=interval_ms,
+            focus=focus,
+            focus_x=focus_x,
+            focus_y=focus_y,
+        )
+        if focus_click:
+            kwargs["focus_click"] = True
+        return self._record("scroll_wheel", **kwargs)
     def type(self, text):                 return self._record("type", text=text)
     def key(self, modifier, keycode):     return self._record("key", modifier=modifier, keycode=keycode)
     def set_clipboard(self, text):        return self._record("set_clipboard", text=text)

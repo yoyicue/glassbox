@@ -118,6 +118,13 @@ def test_phone_size_resolves_from_model():
 
 
 @pytest.mark.smoke
+def test_ipad_mini_7_phone_size_resolves_from_model():
+    cfg = AgentConfig(phone_model="ipad_mini_7", _env_file=None)
+    assert cfg.phone_size() == (1488, 2266)
+    assert cfg.phone_points() == (744, 1133)
+
+
+@pytest.mark.smoke
 def test_phone_size_unknown_model_raises():
     cfg = AgentConfig(phone_model="nokia_3310", _env_file=None)
     with pytest.raises(KeyError):

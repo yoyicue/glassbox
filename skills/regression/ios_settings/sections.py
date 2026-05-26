@@ -126,7 +126,10 @@ _EN_DISPLAY: dict[RootSection, str] = {
     RootSection.PRIVACY_SECURITY: "Privacy & Security", RootSection.BATTERY: "Battery",
     RootSection.WALLET: "Wallet & Apple Pay",
 }
-_EN_ALIASES: dict[RootSection, tuple[str, ...]] = {RootSection.WIFI: ("WiFi",)}
+_EN_ALIASES: dict[RootSection, tuple[str, ...]] = {
+    RootSection.WIFI: ("WiFi",),
+    RootSection.SOUNDS_HAPTICS: ("Sounds",),
+}
 # Greater-China English overlay (live-observed in en-CN and en-HK): WLAN / Mobile
 # Service. Applied for these regions only; en-US shows Wi-Fi / Cellular.
 _GREATER_CHINA_EN_REGIONS = frozenset({"CN", "HK"})

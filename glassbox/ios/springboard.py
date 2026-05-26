@@ -21,9 +21,15 @@ from glassbox.ios.scene import classify_ios_scene
 HOME_SEARCH_LABELS = ("搜索", "Search")
 HOME_FOLDER_LABELS = ("其他", "工具", "实用工具", "Utilities", "Other")
 SPOTLIGHT_MARKERS = ("最佳搜索结果", "Top Hit", "Siri建议", "Siri Suggestions", "在App中搜索", "Search in App")
+ASSISTIVE_TOUCH_MENU_LABELS = (
+    "App Switcher", "Notification Centre", "Notification Center",
+    "Notification", "Device", "Gestures",
+    "Control Centre", "Control Center", "Control", "Centre",
+)
 NON_HOME_APP_MARKERS = (
     "服务有问题", "服务运行中", "Mac 大脑", "最近活动", "停止服务",
     "桥已连接", "已连接 8C1822", "标定",
+    "World Clock", "Alarms", "Stopwatch", "Timers",
 )
 _MOD_META_LEFT = 0x08
 _KEY_A = 0x04
@@ -70,20 +76,75 @@ def _icon_label_candidates(
 ) -> list[UIElement]:
     """Return OCR labels whose geometry looks like Home screen app labels."""
     w, h = _scene_size(scene, viewport_size)
+    assistive_menu_bounds = _assistive_touch_menu_bounds(scene, viewport_size=(w, h))
     candidates: list[UIElement] = []
     for el in scene.elements:
         text = _text(el)
         if not text or el.type in {"nav_back", "status_bar"}:
             continue
+        if assistive_menu_bounds is not None and _point_in_bounds(el.box.center, assistive_menu_bounds):
+            continue
         _cx, cy = el.box.center
-        if cy < h * 0.10 or cy > h * 0.98:
+        min_label_y = h * (0.16 if w >= 600 else 0.10)
+        if cy < min_label_y or cy > h * 0.98:
             continue
         if el.box.w > w * 0.55 or el.box.h > h * 0.06:
             continue
         if len(text) > 18:
             continue
+        if _looks_like_home_widget_text(text, viewport_width=w):
+            continue
         candidates.append(el)
     return candidates
+
+
+def _assistive_touch_menu_bounds(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int],
+) -> tuple[int, int, int, int] | None:
+    """Bounding box for the AssistiveTouch menu overlay, if visible."""
+    _w, h = viewport_size
+    hits = [
+        el for el in scene.elements
+        if _matches(_text(el), ASSISTIVE_TOUCH_MENU_LABELS, fuzzy=0.86)
+        and el.box.center[1] >= h * 0.45
+    ]
+    matched = {
+        label for label in ASSISTIVE_TOUCH_MENU_LABELS
+        if any(_matches(_text(el), (label,), fuzzy=0.86) for el in hits)
+    }
+    if len(matched) < 4:
+        return None
+    x1 = min(el.box.x for el in hits)
+    y1 = min(el.box.y for el in hits)
+    x2 = max(el.box.x2 for el in hits)
+    y2 = max(el.box.y2 for el in hits)
+    return (max(0, x1 - 64), max(0, y1 - 96), x2 + 64, y2 + 64)
+
+
+def _point_in_bounds(point: tuple[int, int], bounds: tuple[int, int, int, int]) -> bool:
+    x, y = point
+    x1, y1, x2, y2 = bounds
+    return x1 <= x <= x2 and y1 <= y <= y2
+
+
+def _looks_like_home_widget_text(text: str, *, viewport_width: int) -> bool:
+    if viewport_width < 600:
+        return False
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if not (stripped[0].isalnum() or "\u4e00" <= stripped[0] <= "\u9fff"):
+        return True
+    compact = stripped.replace(" ", "")
+    if compact.replace(":", "").isdigit():
+        return True
+    if "°" in stripped:
+        return True
+    if stripped.upper() in {"AM", "PM", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"}:
+        return True
+    return stripped in {"No Events Today", "No Notes"}
 
 
 def _has_strong_icon_grid(labels: list[UIElement], *, viewport_size: tuple[int, int]) -> bool:
@@ -114,6 +175,11 @@ def is_ios_home_screen(
     if any(el.type == "nav_back" for el in scene.elements):
         return False
     if any(_matches(_text(el), NON_HOME_APP_MARKERS, fuzzy=0.78) for el in scene.elements):
+        return False
+    platform_kind = str(getattr(scene, "platform_scene_kind", "") or "")
+    if platform_kind in {"springboard", "app_library"}:
+        return True
+    if platform_kind.startswith("settings"):
         return False
 
     labels = _icon_label_candidates(scene, viewport_size=(w, h))
@@ -185,7 +251,10 @@ def find_springboard_icon(
 
     cx, _ = best.box.center
     # OCR sees the label below the icon; tap the icon cell above the label.
-    offset = max(70, int(h * 0.09)) if best.box.center[1] > h * 0.75 else max(28, int(h * 0.045))
+    if w >= 600:
+        offset = max(28, int(h * 0.030)) if best.box.center[1] > h * 0.75 else max(28, int(h * 0.040))
+    else:
+        offset = max(70, int(h * 0.09)) if best.box.center[1] > h * 0.75 else max(28, int(h * 0.045))
     tap_y = max(int(h * 0.05), best.box.y - offset)
     tap_x = min(max(cx, int(w * 0.05)), int(w * 0.95))
     return SpringboardIcon(element=best, tap_point=(tap_x, tap_y))

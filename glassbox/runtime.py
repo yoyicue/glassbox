@@ -155,6 +155,7 @@ def make_effector(
     frame_resolution: tuple[int, int] | None = None,
     coordinate_space: str | None = None,
     device_geometry=None,
+    crop=None,
     connect: bool = True,
 ) -> Effector:
     cfg = cfg or get_config()
@@ -167,6 +168,7 @@ def make_effector(
         frame_resolution=frame_resolution,
         coordinate_space=coordinate_space,
         device_geometry=device_geometry,
+        crop=crop,
     )
     capabilities = _effector_capabilities(eff)
     if not connect:
@@ -217,6 +219,17 @@ def _crop_from_bbox(
     if x < 0 or y < 0 or x + w > fw or y + h > fh:
         raise RuntimeUnavailable(f"crop bbox {bbox!r} is outside frame {frame_size!r}")
     return LetterboxCrop(crop_bbox=(x, y, w, h), frame_size=frame_size, phone_size=phone_size)
+
+
+def _crop_candidate_phone_sizes(
+    geometry,
+    phone_size: tuple[int, int],
+) -> tuple[tuple[int, int], ...]:
+    candidates = [phone_size]
+    model = str(getattr(geometry, "model", "") or "").lower().replace("-", "_")
+    if model.startswith("ipad") and phone_size[0] != phone_size[1]:
+        candidates.append((phone_size[1], phone_size[0]))
+    return tuple(dict.fromkeys(candidates))
 
 
 def _load_cached_crop(
@@ -292,16 +305,21 @@ def detect_crop(
         return crop
     last_exc: Exception | None = None
     attempts = max(1, int(_crop_config_value(cfg, capabilities, "crop_retries", 3)))
+    candidate_phone_sizes = _crop_candidate_phone_sizes(geometry, phone_size)
     try:
         for _ in range(attempts):
             frame = source.snapshot()
-            try:
-                crop = LetterboxCrop.auto_detect(frame.img, phone_size=phone_size)
-                if capabilities.requires_calibrated_crop:
-                    _save_cached_crop(cfg, crop, capabilities=capabilities)
-                break
-            except Exception as exc:
-                last_exc = exc
+            for candidate_phone_size in candidate_phone_sizes:
+                try:
+                    crop = LetterboxCrop.auto_detect(frame.img, phone_size=candidate_phone_size)
+                    if capabilities.requires_calibrated_crop:
+                        _save_cached_crop(cfg, crop, capabilities=capabilities)
+                    break
+                except Exception as exc:
+                    last_exc = exc
+            else:
+                continue
+            break
         else:
             raise last_exc or RuntimeUnavailable("no frame available for crop detection")
     except Exception as exc:
@@ -311,15 +329,16 @@ def detect_crop(
             except Exception:
                 frame_size = None
             if frame_size is not None:
-                cached = _load_cached_crop(
-                    cfg,
-                    capabilities=capabilities,
-                    frame_size=frame_size,
-                    phone_size=phone_size,
-                )
-                if cached is not None:
-                    print(f"[runtime] using cached crop bbox={cached.crop_bbox}")
-                    return cached
+                for candidate_phone_size in candidate_phone_sizes:
+                    cached = _load_cached_crop(
+                        cfg,
+                        capabilities=capabilities,
+                        frame_size=frame_size,
+                        phone_size=candidate_phone_size,
+                    )
+                    if cached is not None:
+                        print(f"[runtime] using cached crop bbox={cached.crop_bbox}")
+                        return cached
             raise RuntimeUnavailable(
                 f"{capabilities.backend} requires a calibrated letterbox crop. "
                 f"Auto-detect failed after {attempts} frame(s): {exc}. "
@@ -408,6 +427,7 @@ def build_phone(
                 frame_resolution=effector_resolution,
                 coordinate_space=coordinate_space,
                 device_geometry=device_geometry,
+                crop=crop,
                 connect=False,
             )
             capabilities = _effector_capabilities(effector)
@@ -436,11 +456,14 @@ def build_phone(
         bundle_id = getattr(getattr(memory, "utg", None), "bundle_id", None)
     app_version = profile.app.version if profile and not cfg.memory_bundle else None
     profile_name = profile.app.bundle_id if profile else (cfg.memory_bundle or "?")
+    selected_platform = select_platform_backend(cfg, bundle_id=bundle_id)
 
     scene_classifiers = []
     from glassbox.app_policies import DEFAULT_APP_POLICY_REGISTRY
 
     app_scene_classifier = DEFAULT_APP_POLICY_REGISTRY.scene_classifier_for(bundle_id)
+    if selected_platform == "ipados" and bundle_id == "com.apple.Preferences":
+        app_scene_classifier = None
     if app_scene_classifier is not None:
         def _classify_app_scene(scene, viewport_size):
             return app_scene_classifier.classify(scene, viewport_size=viewport_size)
@@ -484,6 +507,7 @@ def build_phone(
         )
 
     action_orchestrator = None
+
     if cfg.computer_use_artifact_dir:
         from glassbox.action import ActionOrchestrator, RiskPolicy
         from glassbox.action.actuation_profile import load_actuation_profile
@@ -491,7 +515,7 @@ def build_phone(
         from glassbox.obs.artifacts import ArtifactStore
 
         actuation_profile = load_actuation_profile(
-            platform=cfg.platform,
+            platform=selected_platform,
             device_model=cfg.phone_model,
             profile_dir=cfg.actuation_profile_dir,
         )
@@ -520,14 +544,14 @@ def build_phone(
             risk_policy=RiskPolicy(guarded=cfg.computer_use_guarded),
             semantic_fail_fast=cfg.computer_use_semantic_fail_fast,
             observation_producer_mode=cfg.computer_use_observation_producer_mode,
-            platform=cfg.platform,
+            platform=selected_platform,
             actuation_profile=actuation_profile,
             actuation_profile_dir=cfg.actuation_profile_dir,
             recovery_seed=recovery_seed,
         )
 
     platform = DEFAULT_PLATFORM_REGISTRY.create(
-        select_platform_backend(cfg, bundle_id=bundle_id),
+        selected_platform,
         cfg=cfg,
     )
     if platform.scene_classifier is not None:

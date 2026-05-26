@@ -491,7 +491,7 @@ class Phone:
         safe_actions = set(scene.safe_actions or [])
         if safe_actions.intersection({"back", "edge_back"}):
             if nav_point is None and scene.platform_scene_kind == "settings_detail":
-                return True, "platform_settings_detail", self._inferred_ios_nav_back_point()
+                return True, "platform_settings_detail", self._inferred_ios_nav_back_point(scene)
             return True, "safe_action", nav_point
         if nav_point is not None:
             return True, "nav_back_element", nav_point
@@ -501,7 +501,7 @@ class Phone:
             and classified.platform_scene_kind == "settings_detail"
             and "back" in classified.safe_actions
         ):
-            return True, "platform_settings_detail", nav_point or self._inferred_ios_nav_back_point()
+            return True, "platform_settings_detail", nav_point or self._inferred_ios_nav_back_point(scene)
         # Last resort: a page the classifier positively tagged "unknown" (it ran
         # and could not identify the scene — distinct from no classifier at all)
         # is almost always a sub-page whose chrome defeats back/affordance
@@ -513,7 +513,7 @@ class Phone:
             scene.platform_scene_kind,
             getattr(classified, "platform_scene_kind", None),
         }:
-            return True, "blind_inferred_back", self._inferred_ios_nav_back_point()
+            return True, "blind_inferred_back", self._inferred_ios_nav_back_point(scene)
         return False, "no_parent_back_target", None
 
     def _visible_nav_back_in_scene(self, scene: Scene) -> UIElement | None:
@@ -526,8 +526,17 @@ class Phone:
             return None
         return sorted(candidates, key=lambda element: (element.box.y, element.box.x))[0]
 
-    def _inferred_ios_nav_back_point(self) -> tuple[int, int]:
+    def _inferred_ios_nav_back_point(self, scene: Scene | None = None) -> tuple[int, int]:
         w, h = self._viewport_size()
+        model = str(getattr(getattr(self, "device_geometry", None), "model", "") or "").lower().replace("-", "_")
+        if model.startswith("ipad") and scene is not None:
+            evidence = set(getattr(scene, "evidence", None) or ())
+            if scene.platform_scene_kind == "settings_detail" or "ipad_split_view" in evidence:
+                from glassbox.ipados.scene import sidebar_right_x
+
+                sidebar_right = sidebar_right_x(w)
+                detail_width = max(1, w - sidebar_right)
+                return min(w - 24, sidebar_right + max(8, round(detail_width * 0.02))), round(h * 0.055)
         return round(w * 0.09), round(h * 0.09)
 
     def _unsupported_action(self, op: str, **kwargs) -> ActionResult:
@@ -1053,9 +1062,21 @@ class Phone:
             or "tap_root_row" in safe_actions
         ):
             return None
-        _cx, cy = el.box.center
+        cx, cy = el.box.center
         if cy < int(height * 0.18) or cy > int(height * 0.94):
             return None
+        model = str(getattr(getattr(self, "device_geometry", None), "model", "") or "").lower().replace("-", "_")
+        if model.startswith("ipad"):
+            from glassbox.ipados.scene import sidebar_right_x
+
+            sidebar_right = sidebar_right_x(width)
+            if cx <= sidebar_right:
+                return min(max(cx, int(width * 0.10)), max(int(width * 0.10), sidebar_right - 44)), cy
+            detail_x = min(
+                max(int(sidebar_right + (width - sidebar_right) * 0.34), sidebar_right + 64),
+                width - 44,
+            )
+            return min(max(cx, detail_x), width - 44), cy
         if el.box.x > int(width * 0.45):
             return None
         if el.box.w > int(width * 0.65):
@@ -1863,6 +1884,7 @@ class Phone:
         horizontal: int = 0,
         focus_x: int | None = None,
         focus_y: int | None = None,
+        focus_click: bool = False,
         interval_ms: int | None = None,
     ) -> ActionResult:
         """Mouse-wheel scroll. This is separate from swipe/drag semantics."""
@@ -1875,27 +1897,39 @@ class Phone:
             "focus_x": px,
             "focus_y": py,
         }
+        if focus_click:
+            kwargs["focus_click"] = True
         if interval_ms is not None:
             kwargs["interval_ms"] = int(interval_ms)
         if not self.supports("scroll_wheel"):
+            unsupported_kwargs = {
+                "ticks": int(ticks),
+                "horizontal": int(horizontal),
+                "focus_x": px,
+                "focus_y": py,
+                "coordinate_space": self._coordinate_space(),
+                "via": "scroll_wheel",
+            }
+            if focus_click:
+                unsupported_kwargs["focus_click"] = True
             return self._unsupported_action(
                 "scroll_wheel",
-                ticks=int(ticks),
-                horizontal=int(horizontal),
-                focus_x=px,
-                focus_y=py,
-                coordinate_space=self._coordinate_space(),
-                via="scroll_wheel",
+                **unsupported_kwargs,
             )
+        action_kwargs = {
+            "ticks": int(ticks),
+            "horizontal": int(horizontal),
+            "focus_x": px,
+            "focus_y": py,
+            "coordinate_space": self._coordinate_space(),
+            "via": "scroll_wheel",
+        }
+        if focus_click:
+            action_kwargs["focus_click"] = True
         return self._execute_action(
             "scroll_wheel",
             lambda: self.effector.scroll_wheel(int(ticks), **kwargs),
-            ticks=int(ticks),
-            horizontal=int(horizontal),
-            focus_x=px,
-            focus_y=py,
-            coordinate_space=self._coordinate_space(),
-            via="scroll_wheel",
+            **action_kwargs,
         )
 
     def _default_wheel_ticks(self) -> int:

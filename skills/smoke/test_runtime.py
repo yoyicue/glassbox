@@ -22,8 +22,8 @@ from glassbox.memory import UTG, ScreenMemory
 from glassbox.obs import Recorder
 from glassbox.perception.letterbox import LetterboxCrop
 from glassbox.perception.source import Frame
-from glassbox.platforms import select_platform_backend
-from glassbox.runtime import RuntimeUnavailable, build_phone
+from glassbox.platforms import DEFAULT_PLATFORM_REGISTRY, select_platform_backend
+from glassbox.runtime import RuntimeUnavailable, build_phone, detect_crop
 
 
 class FakeSource:
@@ -78,6 +78,25 @@ class FakeSettingsOCR:
                 text="通用",
                 confidence=0.9,
             ),
+        ]
+
+
+class FakeIPadSource(FakeSource):
+    resolution = (744, 1133)
+
+    def snapshot(self):
+        return Frame(img=np.zeros((1133, 744, 3), dtype=np.uint8), ts=0.0)
+
+
+class FakeIPadHomeWidgetOCR:
+    def recognize(self, _image):
+        return [
+            UIElement(type="text", box=Box(x=40, y=70, w=180, h=24), text="下午8:54 5月25日周一", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=150, w=54, h=24), text="备忘录", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=205, w=92, h=24), text="无备忘录", confidence=0.9),
+            UIElement(type="text", box=Box(x=350, y=205, w=130, h=24), text="The day following", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=420, w=64, h=24), text="上海市", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=476, w=36, h=24), text="26°", confidence=0.9),
         ]
 
 
@@ -237,6 +256,8 @@ def test_runtime_selects_registered_frame_source_and_effector_backends(tmp_path)
     assert "picokvm" in set(DEFAULT_EFFECTOR_REGISTRY.names())
     assert set(DEFAULT_VLM_REGISTRY.names()) == {"moonshot", "siliconflow"}
     assert select_platform_backend(AgentConfig(_env_file=None)) == "ios"
+    assert "ipados" in set(DEFAULT_PLATFORM_REGISTRY.names())
+    assert select_platform_backend(AgentConfig(_env_file=None, phone_model="ipad_mini_7")) == "ipados"
 
 
 @pytest.mark.smoke
@@ -264,6 +285,28 @@ def test_device_geometry_is_built_once_from_config_and_source():
 
 
 @pytest.mark.smoke
+def test_detect_crop_accepts_ipad_landscape_orientation():
+    class IPadLandscapeSource:
+        resolution = (1920, 1080)
+
+        def snapshot(self):
+            img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+            img[57:1023, 225:1695] = 255
+            return Frame(img=img, ts=0.0)
+
+    cfg = AgentConfig(_env_file=None, phone_model="ipad_mini_7")
+    crop = detect_crop(
+        IPadLandscapeSource(),
+        cfg=cfg,
+        device_geometry=make_device_geometry(cfg, frame_size=(1920, 1080)),
+    )
+
+    assert crop is not None
+    assert crop.crop_bbox == (225, 57, 1470, 966)
+    assert crop.phone_size == (2266, 1488)
+
+
+@pytest.mark.smoke
 def test_build_phone_activates_app_scene_classifier_by_bundle():
     source = FakeSource()
     effector = FakeEffector()
@@ -277,6 +320,27 @@ def test_build_phone_activates_app_scene_classifier_by_bundle():
     assert runtime.phone.recovery_provider is not None
     assert scene.scene_type == "settings_root"
     assert scene.platform_scene_kind == "settings_root"
+
+
+@pytest.mark.smoke
+def test_build_phone_skips_ios_settings_app_classifier_for_ipados_home_widgets():
+    cfg = AgentConfig(
+        _env_file=None,
+        phone_model="ipad_mini_7",
+        memory_bundle="com.apple.Preferences",
+    )
+
+    runtime = build_phone(
+        source=FakeIPadSource(),
+        cfg=cfg,
+        ocr=FakeIPadHomeWidgetOCR(),
+        effector=FakeEffector(),
+    )
+
+    scene = runtime.phone.perceive()
+    assert scene.scene_type == "springboard"
+    assert scene.platform_scene_kind == "springboard"
+    assert scene.classification_source == "platform"
 
 
 @pytest.mark.smoke

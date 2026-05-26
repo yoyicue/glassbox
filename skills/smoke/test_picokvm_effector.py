@@ -37,7 +37,7 @@ class FakeRpc:
         return PicoKVMRpcResponse(id=self.next_id, result=None)
 
 
-def make_eff(*, wheel_enabled=False, semantic_verify_enabled=False):
+def make_eff(*, wheel_enabled=False, semantic_verify_enabled=False, device_geometry=None, crop=None):
     rpc = FakeRpc()
     cfg = PicoKVMEffectorConfig(
         _env_file=None,
@@ -47,12 +47,13 @@ def make_eff(*, wheel_enabled=False, semantic_verify_enabled=False):
         click_press_ms=0,
         long_press_min_hold_ms=0,
         keyboard_focus_click_ms=0,
+        keyboard_type_key_gap_ms=0,
         keyboard_shortcut_gap_ms=0,
         semantic_verify_delay_ms=0,
         semantic_verify_timeout_ms=200,
         semantic_verify_sample_interval_ms=1,
     )
-    return PicoKVMEffector(config=cfg, rpc=rpc), rpc
+    return PicoKVMEffector(config=cfg, rpc=rpc, device_geometry=device_geometry, crop=crop), rpc
 
 
 class SequenceOCR:
@@ -123,6 +124,36 @@ def test_picokvm_effector_preflight_and_supports():
     assert eff.capabilities().paste_strategy == "unsupported"
     assert eff.capabilities().switch_input_source_strategy == "unsupported"
     assert eff.capabilities().requires_assistive_touch is True
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_profile_uses_native_pointer_and_enables_wheel_by_default():
+    geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    eff, rpc = make_eff(device_geometry=geometry)
+
+    caps = eff.capabilities()
+
+    assert caps.requires_assistive_touch is False
+    assert caps.home_strategy == "keyboard_combo"
+    assert caps.back_strategy == "keyboard_combo"
+    assert caps.scroll_strategy == "wheel"
+    assert eff.supports("scroll_wheel") is True
+
+    result = eff.scroll_wheel(1, interval_ms=0, focus_x=744, focus_y=1133)
+    assert result.ok is True
+    assert rpc.calls[-2:] == [("wheelReport", {"wheelY": 1}), ("wheelReport", {"wheelY": 0})]
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_profile_derives_absolute_calibration_from_crop():
+    geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    crop = SimpleNamespace(crop_bbox=(640, 48, 642, 984))
+    eff, _ = make_eff(device_geometry=geometry, crop=crop)
+
+    assert eff.config.abs_origin_offset_x == 640.0
+    assert eff.config.abs_origin_offset_y == 48.0
+    assert eff.config.abs_to_phone_scale_x == pytest.approx(642 / 32767)
+    assert eff.config.abs_to_phone_scale_y == pytest.approx(984 / 32767)
 
 
 @pytest.mark.smoke
@@ -310,6 +341,25 @@ def test_picokvm_type_ascii_emits_press_release_reports():
 
 
 @pytest.mark.smoke
+def test_picokvm_type_uses_configured_key_gap_to_preserve_repeats(monkeypatch):
+    eff, rpc = make_eff()
+    eff.config.keyboard_type_key_gap_ms = 7
+    sleeps: list[int] = []
+    monkeypatch.setattr(eff, "_sleep_ms", sleeps.append)
+
+    result = eff.type("tt")
+
+    assert result.ok is True
+    assert sleeps == [7, 7, 7, 7]
+    assert rpc.calls == [
+        ("keyboardReport", {"modifier": 0, "keys": [0x17]}),
+        ("keyboardReport", {"modifier": 0, "keys": []}),
+        ("keyboardReport", {"modifier": 0, "keys": [0x17]}),
+        ("keyboardReport", {"modifier": 0, "keys": []}),
+    ]
+
+
+@pytest.mark.smoke
 def test_picokvm_rejects_non_ascii_type_as_unsupported():
     eff, _rpc = make_eff()
 
@@ -351,6 +401,23 @@ def test_picokvm_wheel_off_by_default_but_hovers_then_scrolls_when_enabled():
         ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 0}),
         ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 0}),
         ("wheelReport", {"wheelY": 1}),
+        ("wheelReport", {"wheelY": 1}),
+        ("wheelReport", {"wheelY": 0}),
+    ]
+
+
+@pytest.mark.smoke
+def test_picokvm_wheel_can_click_focus_point_before_scroll_when_requested():
+    eff, rpc = make_eff(wheel_enabled=True)
+
+    enabled = eff.scroll_wheel(1, interval_ms=0, focus_x=960, focus_y=540, focus_click=True)
+
+    assert enabled.ok is True
+    assert rpc.calls == [
+        ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 0}),
+        ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 0}),
+        ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 1}),
+        ("absMouseReport", {"x": 16405, "y": 16381, "buttons": 0}),
         ("wheelReport", {"wheelY": 1}),
         ("wheelReport", {"wheelY": 0}),
     ]
@@ -571,6 +638,28 @@ def test_phone_back_guard_keeps_platform_settings_detail_reason_after_projection
     assert allowed is True
     assert reason == "platform_settings_detail"
     assert point == (40, 89)
+
+
+@pytest.mark.smoke
+def test_phone_back_guard_uses_ipad_detail_pane_back_fallback(monkeypatch):
+    geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    eff, _rpc = make_eff(device_geometry=geometry)
+    phone = Phone(source=object(), ocr=object(), effector=eff, action_fail_fast=False, device_geometry=geometry)
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        platform_scene_kind="settings_detail",
+        safe_actions=["back", "edge_back"],
+        evidence=("ipad_split_view",),
+    )
+    monkeypatch.setattr(phone, "perceive", lambda: scene)
+    monkeypatch.setattr(phone, "_viewport_size", lambda: (744, 1133))
+
+    allowed, reason, point = phone._picokvm_back_context()
+
+    assert allowed is True
+    assert reason == "platform_settings_detail"
+    assert point == (335, 62)
 
 
 @pytest.mark.smoke

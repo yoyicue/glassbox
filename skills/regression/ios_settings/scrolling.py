@@ -65,10 +65,7 @@ def wheel_scroll_down(
 ) -> None:
     if _phone_supports(phone, "scroll_wheel") and hasattr(phone, "wheel_scroll_down"):
         with action_intent(phone, "scroll.down.wheel"):
-            call_wheel_scroll(
-                phone.wheel_scroll_down,
-                settings_wheel_ticks_per_swipe() if ticks is None else ticks,
-            )
+            _settings_wheel_scroll(phone, settings_wheel_ticks_per_swipe() if ticks is None else ticks)
     else:
         with action_intent(phone, "scroll.down.swipe_fallback"):
             phone.swipe_up()
@@ -92,6 +89,8 @@ def scroll_down_confirmed(
     print(f"[scroll] depth={depth} idx={idx} probe={outcome}", flush=True)
     if outcome != "stuck":
         return outcome, after
+    if _is_ipad_target(phone):
+        return "stuck", after
     wheel_scroll_down(phone, action_intent=action_intent)
     time.sleep(0.8)
     phone.invalidate_perceive_cache()
@@ -107,7 +106,7 @@ def scroll_down_confirmed(
 def wheel_scroll_up(phone, *, action_intent: ActionIntent) -> None:
     if _phone_supports(phone, "scroll_wheel") and hasattr(phone, "wheel_scroll_up"):
         with action_intent(phone, "scroll.up.wheel"):
-            call_wheel_scroll(phone.wheel_scroll_up, settings_wheel_ticks_per_swipe())
+            _settings_wheel_scroll(phone, -settings_wheel_ticks_per_swipe())
     else:
         with action_intent(phone, "scroll.up.swipe_fallback"):
             phone.swipe_down()
@@ -115,6 +114,30 @@ def wheel_scroll_up(phone, *, action_intent: ActionIntent) -> None:
 
 def call_wheel_scroll(method, ticks: int) -> None:
     _call_scroll_method_generic(method, ticks)
+
+
+def _settings_wheel_scroll(phone, ticks: int) -> None:
+    focus = _settings_wheel_focus(phone)
+    if focus is not None and hasattr(phone, "scroll_wheel"):
+        phone.scroll_wheel(ticks, focus_x=focus[0], focus_y=focus[1], focus_click=True)
+        return
+    method = phone.wheel_scroll_down if ticks > 0 else phone.wheel_scroll_up
+    call_wheel_scroll(method, abs(ticks))
+
+
+def _settings_wheel_focus(phone) -> tuple[int, int] | None:
+    if not _is_ipad_target(phone):
+        return None
+    try:
+        w, h = phone._viewport_size()
+    except Exception:
+        return None
+    return int(w * 0.23), int(h * 0.55)
+
+
+def _is_ipad_target(phone) -> bool:
+    model = str(getattr(getattr(phone, "device_geometry", None), "model", "") or "")
+    return model.lower().replace("-", "_").startswith("ipad")
 
 
 def settings_wheel_ticks_per_swipe() -> int:

@@ -103,6 +103,7 @@ def test_english_and_greater_china_region_overlay():
     en = _VOCABS["en-US"]
     assert en.resolve("General") is RootSection.GENERAL
     assert en.resolve("Wi-Fi") is RootSection.WIFI
+    assert en.resolve("Sounds") is RootSection.SOUNDS_HAPTICS
     assert en.resolve("WLAN") is None                    # not a US-English label
     assert en.resolve("Mobile Service") is None          # not a US-English label
     # Greater-China English (CN + HK, live-observed) accepts WLAN / Mobile Service.

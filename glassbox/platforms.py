@@ -90,6 +90,12 @@ def _make_ios_safe_area_provider():
     return IOSSafeAreaProvider()
 
 
+def _make_ipados_safe_area_provider():
+    from glassbox.ios.safe_area import IPadOSSafeAreaProvider
+
+    return IPadOSSafeAreaProvider()
+
+
 def _make_ios_springboard_provider():
     from glassbox.ios.springboard import IOSSpringboardProvider
 
@@ -114,6 +120,18 @@ class IOSSceneClassifier:
         return classify_ios_scene(scene, viewport_size=viewport_size).to_scene_classification()
 
 
+class IPadOSSceneClassifier:
+    def classify(
+        self,
+        scene,
+        *,
+        viewport_size: tuple[int, int] | None = None,
+    ):
+        from glassbox.ipados.scene import classify_ipados_scene
+
+        return classify_ipados_scene(scene, viewport_size=viewport_size).to_scene_classification()
+
+
 @dataclass
 class IOSPlatform:
     scene_classifier: Any | None = field(default_factory=IOSSceneClassifier)
@@ -133,8 +151,19 @@ class IOSPlatform:
         return SpringboardIconMap(path=path)
 
 
+@dataclass
+class IPadOSPlatform(IOSPlatform):
+    scene_classifier: Any | None = field(default_factory=IPadOSSceneClassifier)
+    safe_area: Any | None = field(default_factory=_make_ipados_safe_area_provider)
+    name: str = "ipados"
+
+
 def ios_platform_registration() -> PlatformRegistration:
     return PlatformRegistration(name="ios", factory=_ios_platform_factory, priority=0)
+
+
+def ipados_platform_registration() -> PlatformRegistration:
+    return PlatformRegistration(name="ipados", factory=_ipados_platform_factory, priority=0)
 
 
 def _ios_platform_factory(*, cfg: AgentConfig):
@@ -142,21 +171,31 @@ def _ios_platform_factory(*, cfg: AgentConfig):
     return IOSPlatform()
 
 
+def _ipados_platform_factory(*, cfg: AgentConfig):
+    _ = cfg
+    return IPadOSPlatform()
+
+
 def select_platform_backend(cfg: AgentConfig, *, bundle_id: str | None = None) -> str:
     _ = bundle_id
+    explicit = "platform" in getattr(cfg, "model_fields_set", set())
+    if not explicit and str(getattr(cfg, "phone_model", "")).lower().replace("-", "_").startswith("ipad"):
+        return "ipados"
     return getattr(cfg, "platform", None) or "ios"
 
 
 DEFAULT_PLATFORM_REGISTRY = PlatformRegistry(
-    registrations=(ios_platform_registration(),),
+    registrations=(ios_platform_registration(), ipados_platform_registration()),
 )
 
 
 __all__ = [
     "DEFAULT_PLATFORM_REGISTRY",
     "IOSPlatform",
+    "IPadOSPlatform",
     "PlatformRegistration",
     "PlatformRegistry",
     "ios_platform_registration",
+    "ipados_platform_registration",
     "select_platform_backend",
 ]

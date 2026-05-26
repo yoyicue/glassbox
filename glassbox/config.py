@@ -121,12 +121,12 @@ class AgentConfig(BaseSettings):
 
     # ─── Controlled phone ────────────────────────────────────────────
     phone_model: str = "iphone_17_pro_max"
-    """Controlled iPhone model key, see the DEVICES table in
-    glassbox/perception/device.py. Determines the phone logical resolution
+    """Controlled iOS/iPadOS model key, see the DEVICES table in
+    glassbox/perception/device.py. Determines the device logical resolution
     used by the letterbox coordinate transform."""
 
     platform: str = "ios"
-    """Controlled phone platform provider selector."""
+    """Controlled device platform provider selector."""
 
     # ─── Locale (device language + region) ───────────────────────────
     language: str = "zh-Hans"

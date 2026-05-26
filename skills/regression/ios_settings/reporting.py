@@ -12,8 +12,11 @@ from skills.regression.ios_settings.policy import (
     DEFAULT_SETTINGS_POLICY,
     EXPECTED_ROOT_NAV_TEXT_ZH,
     FAILURE_CATEGORY_KEYS,
+    ROOT_COVERAGE_ONLY_LABELS,
+    detect_device_unavailable_root_labels,
 )
 from skills.regression.ios_settings.sections import (
+    RootSection,
     SectionVocab,
     root_section_for_canonical_label,
     root_section_ids_for_canonical_labels,
@@ -40,6 +43,34 @@ def _active_section_vocab() -> SectionVocab:
 
     cfg = get_config()
     return section_vocab_for(cfg.language, cfg.region)
+
+
+def _section_vocab_for_locale_code(locale_code: str | None) -> SectionVocab | None:
+    if not locale_code:
+        return None
+    language, sep, region = locale_code.partition("-")
+    if not language:
+        return None
+    return section_vocab_for(language, region if sep and region else None)
+
+
+def _canonical_label_for_section(section: RootSection) -> str | None:
+    for label in EXPECTED_ROOT_NAV_TEXT_ZH:
+        if root_section_for_canonical_label(label) is section:
+            return label
+    return None
+
+
+def canonical_root_label_from_text(text: str | None, *, locale_code: str | None = None) -> str | None:
+    """Resolve OCR/report text to the internal Chinese canonical root label."""
+    label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(str(text or ""))
+    if label is not None:
+        return label
+    vocab = _section_vocab_for_locale_code(locale_code)
+    if vocab is None:
+        return None
+    section = vocab.resolve(text)
+    return _canonical_label_for_section(section) if section is not None else None
 
 
 def _section_display(labels: Iterable[str], vocab: SectionVocab) -> list[str]:
@@ -80,7 +111,7 @@ EXPECTED_REJECTED_REASONS = frozenset({
     "section_header",
     "inert_self_loop",
 })
-EXPECTED_NAVIGATION_FAILURE_REASONS = frozenset({"tap_no_navigation"})
+EXPECTED_NAVIGATION_FAILURE_REASONS = frozenset({"tap_no_navigation", "search_no_result"})
 EXPECTED_MIN_VISITS = len(EXPECTED_ROOT_NAV_TEXT_ZH) + 1
 TRACE_METRIC_KEYS = (
     "hid_call_count",
@@ -145,14 +176,14 @@ def blocked_reason_from_texts(texts: Any) -> str | None:
     return None
 
 
-def computed_root_coverage(visits: Sequence[Any]) -> dict[str, list[str]]:
+def computed_root_coverage(visits: Sequence[Any], *, locale_code: str | None = None) -> dict[str, list[str]]:
     visited: set[str] = set()
     for visit in visits:
         path = _path(visit)
         if len(path) < 2 or path[0] != "Settings":
             continue
-        label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(path[1])
-        if label is not None and root_visit_has_label_evidence(visit, label):
+        label = canonical_root_label_from_text(path[1], locale_code=locale_code)
+        if label is not None and root_visit_has_label_evidence(visit, label, locale_code=locale_code):
             visited.add(label)
     expected = list(EXPECTED_ROOT_NAV_TEXT_ZH)
     visited_labels = [label for label in expected if label in visited]
@@ -201,16 +232,23 @@ def classify_root_coverage(
     base: Mapping[str, Sequence[str]],
     visits: Sequence[Any],
     rejected_candidates: Sequence[Any],
+    navigation_failures: Sequence[Any] = (),
+    *,
+    platform: str | None = None,
+    phone_model: str | None = None,
 ) -> dict[str, list[str]]:
     """Enrich root_coverage with entered / visible_only / blocked.
 
     Additive: keeps ``expected``/``visited``/``missing`` (``visited`` = "seen" =
     entered ∪ visible_only ∪ blocked) and adds the breakdown so callers can tell
     a real section entry from a row merely seen on the root list, and from a page
-    deliberately not entered for safety.
+    deliberately not entered for safety. ``entry_exempt`` is the subset that is
+    not required to be opened by design/device capability; ``search_absent`` is
+    the subset that Settings search explicitly reported as absent on this run.
     """
     expected = list(base.get("expected", EXPECTED_ROOT_NAV_TEXT_ZH))
     visited = set(base.get("visited", ()))
+    missing = set(base.get("missing", ()))
     graph_entered = set(base.get("entered_graph", ()))
     entered = {label for label in expected if _label_entered(label, visits)} | graph_entered
     blocked: set[str] = set()
@@ -218,10 +256,31 @@ def classify_root_coverage(
         label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(str(_value(candidate, "text") or ""))
         if label in expected and label not in entered:
             blocked.add(label)
+    coverage_only = _expected_labels(ROOT_COVERAGE_ONLY_LABELS, expected=expected)
+    device_unavailable = detect_device_unavailable_root_labels(
+        visits,
+        navigation_failures,
+        platform=platform,
+        phone_model=phone_model,
+    ) & set(expected)
+    entry_exempt = coverage_only | device_unavailable
+    search_absent = {
+        label
+        for label in (
+            canonical_root_label_from_text(str(_value(failure, "text") or ""))
+            for failure in navigation_failures
+            if _value(failure, "reason") == "search_no_result"
+        )
+        if label in missing
+    }
     enriched = {key: list(value) for key, value in base.items()}
     enriched["entered"] = [label for label in expected if label in entered]
     enriched["entered_graph"] = [label for label in expected if label in graph_entered]
     enriched["blocked"] = [label for label in expected if label in blocked]
+    enriched["device_unavailable"] = [label for label in expected if label in device_unavailable]
+    enriched["entry_exempt"] = [label for label in expected if label in entry_exempt]
+    enriched["search_absent"] = [label for label in expected if label in search_absent]
+    enriched["required_missing"] = [label for label in expected if label in missing and label not in entry_exempt]
     enriched["visible_only"] = [
         label for label in expected if label in visited and label not in entered and label not in blocked
     ]
@@ -230,17 +289,31 @@ def classify_root_coverage(
     # RootSection token; `*_display` renders the same coverage in the run's own
     # language so an en-HK report reads "Mobile Service", not "蜂窝网络".
     vocab = _active_section_vocab()
-    for key in ("expected", "visited", "missing", "entered", "entered_graph", "blocked", "visible_only"):
+    for key in (
+        "expected", "visited", "missing", "entered", "entered_graph", "blocked",
+        "visible_only", "device_unavailable", "entry_exempt", "search_absent",
+        "required_missing",
+    ):
         labels = enriched.get(key, [])
         enriched[f"{key}_ids"] = _section_ids(labels)
         enriched[f"{key}_display"] = _section_display(labels, vocab)
     return enriched
 
 
-def root_visit_has_label_evidence(visit: Any, label: str) -> bool:
+def _expected_labels(labels: Iterable[str], *, expected: Sequence[str]) -> set[str]:
+    expected_set = set(expected)
+    out: set[str] = set()
+    for raw in labels:
+        label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(str(raw))
+        if label in expected_set:
+            out.add(label)
+    return out
+
+
+def root_visit_has_label_evidence(visit: Any, label: str, *, locale_code: str | None = None) -> bool:
     title = _value(visit, "title")
     if isinstance(title, str) and (
-        DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(title) == label
+        canonical_root_label_from_text(title, locale_code=locale_code) == label
         or DEFAULT_SETTINGS_POLICY.title_matches_navigation_label(title, label)
     ):
         return True
@@ -250,15 +323,25 @@ def root_visit_has_label_evidence(visit: Any, label: str) -> bool:
     if label in {"Face ID与密码", "密码"} and blocked_reason_from_texts(texts) == "authentication required":
         return True
     return any(
-        DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(str(text)) == label
+        canonical_root_label_from_text(str(text), locale_code=locale_code) == label
         or DEFAULT_SETTINGS_POLICY.title_matches_navigation_label(str(text), label)
         for text in texts
     )
 
 
-def path_has_root_label_evidence(visits: Sequence[Any], path_key: tuple[str, ...], label: str) -> bool:
+def path_has_root_label_evidence(
+    visits: Sequence[Any],
+    path_key: tuple[str, ...],
+    label: str,
+    *,
+    locale_code: str | None = None,
+) -> bool:
     return any(
-        _path(visit) == path_key and root_visit_has_label_evidence(visit, label)
+        _path(visit) == path_key and root_visit_has_label_evidence(
+            visit,
+            label,
+            locale_code=locale_code,
+        )
         for visit in visits
     )
 
@@ -286,13 +369,20 @@ def report_metrics(
         navigation_success_proxy_rate = navigation_success_proxy / navigation_attempts_proxy
     else:
         navigation_success_proxy_rate = None
+    expected = list(root_coverage.get("expected", ()))
     missing = list(root_coverage.get("missing", ()))
+    required_missing = list(root_coverage.get("required_missing", missing))
+    entry_exempt = list(root_coverage.get("entry_exempt", ()))
     return {
         "visit_count": len(visits),
         "unique_visible_signatures": len(text_signatures),
-        "root_expected_count": len(root_coverage.get("expected", ())),
+        "root_expected_count": len(expected),
+        "root_required_expected_count": max(0, len(expected) - len(entry_exempt)),
         "root_visited_count": len(root_coverage.get("visited", ())),
         "root_missing_count": len(missing),
+        "root_required_missing_count": len(required_missing),
+        "root_entry_exempt_count": len(entry_exempt),
+        "root_search_absent_count": len(root_coverage.get("search_absent", ())),
         "blocked_page_count": len(blocked_pages),
         "rejected_candidate_count": len(rejected_candidates),
         "navigation_failure_count": navigation_failure_count,
@@ -305,7 +395,7 @@ def report_metrics(
         "exhaustive_ready": (
             require_exhaustive
             and not (limits - SOFT_LIMITS)
-            and not missing
+            and not required_missing
             and len(visits) >= min_pages
         ),
     }
@@ -318,6 +408,8 @@ def known_harness_issues(
     navigation_failures: Sequence[Any],
     metrics: Mapping[str, object],
     require_exhaustive: bool,
+    strict_child_candidate_audit: bool = True,
+    entry_exempt_labels: Iterable[str] = (),
 ) -> list[dict[str, object]]:
     issues: list[dict[str, object]] = []
     limits = set(limits_hit)
@@ -345,11 +437,16 @@ def known_harness_issues(
             "evidence": sorted(soft_limits),
             "next_action": "Track these as glassbox efficiency/perception signals; they are not strict-acceptance blockers.",
         })
+    entry_exempt = set(entry_exempt_labels)
+    blocking_navigation_failures = [
+        failure for failure in navigation_failures
+        if canonical_root_label_from_text(str(_value(failure, "text") or "")) not in entry_exempt
+    ]
     if navigation_failures:
         issues.append({
             "id": "ios-settings-navigation-tap-no-transition",
             "category": "operation",
-            "severity": "blocking" if require_exhaustive else "warning",
+            "severity": "blocking" if require_exhaustive and blocking_navigation_failures else "warning",
             "status": "open",
             "area": "glassbox/effectors/picokvm",
             "summary": "One or more safe-looking navigation taps did not open a new page.",
@@ -368,7 +465,7 @@ def known_harness_issues(
         issues.append({
             "id": "ios-settings-navigation-candidate-policy-gap",
             "category": "safety",
-            "severity": "blocking" if require_exhaustive else "warning",
+            "severity": "blocking" if require_exhaustive and strict_child_candidate_audit else "warning",
             "status": "open",
             "area": "skills/regression/ios_settings",
             "summary": "Some row-like texts need an explicit safety/affordance decision.",
@@ -434,6 +531,8 @@ def refresh_report_summaries(report: dict[str, Any]) -> dict[str, Any]:
         navigation_failures=navigation_failures,
         metrics=metrics,
         require_exhaustive=require_exhaustive,
+        strict_child_candidate_audit=config.get("strict_child_candidate_audit") is True,
+        entry_exempt_labels=root_coverage.get("entry_exempt", ()),
     )
     report["metrics"] = metrics
     report["known_issues"] = issues

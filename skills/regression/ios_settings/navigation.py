@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from glassbox.cognition import Box, UIElement
+from glassbox.ios.progress import is_time_text
 from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings import reporting as settings_reporting
 from skills.regression.ios_settings import scene_state as settings_scene_state
@@ -90,8 +91,11 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
         return False
     if not actions.enter_settings_search(phone):
         return False
-    for attempt in range(2):
+    max_attempts = 1 if _is_ipad_target(phone) else 2
+    for attempt in range(max_attempts):
         if not actions.clear_settings_search(phone):
+            if _is_ipad_target(phone):
+                phone._ios_settings_search_unavailable = True
             return False
         scene = phone.perceive()
         if not actions.tap_search_field(phone, scene):
@@ -114,29 +118,45 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
             result = phone.type(query)
         if not actions.record_action_verdict(phone, result):
             return False
-        time.sleep(1.6)
-        phone.invalidate_perceive_cache()
-        scene = phone.perceive()
-        hit = actions.find_search_result(scene, label)
-        if hit is None:
-            suggestion = actions.find_search_query_suggestion(scene, label)
-            if suggestion is not None:
-                cx, cy = suggestion.box.center
-                with actions.action_intent(
-                    phone,
-                    "settings_search.tap_query_suggestion",
-                    label=label,
-                    text=suggestion.text,
-                    x=cx,
-                    y=cy,
-                ):
-                    result = phone.tap_xy(cx, cy)
-                if not actions.record_action_verdict(phone, result):
-                    return False
-                time.sleep(0.8)
+        with contextlib.suppress(Exception):
+            phone.invalidate_perceive_cache()
+        _scene, hit, suggestion = _wait_for_search_result_or_suggestion(phone, label, actions)
+        if hit is None and suggestion is None and _is_ipad_target(phone):
+            with contextlib.suppress(Exception):
                 phone.invalidate_perceive_cache()
-                scene = phone.perceive()
-                hit = actions.find_search_result(scene, label)
+            scene = phone.perceive()
+            if actions.tap_search_field(phone, scene):
+                time.sleep(0.5)
+                with contextlib.suppress(Exception):
+                    phone.invalidate_perceive_cache()
+                _scene, hit, suggestion = _wait_for_search_result_or_suggestion(
+                    phone,
+                    label,
+                    actions,
+                    polls=12,
+                )
+        if hit is None and suggestion is not None:
+            cx, cy = suggestion.box.center
+            with actions.action_intent(
+                phone,
+                "settings_search.tap_query_suggestion",
+                label=label,
+                text=suggestion.text,
+                x=cx,
+                y=cy,
+            ):
+                result = phone.tap_xy(cx, cy)
+            if not actions.record_action_verdict(phone, result):
+                return False
+            time.sleep(0.8)
+            with contextlib.suppress(Exception):
+                phone.invalidate_perceive_cache()
+            _scene, hit, _suggestion = _wait_for_search_result_or_suggestion(
+                phone,
+                label,
+                actions,
+                polls=6,
+            )
         if hit is None:
             continue
         cx, cy = hit.box.center
@@ -154,9 +174,48 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
         time.sleep(1.2)
         phone.invalidate_perceive_cache()
         opened = phone.perceive()
+        opened_label = actions.canonical_expected_root_label(actions.page_title(opened))
+        requested_label = actions.canonical_expected_root_label(label) or label
+        if opened_label == requested_label:
+            if _is_ipad_target(phone) and actions.is_settings_search_scene(opened):
+                if not actions.clear_settings_search(phone):
+                    return False
+                time.sleep(0.8)
+                with contextlib.suppress(Exception):
+                    phone.invalidate_perceive_cache()
+                settled = phone.perceive()
+                return actions.canonical_expected_root_label(actions.page_title(settled)) == requested_label
+            return True
+        if _is_ipad_target(phone):
+            continue
         if not actions.is_settings_search_scene(opened) and not actions.scene_is_settings_root(opened):
             return True
     return False
+
+
+def _wait_for_search_result_or_suggestion(
+    phone,
+    label: str,
+    actions: SettingsNavigationActions,
+    *,
+    polls: int = 10,
+    interval_s: float = 0.35,
+) -> tuple[Any, UIElement | None, UIElement | None]:
+    scene = phone.perceive()
+    hit = actions.find_search_result(scene, label)
+    suggestion = actions.find_search_query_suggestion(scene, label)
+    for poll in range(max(1, polls)):
+        if hit is not None or suggestion is not None:
+            return scene, hit, suggestion
+        if poll + 1 >= polls:
+            break
+        time.sleep(interval_s)
+        with contextlib.suppress(Exception):
+            phone.invalidate_perceive_cache()
+        scene = phone.perceive()
+        hit = actions.find_search_result(scene, label)
+        suggestion = actions.find_search_query_suggestion(scene, label)
+    return scene, hit, suggestion
 
 
 def open_visible_or_scroll_to_row(
@@ -169,7 +228,7 @@ def open_visible_or_scroll_to_row(
         return None
     for attempt in range(5):
         scene = phone.perceive()
-        hit = actions.match_any(scene.elements, labels)
+        hit = _visible_row_match(phone, scene, labels, actions)
         if hit is not None:
             return hit
         vlm_hit = actions.vlm_point_for_label(
@@ -188,9 +247,68 @@ def open_visible_or_scroll_to_row(
     return None
 
 
+def _visible_row_match(
+    phone,
+    scene,
+    labels: tuple[str, ...],
+    actions: SettingsNavigationActions,
+) -> UIElement | None:
+    target_canonicals = {
+        canonical for canonical in (actions.canonical_expected_root_label(label) for label in labels)
+        if canonical is not None
+    }
+    if _is_ipad_target(phone):
+        w, _h = phone._viewport_size()
+        from glassbox.ipados.scene import sidebar_right_x
+
+        sidebar_right = sidebar_right_x(w)
+        elements = [
+            element for element in scene.elements
+            if element.box.center[0] <= sidebar_right + 24
+        ]
+    else:
+        elements = list(scene.elements)
+    for element in elements:
+        text = (element.text or "").strip()
+        if not text:
+            continue
+        if text in labels:
+            return element
+        if target_canonicals and actions.canonical_expected_root_label(text) in target_canonicals:
+            return element
+        if any(_matches_split_sidebar_row_label(text, label) for label in labels):
+            return element
+    return actions.match_any(elements, labels)
+
+
+def _matches_split_sidebar_row_label(text: str, label: str) -> bool:
+    """Match OCR split rows such as ``Home Screen &`` to their full label."""
+    text = (text or "").strip()
+    label = (label or "").strip()
+    if not text.endswith("&") or len(label) <= len(text):
+        return False
+    return _compact_row_label(label).startswith(_compact_row_label(text))
+
+
+def _compact_row_label(text: str) -> str:
+    return "".join(str(text or "").casefold().split())
+
+
 def settings_row_tap_point(phone, row_hit: UIElement) -> tuple[int, int]:
     w, _ = phone._viewport_size()
     _, row_y = row_hit.box.center
+    if _is_ipad_target(phone):
+        from glassbox.ipados.scene import sidebar_right_x
+
+        sidebar_right = sidebar_right_x(w)
+        row_x = row_hit.box.center[0]
+        if row_x <= sidebar_right:
+            return min(max(row_x, int(w * 0.10)), max(int(w * 0.10), sidebar_right - 44)), row_y
+        detail_x = min(
+            max(int(sidebar_right + (w - sidebar_right) * 0.34), sidebar_right + 64),
+            w - 44,
+        )
+        return min(max(row_x, detail_x), w - 44), row_y
     if _backend_pointer_kind(phone) == "external_mouse":
         return int(w * 0.5), row_y
     row_x = max(row_hit.box.center[0], int(w * 0.28))
@@ -263,9 +381,14 @@ def _observed_path_label(
         if observed_root_label is not None:
             return observed_root_label
         requested_root_label = actions.canonical_expected_root_label(requested_label)
-        if requested_root_label is not None:
+        if requested_root_label is not None and _observed_title_missing_or_noise(observed_title):
             return requested_root_label
-    return requested_label
+    return observed_title or requested_label
+
+
+def _observed_title_missing_or_noise(title: str) -> bool:
+    text = (title or "").strip()
+    return not text or text == "?" or text in {"<", "‹", "〈", "返回", "Back"} or is_time_text(text)
 
 
 def _backend_pointer_kind(phone) -> str:
@@ -282,6 +405,11 @@ def _backend_pointer_kind(phone) -> str:
             backend_capabilities = effector_capabilities()
             return str(getattr(backend_capabilities, "pointer_kind", "unknown"))
     return "unknown"
+
+
+def _is_ipad_target(phone) -> bool:
+    model = str(getattr(getattr(phone, "device_geometry", None), "model", "") or "")
+    return model.lower().replace("-", "_").startswith("ipad")
 
 
 def _settings_row_target_box(
@@ -343,7 +471,7 @@ def crawl_missing_root_pages_via_search(
                 path=("Settings",),
                 scene=phone.perceive(),
                 text=label,
-                reason="tap_no_navigation",
+                reason="search_no_result",
             )
             if getattr(phone, "_ios_settings_search_unavailable", False):
                 limits_hit.add("settings_search_unavailable")
@@ -645,6 +773,7 @@ def crawl_current_page(
             ]
             if (
                 depth == 0
+                and not _is_ipad_target(phone)
                 and actions.scroll_to_top is not None
                 and root_resets < actions.max_root_scroll_resets
                 and required_missing

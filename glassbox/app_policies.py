@@ -8,7 +8,7 @@ active bundle id instead of hard-coding app knowledge in the assembler.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.metadata import entry_points
 from typing import Protocol
 
@@ -40,7 +40,10 @@ class IOSSettingsSceneClassifier:
         *,
         viewport_size: tuple[int, int] | None = None,
     ) -> SceneClassification | None:
-        return classify_ios_scene(scene, viewport_size=viewport_size).to_scene_classification()
+        return replace(
+            classify_ios_scene(scene, viewport_size=viewport_size).to_scene_classification(),
+            source="app",
+        )
 
 
 def ios_settings_app_policy() -> AppPolicyRegistration:

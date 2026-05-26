@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from skills.smoke.ios_settings_walkthrough_support import *
 from glassbox.effector import ActionResult
 from skills.regression.ios_settings.recovery import SettingsRootUnreachable
@@ -51,6 +53,76 @@ def test_enter_settings_search_accepts_ocr_prefixed_bottom_search(monkeypatch):
     assert _enter_settings_search(phone)
     assert phone.taps == [(225, 910)]
 
+
+@pytest.mark.smoke
+def test_enter_settings_search_uses_ipad_top_search_pill_hit_point(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    root = _scene(_el("Q Search", 34, 90, w=72), _el("Battery", 70, 226, w=48))
+    search = _scene(_el("Q Search", 34, 90, w=72), _el("Select", 96, 132, w=40))
+    field = root.elements[0]
+
+    class SearchPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self):
+            self.scene = root
+            self.taps: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def _viewport_size(self):
+            return 640, 990
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            self.scene = search
+
+        def invalidate_perceive_cache(self):
+            pass
+
+    phone = SearchPhone()
+    monkeypatch.setattr(walkthrough, "_scene_is_settings_root", lambda scene: scene is root)
+    monkeypatch.setattr(walkthrough, "_is_settings_search_scene", lambda scene: scene is search)
+    monkeypatch.setattr(walkthrough.DEFAULT_SETTINGS_POLICY, "find_root_search_tab", lambda _scene: field)
+
+    assert _enter_settings_search(phone)
+    assert phone.taps == [(151, 100)]
+
+
+@pytest.mark.smoke
+def test_enter_settings_search_accepts_ipad_top_search_focus_without_scene_change(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    root = _scene(_el("Q Search", 34, 90, w=72), _el("Battery", 70, 226, w=48))
+    field = root.elements[0]
+
+    class SearchPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self):
+            self.taps: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return root
+
+        def _viewport_size(self):
+            return 640, 990
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+
+        def invalidate_perceive_cache(self):
+            pass
+
+    phone = SearchPhone()
+    monkeypatch.setattr(walkthrough, "_scene_is_settings_root", lambda scene: scene is root)
+    monkeypatch.setattr(walkthrough, "_is_settings_search_scene", lambda _scene: False)
+    monkeypatch.setattr(walkthrough.DEFAULT_SETTINGS_POLICY, "find_root_search_tab", lambda _scene: field)
+
+    assert _enter_settings_search(phone)
+    assert phone.taps == [(151, 100)]
+
+
 @pytest.mark.smoke
 def test_return_to_settings_root_dismisses_settings_search(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
@@ -91,6 +163,276 @@ def test_return_to_settings_root_dismisses_search_when_clear_button_ocr_is_missi
 
     assert phone.taps == [(394, 924)]
     assert phone.keys == []
+
+
+@pytest.mark.smoke
+def test_dismiss_settings_search_does_not_bottom_tap_ipad_top_search_without_clear(monkeypatch):
+    scene = _scene(_el("Battery", 56, 90, w=50))
+
+    class Phone:
+        def __init__(self):
+            self.taps: list[tuple[int, int]] = []
+
+        def _viewport_size(self):
+            return 640, 990
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+
+    phone = Phone()
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_clear_button", lambda _scene: None)
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_field", lambda _scene: scene.elements[0])
+    monkeypatch.setattr(walkthrough, "_settings_search_has_query_text", lambda _scene: True)
+
+    assert not walkthrough._dismiss_settings_search(phone, scene)
+    assert phone.taps == []
+
+
+@pytest.mark.smoke
+def test_dismiss_settings_search_clears_ipad_top_query_with_keyboard(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    scene = _scene(_el("Q Battery", 34, 90, w=90))
+    cleared = _scene(_el("Q Search", 34, 90, w=72))
+
+    class Phone:
+        def __init__(self):
+            self.scene = scene
+            self.taps: list[tuple[int, int]] = []
+            self.keys: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 640, 990
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+
+        def key(self, modifier: int, keycode: int):
+            self.keys.append((modifier, keycode))
+            if (modifier, keycode) == (0, 0x2A):
+                self.scene = cleared
+
+    phone = Phone()
+    monkeypatch.setattr(walkthrough, "_is_settings_search_scene", lambda _scene: True)
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_clear_button", lambda _scene: None)
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_field", lambda _scene: scene.elements[0])
+    monkeypatch.setattr(walkthrough, "_settings_search_has_query_text", lambda current: current is not cleared)
+
+    assert walkthrough._dismiss_settings_search(phone, scene)
+    assert phone.taps == [scene.elements[0].box.center]
+    assert phone.keys == [(0x08, 0x04), (0, 0x2A)]
+
+
+@pytest.mark.smoke
+def test_dismiss_settings_search_clears_ipad_top_query_via_edit_menu(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    query = _scene(_el("Q Battery", 34, 90, w=90))
+    select_all_menu = _scene(
+        _el("Q Battery", 34, 90, w=90),
+        _el("Select", 54, 132, w=42),
+        _el("Select All", 118, 132, w=60),
+        _el("AutoFill", 202, 132, w=48),
+    )
+    cut_menu = _scene(
+        _el("Q", 34, 90, w=16),
+        _el("Battery", 52, 80, w=98),
+        _el("Cut Copy", 36, 132, w=80),
+        _el("AutoFill", 140, 132, w=48),
+    )
+    cleared = _scene(_el("Q Search", 34, 90, w=72))
+
+    class Phone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self):
+            self.scene = query
+            self.taps: list[tuple[int, int]] = []
+            self.keys: list[tuple[int, int]] = []
+            self.long_presses: list[tuple[int, int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 640, 990
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            if self.scene is cut_menu:
+                self.scene = cleared
+            elif self.scene is select_all_menu:
+                self.scene = cut_menu
+
+        def key(self, modifier: int, keycode: int):
+            self.keys.append((modifier, keycode))
+
+        def long_press_xy(self, x: int, y: int, *, hold_ms: int = 500, target: str | None = None):
+            _ = target
+            self.long_presses.append((x, y, hold_ms))
+            self.scene = select_all_menu
+
+    phone = Phone()
+    monkeypatch.setattr(walkthrough, "_is_settings_search_scene", lambda _scene: True)
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_clear_button", lambda _scene: None)
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_field", lambda _scene: query.elements[0])
+    monkeypatch.setattr(walkthrough, "_settings_search_has_query_text", lambda current: current is not cleared)
+
+    assert walkthrough._dismiss_settings_search(phone, query)
+    assert phone.keys == []
+    assert phone.long_presses == [(121, 100, 1600)]
+    assert phone.taps[-2:] == [(148, 142), (52, 142)]
+
+
+@pytest.mark.smoke
+def test_clear_settings_search_fails_when_ipad_top_query_does_not_clear(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    scene = _scene(_el("Q Battery", 34, 90, w=90))
+
+    class Phone:
+        def __init__(self):
+            self.taps: list[tuple[int, int]] = []
+            self.keys: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return scene
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 640, 990
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+
+        def key(self, modifier: int, keycode: int):
+            self.keys.append((modifier, keycode))
+
+    phone = Phone()
+    monkeypatch.setattr(walkthrough, "_is_settings_search_scene", lambda _scene: True)
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_clear_button", lambda _scene: None)
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_field", lambda _scene: scene.elements[0])
+    monkeypatch.setattr(walkthrough, "_settings_search_has_query_text", lambda _scene: True)
+
+    assert not walkthrough._clear_settings_search(phone)
+    assert phone.taps
+    assert phone.keys
+
+
+@pytest.mark.smoke
+def test_clear_settings_search_handles_ipad_top_query_even_when_scene_not_search(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    query = _scene(_el("Q Battery", 34, 90, w=90), _el("Battery", 404, 44, w=90))
+    cleared = _scene(_el("Q Search", 34, 90, w=72), _el("Battery", 404, 44, w=90))
+
+    class Phone:
+        def __init__(self):
+            self.scene = query
+            self.keys: list[tuple[int, int]] = []
+            self.entered_search = False
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 640, 990
+
+        def tap_xy(self, _x: int, _y: int):
+            pass
+
+        def key(self, modifier: int, keycode: int):
+            self.keys.append((modifier, keycode))
+            if (modifier, keycode) == (0, 0x2A):
+                self.scene = cleared
+
+    phone = Phone()
+    monkeypatch.setattr(walkthrough, "_is_settings_search_scene", lambda _scene: False)
+    monkeypatch.setattr(walkthrough, "_enter_settings_search", lambda _phone: setattr(phone, "entered_search", True) or False)
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_field", lambda scene: scene.elements[0])
+    monkeypatch.setattr(walkthrough, "_settings_search_has_query_text", lambda scene: scene is query)
+
+    assert walkthrough._clear_settings_search(phone)
+    assert phone.keys == [(0x08, 0x04), (0, 0x2A)]
+    assert phone.entered_search is False
+
+
+@pytest.mark.smoke
+def test_clear_settings_search_focuses_hidden_ipad_top_query_before_clear(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    hidden = _scene(_el("No Results for", 72, 520, w=120), _el('"Baer"', 72, 548, w=80))
+    focused = _scene(_el("Baer", 54, 90, w=42))
+    cleared = _scene(_el("Q Search", 34, 90, w=72), _el("Suggestions", 40, 134, w=66))
+
+    class Phone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self):
+            self.scene = hidden
+            self.taps: list[tuple[int, int]] = []
+            self.keys: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 640, 990
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            if self.scene is hidden:
+                self.scene = focused
+
+        def key(self, modifier: int, keycode: int):
+            self.keys.append((modifier, keycode))
+            if (modifier, keycode) == (0, 0x2A):
+                self.scene = cleared
+
+    phone = Phone()
+    monkeypatch.setattr(
+        walkthrough.settings_scene_state,
+        "find_search_field",
+        lambda scene: scene.elements[0] if scene is focused or scene is cleared else None,
+    )
+    monkeypatch.setattr(walkthrough, "_is_settings_search_scene", lambda scene: scene is hidden or scene is focused)
+    monkeypatch.setattr(walkthrough, "_settings_search_has_query_text", lambda scene: scene is not cleared)
+
+    assert walkthrough._clear_settings_search(phone)
+    assert phone.taps[0] == (151, 99)
+    assert phone.keys == [(0x08, 0x04), (0, 0x2A)]
+
+
+@pytest.mark.smoke
+def test_clear_settings_search_accepts_empty_ipad_top_search_with_edit_menu(monkeypatch):
+    scene = _scene(
+        _el("Q Search", 34, 90, w=72),
+        _el("Paste", 62, 132, w=42),
+        _el("AutoFill", 126, 132, w=48),
+    )
+
+    class Phone:
+        def perceive(self):
+            return scene
+
+    phone = Phone()
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_field", lambda _scene: scene.elements[0])
+    monkeypatch.setattr(walkthrough, "_settings_search_has_query_text", lambda _scene: True)
+
+    assert walkthrough._clear_settings_search(phone)
+
 
 @pytest.mark.smoke
 def test_return_to_settings_root_can_leave_search_via_settings_tab(monkeypatch):
@@ -477,6 +819,29 @@ def test_tap_search_field_rejects_semantic_failure():
 
     assert not walkthrough._tap_search_field(phone, search)
     assert phone.taps == [(80, 916)]
+
+
+@pytest.mark.smoke
+def test_tap_search_field_uses_ipad_top_search_pill_hit_point(monkeypatch):
+    search = _scene(_el("Q Search", 34, 90, w=72))
+
+    class SearchFieldPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self):
+            self.taps: list[tuple[int, int]] = []
+
+        def _viewport_size(self):
+            return 640, 990
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+
+    phone = SearchFieldPhone()
+    monkeypatch.setattr(walkthrough.settings_scene_state, "find_search_field", lambda _scene: search.elements[0])
+
+    assert walkthrough._tap_search_field(phone, search)
+    assert phone.taps == [(151, 100)]
 
 
 @pytest.mark.smoke

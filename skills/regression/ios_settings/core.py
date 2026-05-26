@@ -26,6 +26,7 @@ wrappers for existing callers while new code should call the focused modules.
 from __future__ import annotations
 
 import os
+import re
 import time
 from collections.abc import Iterable
 from contextlib import suppress
@@ -573,6 +574,9 @@ def _dismiss_settings_search(phone, scene) -> bool:
         return False
     clear_button = settings_scene_state.find_search_clear_button(scene)
     if clear_button is None:
+        field = settings_scene_state.find_search_field(scene)
+        if field is not None and field.box.center[1] < 180:
+            return _clear_top_settings_search_field(phone, field, scene)
         if not _settings_search_has_query_text(scene):
             return False
         try:
@@ -588,6 +592,123 @@ def _dismiss_settings_search(phone, scene) -> bool:
     with _action_intent(phone, "settings_search.clear_query_button", text=clear_button.text, x=cx, y=cy):
         result = phone.tap_xy(cx, cy)
     return _record_action_verdict(phone, result)
+
+
+def _clear_top_settings_search_field(phone, field: UIElement, scene) -> bool:
+    if not _settings_search_has_query_text(scene):
+        return False
+    try:
+        w, _h = phone._viewport_size()
+    except Exception:
+        w = 0
+    if w < 600 and not _is_ipad_target(phone):
+        return False
+    if _is_ipad_target(phone) and _clear_top_settings_search_field_via_edit_menu(phone, field):
+        return True
+    if not hasattr(phone, "key"):
+        return _clear_top_settings_search_field_via_edit_menu(phone, field)
+    cx, cy = field.box.center
+    with _action_intent(phone, "settings_search.focus_top_query_field", text=field.text, x=cx, y=cy):
+        result = phone.tap_xy(cx, cy)
+    if not _accept_tolerating_unknown(phone, result):
+        return False
+    time.sleep(0.2)
+    with _action_intent(phone, "settings_search.select_top_query_text", modifier=0x08, keycode=0x04):
+        result = phone.key(0x08, 0x04)
+    if not _record_action_verdict(phone, result):
+        return False
+    time.sleep(0.1)
+    with _action_intent(phone, "settings_search.delete_top_query_text", modifier=0, keycode=0x2A):
+        result = phone.key(0, 0x2A)
+    if not _record_action_verdict(phone, result):
+        return False
+    time.sleep(0.4)
+    phone.invalidate_perceive_cache()
+    if _top_search_clear_succeeded(phone.perceive()):
+        return True
+    return _clear_top_settings_search_field_via_edit_menu(phone, field)
+
+
+def _clear_top_settings_search_field_via_edit_menu(phone, field: UIElement) -> bool:
+    long_press = getattr(phone, "long_press_xy", None)
+    if not callable(long_press):
+        return False
+    x, y = _top_search_text_edit_point(phone, field)
+    with _action_intent(phone, "settings_search.long_press_top_query_field", text=field.text, x=x, y=y):
+        result = long_press(x, y, hold_ms=1600, target="settings_search_query")
+    if not _accept_tolerating_unknown(phone, result):
+        return False
+    time.sleep(0.8)
+    phone.invalidate_perceive_cache()
+    scene = phone.perceive()
+    select_all = _find_text_edit_menu_item(scene, {"Select All", "全选"})
+    if select_all is None:
+        return False
+    sx, sy = select_all.box.center
+    with _action_intent(phone, "settings_search.select_all_top_query_text", text=select_all.text, x=sx, y=sy):
+        result = phone.tap_xy(sx, sy)
+    if not _accept_tolerating_unknown(phone, result):
+        return False
+    time.sleep(0.8)
+    phone.invalidate_perceive_cache()
+    scene = phone.perceive()
+    cut = _find_text_edit_menu_item(scene, {"Cut", "剪切"})
+    if cut is None:
+        return False
+    x = cut.box.x + max(12, int(cut.box.w * 0.20))
+    y = cut.box.center[1]
+    with _action_intent(phone, "settings_search.cut_top_query_text", text=cut.text, x=x, y=y):
+        result = phone.tap_xy(x, y)
+    if not _accept_tolerating_unknown(phone, result):
+        return False
+    time.sleep(1.0)
+    phone.invalidate_perceive_cache()
+    return _top_search_clear_succeeded(phone.perceive())
+
+
+def _find_text_edit_menu_item(scene, labels: set[str]) -> UIElement | None:
+    matches: list[UIElement] = []
+    for element in scene.elements:
+        text = (element.text or "").strip()
+        if not text:
+            continue
+        if any(text == label or text.startswith(f"{label} ") or text.startswith(f"{label}|") for label in labels):
+            matches.append(element)
+    if not matches:
+        return None
+    matches.sort(key=lambda element: (element.box.center[1], element.box.center[0]))
+    return matches[0]
+
+
+def _top_search_text_edit_point(phone, field: UIElement) -> tuple[int, int]:
+    cx, cy = field.box.center
+    try:
+        w, _h = phone._viewport_size()
+    except Exception:
+        w = 0
+    if w >= 600:
+        cx = max(cx, int(w * 0.19))
+    return int(cx), int(cy)
+
+
+def _is_ipad_top_search_field(phone, field: UIElement) -> bool:
+    if not _is_ipad_target(phone):
+        return False
+    return field.box.center[1] < 180
+
+
+def _top_search_focus_point(phone, field: UIElement) -> tuple[int, int]:
+    cx, cy = field.box.center
+    try:
+        w, _h = phone._viewport_size()
+        from glassbox.ipados.scene import sidebar_right_x
+
+        sidebar_right = sidebar_right_x(w)
+    except Exception:
+        return int(cx), int(cy)
+    pill_center_x = int(sidebar_right * 0.54)
+    cx = min(max(pill_center_x, int(cx)), max(int(cx), sidebar_right - 40))
+    return int(cx), int(cy)
 
 
 def _settings_search_has_query_text(scene) -> bool:
@@ -606,7 +727,11 @@ def _enter_settings_search(phone) -> bool:
     search_tab = DEFAULT_SETTINGS_POLICY.find_root_search_tab(scene)
     if search_tab is None:
         return False
-    cx, cy = _bottom_tab_hit_point(phone, search_tab)
+    is_ipad_top_search = _is_ipad_top_search_field(phone, search_tab)
+    if is_ipad_top_search:
+        cx, cy = _top_search_focus_point(phone, search_tab)
+    else:
+        cx, cy = _bottom_tab_hit_point(phone, search_tab)
     with _action_intent(phone, "settings_root.open_search_tab", text=search_tab.text, x=cx, y=cy):
         result = phone.tap_xy(cx, cy)
     # Opening Settings Search commonly scores `unknown`: the search scene
@@ -630,13 +755,18 @@ def _enter_settings_search(phone) -> bool:
             phone.home()
         phone.invalidate_perceive_cache()
         return False
+    if is_ipad_top_search and _scene_is_settings_root(opened):
+        return True
     return _is_settings_search_scene(opened)
 
 
 def _tap_search_field(phone, scene) -> bool:
     field = settings_scene_state.find_search_field(scene)
     if field is not None:
-        cx, cy = field.box.center
+        if _is_ipad_top_search_field(phone, field):
+            cx, cy = _top_search_focus_point(phone, field)
+        else:
+            cx, cy = field.box.center
         with _action_intent(phone, "settings_search.focus_search_field", text=field.text, x=cx, y=cy):
             result = phone.tap_xy(cx, cy)
         return _accept_tolerating_unknown(phone, result)
@@ -650,6 +780,21 @@ def _tap_search_field(phone, scene) -> bool:
 def _clear_settings_search(phone) -> bool:
     for _ in range(2):
         scene = phone.perceive()
+        field = settings_scene_state.find_search_field(scene)
+        if (
+            field is not None
+            and field.box.center[1] < 180
+            and _top_search_field_is_empty(field)
+            and not _top_search_has_visible_query_text(scene, field)
+            and not _top_search_has_no_results_text(scene)
+        ):
+            return True
+        if _dismiss_ipad_top_search_query_if_present(phone, scene):
+            time.sleep(0.8)
+            phone.invalidate_perceive_cache()
+            if _top_search_clear_succeeded(phone.perceive()):
+                return True
+            continue
         if not _is_settings_search_scene(scene):
             if not _enter_settings_search(phone):
                 return False
@@ -676,7 +821,92 @@ def _clear_settings_search(phone) -> bool:
             return False
         time.sleep(0.4)
         phone.invalidate_perceive_cache()
+        if not _top_search_clear_succeeded(phone.perceive()):
+            return False
     return True
+
+
+def _dismiss_ipad_top_search_query_if_present(phone, scene) -> bool:
+    field = settings_scene_state.find_search_field(scene)
+    if field is None or field.box.center[1] >= 180:
+        field = _focus_ipad_top_search_field_for_clear(phone, scene)
+        if field is None or field.box.center[1] >= 180:
+            return False
+    if _top_search_field_is_empty(field):
+        return False
+    if not _settings_search_has_query_text(scene):
+        return False
+    return _clear_top_settings_search_field(phone, field, scene)
+
+
+def _focus_ipad_top_search_field_for_clear(phone, scene) -> UIElement | None:
+    if not _is_ipad_target(phone) or not _settings_search_has_query_text(scene):
+        return None
+    try:
+        w, h = phone._viewport_size()
+        from glassbox.ipados.scene import sidebar_right_x
+
+        x = int(sidebar_right_x(w) * 0.54)
+        y = int(h * 0.10)
+    except Exception:
+        x, y = 151, 99
+    with _action_intent(phone, "settings_search.focus_hidden_top_query_field", x=x, y=y):
+        result = phone.tap_xy(x, y)
+    if not _accept_tolerating_unknown(phone, result):
+        return None
+    time.sleep(0.6)
+    phone.invalidate_perceive_cache()
+    return settings_scene_state.find_search_field(phone.perceive())
+
+
+def _top_search_field_is_empty(field: UIElement) -> bool:
+    text = (field.text or "").strip()
+    compact = re.sub(r"\s+", "", text)
+    return (
+        not compact
+        or compact.lower() in {"q", "qsearch", "search"}
+        or compact in {"Q搜索", "搜索"}
+        or _is_settings_search_affordance_text(text)
+    )
+
+
+def _top_search_has_visible_query_text(scene, field: UIElement) -> bool:
+    for element in scene.elements:
+        if element is field or element.type == "status_bar":
+            continue
+        text = (element.text or "").strip()
+        if not text:
+            continue
+        cx, cy = element.box.center
+        if cy < 72 or cy > 112 or cx > max(260, field.box.center[0] + 220):
+            continue
+        compact = re.sub(r"\s+", "", text)
+        if (
+            not compact
+            or compact.isdigit()
+            or compact.lower() in {"q", "qsearch", "search"}
+            or compact in {"Q搜索", "搜索"}
+            or text in ROOT_TITLE
+            or text in {"Paste", "AutoFill", "Select", "Select All", "Cut", "Copy", "Replace..."}
+            or _is_settings_search_affordance_text(text)
+        ):
+            continue
+        return True
+    return False
+
+
+def _top_search_has_no_results_text(scene) -> bool:
+    return any(
+        "No Results" in str(element.text or "")
+        or "Check the spelling" in str(element.text or "")
+        or "无结果" in str(element.text or "")
+        or "没有结果" in str(element.text or "")
+        for element in scene.elements
+    )
+
+
+def _top_search_clear_succeeded(scene) -> bool:
+    return _scene_is_settings_root(scene) or not _settings_search_has_query_text(scene)
 
 
 def _find_search_result(scene, label: str) -> UIElement | None:
@@ -1063,6 +1293,11 @@ def _return_one_level(
     parent_title: str | None = None,
     parent_is_root: bool = False,
 ) -> bool:
+    if parent_is_root and _is_ipad_target(phone):
+        phone.invalidate_perceive_cache()
+        scene = phone.perceive()
+        if _scene_is_settings_root(scene):
+            return True
     with _action_intent(phone, "return.one_level.back_shortcut", parent_title=parent_title):
         result = _send_ios_back_action(phone)
     if _action_semantically_failed(phone, result):
@@ -1102,6 +1337,11 @@ def _return_one_level(
         if returned:
             return True
     return False
+
+
+def _is_ipad_target(phone) -> bool:
+    model = str(getattr(getattr(phone, "device_geometry", None), "model", "") or "")
+    return model.lower().replace("-", "_").startswith("ipad")
 
 
 def _action_semantically_failed(phone, result: Any) -> bool:
@@ -1242,6 +1482,7 @@ def _known_harness_issues(
         navigation_failures=navigation_failures,
         metrics=metrics,
         require_exhaustive=REQUIRE_EXHAUSTIVE,
+        strict_child_candidate_audit=STRICT_CHILD_CANDIDATE_AUDIT,
     )
 
 

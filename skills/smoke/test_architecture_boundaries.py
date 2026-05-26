@@ -53,12 +53,17 @@ from glassbox.crawl_policies import (
 )
 from glassbox.effector import MockEffector, NoOpEffector
 from glassbox.ios.safe_area import IOSSafeAreaProvider
-from glassbox.ios.springboard import IOSSpringboardProvider
+from glassbox.ios.springboard import (
+    IOSSpringboardProvider,
+    find_springboard_icon,
+    is_ios_home_screen,
+)
 from glassbox.perception.letterbox import LetterboxCrop
 from glassbox.perception.source import FRAME_CONTRACT_VERSION, Frame, FrameContext
 from glassbox.phone import Phone, PhoneGestureConfig
 from glassbox.platforms import (
     IOSPlatform,
+    IPadOSPlatform,
     PlatformRegistration,
     PlatformRegistry,
     select_platform_backend,
@@ -224,6 +229,322 @@ def test_ios_platform_exposes_lazy_scene_classifier():
     assert classified is not None
     assert classified.platform_scene_kind == "settings_root"
     assert classified.source == "platform"
+
+
+def test_ipados_platform_classifies_settings_split_view_detail():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(744, 1133),
+        elements=[
+            UIElement(type="text", box=Box(x=48, y=72, w=72, h=28), text="设置", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=220, w=96, h=24), text="无线局域网", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=276, w=44, h=24), text="蓝牙", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=332, w=44, h=24), text="通用", confidence=0.9),
+            UIElement(type="text", box=Box(x=418, y=76, w=70, h=28), text="通用", confidence=0.9),
+            UIElement(type="text", box=Box(x=384, y=180, w=86, h=24), text="关于本机", confidence=0.9),
+            UIElement(type="text", box=Box(x=384, y=236, w=86, h=24), text="软件更新", confidence=0.9),
+            UIElement(type="text", box=Box(x=384, y=292, w=150, h=24), text="iPad 储存空间", confidence=0.9),
+        ],
+    )
+
+    assert platform.safe_area is not None
+    classified = platform.scene_classifier.classify(scene, viewport_size=(744, 1133))
+
+    assert classified is not None
+    assert platform.name == "ipados"
+    assert classified.platform_scene_kind == "settings_detail"
+    assert classified.page_id == "settings/通用"
+    assert "tap_root_row" in classified.safe_actions
+    assert "ipad_split_view" in classified.evidence
+
+
+def test_ipados_platform_classifies_landscape_settings_without_sidebar_title():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(1920, 1080),
+        elements=[
+            UIElement(type="text", box=Box(x=273, y=186, w=104, h=22), text="• Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=363, y=296, w=179, h=20), text="Apple Account, iCloud", confidence=0.9),
+            UIElement(type="text", box=Box(x=315, y=458, w=67, h=22), text="WLAN", confidence=0.9),
+            UIElement(type="text", box=Box(x=321, y=593, w=73, h=25), text="Battery", confidence=0.9),
+            UIElement(type="text", box=Box(x=321, y=675, w=81, h=18), text="General", confidence=0.9),
+            UIElement(type="text", box=Box(x=318, y=740, w=126, h=28), text="Accessibility", confidence=0.9),
+            UIElement(type="text", box=Box(x=321, y=878, w=79, h=22), text="Camera", confidence=0.9),
+            UIElement(type="text", box=Box(x=899, y=78, w=123, h=17), text="Do Not Disturb", confidence=0.9),
+            UIElement(type="text", box=Box(x=692, y=114, w=22, h=25), text="<", confidence=0.9),
+            UIElement(type="button", box=Box(x=1080, y=114, w=201, h=26), text="Language & Region", confidence=0.9),
+            UIElement(type="text", box=Box(x=698, y=209, w=220, h=23), text="Preferred Languages", confidence=0.9),
+            UIElement(type="button", box=Box(x=698, y=265, w=75, h=20), text="English", confidence=0.9),
+            UIElement(type="text", box=Box(x=698, y=469, w=583, h=20), text="Apps and websites will use the first language in this list that they support.", confidence=0.9),
+            UIElement(type="text", box=Box(x=695, y=541, w=73, h=28), text="Region", confidence=0.9),
+            UIElement(type="button", box=Box(x=698, y=614, w=92, h=20), text="Calendar", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(1920, 1080))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "settings_detail"
+    assert classified.page_id == "settings/Language & Region"
+    assert "settings_sidebar_search" in classified.evidence
+    assert "ipad_home_widgets" not in classified.evidence
+
+
+def test_ipados_platform_classifies_minimal_repeated_title_detail():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=34, y=90, w=72, h=18), text="Q Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=220, w=52, h=16), text="WLAN", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=276, w=76, h=16), text="Battery", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=332, w=76, h=16), text="General", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=388, w=112, h=16), text="Accessibility", confidence=0.9),
+            UIElement(type="text", box=Box(x=378, y=44, w=142, h=14), text="Scheduled Summary", confidence=0.9),
+            UIElement(type="text", box=Box(x=280, y=108, w=138, h=16), text="Scheduled Summary", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(640, 989))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "settings_detail"
+    assert classified.page_id == "settings/Scheduled Summary"
+    assert "detail_repeated_title" in classified.evidence
+
+
+def test_ipados_platform_classifies_screen_time_dashboard_title():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=34, y=90, w=72, h=18), text="Q Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=167, w=76, h=16), text="Battery", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=232, w=76, h=16), text="General", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=335, w=92, h=16), text="Screen Time", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=368, w=112, h=16), text="Accessibility", confidence=0.9),
+            UIElement(type="text", box=Box(x=300, y=34, w=88, h=16), text="Daily Average", confidence=0.9),
+            UIElement(type="button", box=Box(x=302, y=60, w=78, h=22), text="47h 19m", confidence=0.9),
+            UIElement(type="text", box=Box(x=482, y=65, w=146, h=16), text="© 19% from last week", confidence=0.9),
+            UIElement(type="text", box=Box(x=582, y=100, w=28, h=10), text="•avg", confidence=0.9),
+            UIElement(type="text", box=Box(x=326, y=225, w=210, h=18), text="See All App & Website Activity", confidence=0.9),
+            UIElement(type="text", box=Box(x=292, y=286, w=170, h=16), text="Updated today at 1:17PM", confidence=0.9),
+            UIElement(type="text", box=Box(x=300, y=318, w=88, h=18), text="Limit Usage", confidence=0.9),
+            UIElement(type="text", box=Box(x=318, y=348, w=76, h=18), text="Downtime", confidence=0.9),
+            UIElement(type="text", box=Box(x=320, y=403, w=78, h=18), text="App Limits", confidence=0.9),
+            UIElement(type="text", box=Box(x=330, y=456, w=112, h=18), text="Always Allowed", confidence=0.9),
+            UIElement(type="text", box=Box(x=332, y=508, w=116, h=18), text="Screen Distance", confidence=0.9),
+            UIElement(type="text", box=Box(x=336, y=608, w=158, h=18), text="Communication Limits", confidence=0.9),
+            UIElement(type="text", box=Box(x=336, y=662, w=164, h=18), text="Communication Safety", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(640, 989))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "settings_detail"
+    assert classified.page_id == "settings/Screen Time"
+
+
+def test_ipados_platform_does_not_reuse_ios_settings_detail_fallback_on_home_widgets():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(744, 1133),
+        elements=[
+            UIElement(type="text", box=Box(x=40, y=70, w=180, h=24), text="下午8:54 5月25日周一", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=150, w=54, h=24), text="备忘录", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=205, w=92, h=24), text="无备忘录", confidence=0.9),
+            UIElement(type="text", box=Box(x=350, y=150, w=32, h=24), text="25", confidence=0.9),
+            UIElement(type="text", box=Box(x=350, y=205, w=130, h=24), text="The day following", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=420, w=64, h=24), text="上海市", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=476, w=36, h=24), text="26°", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(744, 1133))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "springboard"
+    assert "ipad_home_widgets" in classified.evidence
+
+
+def test_ipados_platform_classifies_live_widget_home_before_top_search():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=14, y=10, w=128, h=14), text="11:01PM Mon 25 May", confidence=0.9),
+            UIElement(type="text", box=Box(x=136, y=104, w=12, h=10), text="12", confidence=0.9),
+            UIElement(type="text", box=Box(x=108, y=116, w=12, h=10), text="10", confidence=0.9),
+            UIElement(type="text", box=Box(x=98, y=216, w=40, h=10), text="MONDAY", confidence=0.9),
+            UIElement(type="text", box=Box(x=98, y=228, w=32, h=22), text="25", confidence=0.9),
+            UIElement(type="text", box=Box(x=98, y=334, w=50, h=14), text="Daxing 7", confidence=0.9),
+            UIElement(type="text", box=Box(x=98, y=348, w=50, h=30), text="18°", confidence=0.9),
+            UIElement(type="text", box=Box(x=220, y=94, w=56, h=10), text="Notes", confidence=0.9),
+            UIElement(type="text", box=Box(x=218, y=130, w=46, h=10), text="No Notes", confidence=0.9),
+            UIElement(type="text", box=Box(x=240, y=651, w=42, h=10), text="Camera", confidence=0.9),
+            UIElement(type="text", box=Box(x=354, y=649, w=52, h=12), text="App Store", confidence=0.9),
+            UIElement(type="text", box=Box(x=358, y=769, w=46, h=12), text="Settings", confidence=0.9),
+            UIElement(type="text", box=Box(x=486, y=531, w=30, h=10), text="Maps", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(640, 989))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "springboard"
+    assert "ipad_home_widgets" in classified.evidence
+
+
+def test_springboard_icon_tap_point_uses_shallower_ipad_offset():
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=358, y=769, w=46, h=12), text="Settings", confidence=0.9),
+        ],
+    )
+
+    icon = find_springboard_icon(scene, ("Settings",), viewport_size=(640, 989))
+
+    assert icon is not None
+    assert icon.tap_point == (381, 740)
+
+
+def test_ipad_home_widget_text_is_not_treated_as_icon_label():
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=220, y=94, w=56, h=10), text="- Notes", confidence=0.9),
+            UIElement(type="text", box=Box(x=218, y=130, w=46, h=10), text="No Notes", confidence=0.9),
+            UIElement(type="text", box=Box(x=240, y=649, w=42, h=13), text="Camera", confidence=0.9),
+            UIElement(type="text", box=Box(x=354, y=649, w=52, h=12), text="App Store", confidence=0.9),
+            UIElement(type="text", box=Box(x=358, y=769, w=46, h=13), text="Settings", confidence=0.9),
+            UIElement(type="text", box=Box(x=486, y=412, w=28, h=12), text="Files", confidence=0.9),
+            UIElement(type="text", box=Box(x=484, y=531, w=32, h=10), text="Maps", confidence=0.9),
+        ],
+    )
+
+    assert find_springboard_icon(scene, ("Notes",), viewport_size=(640, 989)) is None
+    assert find_springboard_icon(scene, ("Settings",), viewport_size=(640, 989)) is not None
+
+
+def test_ipados_platform_classifies_spotlight_settings_overlay_as_system_search():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(644, 982),
+        elements=[
+            UIElement(type="text", box=Box(x=116, y=94, w=84, h=24), text="Settings", confidence=0.9),
+            UIElement(type="button", box=Box(x=212, y=90, w=48, h=24), text="Open", confidence=0.9),
+            UIElement(type="text", box=Box(x=84, y=140, w=52, h=16), text="Top Hit", confidence=0.9),
+            UIElement(type="text", box=Box(x=112, y=226, w=58, h=16), text="Settings", confidence=0.9),
+            UIElement(type="text", box=Box(x=84, y=276, w=86, h=16), text="Suggestions", confidence=0.9),
+            UIElement(type="text", box=Box(x=460, y=360, w=92, h=16), text="Search in App", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(644, 982))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "system_search"
+    assert "ipad_system_search_overlay" in classified.evidence
+
+
+def test_ipados_platform_classifies_settings_top_search_no_results_as_search_results():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 988),
+        elements=[
+            UIElement(type="text", box=Box(x=34, y=86, w=118, h=20), text="Q BateryBattery/", confidence=0.9),
+            UIElement(type="button", box=Box(x=66, y=526, w=128, h=18), text="No Results for", confidence=0.9),
+            UIElement(type="text", box=Box(x=56, y=548, w=146, h=22), text='"BateryBattery"', confidence=0.9),
+            UIElement(type="text", box=Box(x=52, y=574, w=158, h=14), text="Check the spelling or try a", confidence=0.9),
+            UIElement(type="text", box=Box(x=422, y=44, w=54, h=16), text="Battery", confidence=0.9),
+            UIElement(type="text", box=Box(x=278, y=108, w=72, h=28), text="100%", confidence=0.9),
+            UIElement(type="text", box=Box(x=282, y=215, w=80, h=17), text="Daily Usage", confidence=0.9),
+            UIElement(type="text", box=Box(x=278, y=500, w=150, h=14), text="App and System Activity", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(640, 988))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "settings_search_results"
+    assert "ipad_settings_top_search" in classified.evidence
+
+
+def test_ipados_platform_settings_top_search_beats_calendar_detail_widget_false_positive():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=14, y=12, w=186, h=12), text="• Search 6:50 AM Tue 26 May", confidence=0.9),
+            UIElement(type="text", box=Box(x=34, y=87, w=110, h=21), text="Q WLANWLAN", confidence=0.9),
+            UIElement(type="button", box=Box(x=66, y=527, w=128, h=18), text="No Results for", confidence=0.9),
+            UIElement(type="button", box=Box(x=62, y=549, w=134, h=20), text="“WLANWLAN”", confidence=0.9),
+            UIElement(type="text", box=Box(x=54, y=575, w=156, h=14), text="Check the spelling or try a", confidence=0.9),
+            UIElement(type="text", box=Box(x=424, y=43, w=52, h=13), text="Sounds", confidence=0.9),
+            UIElement(type="text", box=Box(x=280, y=653, w=104, h=12), text="Calendar Alerts", confidence=0.9),
+            UIElement(type="text", box=Box(x=552, y=653, w=58, h=13), text="Chord〉", confidence=0.9),
+            UIElement(type="text", box=Box(x=280, y=697, w=106, h=14), text="Reminder Alerts", confidence=0.9),
+            UIElement(type="text", box=Box(x=280, y=743, w=92, h=14), text="Default Alerts", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(640, 989))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "settings_search_results"
+    assert "ipad_settings_top_search" in classified.evidence
+    assert "ipad_home_widgets" not in classified.evidence
+
+
+def test_ipados_platform_does_not_classify_files_sidebar_as_settings_top_search():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(644, 984),
+        elements=[
+            UIElement(type="status_bar", box=Box(x=12, y=8, w=142, h=14), text="11:40AM Tue 26 May", confidence=0.9),
+            UIElement(type="text", box=Box(x=32, y=44, w=14, h=20), text="<", confidence=0.9),
+            UIElement(type="text", box=Box(x=66, y=90, w=58, h=16), text="Recents", confidence=0.9),
+            UIElement(type="text", box=Box(x=64, y=420, w=54, h=16), text="Shared", confidence=0.9),
+            UIElement(type="text", box=Box(x=64, y=470, w=54, h=16), text="Browse", confidence=0.9),
+            UIElement(type="text", box=Box(x=330, y=90, w=58, h=16), text="Recents", confidence=0.9),
+            UIElement(type="text", box=Box(x=330, y=160, w=78, h=16), text="Cylink.conf", confidence=0.9),
+            UIElement(type="text", box=Box(x=330, y=192, w=124, h=16), text="29/8/2025", confidence=0.9),
+            UIElement(type="text", box=Box(x=330, y=224, w=34, h=16), text="76 KB", confidence=0.9),
+            UIElement(type="text", box=Box(x=610, y=940, w=14, h=14), text="Q", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(644, 984))
+
+    assert classified is not None
+    assert classified.platform_scene_kind != "settings_search_results"
+    assert "ipad_settings_top_search" not in classified.evidence
 
 
 def test_legacy_ocr_adapter_returns_text_regions_and_offsets_roi():
@@ -406,6 +727,23 @@ def test_ios_springboard_provider_wraps_module_helper(monkeypatch):
     assert calls == [(phone, ("Settings", "设置"), {"max_pages": 3, "settle_s": 0.2, "icon_map": "map"})]
 
 
+def test_springboard_home_recognizer_honors_platform_scene_kind():
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        elements=[
+            UIElement(type="text", box=Box(x=20, y=80, w=120, h=20), text="备忘录", confidence=0.9),
+            UIElement(type="text", box=Box(x=20, y=130, w=120, h=20), text="无备忘录", confidence=0.9),
+        ],
+    )
+    scene.platform_scene_kind = "springboard"
+
+    assert is_ios_home_screen(scene, viewport_size=(744, 1133)) is True
+
+    scene.platform_scene_kind = "settings_detail"
+    assert is_ios_home_screen(scene, viewport_size=(744, 1133)) is False
+
+
 def test_app_policy_registry_resolves_builtin_settings_classifier():
     classifier = DEFAULT_APP_POLICY_REGISTRY.scene_classifier_for("com.apple.Preferences")
 
@@ -424,6 +762,7 @@ def test_app_policy_registry_resolves_builtin_settings_classifier():
     classified = classifier.classify(scene, viewport_size=(448, 973))
     assert classified is not None
     assert classified.platform_scene_kind == "settings_root"
+    assert classified.source == "app"
 
 
 def test_app_policy_registry_loads_entry_point_registration(monkeypatch):
@@ -598,6 +937,24 @@ def test_ios_recovery_provider_recovers_system_search():
 def test_platform_selector_defaults_to_ios():
     class Cfg:
         platform = "ios"
+
+    assert select_platform_backend(Cfg()) == "ios"
+
+
+def test_platform_selector_auto_uses_ipados_for_ipad_model():
+    class Cfg:
+        platform = "ios"
+        phone_model = "ipad_mini_7"
+        model_fields_set = frozenset()
+
+    assert select_platform_backend(Cfg()) == "ipados"
+
+
+def test_platform_selector_respects_explicit_ios_for_ipad_model():
+    class Cfg:
+        platform = "ios"
+        phone_model = "ipad_mini_7"
+        model_fields_set = frozenset({"platform"})
 
     assert select_platform_backend(Cfg()) == "ios"
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from glassbox.cognition import Box, Scene, UIElement
 from skills.regression.ios_settings import child_audit
 from skills.regression.ios_settings import crawler as settings_crawler
+from skills.regression.ios_settings import reporting as settings_reporting
 
 
 def _el(text: str, x: int, y: int, w: int = 90, h: int = 24, ty: str = "text") -> UIElement:
@@ -32,6 +33,11 @@ ABOUT = _scene(
     _el("名称", 54, 286, w=42),
     _el("软件版本", 54, 340, w=72),
 )
+ACCESSIBILITY = _scene(
+    _el("<", 18, 74, w=18, ty="nav_back"),
+    _el("辅助功能", 180, 72, w=88),
+    _el("个性化", 54, 286, w=72),
+)
 
 
 class FakePhone:
@@ -47,6 +53,7 @@ class FakePhone:
             "root": ROOT,
             "general": GENERAL,
             "about": ABOUT,
+            "accessibility": ACCESSIBILITY,
         }[self.stack[-1]]
 
     def invalidate_perceive_cache(self):
@@ -66,6 +73,8 @@ class FakePhone:
         current = self.stack[-1]
         if current == "root" and 300 <= y <= 350:
             self.stack.append("general")
+        elif current == "root" and 360 <= y <= 400:
+            self.stack.append("accessibility")
         elif current == "general" and 260 <= y <= 315:
             self.stack.append("about")
         elif 45 <= y <= 100 and len(self.stack) > 1:
@@ -94,6 +103,12 @@ def test_high_value_child_audit_reaches_child_depth(monkeypatch):
     assert report["status"] == "passed"
     assert report["opened_target_roots"] == ["通用"]
     assert report["visited_child_paths"] == [["Settings", "通用", "关于本机"]]
+    assert report["target_roots_with_child"] == ["通用"]
+    assert report["target_roots_missing_child"] == []
+    assert report["metrics"]["root_expected_count"] == 1
+    assert report["metrics"]["root_required_expected_count"] == 1
+    assert report["metrics"]["target_roots_with_child_count"] == 1
+    assert report["metrics"]["target_roots_missing_child_count"] == 0
     assert report["metrics"]["child_visit_count"] == 1
     assert all(not values for values in report["failure_categories"].values())
 
@@ -118,9 +133,134 @@ def test_high_value_child_audit_reports_unopened_target(monkeypatch):
     ]
 
 
+def test_high_value_child_audit_requires_each_target_root_to_reach_child(monkeypatch):
+    monkeypatch.setattr(settings_crawler.time, "sleep", lambda _: None)
+    phone = FakePhone()
+
+    report = child_audit.probe_high_value_child_audit(
+        phone,
+        target_root_labels=("通用", "辅助功能"),
+        max_depth=2,
+        max_pages=8,
+        max_child_scrolls_per_page=1,
+        max_candidates_per_page=1,
+    )
+
+    assert report["status"] == "failed"
+    assert report["target_roots_with_child"] == ["通用"]
+    assert report["target_roots_missing_child"] == ["辅助功能"]
+    assert report["metrics"]["target_roots_with_child_count"] == 1
+    assert report["metrics"]["target_roots_missing_child_count"] == 1
+    assert report["failure_categories"]["operation"] == [
+        "ios-settings-child-audit-target-root-no-child-depth"
+    ]
+
+
 def test_high_value_child_audit_can_write_report(tmp_path):
     path = tmp_path / "child-audit.json"
 
     child_audit.write_report({"status": "passed"}, path)
 
     assert path.read_text(encoding="utf-8").startswith("{")
+
+
+def test_high_value_child_audit_can_accept_safely_blocked_target_root():
+    report = child_audit._build_report(
+        target_root_labels=("无线局域网",),
+        opened_targets=["无线局域网"],
+        target_failures=[],
+        return_root_failed=False,
+        visits=[
+            settings_reporting.PageVisit(
+                path=("Settings", "无线局域网"),
+                title="WLAN",
+                texts=("WLAN", "My Networks", "Auto-Join"),
+            )
+        ],
+        limits_hit=set(),
+        blocked_pages=[
+            settings_reporting.BlockedPage(
+                path=("Settings", "无线局域网"),
+                title="WLAN",
+                reason="dynamic Wi-Fi rows",
+                texts=("WLAN", "My Networks", "Auto-Join"),
+            )
+        ],
+        rejected_candidates=[],
+        navigation_failures=[],
+        trace_payload=None,
+        sample_limits_hit=[],
+        config={},
+        allow_blocked_target_roots=True,
+    )
+
+    assert report["status"] == "passed"
+    assert report["target_roots_blocked"] == ["无线局域网"]
+    assert report["target_roots_missing_child"] == []
+    assert report["target_roots_without_child"] == ["无线局域网"]
+    assert report["metrics"]["target_roots_blocked_count"] == 1
+
+
+def test_high_value_child_audit_counts_noncanonical_target_root_coverage():
+    report = child_audit._build_report(
+        target_root_labels=("Camera",),
+        opened_targets=["Camera"],
+        target_failures=[],
+        return_root_failed=False,
+        visits=[
+            settings_reporting.PageVisit(
+                path=("Settings", "Camera"),
+                title="Camera",
+                texts=("Camera", "Formats", "Record Video"),
+            ),
+            settings_reporting.PageVisit(
+                path=("Settings", "Camera", "Formats"),
+                title="Formats",
+                texts=("Formats", "High Efficiency", "Most Compatible"),
+            ),
+        ],
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        trace_payload=None,
+        sample_limits_hit=[],
+        config={},
+    )
+
+    assert report["status"] == "passed"
+    assert report["metrics"]["root_expected_count"] == 1
+    assert report["metrics"]["root_visited_count"] == 1
+    assert report["metrics"]["root_required_missing_count"] == 0
+    assert report["target_roots_with_child"] == ["Camera"]
+
+
+def test_high_value_child_audit_can_accept_root_only_inventory_targets():
+    report = child_audit._build_report(
+        target_root_labels=("Wallpaper",),
+        opened_targets=["Wallpaper"],
+        target_failures=[],
+        return_root_failed=False,
+        visits=[
+            settings_reporting.PageVisit(
+                path=("Settings", "Wallpaper"),
+                title="Wallpaper",
+                texts=("Wallpaper", "Add New Wallpaper"),
+            )
+        ],
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        trace_payload=None,
+        sample_limits_hit=[],
+        config={},
+        allow_root_only_target_roots=True,
+    )
+
+    assert report["status"] == "passed"
+    assert report["target_roots_missing_child"] == []
+    assert report["target_roots_without_child"] == ["Wallpaper"]
+    assert report["known_issues"] == []
+    assert report["metrics"]["target_roots_without_child_count"] == 1
+    assert report["metrics"]["allow_root_only_target_roots"] is True

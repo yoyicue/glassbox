@@ -28,6 +28,8 @@ def probe_high_value_child_audit(
     max_child_scrolls_per_page: int = 1,
     max_candidates_per_page: int = 2,
     strict_child_candidate_audit: bool = False,
+    allow_blocked_target_roots: bool = False,
+    allow_root_only_target_roots: bool = False,
 ) -> dict[str, Any]:
     """Sample child Settings pages using the existing readonly crawler."""
     result = settings_crawler.crawl_high_value_child_settings(
@@ -52,6 +54,8 @@ def probe_high_value_child_audit(
         trace_payload=result.trace_payload,
         sample_limits_hit=result.sample_limits_hit,
         config=result.config,
+        allow_blocked_target_roots=allow_blocked_target_roots,
+        allow_root_only_target_roots=allow_root_only_target_roots,
     )
 
 
@@ -69,8 +73,10 @@ def _build_report(
     trace_payload: dict[str, Any] | None,
     sample_limits_hit: list[str],
     config: dict[str, Any],
+    allow_blocked_target_roots: bool = False,
+    allow_root_only_target_roots: bool = False,
 ) -> dict[str, Any]:
-    root_coverage = settings_reporting.computed_root_coverage(visits)
+    root_coverage = _target_root_coverage(target_root_labels, visits)
     metrics = settings_reporting.report_metrics(
         visits=visits,
         limits_hit=limits_hit,
@@ -88,13 +94,34 @@ def _build_report(
         for visit in visits
         if len(visit.path) >= 3
     ]
+    target_roots_with_child, target_roots_missing_child = _target_child_coverage(
+        target_root_labels,
+        child_paths,
+    )
+    target_roots_blocked = _target_blocked_coverage(target_root_labels, blocked_pages)
+    opened_target_set = set(opened_targets)
+    target_roots_unresolved = [
+        label for label in target_roots_missing_child
+        if not allow_blocked_target_roots or label not in target_roots_blocked
+    ]
+    if allow_root_only_target_roots:
+        target_roots_unresolved = [
+            label for label in target_roots_unresolved
+            if label not in opened_target_set
+        ]
     metrics.update({
         "target_root_count": len(target_root_labels),
         "opened_target_root_count": len(opened_targets),
         "target_failure_count": len(target_failures),
         "child_visit_count": len(child_paths),
+        "target_roots_with_child_count": len(target_roots_with_child),
+        "target_roots_blocked_count": len(target_roots_blocked),
+        "target_roots_missing_child_count": len(target_roots_unresolved),
+        "target_roots_without_child_count": len(target_roots_missing_child),
         "return_root_failed": return_root_failed,
         "sample_budget_hit": bool(sample_limits_hit),
+        "allow_blocked_target_roots": allow_blocked_target_roots,
+        "allow_root_only_target_roots": allow_root_only_target_roots,
     })
     known_issues = settings_reporting.known_harness_issues(
         limits_hit=limits_hit,
@@ -106,16 +133,22 @@ def _build_report(
     known_issues.extend(_child_audit_issues(
         target_failures=target_failures,
         child_visit_count=len(child_paths),
+        target_roots_missing_child=target_roots_unresolved,
+        target_roots_blocked=target_roots_blocked,
         return_root_failed=return_root_failed,
+        allow_root_only_target_roots=allow_root_only_target_roots,
     ))
     failure_categories = settings_reporting.failure_categories(known_issues)
     status = "passed" if _passed(
         target_root_labels=target_root_labels,
         opened_targets=opened_targets,
         child_visit_count=len(child_paths),
+        target_roots_missing_child=target_roots_unresolved,
+        target_roots_blocked=target_roots_blocked,
         limits_hit=limits_hit,
         navigation_failures=navigation_failures,
         return_root_failed=return_root_failed,
+        allow_root_only_target_roots=allow_root_only_target_roots,
     ) else "failed"
     return {
         "probe": "ios_settings_high_value_child_audit",
@@ -125,6 +158,10 @@ def _build_report(
         "opened_target_roots": opened_targets,
         "target_failures": target_failures,
         "visited_child_paths": [list(path) for path in child_paths],
+        "target_roots_with_child": target_roots_with_child,
+        "target_roots_blocked": target_roots_blocked,
+        "target_roots_missing_child": target_roots_unresolved,
+        "target_roots_without_child": target_roots_missing_child,
         "trace": trace_payload,
         "limits_hit": sorted(limits_hit),
         "sample_limits_hit": sample_limits_hit,
@@ -174,13 +211,20 @@ def _passed(
     target_root_labels: tuple[str, ...],
     opened_targets: list[str],
     child_visit_count: int,
+    target_roots_missing_child: list[str],
+    target_roots_blocked: list[str],
     limits_hit: set[str],
     navigation_failures: list[settings_reporting.NavigationFailure],
     return_root_failed: bool,
+    allow_root_only_target_roots: bool = False,
 ) -> bool:
+    outcome_count = child_visit_count + len(target_roots_blocked)
+    if allow_root_only_target_roots:
+        outcome_count += len(opened_targets)
     return (
         set(opened_targets) == set(target_root_labels)
-        and child_visit_count > 0
+        and outcome_count > 0
+        and not target_roots_missing_child
         and not limits_hit
         and not navigation_failures
         and not return_root_failed
@@ -191,7 +235,10 @@ def _child_audit_issues(
     *,
     target_failures: list[dict[str, str]],
     child_visit_count: int,
+    target_roots_missing_child: list[str],
+    target_roots_blocked: list[str],
     return_root_failed: bool,
+    allow_root_only_target_roots: bool = False,
 ) -> list[dict[str, object]]:
     issues: list[dict[str, object]] = []
     if target_failures:
@@ -205,7 +252,7 @@ def _child_audit_issues(
             "evidence": [item["label"] for item in target_failures],
             "next_action": "Use action trace to classify whether foreground, scrolling, search, or tap precision failed.",
         })
-    if child_visit_count == 0:
+    if child_visit_count == 0 and not target_roots_blocked and not allow_root_only_target_roots:
         issues.append({
             "id": "ios-settings-child-audit-no-child-depth",
             "category": "operation",
@@ -215,6 +262,17 @@ def _child_audit_issues(
             "summary": "Child audit opened root targets but did not reach a deeper readonly child page.",
             "evidence": ["visited_child_paths is empty"],
             "next_action": "Inspect candidate typing and safe navigation affordance detection on the target root pages.",
+        })
+    if target_roots_missing_child:
+        issues.append({
+            "id": "ios-settings-child-audit-target-root-no-child-depth",
+            "category": "operation",
+            "severity": "blocking",
+            "status": "open",
+            "area": "skills/regression/ios_settings",
+            "summary": "One or more target root pages did not reach a deeper readonly child page.",
+            "evidence": target_roots_missing_child,
+            "next_action": "Inspect safe navigation candidates on each missing target root and add generic iPad split-view handling.",
         })
     if return_root_failed:
         issues.append({
@@ -228,6 +286,116 @@ def _child_audit_issues(
             "next_action": "Review the last action trace and add a generic recovery primitive instead of a page-specific rule.",
         })
     return issues
+
+
+def _target_child_coverage(
+    target_root_labels: Iterable[str],
+    child_paths: list[tuple[str, ...]],
+) -> tuple[list[str], list[str]]:
+    expected: list[tuple[str, str]] = []
+    for label in target_root_labels:
+        canonical = settings_reporting.canonical_root_label_from_text(label) or str(label)
+        expected.append((str(label), canonical))
+    child_roots = {
+        settings_reporting.canonical_root_label_from_text(path[1]) or str(path[1])
+        for path in child_paths
+        if len(path) >= 3
+    }
+    with_child = [label for label, canonical in expected if canonical in child_roots]
+    missing_child = [label for label, canonical in expected if canonical not in child_roots]
+    return with_child, missing_child
+
+
+def _target_blocked_coverage(
+    target_root_labels: Iterable[str],
+    blocked_pages: list[settings_reporting.BlockedPage],
+) -> list[str]:
+    expected: list[tuple[str, str]] = []
+    for label in target_root_labels:
+        canonical = settings_reporting.canonical_root_label_from_text(label) or str(label)
+        expected.append((str(label), canonical))
+    blocked_roots = {
+        settings_reporting.canonical_root_label_from_text(blocked.path[1]) or str(blocked.path[1])
+        for blocked in blocked_pages
+        if len(blocked.path) >= 2
+    }
+    return [label for label, canonical in expected if canonical in blocked_roots]
+
+
+def _target_root_coverage(
+    target_root_labels: Iterable[str],
+    visits: list[settings_reporting.PageVisit],
+) -> dict[str, list[str]]:
+    full_coverage = settings_reporting.computed_root_coverage(visits)
+    full_visited = set(full_coverage.get("visited", ()))
+    expected: list[str] = []
+    expected_with_canonical: list[tuple[str, str | None]] = []
+    for label in target_root_labels:
+        canonical = settings_reporting.canonical_root_label_from_text(label)
+        expected_label = canonical or str(label)
+        if expected_label not in expected:
+            expected.append(expected_label)
+            expected_with_canonical.append((expected_label, canonical))
+    noncanonical_visited = _noncanonical_target_root_visits(visits)
+    visited = [
+        label for label, canonical in expected_with_canonical
+        if (label in full_visited if canonical is not None else label in noncanonical_visited)
+    ]
+    missing = [label for label in expected if label not in visited]
+    return {
+        "expected": expected,
+        "visited": visited,
+        "missing": missing,
+        "required_missing": missing,
+    }
+
+
+def _noncanonical_target_root_visits(visits: list[settings_reporting.PageVisit]) -> set[str]:
+    visited: set[str] = set()
+    for visit in visits:
+        path = _visit_path(visit)
+        if len(path) < 2 or path[0] != "Settings":
+            continue
+        label = str(path[1])
+        if settings_reporting.canonical_root_label_from_text(label) is not None:
+            continue
+        if _visit_has_noncanonical_label_evidence(visit, label):
+            visited.add(label)
+    return visited
+
+
+def _visit_has_noncanonical_label_evidence(
+    visit: settings_reporting.PageVisit,
+    label: str,
+) -> bool:
+    label_key = _compact_label(label)
+    return (
+        _compact_label(_visit_title(visit)) == label_key
+        or any(_compact_label(text) == label_key for text in _visit_texts(visit))
+    )
+
+
+def _visit_path(visit: settings_reporting.PageVisit) -> tuple[str, ...]:
+    if isinstance(visit, dict):
+        return tuple(str(part) for part in visit.get("path", ()))
+    return tuple(str(part) for part in getattr(visit, "path", ()))
+
+
+def _visit_title(visit: settings_reporting.PageVisit) -> str:
+    if isinstance(visit, dict):
+        return str(visit.get("title", ""))
+    return str(getattr(visit, "title", ""))
+
+
+def _visit_texts(visit: settings_reporting.PageVisit) -> tuple[str, ...]:
+    raw = visit.get("texts", ()) if isinstance(visit, dict) else getattr(visit, "texts", ())
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    return tuple(str(text) for text in raw)
+
+
+def _compact_label(text: str) -> str:
+    return "".join(str(text or "").casefold().split())
 
 
 def write_report(report: dict[str, Any], path: str | Path | None) -> None:

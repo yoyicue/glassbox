@@ -20,6 +20,10 @@ from glassbox.ios.scene import (
     classify_ios_scene,
     settings_detail_semantic_guess,
 )
+from skills.regression.ios_settings.sections import (
+    root_section_for_canonical_label,
+    section_vocab_for,
+)
 
 ROOT_TITLE = SETTINGS_TITLE_LABELS
 HARNESS_APP_MARKERS = ("GlassboxHelper", "Mac 大脑", "服务有问题", "最近活动")
@@ -68,12 +72,22 @@ EXPECTED_ROOT_NAV_TEXT = (
 
 SAFE_NAV_TEXT = (
     *EXPECTED_ROOT_NAV_TEXT,
-    # Top-level read-only Settings pages that are not in the curated 17-section
-    # coverage set but are safe to enter and observe. iOS does not always render a
-    # detectable disclosure chevron for these, so they need an explicit safe-known
-    # decision (otherwise they are rejected as unknown_navigation_label at root).
+    # Top-level read-only Settings pages that are not in the shared 17-label
+    # acceptance vocabulary but are safe to enter and observe. iOS does not always
+    # render a detectable disclosure chevron for these, so they need an explicit
+    # safe-known decision (otherwise they are rejected as unknown_navigation_label
+    # at root).
     "相机", "Camera",
     "墙纸", "Wallpaper",
+    "控制中心", "Control Centre", "Control Center",
+    "显示与亮度", "Display & Brightness",
+    "多任务与手势", "Multitasking & Gestures",
+    "Apple Pencil",
+    "主屏幕与 App 资源库", "Home Screen & App Library", "Home Screen &",
+    "App 资源库", "App Library",
+    "Safari浏览器", "Safari",
+    "FaceTime 通话", "FaceTime",
+    "Apps",
     "关于本机", "About",
     "软件更新", "Software Update",
     "iPhone 储存空间", "iPhone Storage",
@@ -90,6 +104,13 @@ SAFE_NAV_TEXT = (
     "键盘", "Keyboard",
     "字体", "Fonts",
     "传输或还原iPhone", "Transfer or Reset iPhone",
+    "停用时间", "Downtime",
+    "App限额", "App Limits",
+    "始终允许", "Always Allowed",
+    "屏幕距离", "Screen Distance",
+    "限定通信", "Communication Limits",
+    "通信安全", "Communication Safety",
+    "内容与隐私限制", "Content & Privacy Restrictions",
 )
 
 EXPECTED_ROOT_NAV_TEXT_ZH = (
@@ -164,14 +185,17 @@ ROOT_LABEL_ALIASES = {
     "Bluetooth": "蓝牙",
     "Cellular": "蜂窝网络",
     "Notifications": "通知",
+    "Sounds": "声音与触感",
     "Sounds & Haptics": "声音与触感",
     "Focus": "专注模式",
     "Screen Time": "屏幕使用时间",
+    "All Devices": "屏幕使用时间",
     "General": "通用",
     "Accessibility": "辅助功能",
     "Action Button": "操作按钮",
     "StandBy": "待机显示",
     "Face ID & Passcode": "Face ID与密码",
+    "Touch ID & Passcode": "Face ID与密码",
     "Emergency SOS": "紧急 SOS",
     "Privacy & Security": "隐私与安全性",
     "Battery": "电池",
@@ -211,6 +235,56 @@ ROOT_SEARCH_QUERIES = {
     "钱包与 Apple Pay": "qianbao",
 }
 
+ROOT_SEARCH_QUERIES_EN = {
+    "无线局域网": "Wi-Fi",
+    "蓝牙": "Bluetooth",
+    "蜂窝网络": "Cellular",
+    "通知": "Notifications",
+    "声音与触感": "Sounds",
+    "专注模式": "Focus",
+    "屏幕使用时间": "Screen Time",
+    "通用": "General",
+    "辅助功能": "Accessibility",
+    "Siri": "Siri",
+    "操作按钮": "Action Button",
+    "待机显示": "StandBy",
+    "Face ID与密码": "Touch ID & Passcode",
+    "紧急 SOS": "Emergency SOS",
+    "隐私与安全性": "Privacy & Security",
+    "电池": "Battery",
+    "钱包与 Apple Pay": "Wallet",
+}
+
+ROOT_SEARCH_QUERIES_GREATER_CHINA_EN = {
+    **ROOT_SEARCH_QUERIES_EN,
+    "无线局域网": "WLAN",
+    "蜂窝网络": "Mobile Service",
+}
+IPAD_ROOT_SEARCH_QUERIES_EN = {
+    # iPadOS top search on the live rig can collapse spaces/ampersands while
+    # typing, producing no-results for exact multi-token queries. Use shorter
+    # stable prefixes for iPad-only search fallback; title-checking still gates
+    # whether the opened result credits the requested root.
+    "屏幕使用时间": "Screen",
+    "Face ID与密码": "Passcode",
+    "隐私与安全性": "Privacy",
+}
+IPAD_EXTRA_TOP_LEVEL_ROOT_SEARCH_QUERIES_EN = {
+    "Camera": "Camera",
+    "Wallpaper": "Wallpaper",
+    "Control Centre": "Control Centre",
+    "Control Center": "Control Center",
+    "Display & Brightness": "Display",
+    "Multitasking & Gestures": "Multitasking",
+    "Apple Pencil": "Apple Pencil",
+    "Home Screen & App Library": "Home Screen",
+    "Safari": "Safari",
+    "Safari浏览器": "Safari",
+    "FaceTime": "FaceTime",
+    "FaceTime 通话": "FaceTime",
+    "Apps": "Apps",
+}
+
 NAV_TITLE_ALIASES = {
     "Safari浏览器": ("Safari",),
     "FaceTime 通话": ("FaceTime",),
@@ -228,6 +302,16 @@ ROOT_COVERAGE_ONLY_LABELS = (
     "钱包与 Apple Pay",
     "Wallet & Apple Pay",
 )
+IPAD_SEARCH_ABSENT_DEVICE_UNAVAILABLE_ROOT_LABELS = (
+    # These are expected iPhone-oriented roots in the shared Settings vocabulary,
+    # but they are device/profile-dependent on iPadOS. Treat them as unavailable
+    # only after an iPad report records Settings search as no-result, so a
+    # capable iPad/iPhone still has to prove entry.
+    "蜂窝网络",
+    "操作按钮",
+    "待机显示",
+    "紧急 SOS",
+)
 
 # A no-SIM iPhone shows one of these on the Mobile Service row and the row is
 # tap-inert (it does not open a detail page), so 蜂窝网络 is *device-unavailable*,
@@ -239,20 +323,65 @@ _NO_SIM_MARKERS = (
 )
 
 
-def detect_device_unavailable_root_labels(visits) -> set[str]:
+def detect_device_unavailable_root_labels(
+    visits,
+    navigation_failures=(),
+    *,
+    platform: str | None = None,
+    phone_model: str | None = None,
+) -> set[str]:
     """Canonical root labels this *device* cannot open, inferred from seen text.
 
-    Today this is just 蜂窝网络 on a no-SIM device. Returns a set of canonical zh
-    labels so callers can treat them as entry-exempt without a manual flag."""
+    Returns canonical zh labels so callers can treat them as entry-exempt
+    without a manual flag. Cellular remains required by default; on iPadOS,
+    iPhone-oriented roots are exempted only when Settings search itself reports
+    no result for that root in the captured run."""
     joined = "\n".join(
         str(t)
-        for v in visits
+        for v in visits or ()
         for t in (getattr(v, "texts", None) if not isinstance(v, dict) else v.get("texts")) or ()
     ).casefold()
     out: set[str] = set()
     if any(marker.casefold() in joined for marker in _NO_SIM_MARKERS):
         out.add("蜂窝网络")
+    if _is_ipad_device_context(platform=platform, phone_model=phone_model):
+        ipad_unavailable = {
+            canonical_label(
+                label,
+                EXPECTED_ROOT_NAV_TEXT_ZH,
+                aliases={**ROOT_LABEL_ALIASES, **_GREATER_CHINA_EN_OVERLAY},
+                fuzzy=0.82,
+                max_leading_noise_chars=1,
+            )
+            for label in IPAD_SEARCH_ABSENT_DEVICE_UNAVAILABLE_ROOT_LABELS
+        }
+        for failure in navigation_failures or ():
+            if (getattr(failure, "reason", None) if not isinstance(failure, dict) else failure.get("reason")) != "search_no_result":
+                continue
+            text = getattr(failure, "text", None) if not isinstance(failure, dict) else failure.get("text")
+            label = canonical_label(
+                str(text or ""),
+                EXPECTED_ROOT_NAV_TEXT_ZH,
+                aliases={**ROOT_LABEL_ALIASES, **_GREATER_CHINA_EN_OVERLAY},
+                fuzzy=0.82,
+                max_leading_noise_chars=1,
+            )
+            if label in ipad_unavailable:
+                out.add(label)
     return out
+
+
+def _is_ipad_device_context(*, platform: str | None, phone_model: str | None) -> bool:
+    platform_key = str(platform or "").lower().replace("-", "_")
+    model_key = str(phone_model or "").lower().replace("-", "_")
+    return platform_key == "ipados" or model_key.startswith("ipad")
+
+
+def _active_section_vocab():
+    from glassbox.config import get_config
+
+    cfg = get_config()
+    return section_vocab_for(cfg.language, cfg.region)
 # Whole-label-only non-nav tokens. These are toggle/picker *state values*, not
 # topics: a row is non-navigational only when its ENTIRE label is the token.
 # Kept out of the substring tier (UNSAFE_OR_NON_NAV_TEXT) because as substrings
@@ -271,10 +400,13 @@ BLOCKED_CHILD_NAVIGATION_MARKERS = (
     ("接入无线局域网", (), "dynamic Wi-Fi rows"),
     ("无线局域网", ("我的网络", "其他网络", "忽略此网络", "自动加入"), "dynamic Wi-Fi rows"),
     ("Wi-Fi", ("My Networks", "Other Networks", "Forget This Network", "Auto-Join"), "dynamic Wi-Fi rows"),
+    ("WLAN", ("Networks", "Other", "Auto-Join"), "dynamic Wi-Fi rows"),
     ("蓝牙", ("我的设备", "其他设备"), "dynamic Bluetooth device rows"),
     ("蓝牙", ("设备",), "dynamic Bluetooth device rows"),
     ("Bluetooth", ("My Devices", "Other Devices"), "dynamic Bluetooth device rows"),
     ("Bluetooth", ("Devices",), "dynamic Bluetooth device rows"),
+    ("Touch ID & Passcode", ("Use Touch ID For", "Fingerprints", "Turn Passcode On", "Change Passcode"), "passcode and biometric settings"),
+    ("Face ID & Passcode", ("Use Face ID For", "Face ID", "Turn Passcode On", "Change Passcode"), "passcode and biometric settings"),
     ("电池", ("充电上限", "优化电池充电", "电池百分比"), "Battery selector/toggle rows"),
     ("Battery", ("Charging Limit", "Optimized Battery Charging", "Battery Percentage"), "Battery selector/toggle rows"),
     ("通知", ("显示为", "定时推送摘要", "显示预览", "通知样式"), "Notification selector/toggle rows"),
@@ -286,6 +418,17 @@ BLOCKED_CHILD_NAVIGATION_MARKERS = (
     ("隔空投送", ("接收关闭", "仅限联系人", "所有人（10分钟）"), "AirDrop selector rows"),
     ("AirDrop", ("Receiving Off", "Contacts Only", "Everyone"), "AirDrop selector rows"),
 )
+
+
+def _blocked_child_navigation_reason_from_texts(texts: list[str] | tuple[str, ...]) -> str | None:
+    stable = stable_visible_texts(texts)
+    joined = "\n".join(stable)
+    for page_marker, row_markers, reason in BLOCKED_CHILD_NAVIGATION_MARKERS:
+        page_key = compact_text(page_marker).casefold()
+        row_keys = tuple(compact_text(marker).casefold() for marker in row_markers)
+        if page_key in joined and (not row_keys or any(marker in joined for marker in row_keys)):
+            return reason
+    return None
 
 
 class PageVisitLike(Protocol):
@@ -774,14 +917,7 @@ class SettingsPolicy:
         # the root, aborting the crawl. Detail pages still classify normally.
         if self.scene_is_settings_root(scene):
             return None
-        texts = stable_visible_texts(self.texts(scene))
-        joined = "\n".join(texts)
-        for page_marker, row_markers, reason in BLOCKED_CHILD_NAVIGATION_MARKERS:
-            page_key = compact_text(page_marker).casefold()
-            row_keys = tuple(compact_text(marker).casefold() for marker in row_markers)
-            if page_key in joined and (not row_keys or any(marker in joined for marker in row_keys)):
-                return reason
-        return None
+        return _blocked_child_navigation_reason_from_texts(self.texts(scene))
 
     def blocks_child_navigation(self, scene) -> bool:
         return self.blocked_child_navigation_reason(scene) is not None
@@ -878,6 +1014,8 @@ class SettingsPolicy:
             return None
         if len(text) <= 1 or text.replace(":", "").isdigit():
             return None
+        if re.fullmatch(r"[\d\s%％.,/:-]+", text):
+            return None
         if len(text) <= 2 and text.isascii() and not self.is_safe_known_navigation_label(text):
             return None
         if text.isascii() and not text[0].isalnum() and not self.is_safe_known_navigation_label(text):
@@ -964,6 +1102,17 @@ class SettingsPolicy:
         }
 
     def root_search_query(self, label: str) -> str | None:
+        try:
+            from glassbox.config import get_config
+            from glassbox.locale import resolve_locale
+
+            locale = resolve_locale(get_config())
+            if locale.language == "en":
+                if locale.code in {"en-CN", "en-HK"}:
+                    return ROOT_SEARCH_QUERIES_GREATER_CHINA_EN.get(label)
+                return ROOT_SEARCH_QUERIES_EN.get(label)
+        except Exception:
+            pass
         return ROOT_SEARCH_QUERIES.get(label)
 
     def visible_root_row_label(self, element: UIElement) -> str | None:
@@ -980,7 +1129,7 @@ class SettingsPolicy:
         return 2 <= len(text) <= 14 and element.box.center[0] < 200
 
     def find_search_result(self, scene, label: str) -> UIElement | None:
-        matches: list[UIElement] = []
+        matches: list[tuple[int, UIElement]] = []
         for element in scene.elements:
             text = (element.text or "").strip()
             if not text:
@@ -1033,4 +1182,579 @@ class SettingsPolicy:
         return out
 
 
-DEFAULT_SETTINGS_POLICY = SettingsPolicy()
+class IPadSettingsPolicy(SettingsPolicy):
+    """Settings policy variant for iPadOS split-view Settings."""
+
+    _RELAXABLE_SELECTOR_BLOCK_REASONS = frozenset({
+        "Battery selector/toggle rows",
+        "Notification selector/toggle rows",
+    })
+
+    def classify_scene(
+        self,
+        scene,
+        *,
+        viewport_size: tuple[int, int] | None = None,
+    ) -> IOSSceneClassification | None:
+        try:
+            from glassbox.ipados.scene import classify_ipados_scene
+
+            return classify_ipados_scene(scene, viewport_size=viewport_size)
+        except Exception:
+            return None
+
+    def scene_is_settings_root(self, scene, *, viewport_size: tuple[int, int] | None = None) -> bool:
+        if self._ipad_search_active(scene):
+            return False
+        classified = self.classify_scene(scene, viewport_size=viewport_size)
+        if classified is None:
+            return False
+        if classified.kind == "settings_root":
+            return True
+        return "ipad_split_view" in set(classified.evidence or ()) and "tap_root_row" in set(
+            classified.safe_actions or (),
+        )
+
+    def is_settings_search_scene(
+        self,
+        scene,
+        *,
+        viewport_size: tuple[int, int] | None = None,
+    ) -> bool:
+        if getattr(scene, "platform_scene_kind", None) == "springboard":
+            return False
+        if self._ipad_search_active(scene):
+            return True
+        return super().is_settings_search_scene(scene, viewport_size=viewport_size)
+
+    def settings_search_has_query_text(self, scene) -> bool:
+        if getattr(scene, "platform_scene_kind", None) == "springboard":
+            return False
+        if self._ipad_top_search_field(scene, allow_query=True) is not None:
+            return self._ipad_search_query_text(scene) is not None
+        return super().settings_search_has_query_text(scene)
+
+    def find_root_search_tab(self, scene) -> UIElement | None:
+        field = self._ipad_top_search_field(scene, allow_query=False)
+        if field is not None:
+            return field
+        return super().find_root_search_tab(scene)
+
+    def find_search_field(self, scene) -> UIElement | None:
+        field = self._ipad_top_search_field(scene, allow_query=True)
+        if field is not None:
+            return field
+        return super().find_search_field(scene)
+
+    def find_search_result(self, scene, label: str) -> UIElement | None:
+        ipad_search_active = self._ipad_search_active(scene)
+        if not ipad_search_active and not self.looks_like_settings_search_results(scene):
+            return None
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        from glassbox.ipados.scene import sidebar_right_x
+
+        sidebar_right = sidebar_right_x(viewport_size[0])
+        matches: list[tuple[int, UIElement]] = []
+        for element in scene.elements:
+            text = (element.text or "").strip()
+            if not text:
+                continue
+            cx, cy = element.box.center
+            if cy < 140 or cy > int(viewport_size[1] * 0.94) or cx > sidebar_right + 24:
+                continue
+            primary = self._search_result_primary_label(text)
+            if (
+                self.canonical_expected_root_label(primary) == label
+                or self.canonical_expected_root_label(text) == label
+                or self.matches_label(primary, label)
+                or self.matches_label(text, label)
+            ):
+                if self._is_query_suggestion_result_line(scene, element, label):
+                    continue
+                anchor = self._search_result_row_anchor(scene, element, label)
+                matches.append((self._root_search_result_rank(text, label), anchor))
+        if matches:
+            matches.sort(key=lambda item: (item[0], item[1].box.center[1], item[1].box.center[0]))
+            return matches[0][1]
+        if ipad_search_active:
+            return None
+        return super().find_search_result(scene, label)
+
+    def root_search_query(self, label: str) -> str | None:
+        try:
+            from glassbox.config import get_config
+            from glassbox.locale import resolve_locale
+
+            locale = resolve_locale(get_config())
+            if locale.language == "en":
+                override = IPAD_ROOT_SEARCH_QUERIES_EN.get(label)
+                if override is not None:
+                    return override
+                extra = IPAD_EXTRA_TOP_LEVEL_ROOT_SEARCH_QUERIES_EN.get(label)
+                if extra is not None:
+                    return extra
+        except Exception:
+            pass
+        return super().root_search_query(label)
+
+    def find_system_search_root_result(
+        self,
+        scene,
+        *,
+        viewport_size: tuple[int, int] | None = None,
+    ) -> tuple[UIElement, str] | None:
+        if self.scene_kind(scene, viewport_size=viewport_size) != "system_search":
+            return None
+        open_buttons = [
+            element for element in scene.elements
+            if (element.text or "").strip() in {"Open", "打开"}
+            and element.box.center[1] <= 160
+        ]
+        if open_buttons:
+            open_buttons.sort(key=lambda element: (element.box.center[1], element.box.center[0]))
+            return open_buttons[0], "Settings"
+        settings_hits = [
+            element for element in scene.elements
+            if (element.text or "").strip() in ROOT_TITLE
+            and 120 <= element.box.center[1] <= 340
+            and element.box.center[0] <= 260
+        ]
+        if settings_hits:
+            settings_hits.sort(key=lambda element: (element.box.center[1], element.box.center[0]))
+            return settings_hits[0], "Settings"
+        return super().find_system_search_root_result(scene, viewport_size=viewport_size)
+
+    def page_title(self, scene) -> str:
+        viewport_size = getattr(scene, "viewport_size", None)
+        classified = self.classify_scene(scene, viewport_size=viewport_size)
+        if classified is not None and classified.title:
+            return classified.title
+        return super().page_title(scene)
+
+    def blocked_child_navigation_reason(self, scene) -> str | None:
+        reason = super().blocked_child_navigation_reason(scene)
+        if reason is None:
+            reason = _blocked_child_navigation_reason_from_texts(self.texts(scene))
+        if reason not in self._RELAXABLE_SELECTOR_BLOCK_REASONS:
+            return reason
+        if self._ipad_search_active(scene):
+            return reason
+        if self._has_safe_detail_disclosure_candidate(scene):
+            return None
+        return reason
+
+    def safe_navigation_candidates(
+        self,
+        scene,
+        *,
+        allow_sensitive_root_labels: bool = False,
+        allow_known_without_affordance: bool = True,
+    ) -> list[UIElement]:
+        if self.blocks_child_navigation(scene):
+            return []
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        from glassbox.ipados.scene import sidebar_right_x
+
+        sidebar_right = sidebar_right_x(viewport_size[0])
+        candidates: list[UIElement] = []
+        seen: set[str] = set()
+        current_detail_title = None if allow_sensitive_root_labels else self.page_title(scene)
+        current_detail_canonical = (
+            self.canonical_expected_root_label(current_detail_title or "")
+            if current_detail_title else None
+        )
+        for element in scene.elements:
+            if allow_sensitive_root_labels:
+                text = self._potential_sidebar_navigation_row_text(
+                    element,
+                    viewport_size=viewport_size,
+                    sidebar_right=sidebar_right,
+                )
+            else:
+                text = self._potential_detail_navigation_row_text(
+                    element,
+                    viewport_size=viewport_size,
+                    sidebar_right=sidebar_right,
+                )
+            if not text or text in seen:
+                continue
+            if current_detail_title and (
+                self.title_matches_navigation_label(current_detail_title, text)
+                or (
+                    current_detail_canonical is not None
+                    and self.canonical_expected_root_label(text) == current_detail_canonical
+                )
+            ):
+                continue
+            seen.add(text)
+            if self.is_settings_section_header(scene, element):
+                continue
+            if (
+                self.is_unsafe_navigation_text(
+                    text,
+                    allow_sensitive_root_labels=allow_sensitive_root_labels,
+                )
+                or (
+                    allow_sensitive_root_labels
+                    and self.canonical_expected_root_label(text) in ROOT_COVERAGE_ONLY_LABELS
+                )
+            ):
+                continue
+            if not self.is_safe_known_navigation_label(text):
+                if not self.has_navigation_affordance(scene, element):
+                    continue
+            elif (
+                not allow_known_without_affordance
+                and not self.has_navigation_affordance(scene, element)
+                and not self.is_exact_safe_navigation_label(text)
+            ):
+                continue
+            candidates.append(element)
+        candidates.sort(key=lambda element: element.box.center[1])
+        return candidates
+
+    def has_navigation_affordance(self, scene, element: UIElement) -> bool:
+        if element.type in {"list_item", "button"}:
+            return True
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        from glassbox.ipados.scene import sidebar_right_x
+
+        sidebar_right = sidebar_right_x(viewport_size[0])
+        cx, cy = element.box.center
+        if cx > sidebar_right + 24:
+            return any(
+                self._text_has_disclosure_affordance(other.text or "")
+                and abs(other.box.center[1] - cy) < 32
+                and other.box.center[0] > max(element.box.center[0], element.box.x + element.box.w)
+                and other.box.center[0] > sidebar_right + 24
+                for other in scene.elements
+            )
+        return any(
+            self._text_has_disclosure_affordance(other.text or "")
+            and abs(other.box.center[1] - cy) < 32
+            and element.box.center[0] < other.box.center[0] <= sidebar_right + 32
+            for other in scene.elements
+        )
+
+    @staticmethod
+    def _text_has_disclosure_affordance(text: str) -> bool:
+        return bool(re.search(r"[>›→❯˃＞]\s*$", (text or "").strip()))
+
+    def _has_safe_detail_disclosure_candidate(self, scene) -> bool:
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        from glassbox.ipados.scene import sidebar_right_x
+
+        sidebar_right = sidebar_right_x(viewport_size[0])
+        current_detail_title = self.page_title(scene)
+        for element in scene.elements:
+            text = self._potential_detail_navigation_row_text(
+                element,
+                viewport_size=viewport_size,
+                sidebar_right=sidebar_right,
+            )
+            if not text:
+                continue
+            if current_detail_title and self.title_matches_navigation_label(current_detail_title, text):
+                continue
+            if self.is_settings_section_header(scene, element) or self.is_unsafe_navigation_text(text):
+                continue
+            if self.has_navigation_affordance(scene, element):
+                return True
+        return False
+
+    def find_visible_back(self, scene) -> UIElement | None:
+        classified = self.classify_scene(scene, viewport_size=getattr(scene, "viewport_size", None))
+        if classified is not None and "ipad_split_view" in set(classified.evidence or ()):
+            viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+            from glassbox.ipados.scene import sidebar_right_x
+
+            sidebar_right = sidebar_right_x(viewport_size[0])
+            candidates = [
+                element for element in scene.elements
+                if self.is_visible_back_element(element)
+                and element.box.center[0] >= sidebar_right - 8
+                and element.box.x <= sidebar_right + 48
+                and element.box.center[1] <= int(viewport_size[1] * 0.18)
+            ]
+            if not candidates:
+                return None
+            candidates.sort(key=lambda element: (element.box.center[1], element.box.center[0]))
+            return candidates[0]
+        return super().find_visible_back(scene)
+
+    def _potential_sidebar_navigation_row_text(
+        self,
+        element: UIElement,
+        *,
+        viewport_size: tuple[int, int],
+        sidebar_right: int,
+    ) -> str | None:
+        text = (element.text or "").strip()
+        if not text:
+            return None
+        _w, h = viewport_size
+        cx, cy = element.box.center
+        if cy < int(h * 0.10) or cy > int(h * 0.96) or cx > sidebar_right:
+            return None
+        if cy <= int(h * 0.18) and re.match(r"^[Qq]\s+", text):
+            return None
+        if len(text) <= 3 and (text[0] in "([（【〈《" or text[-1] in ")]）】〉》"):
+            return None
+        if len(text) <= 1 or text.replace(":", "").isdigit():
+            return None
+        if re.fullmatch(r"[\d\s%％.,/:-]+", text):
+            return None
+        if len(text) <= 2 and text.isascii() and not self.is_safe_known_navigation_label(text):
+            return None
+        if text.isascii() and not text[0].isalnum() and not self.is_safe_known_navigation_label(text):
+            return None
+        if not any(ch.isalnum() or "\u4e00" <= ch <= "\u9fff" for ch in text):
+            return None
+        if len(text) > 48:
+            return None
+        if text in ROOT_TITLE or text in HARNESS_APP_MARKERS:
+            return None
+        return text
+
+    def _potential_detail_navigation_row_text(
+        self,
+        element: UIElement,
+        *,
+        viewport_size: tuple[int, int],
+        sidebar_right: int,
+    ) -> str | None:
+        text = re.sub(r"\s*[>›→❯˃＞]\s*$", "", (element.text or "").strip()).strip()
+        if not text:
+            return None
+        _w, h = viewport_size
+        cx, cy = element.box.center
+        if cy < int(h * 0.12) or cy > int(h * 0.96) or cx <= sidebar_right + 24:
+            return None
+        if len(text) <= 3 and (text[0] in "([（【〈《" or text[-1] in ")]）】〉》"):
+            return None
+        if len(text) <= 1 or text.replace(":", "").isdigit():
+            return None
+        if re.fullmatch(r"[\d\s%％.,/:-]+", text):
+            return None
+        if len(text) <= 2 and text.isascii() and not self.is_safe_known_navigation_label(text):
+            return None
+        if text.isascii() and not text[0].isalnum() and not self.is_safe_known_navigation_label(text):
+            return None
+        if not any(ch.isalnum() or "\u4e00" <= ch <= "\u9fff" for ch in text):
+            return None
+        if len(text) > 64:
+            return None
+        if text in ROOT_TITLE or text in HARNESS_APP_MARKERS:
+            return None
+        return text
+
+    def _ipad_search_active(self, scene) -> bool:
+        if self._ipad_search_query_text(scene) is not None:
+            return True
+        if self._ipad_top_search_field(scene, allow_query=True) is not None and self._ipad_search_panel_visible(scene):
+            return True
+        return any(
+            (element.text or "").strip() in {"AutoFill", "AutoFil", "AutoFI", "Select", "Select All", "全选"}
+            and element.box.center[0] <= self._ipad_sidebar_right(scene) + 24
+            and 110 <= element.box.center[1] <= 170
+            for element in scene.elements
+        )
+
+    def _ipad_search_panel_visible(self, scene) -> bool:
+        sidebar_right = self._ipad_sidebar_right(scene)
+        return any(
+            (element.text or "").strip() in {"Suggestions", "Recents", "建议", "最近"}
+            and element.box.center[0] <= sidebar_right + 24
+            and 115 <= element.box.center[1] <= 340
+            for element in scene.elements
+        )
+
+    def _ipad_search_query_text(self, scene) -> str | None:
+        field = self._ipad_top_search_field(scene, allow_query=True)
+        if field is None:
+            return None
+        text = (field.text or "").strip()
+        compact = re.sub(r"\s+", "", text)
+        if compact.lower() in {"q", "qsearch", "search", "q搜索", "搜索"}:
+            return None
+        if self.is_settings_search_affordance_text(text):
+            return None
+        if compact.lower().startswith("qsearch"):
+            return compact[len("qsearch"):] or None
+        if compact.startswith("Q搜索"):
+            return compact[len("Q搜索"):] or None
+        return text
+
+    def _ipad_top_search_field(self, scene, *, allow_query: bool) -> UIElement | None:
+        sidebar_right = self._ipad_sidebar_right(scene)
+        candidates: list[tuple[bool, UIElement]] = []
+        for element in scene.elements:
+            text = (element.text or "").strip()
+            if not text or element.type == "status_bar":
+                continue
+            if text in ROOT_TITLE:
+                continue
+            cx, cy = element.box.center
+            if cx > sidebar_right + 8 or cy < 72 or cy > 112:
+                continue
+            compact = re.sub(r"\s+", "", text)
+            if compact.isdigit():
+                continue
+            is_placeholder = (
+                self.is_settings_search_affordance_text(text)
+                or compact.lower() in {"q", "qsearch"}
+                or compact in {"Q搜索"}
+            )
+            if not is_placeholder and cx > sidebar_right * 0.62:
+                continue
+            if not allow_query and not is_placeholder:
+                continue
+            if allow_query and len(compact) > 32:
+                continue
+            candidates.append((is_placeholder, element))
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda item: (
+                1 if allow_query and item[0] else 0,
+                abs(item[1].box.center[1] - 96),
+                item[1].box.center[0],
+            ),
+        )
+        return candidates[0][1]
+
+    def _ipad_sidebar_right(self, scene) -> int:
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        from glassbox.ipados.scene import sidebar_right_x
+
+        return sidebar_right_x(viewport_size[0])
+
+    @staticmethod
+    def _search_result_primary_label(text: str) -> str:
+        primary = re.sub(r"^\s*\d+\s*", "", text.strip())
+        return re.split(r"\s*(?:→|>|›|＞)\s*", primary, maxsplit=1)[0].strip()
+
+    def _root_search_result_rank(self, text: str, label: str) -> int:
+        """Prefer exact root display labels over aliases that also match children.
+
+        Example: searching "Sounds" on iPad can show both a generic child result
+        "Sounds" and the root "Sounds & Haptics"; both canonicalize to the same
+        root, but only the latter is the root detail we want to tap.
+        """
+        primary = self._search_result_primary_label(text)
+        exact_terms = {label}
+        try:
+            vocab = _active_section_vocab()
+            section = root_section_for_canonical_label(label)
+            if section is not None:
+                exact_terms.add(vocab.label(section))
+        except Exception:
+            pass
+        exact_norms = {compact_text(term).casefold() for term in exact_terms if term}
+        primary_norm = compact_text(primary).casefold()
+        text_norm = compact_text(text).casefold()
+        if primary_norm in exact_norms:
+            return 0
+        if text_norm in exact_norms:
+            return 1
+        return 2
+
+    def _is_query_suggestion_result_line(self, scene, element: UIElement, label: str) -> bool:
+        """Skip search query suggestions that masquerade as root results.
+
+        iPad Settings can render a compact suggestion title like ``ScreenTime 6``
+        followed by a display line ``Screen Time``. Tapping either line updates
+        the query rather than opening the root page, so neither should be used
+        as a root result.
+        """
+        exact = self._exact_root_display_compact(label)
+        if not exact:
+            return False
+        primary = self._search_result_primary_label(element.text or "")
+        if self._looks_like_numbered_query_suggestion(primary, exact=exact):
+            return True
+        ex, ey = element.box.center
+        return any(
+            self._looks_like_numbered_query_suggestion(
+                self._search_result_primary_label(other.text or ""),
+                exact=exact,
+            )
+            for other in scene.elements
+            if other is not element
+            and (other.text or "").strip()
+            and 0 < ey - other.box.center[1] <= 48
+            and abs(other.box.center[0] - ex) <= 28
+        )
+
+    def _search_result_row_anchor(self, scene, element: UIElement, label: str) -> UIElement:
+        """Return the tappable primary row label for split multi-line results.
+
+        iPad Settings search can OCR a result as a primary compact title
+        (``ScreenTime 6``) with the actual root display label (``Screen Time``)
+        on the next line. Tapping the lower display label does not always open
+        the row; prefer the primary line only when it compact-normalizes to the
+        same exact display term. This avoids turning generic aliases such as
+        ``Sounds`` into anchors for ``Sounds & Haptics``.
+        """
+        exact = self._exact_root_display_compact(label)
+        if not exact:
+            return element
+        ex, ey = element.box.center
+        candidates = [
+            other for other in scene.elements
+            if other is not element
+            and (other.text or "").strip()
+            and 0 < ey - other.box.center[1] <= 48
+            and abs(other.box.center[0] - ex) <= 28
+            and not self._looks_like_numbered_query_suggestion(
+                self._search_result_primary_label(other.text or ""),
+                exact=exact,
+            )
+            and self._compact_without_trailing_count(self._search_result_primary_label(other.text or "")) == exact
+        ]
+        if not candidates:
+            return element
+        candidates.sort(key=lambda other: (other.box.center[1], other.box.center[0]))
+        return candidates[0]
+
+    def _exact_root_display_compact(self, label: str) -> str | None:
+        try:
+            vocab = _active_section_vocab()
+            section = root_section_for_canonical_label(label)
+            if section is None:
+                return None
+            return self._compact_without_trailing_count(vocab.label(section))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _compact_without_trailing_count(text: str) -> str:
+        compacted = compact_text(text).casefold()
+        return re.sub(r"\d+$", "", compacted)
+
+    def _looks_like_numbered_query_suggestion(self, text: str, *, exact: str) -> bool:
+        compacted = compact_text(text).casefold()
+        return compacted != exact and compacted.endswith(tuple("0123456789")) and re.sub(r"\d+$", "", compacted) == exact
+
+    @staticmethod
+    def _scene_extent(scene) -> tuple[int, int]:
+        width = max((element.box.x2 for element in scene.elements), default=744)
+        height = max((element.box.y2 for element in scene.elements), default=1133)
+        return max(width, 744), max(height, 1133)
+
+
+def _default_settings_policy() -> SettingsPolicy:
+    try:
+        from glassbox.config import get_config
+
+        cfg = get_config()
+        platform = str(getattr(cfg, "platform", "") or "").lower()
+        model = str(getattr(cfg, "phone_model", "") or "").lower().replace("-", "_")
+        if platform == "ipados" or model.startswith("ipad"):
+            return IPadSettingsPolicy()
+    except Exception:
+        pass
+    return SettingsPolicy()
+
+
+DEFAULT_SETTINGS_POLICY = _default_settings_policy()

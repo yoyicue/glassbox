@@ -69,3 +69,46 @@ class IOSSafeAreaProvider:
             element_type=element_type,
             fallback_x_fraction=fallback_x_fraction,
         )
+
+
+@dataclass(frozen=True)
+class IPadOSSafeArea(IOSSafeArea):
+    """iPadOS safe-area hit helpers.
+
+    iPad mini uses native pointer navigation rather than the iPhone
+    home-indicator/AssistiveTouch geometry, so bottom controls can be hit lower
+    in the viewport while still avoiding edge chrome.
+    """
+
+    @classmethod
+    def from_viewport(cls, viewport_size: tuple[int, int]) -> IPadOSSafeArea:
+        width, height = viewport_size
+        return cls(width=max(1, int(width)), height=max(1, int(height)))
+
+    @property
+    def bottom_bar_y(self) -> int:
+        return int(self.height * 0.94)
+
+    @property
+    def bottom_control_y(self) -> int:
+        return int(self.height * 0.97)
+
+
+class IPadOSSafeAreaProvider(IOSSafeAreaProvider):
+    """iPadOS Platform safe-area sub-capability."""
+
+    def bottom_hit_point(
+        self,
+        viewport_size: tuple[int, int],
+        *,
+        x: int | None = None,
+        y: int | None = None,
+        element_type: str | None = None,
+        fallback_x_fraction: float = 0.5,
+    ) -> tuple[int, int]:
+        return IPadOSSafeArea.from_viewport(viewport_size).bottom_hit_point(
+            x=x,
+            y=y,
+            element_type=element_type,
+            fallback_x_fraction=fallback_x_fraction,
+        )

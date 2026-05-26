@@ -1,4 +1,4 @@
-"""glassbox/perception/device.py — screen resolutions for known iPhone models
+"""glassbox/perception/device.py — screen resolutions for known iOS devices
 
 Two coordinate sizes matter:
   - pixel_size: native rendered pixels used by HDMI mirror and frame-space actions.
@@ -22,6 +22,8 @@ IPHONE_15_PRO_MAX: tuple[int, int] = (1290, 2796)
 IPHONE_15_PRO: tuple[int, int] = (1179, 2556)
 IPHONE_15: tuple[int, int] = (1179, 2556)
 
+IPAD_MINI_7: tuple[int, int] = (1488, 2266)
+
 
 DEVICES: dict[str, tuple[int, int]] = {
     "iphone_17_pro_max": IPHONE_17_PRO_MAX,
@@ -33,6 +35,7 @@ DEVICES: dict[str, tuple[int, int]] = {
     "iphone_15_pro_max": IPHONE_15_PRO_MAX,
     "iphone_15_pro":     IPHONE_15_PRO,
     "iphone_15":         IPHONE_15,
+    "ipad_mini_7":        IPAD_MINI_7,
 }
 
 DEVICE_POINTS: dict[str, tuple[int, int]] = {
@@ -45,6 +48,7 @@ DEVICE_POINTS: dict[str, tuple[int, int]] = {
     "iphone_15_pro_max": (430, 932),
     "iphone_15_pro":     (393, 852),
     "iphone_15":         (393, 852),
+    "ipad_mini_7":        (744, 1133),
 }
 
 

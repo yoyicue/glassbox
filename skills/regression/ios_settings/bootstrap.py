@@ -59,10 +59,12 @@ def open_settings_from_home_if_visible(phone, actions: SettingsBootstrapActions)
         if opened and actions.ensure_settings_root(phone):
             return
 
-    if actions.is_settings_search_scene(scene) or any(element.type == "nav_back" for element in scene.elements):
-        actions.return_to_settings_root(phone)
-        if actions.is_settings_root(phone):
-            return
+    if (
+        (actions.is_settings_search_scene(scene) or any(element.type == "nav_back" for element in scene.elements))
+        and actions.try_return_to_settings_root(phone)
+        and actions.is_settings_root(phone)
+    ):
+        return
     if (
         actions.scene_kind(scene, phone=phone) == "system_search"
         and actions.tap_visible_settings_root_result_from_system_search(phone, scene)

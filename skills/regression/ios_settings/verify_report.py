@@ -16,6 +16,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from glassbox.cognition.text_match import compact_text
 from skills.regression.ios_settings.policy import (
     DEFAULT_SETTINGS_POLICY,
     EXPECTED_ROOT_NAV_TEXT_ZH,
@@ -30,6 +31,7 @@ from skills.regression.ios_settings.reporting import (
     EXPECTED_REJECTED_REASONS,
     SOFT_LIMITS,
     blocked_reason_from_texts,
+    canonical_root_label_from_text,
     computed_root_coverage,
     path_has_root_label_evidence,
 )
@@ -104,6 +106,7 @@ CONFIG_BOOL_KEYS = frozenset({
     "memory_reuse",
 })
 CONFIG_OPTIONAL_STRING_KEYS = frozenset({"artifact_dir", "memory_dir"})
+CONFIG_DEVICE_STRING_KEYS = frozenset({"phone_model", "platform"})
 
 
 
@@ -117,10 +120,6 @@ def validate_report(
     """Return human-readable validation errors. Empty list means pass."""
     errors: list[str] = []
     entry_exempt = entry_exempt_root_labels(device_unavailable_root)
-    # Auto-exempt sections this device demonstrably cannot open (e.g. 蜂窝网络 on a
-    # no-SIM phone), inferred from the report's own captured text — so an
-    # exhaustive run passes without a manual --device-unavailable-root flag.
-    entry_exempt |= detect_device_unavailable_root_labels(report.get("visits") or [])
 
     if expected_run_id is not None and report.get("run_id") != expected_run_id:
         errors.append("report run_id does not match expected run")
@@ -133,6 +132,8 @@ def validate_report(
     if not isinstance(visits, list) or not visits:
         errors.append("report has no visits")
         visits = []
+    report_locale = report.get("locale")
+    locale_code = report_locale if isinstance(report_locale, str) else None
 
     visit_count = report.get("visit_count")
     if visit_count != len(visits):
@@ -144,6 +145,17 @@ def validate_report(
         config = {}
     else:
         _validate_config_schema(config, errors=errors)
+    raw_navigation_failures = report.get("navigation_failures")
+    navigation_failures_for_exempt = raw_navigation_failures if isinstance(raw_navigation_failures, list) else []
+    # Auto-exempt sections this device demonstrably cannot open (e.g. 蜂窝网络 on a
+    # no-SIM phone, or iPad-only no-result roots), inferred from the report's own
+    # captured text/failures so capable devices still require those sections.
+    entry_exempt |= detect_device_unavailable_root_labels(
+        visits,
+        navigation_failures_for_exempt,
+        platform=_optional_config_str(config.get("platform")),
+        phone_model=_optional_config_str(config.get("phone_model")),
+    )
     if require_exhaustive:
         if config.get("require_exhaustive") is not True:
             errors.append("report was not produced in exhaustive mode")
@@ -155,9 +167,10 @@ def validate_report(
             errors.append("strict root coverage report must not enable child navigation")
         if config.get("max_candidates_per_page") != 0:
             errors.append("exhaustive report must not cap candidates per page")
+        expected_min_visits = max(1, EXPECTED_MIN_VISITS - len(entry_exempt))
         for key in ("min_pages", "max_pages"):
             value = config.get(key)
-            if not isinstance(value, int) or value < EXPECTED_MIN_VISITS:
+            if not isinstance(value, int) or value < expected_min_visits:
                 errors.append(f"config.{key} is too small for expected root coverage")
         for key in ("max_depth", "max_scrolls_per_page"):
             value = config.get(key)
@@ -184,7 +197,7 @@ def validate_report(
     expected = root_coverage.get("expected", [])
     reported_visited = root_coverage.get("visited", [])
     missing = root_coverage.get("missing", [])
-    computed_root = computed_root_coverage(visits)
+    computed_root = computed_root_coverage(visits, locale_code=locale_code)
     if expected != list(EXPECTED_ROOT_NAV_TEXT_ZH):
         errors.append("root_coverage.expected does not match current expected root page list")
     if reported_visited != computed_root["visited"]:
@@ -245,6 +258,7 @@ def validate_report(
             rejected_candidates=rejected_candidates,
             navigation_failures=navigation_failures,
             require_exhaustive=require_exhaustive,
+            strict_child_candidate_audit=config.get("strict_child_candidate_audit") is True,
             errors=errors,
         )
     _validate_failure_categories(
@@ -276,10 +290,15 @@ def validate_report(
         if path_key[0] != "Settings":
             errors.append(f"visit {idx} path does not start at Settings: {' > '.join(path_key)}")
         if len(path_key) == 2:
-            root_label = _canonical_expected_root_label(path_key[1])
+            root_label = canonical_root_label_from_text(path_key[1], locale_code=locale_code)
             if (
                 root_label is not None
-                and not path_has_root_label_evidence(visits, path_key, root_label)
+                and not path_has_root_label_evidence(
+                    visits,
+                    path_key,
+                    root_label,
+                    locale_code=locale_code,
+                )
             ):
                 errors.append(
                     f"visit {idx} root path lacks matching page evidence: "
@@ -340,6 +359,8 @@ def validate_report(
         if reason is None:
             continue
         path_key = tuple(str(segment) for segment in path)
+        if not _requires_blocked_visit_evidence(path_key, config):
+            continue
         if (path_key, reason) not in blocked_keys:
             errors.append(
                 "protected page is missing blocked_pages evidence: "
@@ -363,7 +384,7 @@ def validate_report(
             errors.append(f"rejected candidate path was not visited: {' > '.join(path_key)}")
         if not isinstance(text, str) or not text:
             errors.append(f"rejected_candidates[{idx}] has invalid text")
-        elif text not in visit_texts_by_path.get(path_key, []):
+        elif not _text_present_in_visit(text, visit_texts_by_path.get(path_key, [])):
             errors.append(
                 f"rejected_candidates[{idx}] text was not present in visited page: "
                 f"{' > '.join(path_key)} > {text}"
@@ -371,7 +392,11 @@ def validate_report(
         if not isinstance(reason, str) or reason not in EXPECTED_REJECTED_REASONS:
             errors.append(f"rejected_candidates[{idx}] has invalid reason: {reason!r}")
             continue
-        if require_exhaustive and reason in {"unknown_navigation_label", "missing_navigation_affordance"}:
+        if (
+            require_exhaustive
+            and config.get("strict_child_candidate_audit") is True
+            and reason in {"unknown_navigation_label", "missing_navigation_affordance"}
+        ):
             errors.append(
                 "navigation candidate requires allowlist, affordance, or explicit safety decision: "
                 f"{' > '.join(path_key)} > {text}"
@@ -402,7 +427,11 @@ def validate_report(
         )
         if not isinstance(text, str) or not text:
             errors.append(f"navigation_failures[{idx}] has invalid text")
-        elif not text_entry_exempt and text not in visit_texts_by_path.get(path_key, []):
+        elif (
+            not text_entry_exempt
+            and reason != "search_no_result"
+            and not _text_present_in_visit(text, visit_texts_by_path.get(path_key, []))
+        ):
             errors.append(
                 f"navigation_failures[{idx}] text was not present in visited page: "
                 f"{' > '.join(path_key)} > {text}"
@@ -414,6 +443,31 @@ def validate_report(
             errors.append(f"navigation candidate did not open: {' > '.join(path_key)} > {text}")
 
     return errors
+
+
+def _text_present_in_visit(text: str, visit_texts: Iterable[str]) -> bool:
+    if text in visit_texts:
+        return True
+    target = compact_text(text)
+    return bool(target) and any(compact_text(item) == target for item in visit_texts)
+
+
+def _requires_blocked_visit_evidence(path_key: tuple[str, ...], config: dict[str, Any]) -> bool:
+    # The root page can show sibling row labels that happen to match a protected
+    # child-page marker pair. The crawler deliberately never treats Settings root
+    # itself as blocked; mirror that here so a visible "Notifications" sidebar
+    # row cannot require blocked-page evidence for the root.
+    if path_key == ("Settings",):
+        return False
+    # In a depth-limited drill-down run, a visit at max_depth is terminal by
+    # configuration. Requiring blocked evidence there would reject a safe sample
+    # run even though the crawler is not allowed to traverse child rows.
+    max_depth = config.get("max_depth")
+    return not (
+        config.get("child_navigation_enabled") is True
+        and isinstance(max_depth, int)
+        and len(path_key) - 1 >= max_depth
+    )
 
 
 def _validate_root_coverage_ids(
@@ -455,6 +509,13 @@ def _validate_config_schema(config: dict[str, Any], *, errors: list[str]) -> Non
         value = config.get(key)
         if value is not None and not isinstance(value, str):
             errors.append(f"config.{key} must be null or string")
+    for key in sorted(CONFIG_DEVICE_STRING_KEYS):
+        if key in config and not isinstance(config.get(key), str):
+            errors.append(f"config.{key} must be a string")
+
+
+def _optional_config_str(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
 def _validate_metrics(
@@ -471,14 +532,31 @@ def _validate_metrics(
     expected_counts = {
         "visit_count": len(visits),
         "root_expected_count": len(root_coverage.get("expected", [])),
+        "root_required_expected_count": max(
+            0,
+            len(root_coverage.get("expected", [])) - len(root_coverage.get("entry_exempt", [])),
+        ),
         "root_visited_count": len(root_coverage.get("visited", [])),
         "root_missing_count": len(root_coverage.get("missing", [])),
+        "root_required_missing_count": len(
+            root_coverage.get("required_missing", root_coverage.get("missing", []))
+        ),
+        "root_entry_exempt_count": len(root_coverage.get("entry_exempt", [])),
+        "root_search_absent_count": len(root_coverage.get("search_absent", [])),
         "blocked_page_count": len(blocked_pages),
         "rejected_candidate_count": len(rejected_candidates),
         "navigation_failure_count": len(navigation_failures),
         "limits_hit_count": len(limits_hit),
     }
+    optional_metric_counts = {
+        "root_required_expected_count",
+        "root_required_missing_count",
+        "root_entry_exempt_count",
+        "root_search_absent_count",
+    }
     for key, expected in expected_counts.items():
+        if key not in metrics and key in optional_metric_counts:
+            continue
         if metrics.get(key) != expected:
             errors.append(f"metrics.{key} mismatch: {metrics.get(key)!r} != {expected}")
 
@@ -514,6 +592,7 @@ def _validate_known_issues(
     rejected_candidates: list[Any],
     navigation_failures: list[Any],
     require_exhaustive: bool,
+    strict_child_candidate_audit: bool,
     errors: list[str],
 ) -> None:
     issue_ids: set[str] = set()
@@ -545,7 +624,8 @@ def _validate_known_issues(
     ]
     if unresolved_rejections and "ios-settings-navigation-candidate-policy-gap" not in issue_ids:
         errors.append("known_issues missing candidate policy issue")
-    if require_exhaustive and not hard_limits and not navigation_failures and not unresolved_rejections:
+    blocking_rejections = unresolved_rejections if strict_child_candidate_audit else []
+    if require_exhaustive and not hard_limits and not navigation_failures and not blocking_rejections:
         blocking = [
             issue for issue in known_issues
             if isinstance(issue, dict) and issue.get("severity") == "blocking"

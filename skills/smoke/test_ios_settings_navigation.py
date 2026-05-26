@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+from dataclasses import replace
+from types import SimpleNamespace
+
 from glassbox.effector import ActionResult
 
 from skills.smoke.ios_settings_walkthrough_support import *
@@ -71,6 +75,325 @@ def test_search_query_suggestion_matches_keyboard_candidate_for_pinyin_input():
 
     assert hit is not None
     assert hit.text == "1蜂窝网络"
+
+
+@pytest.mark.smoke
+def test_open_root_label_via_search_accepts_ipad_split_view_root_detail():
+    search_scene = _scene(_el("通知", 72, 160, w=40, ty="button"))
+    opened_detail = _scene(
+        _el("Q Search", 34, 90, w=72),
+        _el("通知", 66, 494, w=40),
+        _el("通知", 404, 44, w=90),
+    )
+
+    class SearchPhone:
+        def __init__(self) -> None:
+            self.scene = search_scene
+            self.taps: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def type(self, _query: str):
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            self.scene = opened_detail
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+    actions = SimpleNamespace(
+        root_search_query=lambda label: "tongzhi" if label == "通知" else None,
+        enter_settings_search=lambda _phone: True,
+        clear_settings_search=lambda _phone: True,
+        tap_search_field=lambda _phone, _scene: True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        record_action_verdict=lambda _phone, _result: True,
+        find_search_result=lambda scene, label: scene.elements[0] if label == "通知" else None,
+        find_search_query_suggestion=lambda _scene, _label: None,
+        is_settings_search_scene=lambda scene: scene is search_scene,
+        scene_is_settings_root=lambda scene: scene is opened_detail,
+        page_title=lambda scene: "通知" if scene is opened_detail else "Search",
+        canonical_expected_root_label=lambda text: "通知" if text in {"通知", "Notifications"} else None,
+    )
+
+    assert settings_navigation.open_root_label_via_search(SearchPhone(), "通知", actions)
+
+
+@pytest.mark.smoke
+def test_open_root_label_via_search_clears_ipad_top_search_after_root_open(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+    search_scene = _scene(_el("Notifications", 72, 160, w=88, ty="button"))
+    dirty_detail = _scene(
+        _el("Q Notifications", 34, 90, w=124),
+        _el("Notifications", 404, 44, w=90),
+        _el("Apps → Notes", 72, 180, w=104),
+    )
+    clean_detail = _scene(
+        _el("Q Search", 34, 90, w=72),
+        _el("Notifications", 404, 44, w=90),
+        _el("Scheduled Summary", 280, 320, w=138),
+    )
+
+    class SearchPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self) -> None:
+            self.scene = search_scene
+            self.clear_calls = 0
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def type(self, _query: str):
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+        def tap_xy(self, _x: int, _y: int):
+            self.scene = dirty_detail
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+    phone = SearchPhone()
+
+    def clear_search(clear_phone):
+        clear_phone.clear_calls += 1
+        if clear_phone.scene is dirty_detail:
+            clear_phone.scene = clean_detail
+        return True
+
+    actions = SimpleNamespace(
+        root_search_query=lambda label: "Notifications" if label == "通知" else None,
+        enter_settings_search=lambda _phone: True,
+        clear_settings_search=clear_search,
+        tap_search_field=lambda _phone, _scene: True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        record_action_verdict=lambda _phone, _result: True,
+        find_search_result=lambda scene, label: scene.elements[0] if scene is search_scene and label == "通知" else None,
+        find_search_query_suggestion=lambda _scene, _label: None,
+        is_settings_search_scene=lambda scene: scene is search_scene or scene is dirty_detail,
+        scene_is_settings_root=lambda _scene: False,
+        page_title=lambda scene: "Notifications" if scene is dirty_detail or scene is clean_detail else "Search",
+        canonical_expected_root_label=lambda text: "通知" if text in {"通知", "Notifications"} else None,
+    )
+
+    assert settings_navigation.open_root_label_via_search(phone, "通知", actions)
+    assert phone.clear_calls == 2
+    assert phone.scene is clean_detail
+
+
+@pytest.mark.smoke
+def test_open_root_label_via_search_waits_for_delayed_results(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+    search_scene = _scene(_el("Q Battery", 54, 90, w=72))
+    result_scene = _scene(_el("Battery", 72, 150, w=50, ty="button"))
+    opened_detail = _scene(_el("Q Search", 34, 90, w=72), _el("Battery", 404, 44, w=90))
+
+    class SearchPhone:
+        def __init__(self) -> None:
+            self.scene = search_scene
+            self.polls_after_type = 0
+            self.taps: list[tuple[int, int]] = []
+            self.typed = False
+
+        def perceive(self):
+            if self.typed and self.scene is search_scene:
+                self.polls_after_type += 1
+                if self.polls_after_type >= 3:
+                    self.scene = result_scene
+            return self.scene
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def type(self, _query: str):
+            self.typed = True
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            if self.scene is result_scene:
+                self.scene = opened_detail
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+    phone = SearchPhone()
+    actions = SimpleNamespace(
+        root_search_query=lambda label: "Battery" if label == "电池" else None,
+        enter_settings_search=lambda _phone: True,
+        clear_settings_search=lambda _phone: True,
+        tap_search_field=lambda _phone, _scene: True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        record_action_verdict=lambda _phone, _result: True,
+        find_search_result=lambda scene, label: scene.elements[0] if scene is result_scene and label == "电池" else None,
+        find_search_query_suggestion=lambda _scene, _label: None,
+        is_settings_search_scene=lambda scene: scene is search_scene or scene is result_scene,
+        scene_is_settings_root=lambda scene: scene is opened_detail,
+        page_title=lambda scene: "电池" if scene is opened_detail else "Search",
+        canonical_expected_root_label=lambda text: "电池" if text in {"电池", "Battery"} else None,
+    )
+
+    assert settings_navigation.open_root_label_via_search(phone, "电池", actions)
+    assert phone.polls_after_type >= 3
+    assert phone.taps == [(97, 160)]
+
+
+@pytest.mark.smoke
+def test_open_root_label_via_search_marks_ipad_search_unavailable_when_clear_fails():
+    class SearchPhone:
+        def __init__(self) -> None:
+            self.device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+    actions = SimpleNamespace(
+        root_search_query=lambda label: "battery" if label == "电池" else None,
+        enter_settings_search=lambda _phone: True,
+        clear_settings_search=lambda _phone: False,
+    )
+    phone = SearchPhone()
+
+    assert not settings_navigation.open_root_label_via_search(phone, "电池", actions)
+    assert phone._ios_settings_search_unavailable is True
+
+
+@pytest.mark.smoke
+def test_open_root_label_via_search_rejects_ipad_duplicate_query_no_results(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+    search_scene = _scene(_el("WLAN", 72, 160, w=52, ty="button"))
+    no_results = _scene(
+        _el("Q WLANWLAN", 34, 90, w=112),
+        _el('No Results for "WLANWLAN"', 64, 176, w=220),
+        _el("Sounds", 404, 44, w=70),
+    )
+
+    class SearchPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self) -> None:
+            self.scene = search_scene
+            self.typed: list[str] = []
+            self.taps: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def type(self, query: str):
+            self.typed.append(query)
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            self.scene = no_results
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+    actions = SimpleNamespace(
+        root_search_query=lambda label: "WLAN" if label == "无线局域网" else None,
+        enter_settings_search=lambda _phone: True,
+        clear_settings_search=lambda _phone: True,
+        tap_search_field=lambda _phone, _scene: True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        record_action_verdict=lambda _phone, _result: True,
+        find_search_result=lambda scene, label: scene.elements[0] if scene is search_scene and label == "无线局域网" else None,
+        find_search_query_suggestion=lambda _scene, _label: None,
+        is_settings_search_scene=lambda _scene: False,
+        scene_is_settings_root=lambda _scene: False,
+        page_title=lambda scene: "Q WLANWLAN" if scene is no_results else "Search",
+        canonical_expected_root_label=lambda text: "无线局域网" if text in {"WLAN", "Wi-Fi"} else None,
+    )
+    phone = SearchPhone()
+
+    assert not settings_navigation.open_root_label_via_search(phone, "无线局域网", actions)
+    assert phone.typed == ["WLAN"]
+    assert phone.taps == [(98, 170)]
+
+
+@pytest.mark.smoke
+def test_open_root_label_via_search_refocuses_ipad_top_search_when_results_lag(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+    pre_result_scene = _scene(_el("Q Search", 34, 90, w=72))
+    result_scene = _scene(
+        _el("Q WLAN", 34, 90, w=72),
+        _el("WLAN", 72, 150, w=44, ty="button"),
+        _el("WLAN Power", 72, 194, w=88),
+    )
+    opened_detail = _scene(_el("WLAN", 404, 44, w=70), _el("Choose a Network", 404, 180, w=150))
+
+    class SearchPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self) -> None:
+            self.scene = pre_result_scene
+            self.typed: list[str] = []
+            self.focuses = 0
+            self.result_taps: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def type(self, query: str):
+            self.typed.append(query)
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+        def tap_xy(self, x: int, y: int):
+            self.result_taps.append((x, y))
+            self.scene = opened_detail
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+    phone = SearchPhone()
+
+    def tap_search_field(_phone, _scene):
+        phone.focuses += 1
+        if phone.typed:
+            phone.scene = result_scene
+        return True
+
+    actions = SimpleNamespace(
+        root_search_query=lambda label: "WLAN" if label == "无线局域网" else None,
+        enter_settings_search=lambda _phone: True,
+        clear_settings_search=lambda _phone: True,
+        tap_search_field=tap_search_field,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        record_action_verdict=lambda _phone, _result: True,
+        find_search_result=lambda scene, label: (
+            scene.elements[1] if scene is result_scene and label == "无线局域网" else None
+        ),
+        find_search_query_suggestion=lambda _scene, _label: None,
+        is_settings_search_scene=lambda scene: scene is pre_result_scene or scene is result_scene,
+        scene_is_settings_root=lambda scene: scene is opened_detail,
+        page_title=lambda scene: "WLAN" if scene is opened_detail else "Search",
+        canonical_expected_root_label=lambda text: "无线局域网" if text in {"WLAN", "Wi-Fi"} else None,
+    )
+
+    assert settings_navigation.open_root_label_via_search(phone, "无线局域网", actions)
+    assert phone.typed == ["WLAN"]
+    assert phone.focuses == 2
+    assert phone.result_taps == [(94, 160)]
+
+
+@pytest.mark.smoke
+def test_open_root_label_via_search_does_not_globally_disable_iphone_search_on_clear_miss():
+    class SearchPhone:
+        def __init__(self) -> None:
+            self.device_geometry = SimpleNamespace(model="iphone_17_pro_max")
+
+    actions = SimpleNamespace(
+        root_search_query=lambda label: "battery" if label == "电池" else None,
+        enter_settings_search=lambda _phone: True,
+        clear_settings_search=lambda _phone: False,
+    )
+    phone = SearchPhone()
+
+    assert not settings_navigation.open_root_label_via_search(phone, "电池", actions)
+    assert not hasattr(phone, "_ios_settings_search_unavailable")
+
 
 @pytest.mark.smoke
 def test_search_query_suggestion_handles_ocr_joined_candidates():
@@ -685,6 +1008,82 @@ def test_open_visible_or_scroll_to_row_does_not_call_vlm_when_match_hits(monkeyp
 
 
 @pytest.mark.smoke
+def test_open_visible_or_scroll_to_row_matches_ipad_sidebar_by_canonical_label():
+    from dataclasses import replace
+
+    scene = _scene(
+        _el("Screen Time", 70, 360, w=82),
+        _el("Lock Screen Time Settings", 318, 845, w=178),
+    )
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Phone:
+        device_geometry = _Geometry()
+
+        def _viewport_size(self):
+            return 640, 989
+
+        def perceive(self):
+            return scene
+
+    def canonical(text):
+        return "屏幕使用时间" if text in {"屏幕使用时间", "Screen Time"} else None
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("VLM fallback must only run after deterministic miss")
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        canonical_expected_root_label=canonical,
+        vlm_point_for_label=boom,
+    )
+
+    hit = settings_navigation.open_visible_or_scroll_to_row(_Phone(), ("屏幕使用时间",), actions)
+
+    assert hit is not None
+    assert hit.text == "Screen Time"
+
+
+@pytest.mark.smoke
+def test_open_visible_or_scroll_to_row_matches_ipad_split_ampersand_sidebar_label():
+    from dataclasses import replace
+
+    scene = _scene(
+        _el("Home Screen &", 70, 360, w=118),
+        _el("App Library", 70, 382, w=90),
+        _el("Search in App", 318, 845, w=92),
+    )
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Phone:
+        device_geometry = _Geometry()
+
+        def _viewport_size(self):
+            return 640, 989
+
+        def perceive(self):
+            return scene
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("VLM fallback must only run after deterministic miss")
+
+    actions = replace(walkthrough._navigation_actions(), vlm_point_for_label=boom)
+
+    hit = settings_navigation.open_visible_or_scroll_to_row(
+        _Phone(),
+        ("Home Screen & App Library",),
+        actions,
+    )
+
+    assert hit is not None
+    assert hit.text == "Home Screen &"
+
+
+@pytest.mark.smoke
 def test_vlm_point_for_label_rejects_out_of_band_point():
     import numpy as np
 
@@ -985,6 +1384,64 @@ def test_vlm_point_synthetic_element_flows_through_picokvm_settings_row_projecti
     assert hit.box.center[0] != 2000
     assert Phone._picokvm_settings_row_tap_point_for_element(phone, hit) == (224, 535)
 
+
+@pytest.mark.smoke
+def test_picokvm_ipad_settings_row_projection_stays_in_sidebar():
+    from glassbox.phone import Phone
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Phone:
+        device_geometry = _Geometry()
+        _last_scene = _scene(
+            _el("设置", 48, 72, w=72, h=28),
+            _el("通用", 72, 332, w=44, h=24),
+        )
+        _last_scene.viewport_size = (744, 1133)
+        _last_scene.platform_scene_kind = "settings_detail"
+        _last_scene.safe_actions = ("tap_root_row",)
+
+        def _effector_backend(self):
+            return "picokvm"
+
+        def _viewport_size(self):
+            return 744, 1133
+
+    hit = _el("通用", 72, 332, w=44, h=24)
+
+    assert Phone._picokvm_settings_row_tap_point_for_element(_Phone(), hit) == (94, 344)
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_detail_row_projection_moves_inside_detail_pane():
+    from glassbox.phone import Phone
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Phone:
+        device_geometry = _Geometry()
+        _last_scene = _scene(
+            _el("Screen Time", 70, 328, w=82, h=14),
+            _el("Downtime", 320, 341, w=66, h=13),
+        )
+        _last_scene.viewport_size = (640, 989)
+        _last_scene.platform_scene_kind = "settings_detail"
+        _last_scene.page_id = "settings/Screen Time"
+        _last_scene.safe_actions = ("tap_root_row",)
+
+        def _effector_backend(self):
+            return "picokvm"
+
+        def _viewport_size(self):
+            return 640, 989
+
+    hit = _el("Downtime", 320, 341, w=66, h=13)
+
+    assert Phone._picokvm_settings_row_tap_point_for_element(_Phone(), hit) == (403, 347)
+
+
 @pytest.mark.smoke
 def test_unsafe_navigation_text_matches_spaceless_ocr_form():
     """OCR 常把「Game Center」读成「GameCenter」—— 去空格后仍判为不安全项。"""
@@ -1020,7 +1477,11 @@ def test_long_english_safe_navigation_labels_are_not_filtered_by_length():
 
     labels = [e.text for e in _safe_navigation_candidates(scene)]
 
-    assert labels == ["VPN & Device Management", "Transfer or Reset iPhone"]
+    assert labels == [
+        "Home Screen & App Library",
+        "VPN & Device Management",
+        "Transfer or Reset iPhone",
+    ]
 
 @pytest.mark.smoke
 def test_bluetooth_device_list_is_not_crawled_as_navigation_rows():
@@ -1297,7 +1758,7 @@ def test_known_nested_rows_need_navigation_affordance_to_avoid_toggling_app_rows
 
     assert labels == []
     assert [(item.text, item.reason) for item in rejected] == [
-        ("Safari浏览器", "unknown_navigation_label"),
+        ("Safari浏览器", "missing_navigation_affordance"),
     ]
 
 @pytest.mark.smoke
@@ -1480,6 +1941,65 @@ def test_crawler_reports_max_scrolls_when_more_viewports_remain(monkeypatch):
 
     assert limits == {"max_scrolls_per_page"}
 
+
+@pytest.mark.smoke
+def test_ipad_root_stuck_scroll_falls_through_to_search_without_reset(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root = _scene(
+        _el("Settings", 48, 72, w=70),
+        _el("Notifications", 72, 300, w=110),
+    )
+
+    class IPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return root
+
+    reset_calls: list[str] = []
+    search_calls: list[dict] = []
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        root_coverage_perceive=lambda _phone, _depth: root,
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: False,
+        scroll_budget_for_depth=lambda _depth: 1,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", root),
+        scroll_to_top=lambda _phone: reset_calls.append("reset"),
+        max_root_scroll_resets=2,
+        root_coverage=lambda _visits, phone=None: {
+            "expected": ["电池"],
+            "visited": [],
+            "missing": ["电池"],
+        },
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        crawl_missing_root_pages_via_search=lambda _phone, **kwargs: search_calls.append(kwargs),
+    )
+
+    settings_navigation.crawl_current_page(
+        IPadPhone(),
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert reset_calls == []
+    assert len(search_calls) == 1
+
+
 @pytest.mark.smoke
 def test_crawler_records_navigation_failure_when_tap_does_not_open(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
@@ -1569,6 +2089,129 @@ def test_root_crawl_records_observed_root_title_after_shifted_tap(monkeypatch):
     )
 
     assert ("Settings", "声音与触感") in [visit.path for visit in visits]
+
+
+@pytest.mark.smoke
+def test_root_crawl_maps_live_ipad_short_sounds_title_to_root_coverage(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    monkeypatch.setattr(walkthrough, "ROOT_COVERAGE_MODE", False)
+    monkeypatch.setattr(walkthrough, "CHILD_NAVIGATION_ENABLED", True)
+    monkeypatch.setattr(walkthrough, "_crawl_missing_root_pages_via_search", lambda *args, **kwargs: None)
+    monkeypatch.setattr(walkthrough, "_scene_is_settings_root", lambda scene: True)
+    root = _scene(
+        _el("Settings", 48, 72, w=70, ty="button"),
+        _el("Camera", 80, 360, w=70),
+        _el("›", 386, 360, w=12),
+    )
+    observed = _scene(
+        _el("Sounds", 404, 44, w=70),
+        _el("Ringtone", 404, 240, w=84),
+    )
+
+    class Phone:
+        def __init__(self):
+            self.scene = root
+
+        def perceive(self):
+            return self.scene
+
+        def _viewport_size(self):
+            return 744, 1133
+
+        def tap_xy(self, x, y):
+            del x, y
+            self.scene = observed
+
+        def key(self, modifier, keycode):
+            del modifier, keycode
+            self.scene = root
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def wheel_scroll_down(self, *, ticks=None):
+            del ticks
+
+    visits: list[PageVisit] = []
+
+    _crawl_current_page(
+        Phone(),
+        path=("Settings",),
+        visits=visits,
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+    )
+
+    paths = [visit.path for visit in visits]
+    assert ("Settings", "声音与触感") in paths
+    assert ("Settings", "Camera") not in paths
+
+
+@pytest.mark.smoke
+def test_root_crawl_keeps_observed_non_root_title_instead_of_requested_root(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    monkeypatch.setattr(walkthrough, "ROOT_COVERAGE_MODE", False)
+    monkeypatch.setattr(walkthrough, "CHILD_NAVIGATION_ENABLED", True)
+    monkeypatch.setattr(walkthrough, "_crawl_missing_root_pages_via_search", lambda *args, **kwargs: None)
+    monkeypatch.setattr(walkthrough, "_scene_is_settings_root", lambda scene: True)
+    root = _scene(
+        _el("Settings", 48, 72, w=70, ty="button"),
+        _el("General", 80, 360, w=70),
+        _el("›", 386, 360, w=12),
+    )
+    observed = _scene(
+        _el("Display & Brightness", 404, 44, w=160),
+        _el("Appearance", 404, 240, w=90),
+    )
+
+    class Phone:
+        def __init__(self):
+            self.scene = root
+
+        def perceive(self):
+            return self.scene
+
+        def _viewport_size(self):
+            return 744, 1133
+
+        def tap_xy(self, x, y):
+            del x, y
+            self.scene = observed
+
+        def key(self, modifier, keycode):
+            del modifier, keycode
+            self.scene = root
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def wheel_scroll_down(self, *, ticks=None):
+            del ticks
+
+    visits: list[PageVisit] = []
+
+    _crawl_current_page(
+        Phone(),
+        path=("Settings",),
+        visits=visits,
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+    )
+
+    paths = [visit.path for visit in visits]
+    assert ("Settings", "Display & Brightness") in paths
+    assert ("Settings", "通用") not in paths
+
 
 @pytest.mark.smoke
 def test_root_crawl_canonicalizes_root_alias_when_child_title_is_missing(monkeypatch):

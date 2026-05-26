@@ -7,6 +7,7 @@ already collected records, run config, trace payload, and root coverage.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -71,8 +72,15 @@ def build_report_payload(
     root_coverage: dict[str, list[str]],
     trace_payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    report_config = run_config.to_report_config()
+    report_config.update(_active_device_report_config())
     root_coverage = settings_reporting.classify_root_coverage(
-        root_coverage, visits, rejected_candidates
+        root_coverage,
+        visits,
+        rejected_candidates,
+        navigation_failures,
+        platform=_optional_str(report_config.get("platform")),
+        phone_model=_optional_str(report_config.get("phone_model")),
     )
     metrics = report_metrics(
         visits=visits,
@@ -92,6 +100,8 @@ def build_report_payload(
         navigation_failures=navigation_failures,
         metrics=metrics,
         require_exhaustive=run_config.require_exhaustive,
+        strict_child_candidate_audit=run_config.strict_child_candidate_audit,
+        entry_exempt_labels=root_coverage.get("entry_exempt", ()),
     )
     return {
         "run_id": run_config.run_id,
@@ -102,7 +112,7 @@ def build_report_payload(
         # yet — so this is tagged "0.1", not "0.2".
         "schema_version": "0.1",
         "locale": _active_locale_code(),
-        "config": run_config.to_report_config(),
+        "config": report_config,
         "trace": trace_payload,
         "limits_hit": sorted(limits_hit),
         "visit_count": len(visits),
@@ -152,6 +162,21 @@ def add_trace_metrics(metrics: dict[str, object], trace_payload: dict[str, Any])
     settings_reporting.add_trace_metrics(metrics, trace_payload)
 
 
+def _active_device_report_config() -> dict[str, str]:
+    from glassbox.config import get_config
+    from glassbox.platforms import select_platform_backend
+
+    cfg = get_config()
+    return {
+        "phone_model": str(getattr(cfg, "phone_model", "") or ""),
+        "platform": select_platform_backend(cfg),
+    }
+
+
+def _optional_str(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 def report_metrics(
     *,
     visits: list[PageVisit],
@@ -182,6 +207,8 @@ def known_harness_issues(
     navigation_failures: list[NavigationFailure],
     metrics: dict[str, object],
     require_exhaustive: bool,
+    strict_child_candidate_audit: bool = True,
+    entry_exempt_labels: Iterable[str] = (),
 ) -> list[dict[str, object]]:
     return settings_reporting.known_harness_issues(
         limits_hit=limits_hit,
@@ -189,6 +216,8 @@ def known_harness_issues(
         navigation_failures=navigation_failures,
         metrics=metrics,
         require_exhaustive=require_exhaustive,
+        strict_child_candidate_audit=strict_child_candidate_audit,
+        entry_exempt_labels=entry_exempt_labels,
     )
 
 

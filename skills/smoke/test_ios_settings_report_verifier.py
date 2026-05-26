@@ -4,11 +4,14 @@ import json
 
 import pytest
 
+from skills.regression.ios_settings.config import SettingsRunConfig
 from skills.regression.ios_settings.policy import (
     EXPECTED_ROOT_NAV_TEXT_ZH,
     detect_device_unavailable_root_labels,
 )
+from skills.regression.ios_settings.report_writer import build_report_payload
 from skills.regression.ios_settings.reporting import (
+    NavigationFailure,
     PageVisit,
     RejectedCandidate,
     classify_root_coverage,
@@ -37,6 +40,135 @@ def test_classify_root_coverage_splits_entered_visible_only_blocked():
     assert result["blocked"] == ["Face ID与密码"]
     assert result["missing"] == ["Face ID与密码", "通用"]  # base keys preserved
     assert result["visited"] == ["无线局域网", "蓝牙"]      # backward-compat ("seen")
+
+
+@pytest.mark.smoke
+def test_classify_root_coverage_tracks_exempt_and_search_absent_roots():
+    expected = ["蜂窝网络", "操作按钮", "待机显示", "钱包与 Apple Pay"]
+    visits = [PageVisit(("Settings",), "Settings", ("Settings",))]
+    failures = [
+        NavigationFailure(("Settings",), "Settings", "蜂窝网络", "search_no_result"),
+        NavigationFailure(("Settings",), "Settings", "操作按钮", "search_no_result"),
+        NavigationFailure(("Settings",), "Settings", "待机显示", "tap_no_navigation"),
+    ]
+    base = {"expected": expected, "visited": [], "missing": expected}
+
+    result = classify_root_coverage(base, visits, [], failures)
+
+    assert result["entry_exempt"] == ["钱包与 Apple Pay"]
+    assert result["search_absent"] == ["蜂窝网络", "操作按钮"]
+    assert result["required_missing"] == ["蜂窝网络", "操作按钮", "待机显示"]
+    assert result["entry_exempt_ids"] == ["WALLET"]
+    assert result["search_absent_ids"] == ["CELLULAR", "ACTION_BUTTON"]
+
+
+@pytest.mark.smoke
+def test_classify_root_coverage_treats_detected_no_sim_as_entry_exempt():
+    expected = ["蜂窝网络", "钱包与 Apple Pay"]
+    visits = [PageVisit(("Settings",), "Settings", ("Settings", "No SIM"))]
+    base = {"expected": expected, "visited": [], "missing": expected}
+
+    result = classify_root_coverage(base, visits, [], [])
+
+    assert result["device_unavailable"] == ["蜂窝网络"]
+    assert result["entry_exempt"] == ["蜂窝网络", "钱包与 Apple Pay"]
+    assert result["required_missing"] == []
+
+
+@pytest.mark.smoke
+def test_classify_root_coverage_marks_ipad_search_absent_roots_unavailable():
+    expected = ["操作按钮", "待机显示", "蓝牙", "钱包与 Apple Pay"]
+    visits = [PageVisit(("Settings",), "Settings", ("Settings",))]
+    failures = [
+        NavigationFailure(("Settings",), "Settings", "Action Button", "search_no_result"),
+        NavigationFailure(("Settings",), "Settings", "Bluetooth", "search_no_result"),
+    ]
+    base = {"expected": expected, "visited": [], "missing": expected}
+
+    result = classify_root_coverage(
+        base,
+        visits,
+        [],
+        failures,
+        platform="ipados",
+        phone_model="ipad_mini_7",
+    )
+
+    assert result["device_unavailable"] == ["操作按钮"]
+    assert result["entry_exempt"] == ["操作按钮", "钱包与 Apple Pay"]
+    assert result["search_absent"] == ["操作按钮", "蓝牙"]
+    assert result["required_missing"] == ["待机显示", "蓝牙"]
+
+
+@pytest.mark.smoke
+def test_report_payload_threads_search_failures_into_root_coverage(monkeypatch):
+    monkeypatch.setattr(
+        "skills.regression.ios_settings.report_writer._active_device_report_config",
+        lambda: {"phone_model": "iphone_17_pro_max", "platform": "ios"},
+    )
+    run_config = SettingsRunConfig.for_child_audit(
+        max_depth=1,
+        max_pages=4,
+        max_child_scrolls_per_page=1,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+    )
+    expected = ["操作按钮", "钱包与 Apple Pay"]
+
+    payload = build_report_payload(
+        run_config=run_config,
+        visits=[PageVisit(("Settings",), "Settings", ("Settings",))],
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[
+            NavigationFailure(("Settings",), "Settings", "操作按钮", "search_no_result"),
+        ],
+        root_coverage={"expected": expected, "visited": [], "missing": expected},
+        trace_payload=None,
+    )
+
+    root_coverage = payload["root_coverage"]
+    assert root_coverage["entry_exempt"] == ["钱包与 Apple Pay"]
+    assert root_coverage["search_absent"] == ["操作按钮"]
+    assert payload["metrics"]["root_required_expected_count"] == 1
+    assert payload["metrics"]["root_entry_exempt_count"] == 1
+    assert payload["metrics"]["root_search_absent_count"] == 1
+
+
+@pytest.mark.smoke
+def test_report_payload_uses_ipad_device_context_for_unavailable_roots(monkeypatch):
+    monkeypatch.setattr(
+        "skills.regression.ios_settings.report_writer._active_device_report_config",
+        lambda: {"phone_model": "ipad_mini_7", "platform": "ipados"},
+    )
+    run_config = SettingsRunConfig.for_child_audit(
+        max_depth=1,
+        max_pages=4,
+        max_child_scrolls_per_page=1,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+    )
+    expected = ["操作按钮", "钱包与 Apple Pay"]
+
+    payload = build_report_payload(
+        run_config=run_config,
+        visits=[PageVisit(("Settings",), "Settings", ("Settings",))],
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[
+            NavigationFailure(("Settings",), "Settings", "操作按钮", "search_no_result"),
+        ],
+        root_coverage={"expected": expected, "visited": [], "missing": expected},
+        trace_payload=None,
+    )
+
+    assert payload["config"]["platform"] == "ipados"
+    assert payload["config"]["phone_model"] == "ipad_mini_7"
+    assert payload["root_coverage"]["device_unavailable"] == ["操作按钮"]
+    assert payload["root_coverage"]["required_missing"] == []
+    assert payload["metrics"]["root_required_expected_count"] == 0
 
 
 def _report(*, limits=None, visits=None, missing=None):
@@ -137,6 +269,27 @@ def test_detect_device_unavailable_root_labels_no_sim():
     ) == set()
 
 
+@pytest.mark.smoke
+def test_detect_device_unavailable_root_labels_ipad_search_absent_only():
+    failures = [
+        {"path": ["Settings"], "title": "Settings", "text": "Action Button", "reason": "search_no_result"},
+        {"path": ["Settings"], "title": "Settings", "text": "Bluetooth", "reason": "search_no_result"},
+    ]
+
+    assert detect_device_unavailable_root_labels(
+        [],
+        failures,
+        platform="ipados",
+        phone_model="ipad_mini_7",
+    ) == {"操作按钮"}
+    assert detect_device_unavailable_root_labels(
+        [],
+        failures,
+        platform="ios",
+        phone_model="iphone_17_pro_max",
+    ) == set()
+
+
 def _report_without_cellular(*, root_texts):
     visits = [
         {"path": ["Settings"], "title": "设置", "texts": root_texts},
@@ -164,6 +317,71 @@ def test_verifier_still_requires_cellular_when_no_marker():
     silently hidden."""
     report = _report_without_cellular(root_texts=["设置", "蜂窝网络"])
     errors = validate_report(report)
+    assert any("missing expected root pages" in e for e in errors)
+
+
+@pytest.mark.smoke
+def test_verifier_auto_exempts_ipad_search_absent_device_roots():
+    visits = [
+        {"path": ["Settings"], "title": "Settings", "texts": ["Settings"]},
+        *[
+            {"path": ["Settings", label], "title": label, "texts": [label, "body line"]}
+            for label in EXPECTED_ROOT_NAV_TEXT_ZH
+            if label not in {"蜂窝网络", "操作按钮", "待机显示", "紧急 SOS"}
+        ],
+    ]
+    report = _report(
+        visits=visits,
+        missing=["蜂窝网络", "操作按钮", "待机显示", "紧急 SOS"],
+    )
+    report["config"]["platform"] = "ipados"
+    report["config"]["phone_model"] = "ipad_mini_7"
+    report["navigation_failures"] = [
+        {"path": ["Settings"], "title": "Settings", "text": label, "reason": "search_no_result"}
+        for label in ("蜂窝网络", "操作按钮", "待机显示", "紧急 SOS")
+    ]
+    _refresh_report_summaries(report)
+
+    errors = validate_report(report)
+
+    assert not any("missing expected root pages" in e for e in errors), errors
+
+
+@pytest.mark.smoke
+def test_report_summaries_downgrade_entry_exempt_navigation_failures():
+    report = _report()
+    report["config"]["platform"] = "ipados"
+    report["config"]["phone_model"] = "ipad_mini_7"
+    report["root_coverage"]["entry_exempt"] = ["操作按钮"]
+    report["navigation_failures"] = [
+        {"path": ["Settings"], "title": "Settings", "text": "操作按钮", "reason": "search_no_result"},
+    ]
+    _refresh_report_summaries(report)
+
+    issue = next(item for item in report["known_issues"] if item["id"] == "ios-settings-navigation-tap-no-transition")
+    assert issue["severity"] == "warning"
+
+
+@pytest.mark.smoke
+def test_verifier_still_requires_ipad_search_absent_roots_without_ipad_context():
+    report = _report(
+        visits=[
+            {"path": ["Settings"], "title": "Settings", "texts": ["Settings"]},
+            *[
+                {"path": ["Settings", label], "title": label, "texts": [label, "body line"]}
+                for label in EXPECTED_ROOT_NAV_TEXT_ZH
+                if label != "操作按钮"
+            ],
+        ],
+        missing=["操作按钮"],
+    )
+    report["navigation_failures"] = [
+        {"path": ["Settings"], "title": "Settings", "text": "操作按钮", "reason": "search_no_result"},
+    ]
+    _refresh_report_summaries(report)
+
+    errors = validate_report(report)
+
     assert any("missing expected root pages" in e for e in errors)
 
 
@@ -260,6 +478,24 @@ def test_ios_settings_report_verifier_counts_english_root_labels_as_canonical_co
 
     _refresh_report_summaries(report)
     assert validate_report(report) == []
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_uses_report_locale_for_root_evidence():
+    report = _report(
+        visits=[
+            {"path": ["Settings"], "title": "Settings", "texts": ["Settings"]},
+            {"path": ["Settings", "无线局域网"], "title": "WLAN", "texts": ["WLAN", "Ask To Join Networks"]},
+        ],
+    )
+    report["locale"] = "en-HK"
+    _refresh_report_summaries(report)
+
+    errors = validate_report(report, require_exhaustive=False)
+
+    assert not any("root_coverage.visited does not match visits" in error for error in errors)
+    assert not any("root_coverage.missing does not match visits" in error for error in errors)
+    assert not any("root path lacks matching page evidence" in error for error in errors)
 
 
 @pytest.mark.smoke
@@ -591,6 +827,43 @@ def test_ios_settings_report_verifier_requires_blocked_evidence_for_protected_vi
 
 
 @pytest.mark.smoke
+def test_ios_settings_report_verifier_does_not_require_blocked_evidence_for_root_sidebar_texts():
+    visits = [
+        {
+            "path": ["Settings"],
+            "title": "Settings",
+            "texts": ["Settings", "Notifications", "Display As", "Show Previews"],
+        },
+        {"path": ["Settings", "蓝牙"], "title": "蓝牙", "texts": ["蓝牙"]},
+    ]
+
+    errors = validate_report(_report(visits=visits, missing=["无线局域网"]), require_exhaustive=False)
+
+    assert not any("protected page is missing blocked_pages evidence: Settings " in error for error in errors)
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_allows_terminal_max_depth_protected_sample():
+    visits = [
+        {"path": ["Settings"], "title": "Settings", "texts": ["Settings"]},
+        {
+            "path": ["Settings", "通知"],
+            "title": "Notifications",
+            "texts": ["Notifications", "Display As", "Show Previews"],
+        },
+    ]
+    report = _report(visits=visits, missing=["蓝牙"])
+    report["config"]["child_navigation_enabled"] = True
+    report["config"]["root_coverage_mode"] = False
+    report["config"]["max_depth"] = 1
+    _refresh_report_summaries(report)
+
+    errors = validate_report(report, require_exhaustive=False)
+
+    assert not any("protected page is missing blocked_pages evidence" in error for error in errors)
+
+
+@pytest.mark.smoke
 def test_ios_settings_report_verifier_accepts_blocked_evidence_for_protected_visit():
     visits = [
         {"path": ["Settings"], "title": "设置", "texts": []},
@@ -727,6 +1000,7 @@ def test_ios_settings_report_verifier_rejects_non_settings_blocked_and_rejected_
 @pytest.mark.smoke
 def test_ios_settings_report_verifier_rejects_unknown_candidate_in_strict_mode():
     report = _report()
+    report["config"]["strict_child_candidate_audit"] = True
     report["visits"].append({
         "path": ["Settings", "通用"],
         "title": "通用",
@@ -748,8 +1022,30 @@ def test_ios_settings_report_verifier_rejects_unknown_candidate_in_strict_mode()
 
 
 @pytest.mark.smoke
+def test_ios_settings_report_verifier_allows_unknown_candidate_when_audit_not_strict():
+    report = _report()
+    report["visits"][0]["texts"] = [*report["visits"][0]["texts"], "Apple Pencil"]
+    report["rejected_candidates"] = [
+        {
+            "path": ["Settings"],
+            "title": "Settings",
+            "text": "Apple Pencil",
+            "reason": "unknown_navigation_label",
+        },
+    ]
+    _refresh_report_summaries(report)
+
+    errors = validate_report(report)
+
+    assert not any("navigation candidate requires" in error for error in errors)
+    assert report["known_issues"][-1]["id"] == "ios-settings-navigation-candidate-policy-gap"
+    assert report["known_issues"][-1]["severity"] == "warning"
+
+
+@pytest.mark.smoke
 def test_ios_settings_report_verifier_rejects_missing_affordance_in_strict_mode():
     report = _report()
+    report["config"]["strict_child_candidate_audit"] = True
     report["visits"].append({
         "path": ["Settings", "蜂窝网络"],
         "title": "蜂窝网络",
@@ -877,6 +1173,22 @@ def test_ios_settings_report_verifier_allows_navigation_failure_in_partial_mode_
 
 
 @pytest.mark.smoke
+def test_ios_settings_report_verifier_allows_search_failure_without_visible_row_text_in_partial_mode():
+    report = _report()
+    report["navigation_failures"] = [
+        {
+            "path": ["Settings"],
+            "title": "Settings",
+            "text": "无线局域网",
+            "reason": "search_no_result",
+        },
+    ]
+    _refresh_report_summaries(report)
+
+    assert validate_report(report, require_exhaustive=False) == []
+
+
+@pytest.mark.smoke
 def test_ios_settings_report_verifier_rejects_navigation_failure_without_evidence():
     report = _report()
     report["navigation_failures"] = [
@@ -918,6 +1230,24 @@ def test_ios_settings_report_verifier_aggregates_text_evidence_across_same_path_
             "reason": "unknown_navigation_label",
         },
     ]
+
+    errors = validate_report(report, require_exhaustive=False)
+
+    assert not any("text was not present in visited page" in error for error in errors)
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_accepts_compact_text_evidence():
+    report = _report()
+    report["rejected_candidates"] = [
+        {
+            "path": ["Settings"],
+            "title": "Settings",
+            "text": "Game Center",
+            "reason": "unsafe_text",
+        },
+    ]
+    report["visits"][0]["texts"] = [*report["visits"][0]["texts"], "GameCenter"]
 
     errors = validate_report(report, require_exhaustive=False)
 

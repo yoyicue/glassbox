@@ -168,6 +168,10 @@ def ios_settings_crawl_policy_registration() -> CrawlPolicyRegistration:
     return CrawlPolicyRegistration(name="ios_settings", factory=_ios_settings_crawl_policy_factory)
 
 
+def ipados_settings_crawl_policy_registration() -> CrawlPolicyRegistration:
+    return CrawlPolicyRegistration(name="ipados_settings", factory=_ipados_settings_crawl_policy_factory)
+
+
 def generic_crawl_policy_registration() -> CrawlPolicyRegistration:
     return CrawlPolicyRegistration(name="generic", factory=_generic_crawl_policy_factory)
 
@@ -182,10 +186,17 @@ def _ios_settings_crawl_policy_factory(**_kwargs) -> SettingsCrawlPolicyAdapter:
     return SettingsCrawlPolicyAdapter(DEFAULT_SETTINGS_POLICY)
 
 
+def _ipados_settings_crawl_policy_factory(**_kwargs) -> SettingsCrawlPolicyAdapter:
+    from skills.regression.ios_settings.policy import IPadSettingsPolicy
+
+    return SettingsCrawlPolicyAdapter(IPadSettingsPolicy())
+
+
 DEFAULT_CRAWL_POLICY_REGISTRY = CrawlPolicyRegistry(
     registrations=(
         generic_crawl_policy_registration(),
         ios_settings_crawl_policy_registration(),
+        ipados_settings_crawl_policy_registration(),
     ),
 )
 
@@ -198,4 +209,5 @@ __all__ = [
     "SettingsCrawlPolicyAdapter",
     "generic_crawl_policy_registration",
     "ios_settings_crawl_policy_registration",
+    "ipados_settings_crawl_policy_registration",
 ]

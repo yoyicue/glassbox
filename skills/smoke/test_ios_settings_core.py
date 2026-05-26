@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+from types import SimpleNamespace
+
 from skills.smoke.ios_settings_walkthrough_support import *
 
 @pytest.mark.smoke
@@ -175,6 +178,84 @@ def test_settings_wheel_scroll_uses_conservative_default_ticks(monkeypatch):
 
     assert phone.down_ticks == [15]   # 动量悬崖下的受控默认档
     assert _settings_wheel_ticks_per_swipe() == 15
+
+@pytest.mark.smoke
+def test_ipad_settings_wheel_clicks_sidebar_focus_before_wheel():
+    class IPadWheelPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, dict]] = []
+
+        def supports(self, action: str) -> bool:
+            return action == "scroll_wheel"
+
+        def wheel_scroll_down(self, *, ticks: int | None = None) -> None:
+            raise AssertionError("iPad Settings should use focused scroll_wheel directly")
+
+        def _viewport_size(self) -> tuple[int, int]:
+            return 640, 980
+
+        def scroll_wheel(self, ticks: int, **kwargs) -> None:
+            self.calls.append((ticks, kwargs))
+
+    phone = IPadWheelPhone()
+
+    _wheel_scroll_down(phone, ticks=6)
+
+    assert phone.calls == [
+        (6, {"focus_x": 147, "focus_y": 539, "focus_click": True}),
+    ]
+
+
+@pytest.mark.smoke
+def test_ipad_scroll_down_confirmed_does_not_retry_stuck_wheel(monkeypatch):
+    monkeypatch.setattr(settings_scrolling.time, "sleep", lambda _seconds: None)
+    scene = _scene(
+        _el("Settings", 48, 70, w=70),
+        _el("General", 72, 360, w=70),
+        _el("Accessibility", 72, 420, w=120),
+    )
+
+    class IPadWheelPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, dict]] = []
+
+        def supports(self, action: str) -> bool:
+            return action == "scroll_wheel"
+
+        def wheel_scroll_down(self, *, ticks: int | None = None) -> None:
+            raise AssertionError("iPad Settings should use focused scroll_wheel directly")
+
+        def _viewport_size(self) -> tuple[int, int]:
+            return 640, 980
+
+        def scroll_wheel(self, ticks: int, **kwargs) -> None:
+            self.calls.append((ticks, kwargs))
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def perceive(self):
+            return scene
+
+    phone = IPadWheelPhone()
+
+    outcome, after = settings_scrolling.scroll_down_confirmed(
+        phone,
+        ["Settings", "General", "Accessibility"],
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        texts=lambda observed: [element.text for element in observed.elements if element.text],
+        depth=0,
+        idx=0,
+    )
+
+    assert outcome == "stuck"
+    assert after is scene
+    assert len(phone.calls) == 1
+
 
 @pytest.mark.smoke
 def test_settings_wheel_scroll_honors_env_ticks(monkeypatch):
