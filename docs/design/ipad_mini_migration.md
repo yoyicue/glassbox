@@ -168,6 +168,16 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   yet. Acceptance should continue to come from visible sidebar rows, title-checked
   top-search fallback, and graph/search recovery until a new HID path proves
   semantic scroll movement.
+- A follow-up public quick drill after disabling iPad default wheel and
+  swipe-drag fallback
+  (`/private/tmp/ipad-settings-quick-drill-noswipe-1.json`) passed verification
+  with no scroll events recorded. It foregrounded Settings, opened root/detail
+  pages for `WLAN`, `Battery`, `General`, `Accessibility`, plus visible extra
+  roots `Apple Pencil` and `Camera`, and stopped at depth 1 (`max_pages`/`max_depth`)
+  without entering app authorization panels. `WLAN` was recorded as a blocked
+  dynamic Wi-Fi page, navigation failures were empty, and
+  `navigation_success_proxy_rate=1.0`. This proves the no-wheel path still
+  supports safe visible-row/root-detail traversal, not exhaustive coverage.
 - Split-view Settings child traversal is now policy-modeled separately from root
   coverage: root scans emit only left-sidebar rows, while depth>0 child scans emit
   only right-detail-pane rows and require a right-pane navigation affordance for
