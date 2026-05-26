@@ -427,6 +427,7 @@ BLOCKED_CHILD_NAVIGATION_MARKERS = (
     ("Notifications", ("Allow Notifications", "Immediate Delivery", "Alerts", "Sounds", "Badges"), "Notification app selector/toggle rows"),
     ("显示预览", ("始终", "解锁时", "永不"), "Notification preview selector rows"),
     ("Show Previews", ("Always", "When Unlocked", "Never"), "Notification preview selector rows"),
+    ("Camera", ("Apps that have requested access to the camera", "App Clips"), "app permission/access selector rows"),
     ("隔空投送", ("接收关闭", "仅限联系人", "所有人（10分钟）"), "AirDrop selector rows"),
     ("AirDrop", ("Receiving Off", "Contacts Only", "Everyone"), "AirDrop selector rows"),
 )

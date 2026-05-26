@@ -237,6 +237,19 @@ def test_ipad_settings_policy_blocks_game_center_onboarding_children():
 @pytest.mark.smoke
 def test_ipad_settings_policy_blocks_app_permission_access_children():
     policy = IPadSettingsPolicy()
+    camera = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 34, 90, w=72, h=18),
+            _el("Camera", 420, 44, w=62, h=12),
+            _el("Photos and videos taken with the camera may contain other", 280, 106, w=320, h=12),
+            _el("Apps that have requested access to the camera will", 280, 160, w=320, h=12),
+            _el("appear here.", 280, 180, w=86, h=12),
+            _el("App Clips", 314, 230, w=72, h=16),
+        ],
+    )
     weather = Scene(
         frame_id=0,
         timestamp=0.0,
@@ -264,6 +277,8 @@ def test_ipad_settings_policy_blocks_app_permission_access_children():
         ],
     )
 
+    assert policy.blocked_child_navigation_reason(camera) == "app permission/access selector rows"
+    assert policy.safe_navigation_candidates(camera) == []
     assert policy.blocked_child_navigation_reason(weather) == "app permission/access selector rows"
     assert policy.safe_navigation_candidates(weather) == []
     assert policy.blocked_child_navigation_reason(location) == "app permission/access selector rows"

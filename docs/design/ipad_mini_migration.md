@@ -509,11 +509,17 @@ top-left point.
   `/private/tmp/ipad-settings-extra-child-safari-1.json` can reach
   `Settings > Safari > Siri`, while Weather's first child path reaches a
   Location permission selector (`/private/tmp/ipad-weather-location-inspect-1.json`).
-  Those are not good evidence for broad read-only Settings traversal on a
-  not-yet-authorized device. The policy now blocks the observed Safari/Weather
-  `Allow ... to Access` panels and `Allow Location Access` selector pages as app
-  permission/access rows; future broader child samples should prefer
-  settings-native, read-only pages.
+  A Camera broad-child attempt
+  (`/private/tmp/ipad-settings-camera-broad-child-1.json`) similarly reached the
+  fresh-install/privacy `Camera > App Clips` access page, not the Camera app
+  recording settings page. Those are not good evidence for broad read-only
+  Settings traversal on a not-yet-authorized device. The policy now blocks the
+  observed Safari/Weather/Camera permission-access panels and `Allow Location
+  Access` selector pages as app permission/access rows; a follow-up read-only
+  check (`/private/tmp/ipad-settings-camera-permission-block-readonly-1.json`)
+  opens only the Camera detail page, records
+  `app permission/access selector rows`, and exposes `safe_candidate_texts=[]`.
+  Future broader child samples should prefer settings-native, read-only pages.
 - A settings-native blocked-target follow-up
   (`/private/tmp/ipad-settings-extra-blocked-native-1.json`) now turns four
   previously root-only pages into explicit read-only stop points:
