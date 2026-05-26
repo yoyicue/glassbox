@@ -263,6 +263,15 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   (`navigation_success_proxy_rate=1.0`). The run is bounded by
   `max_candidates_per_page`/`max_depth`, so it is still sample coverage, not
   exhaustive Settings inventory.
+- An Accessibility multi-child audit
+  (`/private/tmp/ipad-settings-accessibility-broad-child-1.json`) now passes on
+  hardware as a broader shared-root sample. It opens `Settings > Accessibility`,
+  then reaches and returns from five Settings-native child pages (`Zoom`,
+  `Hover Text`, `Audio Descriptions`, `Switch Control`, and `Voice Control`)
+  without target failures, hard traversal limits, blocked pages, navigation
+  failures, or known issues (`navigation_success_proxy_rate=1.0`). This extends
+  the earlier all-nine child proof, which only sampled one Accessibility child,
+  while still remaining bounded by `max_candidates_per_page`/`max_depth`.
 - A blocked-target child audit
   (`/tmp/ipad-settings-child-audit-blocked-3-1.json`) now proves the remaining
   actionable shared roots on this iPad profile are handled conservatively:
@@ -550,9 +559,9 @@ top-left point.
   actionable shared roots plus these first fourteen extra top-level pages and six
   explicit blocked stop points, and keep stale-detail/return semantics under
   real multi-level pages without turning the policy into a page-specific rule
-  list. The General, Display & Brightness, and Sounds & Haptics broad-child
-  passes reduce this risk but do not make the whole iPad Settings child
-  inventory exhaustive.
+  list. The General, Accessibility, Display & Brightness, and Sounds & Haptics
+  broad-child passes reduce this risk but do not make the whole iPad Settings
+  child inventory exhaustive.
 
 ### 3. Scene classifier / safe-area / springboard: pervasive single-column geometry
 Under-stated previously — the iPhone single-column assumption was not confined to
@@ -605,11 +614,11 @@ only when adapter/cabling/profile changes.
 
 Core stayed; the iPad profile and iPadOS platform baseline now exist and are
 hardware-proved for Settings root coverage, nine-root split-view child
-traversal, broader General, Display & Brightness, and Sounds & Haptics child
-samples, three additional safe-blocked Settings roots, fourteen extra safe
-top-level Settings pages beyond the shared-root gate, six extra pages that now
-stop as explicit read-only blocked targets, keyboard Home, native pointer taps,
-and visible/multi-page Home-icon foregrounding.
+traversal, broader General, Accessibility, Display & Brightness, and Sounds &
+Haptics child samples, three additional safe-blocked Settings roots, fourteen
+extra safe top-level Settings pages beyond the shared-root gate, six extra
+pages that now stop as explicit read-only blocked targets, keyboard Home,
+native pointer taps, and visible/multi-page Home-icon foregrounding.
 
 The remaining work is narrower but still real: do not promote wheel scrolling
 until semantic movement is observed, do not claim arbitrary iPad SpringBoard
