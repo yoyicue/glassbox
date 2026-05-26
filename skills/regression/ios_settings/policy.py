@@ -422,6 +422,18 @@ BLOCKED_CHILD_NAVIGATION_MARKERS = (
         ("Never", "Ask Next Time", "While Using", "Always", "Precise Location"),
         "app permission/access selector rows",
     ),
+    ("Control Centre", ("Customise Control Centre", "Reset Control Centre"), "control centre customization/reset rows"),
+    ("Wallpaper", ("Customise", "Add New Wallpaper", "Lock Screen"), "wallpaper customization rows"),
+    (
+        "Home Screen & App Library",
+        ("Newly Downloaded Apps", "Add to Home Screen", "App Library Only", "Use Large App Icons"),
+        "home screen layout selector rows",
+    ),
+    (
+        "Multitasking & Gestures",
+        ("Full-Screen Apps", "Windowed Apps", "Stage Manager"),
+        "multitasking layout selector rows",
+    ),
     ("Touch ID & Passcode", ("Use Touch ID For", "Fingerprints", "Turn Passcode On", "Change Passcode"), "passcode and biometric settings"),
     ("Face ID & Passcode", ("Use Face ID For", "Face ID", "Turn Passcode On", "Change Passcode"), "passcode and biometric settings"),
     ("电池", ("充电上限", "优化电池充电", "电池百分比"), "Battery selector/toggle rows"),

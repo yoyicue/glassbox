@@ -466,6 +466,16 @@ top-left point.
   `Allow ... to Access` panels and `Allow Location Access` selector pages as app
   permission/access rows; future broader child samples should prefer
   settings-native, read-only pages.
+- A settings-native blocked-target follow-up
+  (`/private/tmp/ipad-settings-extra-blocked-native-1.json`) now turns four
+  previously root-only pages into explicit read-only stop points:
+  `Control Centre` (`control centre customization/reset rows`), `Wallpaper`
+  (`wallpaper customization rows`), `Home Screen & App Library`
+  (`home screen layout selector rows`), and `Multitasking & Gestures`
+  (`multitasking layout selector rows`). The report passes with all four target
+  roots opened, all four covered by `target_roots_blocked`, no target failures,
+  no limits, no known issues, `return_root_failed=false`, and
+  `navigation_success_proxy_rate=1.0`.
 - Remaining: keep broadening Settings sampling beyond the current twelve
   actionable shared roots plus these first fourteen extra top-level pages, and keep
   stale-detail/return semantics under real multi-level pages without turning the
@@ -523,8 +533,9 @@ only when adapter/cabling/profile changes.
 Core stayed; the iPad profile and iPadOS platform baseline now exist and are
 hardware-proved for Settings root coverage, nine-root split-view child
 traversal, three additional safe-blocked Settings roots, fourteen extra safe
-top-level Settings pages beyond the shared-root gate, keyboard Home, native
-pointer taps, and visible/multi-page Home-icon foregrounding.
+top-level Settings pages beyond the shared-root gate, four settings-native
+extra pages that now stop as explicit read-only blocked targets, keyboard Home,
+native pointer taps, and visible/multi-page Home-icon foregrounding.
 
 The remaining work is narrower but still real: do not promote wheel scrolling
 until semantic movement is observed, do not claim arbitrary iPad SpringBoard

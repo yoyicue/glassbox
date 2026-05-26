@@ -271,6 +271,66 @@ def test_ipad_settings_policy_blocks_app_permission_access_children():
 
 
 @pytest.mark.smoke
+def test_ipad_settings_policy_blocks_settings_native_layout_customization_pages():
+    policy = IPadSettingsPolicy()
+    control_centre = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Control Centre", 420, 44, w=112, h=16),
+            _el("Customise Control Centre", 280, 130, w=176, h=14),
+            _el("Access Within Apps", 280, 310, w=136, h=14),
+            _el("Reset Control Centre", 280, 430, w=140, h=14),
+        ],
+    )
+    wallpaper = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Wallpaper", 420, 44, w=84, h=16),
+            _el("CURRENT", 310, 116, w=66, h=12),
+            _el("Customise", 300, 260, w=74, h=14),
+            _el("+Add New Wallpaper", 300, 540, w=150, h=14),
+            _el("Lock Screen", 300, 650, w=90, h=14),
+        ],
+    )
+    home_screen = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Home Screen & App Library", 360, 44, w=200, h=16),
+            _el("Use Large App Icons", 300, 170, w=142, h=14),
+            _el("Newly Downloaded Apps", 300, 260, w=172, h=14),
+            _el("Add to Home Screen", 320, 310, w=140, h=14),
+            _el("App Library Only", 320, 360, w=122, h=14),
+        ],
+    )
+    multitasking = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Multitasking & Gestures", 360, 44, w=190, h=16),
+            _el("Full-Screen Apps", 300, 120, w=130, h=14),
+            _el("Windowed Apps", 300, 260, w=118, h=14),
+            _el("Stage Manager", 300, 400, w=116, h=14),
+        ],
+    )
+
+    assert policy.blocked_child_navigation_reason(control_centre) == "control centre customization/reset rows"
+    assert policy.safe_navigation_candidates(control_centre) == []
+    assert policy.blocked_child_navigation_reason(wallpaper) == "wallpaper customization rows"
+    assert policy.safe_navigation_candidates(wallpaper) == []
+    assert policy.blocked_child_navigation_reason(home_screen) == "home screen layout selector rows"
+    assert policy.safe_navigation_candidates(home_screen) == []
+    assert policy.blocked_child_navigation_reason(multitasking) == "multitasking layout selector rows"
+    assert policy.safe_navigation_candidates(multitasking) == []
+
+
+@pytest.mark.smoke
 def test_ipad_detail_child_accepts_trailing_value_disclosure_affordance():
     policy = IPadSettingsPolicy()
     scene = Scene(
