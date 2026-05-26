@@ -8,11 +8,16 @@ into a growing rule repository.
 
 from __future__ import annotations
 
+import argparse
+import contextlib
 import json
-from collections.abc import Iterable
+import os
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+from glassbox.config import get_config
+from glassbox.runtime import RuntimeUnavailable, build_phone, make_source
 from skills.regression.ios_settings import crawler as settings_crawler
 from skills.regression.ios_settings import reporting as settings_reporting
 
@@ -405,3 +410,105 @@ def write_report(report: dict[str, Any], path: str | Path | None) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@contextlib.contextmanager
+def _temporary_env(env: dict[str, str]) -> Iterator[None]:
+    previous = os.environ.copy()
+    try:
+        os.environ.clear()
+        os.environ.update(env)
+        get_config.cache_clear()
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(previous)
+        get_config.cache_clear()
+
+
+def _run_live_child_audit(args: argparse.Namespace) -> int:
+    report_path = args.report.expanduser().resolve()
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    if report_path.exists():
+        report_path.unlink()
+
+    env = dict(os.environ)
+    env["PYTHONUNBUFFERED"] = "1"
+    env.setdefault("GLASSBOX_PICOKVM", "1")
+    env.setdefault("IOS_SETTINGS_TRACE_ACTIONS", "1")
+    if args.language is not None:
+        env["GLASSBOX_LANGUAGE"] = args.language
+    if args.region is not None:
+        env["GLASSBOX_REGION"] = args.region
+    if args.phone_model is not None:
+        env["GLASSBOX_PHONE_MODEL"] = args.phone_model
+    if args.platform is not None:
+        env["GLASSBOX_PLATFORM"] = args.platform
+
+    runtime = None
+    source = None
+    try:
+        with _temporary_env(env):
+            cfg = get_config()
+            source = make_source(cfg=cfg)
+            runtime = build_phone(source=source, cfg=cfg)
+            report = probe_high_value_child_audit(
+                runtime.phone,
+                target_root_labels=tuple(args.target_root),
+                max_depth=args.max_depth,
+                max_pages=args.max_pages,
+                max_child_scrolls_per_page=args.max_child_scrolls_per_page,
+                max_candidates_per_page=args.max_candidates_per_page,
+                strict_child_candidate_audit=args.strict_child_candidate_audit,
+                allow_blocked_target_roots=args.allow_blocked_target_roots,
+                allow_root_only_target_roots=args.allow_root_only_target_roots,
+            )
+    except (RuntimeUnavailable, settings_crawler.SettingsCrawlerUnavailable) as exc:
+        print(f"ERROR: {exc}")
+        return 1
+    finally:
+        if runtime is not None:
+            runtime.close(close_source=True)
+        elif source is not None and hasattr(source, "close"):
+            with contextlib.suppress(Exception):
+                source.close()
+
+    write_report(report, report_path)
+    print(f"report: {report_path}")
+    print(f"status: {report['status']}")
+    return 0 if report["status"] == "passed" else 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run a bounded iOS Settings child audit")
+    parser.add_argument(
+        "--report",
+        type=Path,
+        default=Path("/tmp/ios-settings-child-audit.json"),
+        help="JSON report path written by the probe.",
+    )
+    parser.add_argument(
+        "--target-root",
+        action="append",
+        default=[],
+        help="Settings root label to audit. Repeat for multiple roots. Defaults to the built-in high-value pair.",
+    )
+    parser.add_argument("--max-depth", type=int, default=2)
+    parser.add_argument("--max-pages", type=int, default=24)
+    parser.add_argument("--max-child-scrolls-per-page", type=int, default=1)
+    parser.add_argument("--max-candidates-per-page", type=int, default=2)
+    parser.add_argument("--strict-child-candidate-audit", action="store_true")
+    parser.add_argument("--allow-blocked-target-roots", action="store_true")
+    parser.add_argument("--allow-root-only-target-roots", action="store_true")
+    parser.add_argument("--language", default=None)
+    parser.add_argument("--region", default=None)
+    parser.add_argument("--phone-model", default=None)
+    parser.add_argument("--platform", default=None)
+    args = parser.parse_args(argv)
+    if not args.target_root:
+        args.target_root = list(DEFAULT_TARGET_ROOT_LABELS)
+    return _run_live_child_audit(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

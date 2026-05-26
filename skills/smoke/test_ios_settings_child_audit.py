@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from glassbox.cognition import Box, Scene, UIElement
 from skills.regression.ios_settings import child_audit
 from skills.regression.ios_settings import crawler as settings_crawler
@@ -314,3 +316,52 @@ def test_root_only_single_target_can_start_from_already_open_page(monkeypatch):
     assert [visit.path for visit in result.visits] == [("Settings", "Wallpaper")]
     assert result.return_root_failed is False
     assert visits == []
+
+
+def test_child_audit_cli_writes_report_with_requested_roots(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+
+    class Runtime:
+        phone = object()
+
+        def close(self, *, close_source: bool = False):
+            captured["closed"] = close_source
+
+    def fake_probe(phone, **kwargs):
+        captured["phone"] = phone
+        captured.update(kwargs)
+        return {
+            "status": "passed",
+            "target_root_labels": list(kwargs["target_root_labels"]),
+            "metrics": {},
+        }
+
+    monkeypatch.setattr(child_audit, "make_source", lambda *, cfg: object())
+    monkeypatch.setattr(child_audit, "build_phone", lambda *, source, cfg: Runtime())
+    monkeypatch.setattr(child_audit, "probe_high_value_child_audit", fake_probe)
+
+    report_path = tmp_path / "child-audit.json"
+    rc = child_audit.main([
+        "--report", str(report_path),
+        "--target-root", "Apple Pencil",
+        "--max-depth", "1",
+        "--max-pages", "5",
+        "--max-child-scrolls-per-page", "0",
+        "--max-candidates-per-page", "0",
+        "--allow-root-only-target-roots",
+        "--language", "en",
+        "--region", "HK",
+        "--phone-model", "ipad_mini_7",
+        "--platform", "ipados",
+    ])
+
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert rc == 0
+    assert payload["target_root_labels"] == ["Apple Pencil"]
+    assert captured["target_root_labels"] == ("Apple Pencil",)
+    assert captured["max_depth"] == 1
+    assert captured["max_pages"] == 5
+    assert captured["max_child_scrolls_per_page"] == 0
+    assert captured["max_candidates_per_page"] == 0
+    assert captured["allow_root_only_target_roots"] is True
+    assert captured["closed"] is True
