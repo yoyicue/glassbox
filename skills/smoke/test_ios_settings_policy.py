@@ -98,6 +98,45 @@ def test_ipad_settings_policy_uses_detail_pane_for_child_navigation():
 
 
 @pytest.mark.smoke
+def test_ipad_settings_policy_rejects_screen_time_duration_metrics_as_child_rows():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Search", 58, 89, w=48, h=15),
+            _el("Screen Time", 406, 44, w=88, h=14),
+            _el("All Devices", 282, 103, w=76, h=15),
+            _el("Daily Average", 282, 142, w=90, h=14),
+            _el("55h 56m", 280, 162, w=118, h=26, ty="button"),
+            _el("29h", 586, 240, w=24, h=10),
+            _el("See All App & WebsiteActivity", 280, 332, w=202, h=14),
+            _el("Limit Usage", 278, 428, w=86, h=16),
+            _el("Downtime", 320, 457, w=66, h=12),
+            _el("Schedule time away from the screen", 318, 478, w=216, h=12),
+            _el("App Limits", 316, 509, w=74, h=17),
+            _el("Set time limits for apps", 318, 529, w=138, h=14),
+            _el("Always Allowed", 318, 563, w=102, h=14),
+            _el("Choose apps to allow at all times", 318, 583, w=196, h=12),
+        ],
+    )
+
+    labels = [
+        (candidate.text or "").strip()
+        for candidate in policy.safe_navigation_candidates(
+            scene,
+            allow_sensitive_root_labels=False,
+            allow_known_without_affordance=False,
+        )
+    ]
+
+    assert "55h 56m" not in labels
+    assert "29h" not in labels
+    assert labels[:2] == ["Downtime", "App Limits"]
+
+
+@pytest.mark.smoke
 def test_ipad_detail_unknown_child_requires_right_pane_affordance():
     policy = IPadSettingsPolicy()
     scene_without_chevron = Scene(

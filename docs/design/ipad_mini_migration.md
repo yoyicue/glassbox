@@ -614,11 +614,21 @@ top-left point.
 - Screen Time has the same fresh-install boundary at `Always Allowed`: the page
   is an allowed-apps selector, not useful read-only Settings structure on a
   not-yet-authorized iPad. The policy now excludes that row from child
-  candidates. A broader follow-up
+  candidates. It also rejects dashboard duration metrics such as `55h 56m` and
+  `29h` as child rows, so Screen Time statistics are not tapped as navigation.
+  A broader follow-up
   (`/private/tmp/ipad-settings-screen-time-broad-child-2.json`) reached the
   settings-native `Downtime` and `App Limits` child pages, then failed only when
   continuing into lower Screen Time rows that did not transition on this device;
-  do not count that report as a passing broad-child sample.
+  do not count that report as a passing broad-child sample. A bounded
+  fresh-device-safe sample
+  (`/private/tmp/ipad-settings-screen-time-two-child-2.json`) now runs with
+  `--assume-settings-open`, reaches `Settings > Screen Time > Downtime` and
+  `Settings > Screen Time > App Limits`, and passes with `target_failures=[]`,
+  `target_roots_missing_child=[]`, `limits_hit=[]`, no known issues, no
+  navigation failures, and `navigation_success_proxy_rate=1.0`. This is
+  positive evidence for the first two settings-native Screen Time children, not
+  exhaustive Screen Time inventory.
 - A settings-native blocked-target follow-up
   (`/private/tmp/ipad-settings-extra-blocked-native-1.json`) now turns four
   previously root-only pages into explicit read-only stop points:

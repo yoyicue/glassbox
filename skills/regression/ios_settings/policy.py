@@ -493,6 +493,20 @@ def _blocked_child_navigation_reason_from_texts(
     return None
 
 
+def _looks_like_duration_metric(text: str) -> bool:
+    value = (text or "").strip()
+    if not value:
+        return False
+    return bool(
+        re.fullmatch(
+            r"\d+\s*(?:h|hr|hrs|hour|hours|m|min|mins|minute|minutes)"
+            r"(?:\s+\d+\s*(?:h|hr|hrs|hour|hours|m|min|mins|minute|minutes))*",
+            value,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
 class PageVisitLike(Protocol):
     path: tuple[str, ...]
 
@@ -1078,6 +1092,8 @@ class SettingsPolicy:
             return None
         if re.fullmatch(r"[\d\s%％.,/:-]+", text):
             return None
+        if _looks_like_duration_metric(text):
+            return None
         if len(text) <= 2 and text.isascii() and not self.is_safe_known_navigation_label(text):
             return None
         if text.isascii() and not text[0].isalnum() and not self.is_safe_known_navigation_label(text):
@@ -1629,6 +1645,8 @@ class IPadSettingsPolicy(SettingsPolicy):
             return None
         if re.fullmatch(r"[\d\s%％.,/:-]+", text):
             return None
+        if _looks_like_duration_metric(text):
+            return None
         if len(text) <= 2 and text.isascii() and not self.is_safe_known_navigation_label(text):
             return None
         if text.isascii() and not text[0].isalnum() and not self.is_safe_known_navigation_label(text):
@@ -1660,6 +1678,8 @@ class IPadSettingsPolicy(SettingsPolicy):
         if len(text) <= 1 or text.replace(":", "").isdigit():
             return None
         if re.fullmatch(r"[\d\s%％.,/:-]+", text):
+            return None
+        if _looks_like_duration_metric(text):
             return None
         if len(text) <= 2 and text.isascii() and not self.is_safe_known_navigation_label(text):
             return None
