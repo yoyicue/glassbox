@@ -7,6 +7,7 @@ import pytest
 
 from glassbox.cognition import Box, Scene, UIElement
 from glassbox.ios.scene import apply_ios_classification, classify_ios_scene
+from glassbox.ipados.scene import classify_ipados_scene
 
 _GOLDEN_IOS_SCENE_DIR = Path(__file__).parents[1] / "golden" / "ios_scene" / "drill_aftersim"
 
@@ -551,6 +552,36 @@ def test_ios_scene_classifier_settings_app_list_is_not_springboard():
 
     assert classified.kind == "settings_detail"
     assert "back" in classified.safe_actions
+
+
+@pytest.mark.smoke
+def test_ipados_scene_classifier_weather_settings_search_detail_is_not_springboard():
+    scene = _scene(
+        _el("4 Search 5:32PM Tue 26 May", 16, 10, w=170, h=18, ty="status_bar"),
+        _el("Weather", 34, 88, w=72),
+        _el("Weather", 72, 142, w=58),
+        _el("Apps", 72, 176, w=34),
+        _el("Weather Conditions", 72, 210, w=144),
+        _el("Apps → Weather", 72, 278, w=118),
+        _el("<", 276, 46, w=14, h=18),
+        _el("Weather", 420, 44, w=70),
+        _el("Allow Weather to Access", 300, 108, w=172),
+        _el("Location", 320, 154, w=64),
+        _el("While Using >", 500, 154, w=98),
+        _el("Siri", 320, 206, w=30),
+        _el("Search", 320, 250, w=54),
+        _el("Preferred Language", 344, 306, w=138),
+        _el("Temperature Unit", 344, 416, w=130),
+        _el("Choose how temperature should be displayed in the Weather", 344, 540, w=260),
+    )
+    scene.viewport_size = (640, 989)
+
+    classified = classify_ipados_scene(scene)
+
+    assert classified.kind == "settings_search_results"
+    assert classified.title == "Weather"
+    assert "ipad_settings_top_search" in classified.evidence
+    assert any(item.startswith("settings_search_path_hints:") for item in classified.evidence)
 
 
 @pytest.mark.smoke

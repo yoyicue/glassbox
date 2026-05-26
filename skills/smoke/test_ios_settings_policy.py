@@ -555,12 +555,13 @@ def test_extra_top_level_pages_are_safe_known_not_unknown_candidates():
         "Home Screen & App Library", "Home Screen &", "App Library",
         "主屏幕与 App 资源库", "App 资源库",
         "Safari", "Safari浏览器", "FaceTime", "FaceTime 通话",
-        "Apps", "Game Center",
+        "Apps", "Game Center", "Weather",
     ):
         assert DEFAULT_SETTINGS_POLICY.is_safe_known_navigation_label(label), label
     assert DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text("App")
     assert not DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text("Apps")
     assert not DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text("Game Center")
+    assert not DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text("Weather")
     scene = _scene(
         _el("设置", 198, 72, w=48),
         _el("Camera", 80, 500, w=70),
@@ -573,7 +574,8 @@ def test_extra_top_level_pages_are_safe_known_not_unknown_candidates():
         _el("App Library", 80, 835, w=92),
         _el("Apps", 80, 855, w=60),
         _el("Game Center", 80, 865, w=90),
-        _el("Frobnicate", 80, 875, w=90),
+        _el("Weather", 80, 875, w=70),
+        _el("Frobnicate", 80, 884, w=90),
     )
     rejected = DEFAULT_SETTINGS_POLICY.rejected_candidate_rows(
         scene,
@@ -925,6 +927,7 @@ def test_settings_policy_uses_english_root_search_queries_for_english_locale(mon
         assert policy.root_search_query("FaceTime") == "FaceTime"
         assert policy.root_search_query("Apps") == "Apps"
         assert policy.root_search_query("Game Center") == "Game Center"
+        assert policy.root_search_query("Weather") == "Weather"
         assert policy.root_search_query("Home Screen & App Library") == "Home Screen"
         assert policy.canonical_expected_root_label("Sounds") == "声音与触感"
         assert policy.canonical_expected_root_label("All Devices") == "屏幕使用时间"

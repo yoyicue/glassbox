@@ -187,6 +187,76 @@ def test_open_root_label_via_search_clears_ipad_top_search_after_root_open(monke
 
 
 @pytest.mark.smoke
+def test_open_root_label_via_search_uses_existing_ipad_search_hit_before_typing(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+    search_scene = _scene(
+        _el("Q Search", 34, 90, w=72),
+        _el("Weather", 72, 142, w=58, ty="button"),
+    )
+    dirty_detail = _scene(
+        _el("Q Weather", 34, 90, w=92),
+        _el("Weather", 404, 44, w=70),
+    )
+    clean_detail = _scene(
+        _el("Q Search", 34, 90, w=72),
+        _el("Weather", 404, 44, w=70),
+    )
+
+    class SearchPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self) -> None:
+            self.scene = search_scene
+            self.clear_calls = 0
+            self.typed: list[str] = []
+            self.taps: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def type(self, query: str):
+            self.typed.append(query)
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            self.scene = dirty_detail
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+    phone = SearchPhone()
+
+    def clear_search(clear_phone):
+        clear_phone.clear_calls += 1
+        if clear_phone.scene is dirty_detail:
+            clear_phone.scene = clean_detail
+        return True
+
+    actions = SimpleNamespace(
+        root_search_query=lambda label: "Weather" if label == "Weather" else None,
+        enter_settings_search=lambda _phone: True,
+        clear_settings_search=clear_search,
+        tap_search_field=lambda _phone, _scene: True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        record_action_verdict=lambda _phone, _result: True,
+        find_search_result=lambda scene, label: scene.elements[1] if scene is search_scene and label == "Weather" else None,
+        find_search_query_suggestion=lambda _scene, _label: None,
+        is_settings_search_scene=lambda scene: scene is search_scene or scene is dirty_detail,
+        scene_is_settings_root=lambda _scene: False,
+        page_title=lambda scene: "Weather" if scene is dirty_detail or scene is clean_detail else "Search",
+        canonical_expected_root_label=lambda _text: None,
+    )
+
+    assert settings_navigation.open_root_label_via_search(phone, "Weather", actions)
+    assert phone.typed == []
+    assert phone.taps == [search_scene.elements[1].box.center]
+    assert phone.clear_calls == 2
+    assert phone.scene is clean_detail
+
+
+@pytest.mark.smoke
 def test_open_root_label_via_search_waits_for_delayed_results(monkeypatch):
     monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
     search_scene = _scene(_el("Q Battery", 54, 90, w=72))

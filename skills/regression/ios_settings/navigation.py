@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from glassbox.cognition import Box, UIElement
+from glassbox.cognition.text_match import compact_text
 from glassbox.ios.progress import is_time_text
 from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings import reporting as settings_reporting
@@ -97,6 +98,18 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
             if _is_ipad_target(phone):
                 phone._ios_settings_search_unavailable = True
             return False
+        if _is_ipad_target(phone):
+            scene = phone.perceive()
+            if actions.is_settings_search_scene(scene):
+                hit = actions.find_search_result(scene, label)
+                if hit is not None and _tap_search_result(
+                    phone,
+                    label,
+                    hit,
+                    actions,
+                    intent_name="settings_search.tap_existing_root_result",
+                ):
+                    return True
         scene = phone.perceive()
         if not actions.tap_search_field(phone, scene):
             return False
@@ -159,38 +172,67 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
             )
         if hit is None:
             continue
-        cx, cy = hit.box.center
-        with actions.action_intent(
+        if _tap_search_result(
             phone,
-            "settings_search.tap_root_result",
-            label=label,
-            text=hit.text,
-            x=cx,
-            y=cy,
+            label,
+            hit,
+            actions,
+            intent_name="settings_search.tap_root_result",
         ):
-            result = phone.tap_xy(cx, cy)
-        if not actions.record_action_verdict(phone, result):
-            return False
-        time.sleep(1.2)
-        phone.invalidate_perceive_cache()
-        opened = phone.perceive()
-        opened_label = actions.canonical_expected_root_label(actions.page_title(opened))
-        requested_label = actions.canonical_expected_root_label(label) or label
-        if opened_label == requested_label:
-            if _is_ipad_target(phone) and actions.is_settings_search_scene(opened):
-                if not actions.clear_settings_search(phone):
-                    return False
-                time.sleep(0.8)
-                with contextlib.suppress(Exception):
-                    phone.invalidate_perceive_cache()
-                settled = phone.perceive()
-                return actions.canonical_expected_root_label(actions.page_title(settled)) == requested_label
-            return True
-        if _is_ipad_target(phone):
-            continue
-        if not actions.is_settings_search_scene(opened) and not actions.scene_is_settings_root(opened):
             return True
     return False
+
+
+def _tap_search_result(
+    phone,
+    label: str,
+    hit: UIElement,
+    actions: SettingsNavigationActions,
+    *,
+    intent_name: str,
+) -> bool:
+    cx, cy = hit.box.center
+    with actions.action_intent(
+        phone,
+        intent_name,
+        label=label,
+        text=hit.text,
+        x=cx,
+        y=cy,
+    ):
+        result = phone.tap_xy(cx, cy)
+    if not actions.record_action_verdict(phone, result):
+        return False
+    time.sleep(1.2)
+    phone.invalidate_perceive_cache()
+    opened = phone.perceive()
+    if _scene_title_matches_requested_label(opened, label, actions):
+        if _is_ipad_target(phone) and actions.is_settings_search_scene(opened):
+            if not actions.clear_settings_search(phone):
+                return False
+            time.sleep(0.8)
+            with contextlib.suppress(Exception):
+                phone.invalidate_perceive_cache()
+            return _scene_title_matches_requested_label(phone.perceive(), label, actions)
+        return True
+    if _is_ipad_target(phone):
+        return False
+    return not actions.is_settings_search_scene(opened) and not actions.scene_is_settings_root(opened)
+
+
+def _scene_title_matches_requested_label(
+    scene,
+    label: str,
+    actions: SettingsNavigationActions,
+) -> bool:
+    title = actions.page_title(scene)
+    opened_label = actions.canonical_expected_root_label(title)
+    requested_label = actions.canonical_expected_root_label(label) or label
+    if opened_label == requested_label:
+        return True
+    if opened_label is not None:
+        return False
+    return compact_text(title).casefold() == compact_text(label).casefold()
 
 
 def _wait_for_search_result_or_suggestion(

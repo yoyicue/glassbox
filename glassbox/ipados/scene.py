@@ -200,6 +200,7 @@ def _settings_top_search_evidence(
     edit_menu = False
     no_results = False
     right_pane_items = 0
+    result_path_hints = 0
     for el in scene.elements:
         text = _text(el)
         if not text or el.type == "status_bar":
@@ -228,14 +229,20 @@ def _settings_top_search_evidence(
             or "没有结果" in text
         ):
             no_results = True
+        if cx <= right + 24 and h * 0.12 <= cy <= h * 0.65 and re.search(r"(?:→|>|›|＞)", text):
+            result_path_hints += 1
         if cx > right and h * 0.05 <= cy <= h * 0.96:
             right_pane_items += 1
-    top_search = top_search_affordance or (top_query_text and (edit_menu or no_results))
+    top_search = top_search_affordance or (
+        top_query_text and (edit_menu or no_results or result_path_hints > 0)
+    )
     if not top_search:
         return ()
     evidence: list[str] = []
     if no_results:
         evidence.append("settings_search_no_results")
+    if result_path_hints:
+        evidence.append(f"settings_search_path_hints:{min(result_path_hints, 4)}")
     if right_pane_items >= 3:
         evidence.append(f"settings_detail_pane_visible:{min(right_pane_items, 6)}")
     return tuple(evidence) if evidence else ()

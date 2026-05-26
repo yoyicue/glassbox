@@ -89,6 +89,7 @@ SAFE_NAV_TEXT = (
     "FaceTime 通话", "FaceTime",
     "Apps",
     "Game Center",
+    "Weather",
     "关于本机", "About",
     "软件更新", "Software Update",
     "iPhone 储存空间", "iPhone Storage",
@@ -285,6 +286,7 @@ IPAD_EXTRA_TOP_LEVEL_ROOT_SEARCH_QUERIES_EN = {
     "FaceTime 通话": "FaceTime",
     "Apps": "Apps",
     "Game Center": "Game Center",
+    "Weather": "Weather",
 }
 
 NAV_TITLE_ALIASES = {
