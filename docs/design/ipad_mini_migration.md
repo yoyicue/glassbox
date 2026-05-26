@@ -244,6 +244,15 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   returned to its parent, a final strict settle check catches late iPad back
   animations, and non-returnable/purchase-or-selector child labels such as
   `AppleCare & Warranty` and `AirDrop` are not entered as broad child samples.
+- A Display & Brightness multi-child audit
+  (`/private/tmp/ipad-settings-display-brightness-broad-child-1.json`) now
+  passes on hardware as another settings-native broad sample. It opens
+  `Settings > Display & Brightness`, reaches `Liquid Glass` and `Night Shift`,
+  and returns without target failures, traversal limits, blocked pages,
+  navigation failures, or known issues (`navigation_success_proxy_rate=1.0`).
+  This is narrower than the General broad-child pass, but it independently
+  proves right-pane child selection and return on a non-shared extra top-level
+  Settings page.
 - A blocked-target child audit
   (`/tmp/ipad-settings-child-audit-blocked-3-1.json`) now proves the remaining
   actionable shared roots on this iPad profile are handled conservatively:
@@ -517,8 +526,8 @@ top-left point.
   actionable shared roots plus these first fourteen extra top-level pages and six
   explicit blocked stop points, and keep stale-detail/return semantics under
   real multi-level pages without turning the policy into a page-specific rule
-  list. The General broad-child pass reduces this risk but does not make the
-  whole iPad Settings child inventory exhaustive.
+  list. The General and Display & Brightness broad-child passes reduce this risk
+  but do not make the whole iPad Settings child inventory exhaustive.
 
 ### 3. Scene classifier / safe-area / springboard: pervasive single-column geometry
 Under-stated previously — the iPhone single-column assumption was not confined to
@@ -571,11 +580,11 @@ only when adapter/cabling/profile changes.
 
 Core stayed; the iPad profile and iPadOS platform baseline now exist and are
 hardware-proved for Settings root coverage, nine-root split-view child
-traversal, a broader five-child General native-page sample, three additional
-safe-blocked Settings roots, fourteen extra safe top-level Settings pages beyond
-the shared-root gate, six extra pages that now stop as explicit read-only
-blocked targets, keyboard Home, native pointer taps, and visible/multi-page
-Home-icon foregrounding.
+traversal, broader General and Display & Brightness native-page child samples,
+three additional safe-blocked Settings roots, fourteen extra safe top-level
+Settings pages beyond the shared-root gate, six extra pages that now stop as
+explicit read-only blocked targets, keyboard Home, native pointer taps, and
+visible/multi-page Home-icon foregrounding.
 
 The remaining work is narrower but still real: do not promote wheel scrolling
 until semantic movement is observed, do not claim arbitrary iPad SpringBoard
