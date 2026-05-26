@@ -497,6 +497,62 @@ def test_open_app_from_springboard_does_not_treat_app_library_category_as_home_f
 
 
 @pytest.mark.smoke
+def test_open_app_from_springboard_verifies_folder_overlay_before_inner_tap(monkeypatch):
+    monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
+
+    home_page = _scene(
+        _el("文件", 42, 176, w=42),
+        _el("其他", 92, 890, w=42),
+        _el("DemoApp", 252, 176, w=82),
+    )
+    wrong_app = _scene(
+        _el("Settings", 220, 320, w=72),
+        _el("Continue", 220, 520, w=80),
+    )
+
+    class FakePhone:
+        def __init__(self):
+            self.actions: list[tuple[str, tuple | None]] = []
+            self.mode = "home"
+
+        def _viewport_size(self):
+            return 440, 956
+
+        def home(self):
+            self.actions.append(("home", None))
+            self.mode = "home"
+
+        def perceive(self):
+            return wrong_app if self.mode == "wrong_app" else home_page
+
+        def invalidate_perceive_cache(self):
+            self.actions.append(("invalidate", None))
+
+        def tap_xy(self, x: int, y: int):
+            self.actions.append(("tap", (x, y)))
+            if self.mode == "home":
+                self.mode = "wrong_app"
+
+        def swipe_right(self):
+            self.actions.append(("swipe_right", None))
+
+        def swipe_left(self):
+            self.actions.append(("swipe_left", None))
+
+        def key(self, modifier: int, keycode: int):
+            self.actions.append(("key", (modifier, keycode)))
+
+        def type(self, text: str):
+            self.actions.append(("type", (text,)))
+
+    phone = FakePhone()
+
+    assert not open_app_from_springboard(phone, ("Settings",), max_pages=0, settle_s=0.0)
+    taps = [action for action in phone.actions if action[0] == "tap"]
+    assert len(taps) == 1
+
+
+@pytest.mark.smoke
 def test_open_app_from_springboard_falls_back_when_icon_tap_does_not_leave_home(monkeypatch):
     monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
 

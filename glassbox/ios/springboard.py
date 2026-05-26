@@ -457,8 +457,18 @@ def _tap_target_inside_home_folder_if_visible(
         return False
     if attempted_home_signatures is not None:
         attempted_home_signatures.add(home_sig)
+    folder_label = _text(folder.element)
     phone.tap_xy(*folder.tap_point)
     folder_scene = _perceive_after_settle(phone, settle_s)
+    folder_viewport = _viewport_size(phone)
+    if not _looks_like_home_folder_contents(
+        folder_scene,
+        folder_label=folder_label,
+        viewport_size=folder_viewport,
+    ):
+        phone.home()
+        _perceive_after_settle(phone, settle_s)
+        return False
     if _tap_icon_if_visible(phone, folder_scene, labels, settle_s=settle_s):
         return True
     phone.home()
@@ -472,22 +482,55 @@ def _find_home_folder_icon(
     viewport_size: tuple[int, int] | None,
 ) -> SpringboardIcon | None:
     """Return a real Home-page folder candidate, not an App Library category."""
-    platform_kind = str(getattr(scene, "platform_scene_kind", "") or "")
-    if platform_kind in {"app_library", "system_search"} or platform_kind.startswith("settings"):
+    if _is_known_non_home_folder_surface(scene, viewport_size=viewport_size):
         return None
     classified = classify_ios_scene(scene, viewport_size=viewport_size)
-    if classified.kind in {
+    if classified.kind != "springboard" and not is_ios_home_screen(scene, viewport_size=viewport_size):
+        return None
+    return find_springboard_icon(scene, HOME_FOLDER_LABELS, viewport_size=viewport_size, fuzzy=0.78)
+
+
+def _looks_like_home_folder_contents(
+    scene: Scene,
+    *,
+    folder_label: str,
+    viewport_size: tuple[int, int] | None,
+) -> bool:
+    """Confirm a folder tap opened a Home folder overlay before tapping inside it."""
+    if _is_known_non_home_folder_surface(scene, viewport_size=viewport_size):
+        return False
+    w, h = _scene_size(scene, viewport_size)
+    has_folder_title = bool(folder_label) and any(
+        _matches(_text(el), (folder_label,), fuzzy=0.78)
+        and el.box.center[1] <= h * 0.24
+        for el in scene.elements
+    )
+    if not has_folder_title:
+        return False
+    icon_labels = [
+        el for el in _icon_label_candidates(scene, viewport_size=(w, h))
+        if el.box.center[1] > h * 0.12
+    ]
+    return bool(icon_labels)
+
+
+def _is_known_non_home_folder_surface(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None,
+) -> bool:
+    platform_kind = str(getattr(scene, "platform_scene_kind", "") or "")
+    if platform_kind in {"app_library", "system_search"} or platform_kind.startswith("settings"):
+        return True
+    classified = classify_ios_scene(scene, viewport_size=viewport_size)
+    return classified.kind in {
         "app_library",
         "system_search",
         "settings_root",
         "settings_search_results",
         "settings_detail",
         "settings_blocked_safety",
-    }:
-        return None
-    if classified.kind != "springboard" and not is_ios_home_screen(scene, viewport_size=viewport_size):
-        return None
-    return find_springboard_icon(scene, HOME_FOLDER_LABELS, viewport_size=viewport_size, fuzzy=0.78)
+    }
 
 
 def _tap_home_search_if_visible(phone, scene: Scene) -> bool:

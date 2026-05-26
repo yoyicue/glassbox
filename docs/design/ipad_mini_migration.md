@@ -437,8 +437,10 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   AssistiveTouch menu controls so they are not treated as app/folder icons.
   The Home-folder helper is also code-gated against App Library/system-search
   scenes, so category labels such as `Utilities`/`Other` are no longer treated
-  as real Home-folder candidates; unit coverage locks this distinction while
-  hardware proof still waits for an actual folder on the device.
+  as real Home-folder candidates. After tapping a candidate, it now verifies a
+  matching folder overlay before tapping any internal target label; unit
+  coverage locks both distinctions while hardware proof still waits for an
+  actual folder on the device.
 
 ## Why consider it
 
