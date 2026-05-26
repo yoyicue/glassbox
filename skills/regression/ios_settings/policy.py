@@ -479,7 +479,13 @@ def _blocked_child_navigation_reason_from_texts(
     for page_marker, row_markers, reason in markers:
         page_key = compact_text(page_marker).casefold()
         row_keys = tuple(compact_text(marker).casefold() for marker in row_markers)
-        if page_key in joined and (not row_keys or any(marker in joined for marker in row_keys)):
+        row_hit_count = sum(1 for marker in row_keys if marker in joined)
+        page_present = (
+            page_key in joined
+            if not row_keys
+            else page_key in stable or (page_key in joined and row_hit_count >= 2)
+        )
+        if page_present and (not row_keys or row_hit_count > 0):
             return reason
     return None
 

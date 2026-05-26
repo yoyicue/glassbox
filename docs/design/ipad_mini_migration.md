@@ -272,6 +272,15 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   failures, or known issues (`navigation_success_proxy_rate=1.0`). This extends
   the earlier all-nine child proof, which only sampled one Accessibility child,
   while still remaining bounded by `max_candidates_per_page`/`max_depth`.
+- A Siri multi-child audit (`/private/tmp/ipad-settings-siri-broad-child-2.json`)
+  now passes on hardware as another settings-native shared-root sample. It opens
+  `Settings > Siri`, then reaches `Talk to Siri` and the Siri-owned `App Clips`
+  suggestions page with `target_roots_missing_child=[]`, no target failures, no
+  hard limits, no blocked pages, no navigation failures, and
+  `navigation_success_proxy_rate=1.0`. The generic fix behind this was to make
+  child-page blockers with row markers require the page marker as its own stable
+  visible row; otherwise Siri's `Allow Notifications` row falsely matched the
+  `Notifications` page blocker.
 - A blocked-target child audit
   (`/tmp/ipad-settings-child-audit-blocked-3-1.json`) now proves the remaining
   actionable shared roots on this iPad profile are handled conservatively:
@@ -559,9 +568,9 @@ top-left point.
   actionable shared roots plus these first fourteen extra top-level pages and six
   explicit blocked stop points, and keep stale-detail/return semantics under
   real multi-level pages without turning the policy into a page-specific rule
-  list. The General, Accessibility, Display & Brightness, and Sounds & Haptics
-  broad-child passes reduce this risk but do not make the whole iPad Settings
-  child inventory exhaustive.
+  list. The General, Accessibility, Siri, Display & Brightness, and Sounds &
+  Haptics broad-child passes reduce this risk but do not make the whole iPad
+  Settings child inventory exhaustive.
 
 ### 3. Scene classifier / safe-area / springboard: pervasive single-column geometry
 Under-stated previously — the iPhone single-column assumption was not confined to
@@ -614,10 +623,10 @@ only when adapter/cabling/profile changes.
 
 Core stayed; the iPad profile and iPadOS platform baseline now exist and are
 hardware-proved for Settings root coverage, nine-root split-view child
-traversal, broader General, Accessibility, Display & Brightness, and Sounds &
-Haptics child samples, three additional safe-blocked Settings roots, fourteen
-extra safe top-level Settings pages beyond the shared-root gate, six extra
-pages that now stop as explicit read-only blocked targets, keyboard Home,
+traversal, broader General, Accessibility, Siri, Display & Brightness, and
+Sounds & Haptics child samples, three additional safe-blocked Settings roots,
+fourteen extra safe top-level Settings pages beyond the shared-root gate, six
+extra pages that now stop as explicit read-only blocked targets, keyboard Home,
 native pointer taps, and visible/multi-page Home-icon foregrounding.
 
 The remaining work is narrower but still real: do not promote wheel scrolling

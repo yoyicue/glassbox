@@ -611,6 +611,36 @@ def test_ipad_notifications_selector_root_allows_disclosure_children():
 
 
 @pytest.mark.smoke
+def test_ipad_siri_allow_notifications_row_does_not_block_page_as_notifications():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Search", 48, 90, w=72),
+            _el("Notifications", 72, 332, w=112),
+            _el("Siri", 404, 44, w=40, h=14),
+            _el("Siri Requests", 280, 220, w=96, h=14),
+            _el("Talk to Siri", 280, 260, w=82, h=14),
+            _el("Off >", 572, 260, w=38, h=12),
+            _el("Suggestions", 280, 410, w=82, h=14),
+            _el("Allow Notifications", 280, 520, w=128, h=14),
+        ],
+    )
+
+    assert policy.blocked_child_navigation_reason(scene) is None
+    assert [
+        (candidate.text or "").strip()
+        for candidate in policy.safe_navigation_candidates(
+            scene,
+            allow_sensitive_root_labels=False,
+            allow_known_without_affordance=False,
+        )
+    ] == ["Talk to Siri"]
+
+
+@pytest.mark.smoke
 def test_ipad_split_view_only_uses_right_pane_visible_back():
     policy = IPadSettingsPolicy()
     root_detail = _ipad_split_scene()
