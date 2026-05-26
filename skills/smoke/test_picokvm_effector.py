@@ -137,6 +137,8 @@ def test_picokvm_ipad_profile_uses_native_pointer_without_default_wheel():
     assert caps.home_strategy == "keyboard_combo"
     assert caps.back_strategy == "keyboard_combo"
     assert caps.scroll_strategy == "unsupported"
+    assert caps.wheel_diagnostic is True
+    assert caps.scroll_strategy_validated is True
     assert eff.supports("scroll_wheel") is False
 
     result = eff.scroll_wheel(1, interval_ms=0, focus_x=744, focus_y=1133)
@@ -153,6 +155,9 @@ def test_picokvm_ipad_profile_can_opt_into_wheel_diagnostic():
 
     assert caps.requires_assistive_touch is False
     assert caps.scroll_strategy == "wheel"
+    assert caps.wheel_diagnostic is True
+    assert caps.scroll_strategy_validated is False
+    assert caps.scroll_evidence == "ack_only"
     assert eff.supports("scroll_wheel") is True
 
     result = eff.scroll_wheel(1, interval_ms=0, focus_x=744, focus_y=1133)

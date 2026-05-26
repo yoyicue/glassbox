@@ -1327,9 +1327,10 @@ class IPadSettingsPolicy(SettingsPolicy):
 
     def find_search_result(self, scene, label: str) -> UIElement | None:
         ipad_search_active = self._ipad_search_active(scene)
-        if not ipad_search_active and not self.looks_like_settings_search_results(scene):
+        if not ipad_search_active:
             return None
         viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        _w, h = viewport_size
         from glassbox.ipados.scene import sidebar_right_x
 
         sidebar_right = sidebar_right_x(viewport_size[0])
@@ -1339,7 +1340,7 @@ class IPadSettingsPolicy(SettingsPolicy):
             if not text:
                 continue
             cx, cy = element.box.center
-            if cy < 140 or cy > int(viewport_size[1] * 0.94) or cx > sidebar_right + 24:
+            if cy < int(h * 0.12) or cy > int(h * 0.94) or cx > sidebar_right + 24:
                 continue
             primary = self._search_result_primary_label(text)
             if (
@@ -1698,19 +1699,23 @@ class IPadSettingsPolicy(SettingsPolicy):
             return True
         if self._ipad_top_search_field(scene, allow_query=True) is not None and self._ipad_search_panel_visible(scene):
             return True
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        _w, h = viewport_size
         return any(
             (element.text or "").strip() in {"AutoFill", "AutoFil", "AutoFI", "Select", "Select All", "全选"}
             and element.box.center[0] <= self._ipad_sidebar_right(scene) + 24
-            and 110 <= element.box.center[1] <= 170
+            and int(h * 0.105) <= element.box.center[1] <= int(h * 0.17)
             for element in scene.elements
         )
 
     def _ipad_search_panel_visible(self, scene) -> bool:
         sidebar_right = self._ipad_sidebar_right(scene)
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        _w, h = viewport_size
         return any(
             (element.text or "").strip() in {"Suggestions", "Recents", "建议", "最近"}
             and element.box.center[0] <= sidebar_right + 24
-            and 115 <= element.box.center[1] <= 340
+            and int(h * 0.10) <= element.box.center[1] <= int(h * 0.34)
             for element in scene.elements
         )
 
@@ -1732,6 +1737,9 @@ class IPadSettingsPolicy(SettingsPolicy):
 
     def _ipad_top_search_field(self, scene, *, allow_query: bool) -> UIElement | None:
         sidebar_right = self._ipad_sidebar_right(scene)
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        _w, h = viewport_size
+        top_min_y, top_max_y = self._ipad_top_search_y_range(h)
         candidates: list[tuple[bool, UIElement]] = []
         for element in scene.elements:
             text = (element.text or "").strip()
@@ -1740,7 +1748,7 @@ class IPadSettingsPolicy(SettingsPolicy):
             if text in ROOT_TITLE:
                 continue
             cx, cy = element.box.center
-            if cx > sidebar_right + 8 or cy < 72 or cy > 112:
+            if cx > sidebar_right + 8 or cy < top_min_y or cy > top_max_y:
                 continue
             compact = re.sub(r"\s+", "", text)
             if compact.isdigit():
@@ -1762,11 +1770,15 @@ class IPadSettingsPolicy(SettingsPolicy):
         candidates.sort(
             key=lambda item: (
                 1 if allow_query and item[0] else 0,
-                abs(item[1].box.center[1] - 96),
+                abs(item[1].box.center[1] - int(h * 0.085)),
                 item[1].box.center[0],
             ),
         )
         return candidates[0][1]
+
+    @staticmethod
+    def _ipad_top_search_y_range(viewport_height: int) -> tuple[int, int]:
+        return int(viewport_height * 0.06), int(viewport_height * 0.105)
 
     def _ipad_sidebar_right(self, scene) -> int:
         viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
@@ -1888,18 +1900,31 @@ class IPadSettingsPolicy(SettingsPolicy):
         return max(width, 744), max(height, 1133)
 
 
-def _default_settings_policy() -> SettingsPolicy:
-    try:
+def settings_policy_for_config(cfg=None) -> SettingsPolicy:
+    if cfg is None:
         from glassbox.config import get_config
 
         cfg = get_config()
-        platform = str(getattr(cfg, "platform", "") or "").lower()
-        model = str(getattr(cfg, "phone_model", "") or "").lower().replace("-", "_")
-        if platform == "ipados" or model.startswith("ipad"):
-            return IPadSettingsPolicy()
-    except Exception:
-        pass
+    if _is_ipad_device_context(
+        platform=getattr(cfg, "platform", None),
+        phone_model=getattr(cfg, "phone_model", None),
+    ):
+        return IPadSettingsPolicy()
     return SettingsPolicy()
 
 
-DEFAULT_SETTINGS_POLICY = _default_settings_policy()
+class _RuntimeSettingsPolicy:
+    """Delegate the module default to the current runtime config.
+
+    This preserves the historical module-level import surface without freezing
+    the iPhone/iPad variant during import.
+    """
+
+    def __getattr__(self, name: str):
+        return getattr(settings_policy_for_config(), name)
+
+    def __repr__(self) -> str:
+        return f"<RuntimeSettingsPolicy policy={settings_policy_for_config()!r}>"
+
+
+DEFAULT_SETTINGS_POLICY = _RuntimeSettingsPolicy()

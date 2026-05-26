@@ -461,9 +461,10 @@ def build_phone(
     scene_classifiers = []
     from glassbox.app_policies import DEFAULT_APP_POLICY_REGISTRY
 
-    app_scene_classifier = DEFAULT_APP_POLICY_REGISTRY.scene_classifier_for(bundle_id)
-    if selected_platform == "ipados" and bundle_id == "com.apple.Preferences":
-        app_scene_classifier = None
+    app_scene_classifier = DEFAULT_APP_POLICY_REGISTRY.scene_classifier_for(
+        bundle_id,
+        platform=selected_platform,
+    )
     if app_scene_classifier is not None:
         def _classify_app_scene(scene, viewport_size):
             return app_scene_classifier.classify(scene, viewport_size=viewport_size)

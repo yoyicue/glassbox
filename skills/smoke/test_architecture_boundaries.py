@@ -765,6 +765,33 @@ def test_app_policy_registry_resolves_builtin_settings_classifier():
     assert classified.source == "app"
 
 
+def test_app_policy_registry_resolves_ipados_settings_classifier():
+    classifier = DEFAULT_APP_POLICY_REGISTRY.scene_classifier_for("com.apple.Preferences", platform="ipados")
+
+    assert classifier is not None
+    assert (
+        DEFAULT_APP_POLICY_REGISTRY.crawl_policy_for("com.apple.Preferences", platform="ipados")
+        == "ipados_settings"
+    )
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(744, 1133),
+        elements=[
+            UIElement(type="text", box=Box(x=40, y=70, w=180, h=24), text="下午8:54 5月25日周一", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=150, w=54, h=24), text="备忘录", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=205, w=92, h=24), text="无备忘录", confidence=0.9),
+            UIElement(type="text", box=Box(x=350, y=205, w=130, h=24), text="The day following", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=420, w=64, h=24), text="上海市", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=476, w=36, h=24), text="26°", confidence=0.9),
+        ],
+    )
+    classified = classifier.classify(scene, viewport_size=(744, 1133))
+    assert classified is not None
+    assert classified.platform_scene_kind == "springboard"
+    assert classified.source == "app"
+
+
 def test_app_policy_registry_loads_entry_point_registration(monkeypatch):
     class EntryPoint:
         def load(self):
@@ -1023,6 +1050,19 @@ def test_default_crawl_policy_registry_exposes_settings_adapter():
     assert isinstance(policy, SettingsCrawlPolicyAdapter)
 
 
+def test_ios_settings_crawl_policy_selects_ipad_policy_from_runtime_config():
+    from glassbox.config import AgentConfig
+    from skills.regression.ios_settings.policy import IPadSettingsPolicy
+
+    policy = DEFAULT_CRAWL_POLICY_REGISTRY.create(
+        "ios_settings",
+        cfg=AgentConfig(_env_file=None, phone_model="ipad_mini_7"),
+    )
+
+    assert isinstance(policy, SettingsCrawlPolicyAdapter)
+    assert isinstance(policy.settings_policy, IPadSettingsPolicy)
+
+
 def test_default_crawl_policy_registry_exposes_generic_policy():
     policy = DEFAULT_CRAWL_POLICY_REGISTRY.create("generic")
 
@@ -1046,6 +1086,14 @@ def test_crawl_run_cli_resolves_policy_name_by_bundle_and_overrides(monkeypatch)
     assert (
         _resolve_crawl_policy_name("com.apple.Preferences", explicit_policy=None, cfg=cfg)
         == "ios_settings"
+    )
+    assert (
+        _resolve_crawl_policy_name(
+            "com.apple.Preferences",
+            explicit_policy=None,
+            cfg=AgentConfig(_env_file=None, phone_model="ipad_mini_7"),
+        )
+        == "ipados_settings"
     )
     assert _resolve_crawl_policy_name("com.example.app", explicit_policy=None, cfg=cfg) == "generic"
     assert (

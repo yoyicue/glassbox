@@ -192,6 +192,9 @@ class BackendCapabilities:
     transport_label: str = "none"
     wheel_ticks_per_scroll: int | None = None
     wheel_invert: bool | None = None
+    scroll_strategy_validated: bool = True
+    scroll_evidence: str | None = None
+    wheel_diagnostic: bool = False
 
     def supports_direct(self, action: str) -> bool:
         return action in self.direct_actions

@@ -93,9 +93,14 @@ class PicoKVMEffector:
     def capabilities(self) -> BackendCapabilities:
         direct_actions = _PICOKVM_DIRECT_ACTIONS
         scroll_strategy = "unsupported"
+        scroll_strategy_validated = True
+        scroll_evidence = None
         if self._wheel_available():
             direct_actions = direct_actions | frozenset({"scroll_wheel", "wheel_scroll_down", "wheel_scroll_up"})
             scroll_strategy = "wheel"
+            if self._is_ipad_target():
+                scroll_strategy_validated = False
+                scroll_evidence = "ack_only"
         home_strategy = "unsupported"
         if self.config.assistive_touch_home_enabled:
             home_strategy = "assistive_touch"
@@ -121,6 +126,9 @@ class PicoKVMEffector:
             requires_assistive_touch=not self._is_ipad_target(),
             requires_connection=True,
             transport_label="picokvm-http",
+            scroll_strategy_validated=scroll_strategy_validated,
+            scroll_evidence=scroll_evidence,
+            wheel_diagnostic=self._is_ipad_target(),
         )
 
     def _is_ipad_target(self) -> bool:

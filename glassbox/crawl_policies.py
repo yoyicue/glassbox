@@ -180,10 +180,10 @@ def _generic_crawl_policy_factory(**_kwargs) -> GenericCrawlPolicyAdapter:
     return GenericCrawlPolicyAdapter()
 
 
-def _ios_settings_crawl_policy_factory(**_kwargs) -> SettingsCrawlPolicyAdapter:
-    from skills.regression.ios_settings.policy import DEFAULT_SETTINGS_POLICY
+def _ios_settings_crawl_policy_factory(**kwargs) -> SettingsCrawlPolicyAdapter:
+    from skills.regression.ios_settings.policy import settings_policy_for_config
 
-    return SettingsCrawlPolicyAdapter(DEFAULT_SETTINGS_POLICY)
+    return SettingsCrawlPolicyAdapter(settings_policy_for_config(kwargs.get("cfg")))
 
 
 def _ipados_settings_crawl_policy_factory(**_kwargs) -> SettingsCrawlPolicyAdapter:

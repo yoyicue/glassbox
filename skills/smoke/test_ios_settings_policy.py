@@ -1193,6 +1193,57 @@ def test_ipad_settings_policy_uses_sidebar_top_search_field():
 
 
 @pytest.mark.smoke
+def test_ipad_settings_policy_scales_top_search_geometry_for_pixel_viewport():
+    policy = IPadSettingsPolicy()
+    root = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(1488, 2266),
+        elements=[
+            _el("Q Search", 68, 184, w=144, h=40),
+            _el("Camera", 132, 236, w=104, h=40),
+            _el("Notifications", 132, 988, w=168, h=40),
+            _el("Notifications", 808, 88, w=180, h=40),
+        ],
+    )
+    search = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(1488, 2266),
+        elements=[
+            _el("Siri", 108, 184, w=52, h=40, ty="nav_back"),
+            _el("Select", 68, 284, w=84, h=40),
+            _el("1 Notifications", 144, 360, w=208, h=40, ty="button"),
+        ],
+    )
+
+    assert policy.find_root_search_tab(root).text == "Q Search"
+    assert policy.is_settings_search_scene(search)
+    assert policy.find_search_field(search).text == "Siri"
+    assert policy.find_search_result(search, "通知").text == "1 Notifications"
+
+
+@pytest.mark.smoke
+def test_default_settings_policy_resolves_ipad_variant_at_call_time(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_PHONE_MODEL", "ipad_mini_7")
+    get_config.cache_clear()
+    try:
+        root = Scene(
+            frame_id=0,
+            timestamp=0.0,
+            viewport_size=(1488, 2266),
+            elements=[
+                _el("Q Search", 68, 184, w=144, h=40),
+                _el("Camera", 132, 236, w=104, h=40),
+            ],
+        )
+
+        assert DEFAULT_SETTINGS_POLICY.find_root_search_tab(root).text == "Q Search"
+    finally:
+        get_config.cache_clear()
+
+
+@pytest.mark.smoke
 def test_ipad_settings_policy_does_not_treat_top_query_as_search_result():
     policy = IPadSettingsPolicy()
     search = _scene(

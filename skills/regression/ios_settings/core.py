@@ -575,7 +575,7 @@ def _dismiss_settings_search(phone, scene) -> bool:
     clear_button = settings_scene_state.find_search_clear_button(scene)
     if clear_button is None:
         field = settings_scene_state.find_search_field(scene)
-        if field is not None and field.box.center[1] < 180:
+        if field is not None and _is_top_settings_search_field(phone, field):
             return _clear_top_settings_search_field(phone, field, scene)
         if not _settings_search_has_query_text(scene):
             return False
@@ -694,7 +694,26 @@ def _top_search_text_edit_point(phone, field: UIElement) -> tuple[int, int]:
 def _is_ipad_top_search_field(phone, field: UIElement) -> bool:
     if not _is_ipad_target(phone):
         return False
-    return field.box.center[1] < 180
+    top_min_y, top_max_y = _top_settings_search_y_range(phone)
+    return top_min_y <= field.box.center[1] <= top_max_y
+
+
+def _is_top_settings_search_field(phone, field: UIElement) -> bool:
+    if _is_ipad_target(phone):
+        return _is_ipad_top_search_field(phone, field)
+    try:
+        _w, h = phone._viewport_size()
+    except Exception:
+        h = 973
+    return field.box.center[1] <= int(h * 0.185)
+
+
+def _top_settings_search_y_range(phone) -> tuple[int, int]:
+    try:
+        _w, h = phone._viewport_size()
+    except Exception:
+        h = 1133
+    return int(h * 0.06), int(h * 0.105)
 
 
 def _top_search_focus_point(phone, field: UIElement) -> tuple[int, int]:
@@ -783,7 +802,7 @@ def _clear_settings_search(phone) -> bool:
         field = settings_scene_state.find_search_field(scene)
         if (
             field is not None
-            and field.box.center[1] < 180
+            and _is_top_settings_search_field(phone, field)
             and _top_search_field_is_empty(field)
             and not _top_search_has_visible_query_text(scene, field)
             and not _top_search_has_no_results_text(scene)
@@ -828,9 +847,9 @@ def _clear_settings_search(phone) -> bool:
 
 def _dismiss_ipad_top_search_query_if_present(phone, scene) -> bool:
     field = settings_scene_state.find_search_field(scene)
-    if field is None or field.box.center[1] >= 180:
+    if field is None or not _is_top_settings_search_field(phone, field):
         field = _focus_ipad_top_search_field_for_clear(phone, scene)
-        if field is None or field.box.center[1] >= 180:
+        if field is None or not _is_top_settings_search_field(phone, field):
             return False
     if _top_search_field_is_empty(field):
         return False
@@ -871,6 +890,8 @@ def _top_search_field_is_empty(field: UIElement) -> bool:
 
 
 def _top_search_has_visible_query_text(scene, field: UIElement) -> bool:
+    _w, h = getattr(scene, "viewport_size", None) or _scene_extent(scene)
+    top_min_y, top_max_y = int(h * 0.06), int(h * 0.105)
     for element in scene.elements:
         if element is field or element.type == "status_bar":
             continue
@@ -878,7 +899,7 @@ def _top_search_has_visible_query_text(scene, field: UIElement) -> bool:
         if not text:
             continue
         cx, cy = element.box.center
-        if cy < 72 or cy > 112 or cx > max(260, field.box.center[0] + 220):
+        if cy < top_min_y or cy > top_max_y or cx > max(260, field.box.center[0] + 220):
             continue
         compact = re.sub(r"\s+", "", text)
         if (
@@ -893,6 +914,12 @@ def _top_search_has_visible_query_text(scene, field: UIElement) -> bool:
             continue
         return True
     return False
+
+
+def _scene_extent(scene) -> tuple[int, int]:
+    width = max((element.box.x2 for element in scene.elements), default=744)
+    height = max((element.box.y2 for element in scene.elements), default=1133)
+    return max(width, 744), max(height, 1133)
 
 
 def _top_search_has_no_results_text(scene) -> bool:

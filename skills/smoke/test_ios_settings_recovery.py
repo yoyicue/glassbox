@@ -91,6 +91,18 @@ def test_enter_settings_search_uses_ipad_top_search_pill_hit_point(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_ipad_top_search_detection_scales_with_pixel_viewport():
+    field = _el("Q Search", 68, 184, w=144, h=40)
+
+    phone = SimpleNamespace(
+        device_geometry=SimpleNamespace(model="ipad_mini_7"),
+        _viewport_size=lambda: (1488, 2266),
+    )
+
+    assert walkthrough._is_ipad_top_search_field(phone, field)
+
+
+@pytest.mark.smoke
 def test_enter_settings_search_accepts_ipad_top_search_focus_without_scene_change(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
     root = _scene(_el("Q Search", 34, 90, w=72), _el("Battery", 70, 226, w=48))

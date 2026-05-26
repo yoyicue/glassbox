@@ -323,7 +323,7 @@ def test_build_phone_activates_app_scene_classifier_by_bundle():
 
 
 @pytest.mark.smoke
-def test_build_phone_skips_ios_settings_app_classifier_for_ipados_home_widgets():
+def test_build_phone_uses_ipados_settings_app_classifier_for_home_widgets():
     cfg = AgentConfig(
         _env_file=None,
         phone_model="ipad_mini_7",
@@ -340,7 +340,7 @@ def test_build_phone_skips_ios_settings_app_classifier_for_ipados_home_widgets()
     scene = runtime.phone.perceive()
     assert scene.scene_type == "springboard"
     assert scene.platform_scene_kind == "springboard"
-    assert scene.classification_source == "platform"
+    assert scene.classification_source == "app"
 
 
 @pytest.mark.smoke
