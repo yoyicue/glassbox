@@ -88,6 +88,7 @@ SAFE_NAV_TEXT = (
     "Safari浏览器", "Safari",
     "FaceTime 通话", "FaceTime",
     "Apps",
+    "Game Center",
     "关于本机", "About",
     "软件更新", "Software Update",
     "iPhone 储存空间", "iPhone Storage",
@@ -283,6 +284,7 @@ IPAD_EXTRA_TOP_LEVEL_ROOT_SEARCH_QUERIES_EN = {
     "FaceTime": "FaceTime",
     "FaceTime 通话": "FaceTime",
     "Apps": "Apps",
+    "Game Center": "Game Center",
 }
 
 NAV_TITLE_ALIASES = {
@@ -396,7 +398,9 @@ BLOCKED_CHILD_NAVIGATION_MARKERS = (
     ("Enter Passcode", (), "authentication required"),
     ("iPhone Passcode", (), "authentication required"),
     ("欢迎来到 Game Center", (), "game center onboarding requires action"),
+    ("Welcome to Game Center", (), "game center onboarding requires action"),
     ("自定义你的个人资料", (), "game center profile setup requires action"),
+    ("Customize Your Profile", (), "game center profile setup requires action"),
     ("接入无线局域网", (), "dynamic Wi-Fi rows"),
     ("无线局域网", ("我的网络", "其他网络", "忽略此网络", "自动加入"), "dynamic Wi-Fi rows"),
     ("Wi-Fi", ("My Networks", "Other Networks", "Forget This Network", "Auto-Join"), "dynamic Wi-Fi rows"),

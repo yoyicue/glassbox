@@ -264,3 +264,53 @@ def test_high_value_child_audit_can_accept_root_only_inventory_targets():
     assert report["known_issues"] == []
     assert report["metrics"]["target_roots_without_child_count"] == 1
     assert report["metrics"]["allow_root_only_target_roots"] is True
+
+
+def test_root_only_single_target_can_start_from_already_open_page(monkeypatch):
+    phone = FakePhone()
+    visits: list[settings_reporting.PageVisit] = []
+
+    monkeypatch.setattr(settings_crawler.time, "sleep", lambda _: None)
+    monkeypatch.setattr(settings_crawler, "_open_settings_from_home_if_visible", lambda _phone: None)
+    monkeypatch.setattr(settings_crawler, "_opened_requested_root", lambda _scene, label: label == "Wallpaper")
+
+    def fail_return(_phone):
+        raise AssertionError("root-only already-open target should not force root recovery")
+
+    def record_current_page(
+        _phone,
+        *,
+        path,
+        visits,
+        seen_sigs,
+        depth,
+        max_depth,
+        limits_hit,
+        blocked_pages,
+        rejected_candidates,
+        navigation_failures,
+    ):
+        visits.append(settings_reporting.PageVisit(
+            path=path,
+            title=path[-1],
+            texts=(path[-1],),
+        ))
+
+    monkeypatch.setattr(settings_crawler, "_return_to_settings_root", fail_return)
+    monkeypatch.setattr(settings_crawler, "_crawl_current_page", record_current_page)
+
+    result = settings_crawler.crawl_high_value_child_settings(
+        phone,
+        target_root_labels=("Wallpaper",),
+        max_depth=1,
+        max_pages=4,
+        max_child_scrolls_per_page=0,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+        allow_root_only_target_roots=True,
+    )
+
+    assert result.opened_targets == ["Wallpaper"]
+    assert [visit.path for visit in result.visits] == [("Settings", "Wallpaper")]
+    assert result.return_root_failed is False
+    assert visits == []

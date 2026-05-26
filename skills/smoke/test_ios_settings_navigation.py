@@ -1443,10 +1443,10 @@ def test_picokvm_ipad_detail_row_projection_moves_inside_detail_pane():
 
 
 @pytest.mark.smoke
-def test_unsafe_navigation_text_matches_spaceless_ocr_form():
-    """OCR 常把「Game Center」读成「GameCenter」—— 去空格后仍判为不安全项。"""
-    assert _is_unsafe_navigation_text("Game Center")
-    assert _is_unsafe_navigation_text("GameCenter")
+def test_game_center_is_root_only_safe_but_account_rows_stay_unsafe():
+    """Game Center is safe as a root-only inventory page; account rows stay blocked."""
+    assert not _is_unsafe_navigation_text("Game Center")
+    assert not _is_unsafe_navigation_text("GameCenter")
     assert _is_unsafe_navigation_text("iClOud")
 
 

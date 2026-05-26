@@ -80,6 +80,7 @@ def crawl_high_value_child_settings(
     max_child_scrolls_per_page: int,
     max_candidates_per_page: int,
     strict_child_candidate_audit: bool,
+    allow_root_only_target_roots: bool = False,
 ) -> SettingsChildCrawlResult:
     """Sample stable child Settings pages without exposing walkthrough internals."""
     target_labels = tuple(target_root_labels)
@@ -98,6 +99,13 @@ def crawl_high_value_child_settings(
     target_failures: list[dict[str, str]] = []
     opened_targets: list[str] = []
     return_root_failed = False
+    root_only_single_target = (
+        allow_root_only_target_roots
+        and len(target_labels) == 1
+        and max_depth <= 1
+        and max_child_scrolls_per_page <= 0
+        and max_candidates_per_page <= 0
+    )
 
     previous_trace = settings_core._ACTIVE_TRACE
     traced_phone, trace = settings_core._wrap_phone_with_trace_if_enabled(phone)
@@ -105,7 +113,11 @@ def crawl_high_value_child_settings(
     try:
         with _temporary_run_config(run_config):
             _open_settings_from_home_if_visible(traced_phone)
-            _return_to_settings_root(traced_phone)
+            already_open_target = False
+            if root_only_single_target and target_labels and hasattr(traced_phone, "perceive"):
+                already_open_target = _opened_requested_root(traced_phone.perceive(), target_labels[0])
+            if not already_open_target:
+                _return_to_settings_root(traced_phone)
             for label in target_labels:
                 if len(visits) >= max_pages:
                     limits_hit.add("max_pages")
@@ -132,15 +144,16 @@ def crawl_high_value_child_settings(
                     return_root_failed = True
                     limits_hit.add("return_root_failed")
                     break
-                try:
-                    _return_to_settings_root(traced_phone)
-                except settings_recovery.SettingsRootUnreachable:
-                    # Soft return-failure path: record it and stop the child
-                    # audit gracefully instead of letting the distinct recovery
-                    # exception fall through to the crash/re-raise handler below.
-                    return_root_failed = True
-                    limits_hit.add("return_root_failed")
-                    break
+                if not root_only_single_target:
+                    try:
+                        _return_to_settings_root(traced_phone)
+                    except settings_recovery.SettingsRootUnreachable:
+                        # Soft return-failure path: record it and stop the child
+                        # audit gracefully instead of letting the distinct recovery
+                        # exception fall through to the crash/re-raise handler below.
+                        return_root_failed = True
+                        limits_hit.add("return_root_failed")
+                        break
     except BaseException:
         limits_hit.add("exception")
         raise
@@ -265,6 +278,10 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
 
 
 def _open_target_root_page(phone, label: str) -> bool:
+    if hasattr(phone, "perceive"):
+        current = phone.perceive()
+        if _opened_requested_root(current, label):
+            return True
     _return_to_settings_root(phone)
     _scroll_to_vertical_boundary(phone, direction="up")
     current = phone.perceive()

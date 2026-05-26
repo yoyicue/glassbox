@@ -215,6 +215,26 @@ def test_ipad_settings_policy_blocks_passcode_biometric_rows():
 
 
 @pytest.mark.smoke
+def test_ipad_settings_policy_blocks_game_center_onboarding_children():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 34, 90, w=72, h=18),
+            _el("Game Center", 70, 328, w=92, h=16),
+            _el("Game Center", 410, 44, w=92, h=16),
+            _el("Welcome to Game Center", 300, 180, w=190, h=20),
+            _el("Continue", 440, 720, w=70, h=18),
+        ],
+    )
+
+    assert policy.blocked_child_navigation_reason(scene) == "game center onboarding requires action"
+    assert policy.safe_navigation_candidates(scene) == []
+
+
+@pytest.mark.smoke
 def test_ipad_detail_child_accepts_trailing_value_disclosure_affordance():
     policy = IPadSettingsPolicy()
     scene = Scene(
@@ -535,11 +555,12 @@ def test_extra_top_level_pages_are_safe_known_not_unknown_candidates():
         "Home Screen & App Library", "Home Screen &", "App Library",
         "主屏幕与 App 资源库", "App 资源库",
         "Safari", "Safari浏览器", "FaceTime", "FaceTime 通话",
-        "Apps",
+        "Apps", "Game Center",
     ):
         assert DEFAULT_SETTINGS_POLICY.is_safe_known_navigation_label(label), label
     assert DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text("App")
     assert not DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text("Apps")
+    assert not DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text("Game Center")
     scene = _scene(
         _el("设置", 198, 72, w=48),
         _el("Camera", 80, 500, w=70),
@@ -551,6 +572,7 @@ def test_extra_top_level_pages_are_safe_known_not_unknown_candidates():
         _el("Home Screen &", 80, 815, w=120),
         _el("App Library", 80, 835, w=92),
         _el("Apps", 80, 855, w=60),
+        _el("Game Center", 80, 865, w=90),
         _el("Frobnicate", 80, 875, w=90),
     )
     rejected = DEFAULT_SETTINGS_POLICY.rejected_candidate_rows(
@@ -902,6 +924,7 @@ def test_settings_policy_uses_english_root_search_queries_for_english_locale(mon
         assert policy.root_search_query("Safari") == "Safari"
         assert policy.root_search_query("FaceTime") == "FaceTime"
         assert policy.root_search_query("Apps") == "Apps"
+        assert policy.root_search_query("Game Center") == "Game Center"
         assert policy.root_search_query("Home Screen & App Library") == "Home Screen"
         assert policy.canonical_expected_root_label("Sounds") == "声音与触感"
         assert policy.canonical_expected_root_label("All Devices") == "屏幕使用时间"

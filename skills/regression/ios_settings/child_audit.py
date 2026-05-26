@@ -40,6 +40,7 @@ def probe_high_value_child_audit(
         max_child_scrolls_per_page=max_child_scrolls_per_page,
         max_candidates_per_page=max_candidates_per_page,
         strict_child_candidate_audit=strict_child_candidate_audit,
+        allow_root_only_target_roots=allow_root_only_target_roots,
     )
     return _build_report(
         target_root_labels=result.target_root_labels,
