@@ -1336,6 +1336,20 @@ def _return_one_level(
         )
         if returned:
             return True
+    if parent_texts is not None:
+        # iPad split-view back animations can settle just after the bounded
+        # polling window, especially from dense native pages like About. Do one
+        # final strict parent check; do not relax the title/text predicate.
+        time.sleep(0.8 if _is_ipad_target(phone) else 0.2)
+        phone.invalidate_perceive_cache()
+        if _returned_to_parent_scene(
+            phone.perceive(),
+            parent_texts=parent_texts,
+            parent_title=parent_title,
+            parent_is_root=parent_is_root,
+            ipad_target=_is_ipad_target(phone),
+        ):
+            return True
     return False
 
 
@@ -1372,6 +1386,7 @@ def _wait_returned_to_parent(
             parent_texts=parent_texts,
             parent_title=parent_title,
             parent_is_root=parent_is_root,
+            ipad_target=_is_ipad_target(phone),
         ):
             return True, scene
         time.sleep(0.4)
@@ -1385,11 +1400,14 @@ def _returned_to_parent_scene(
     parent_texts: Iterable[str],
     parent_title: str | None,
     parent_is_root: bool,
+    ipad_target: bool = False,
 ) -> bool:
     if parent_is_root:
         return _scene_is_settings_root(scene)
     if parent_title and _title_matches_navigation_label(_page_title(scene), parent_title):
         return True
+    if ipad_target and parent_title:
+        return False
     return settings_scene_state.same_visible_page(parent_texts, _texts(scene))
 
 

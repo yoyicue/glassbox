@@ -390,13 +390,15 @@ def _active_section_vocab():
 
     cfg = get_config()
     return section_vocab_for(cfg.language, cfg.region)
-# Whole-label-only non-nav tokens. These are toggle/picker *state values*, not
-# topics: a row is non-navigational only when its ENTIRE label is the token.
-# Kept out of the substring tier (UNSAFE_OR_NON_NAV_TEXT) because as substrings
-# they over-match real English nav rows ("On" inside "NotificatiOns"/
-# "ActiOnButtOn") and even Chinese ("关" inside "关于本机"/About). Matched on
-# compacted+casefolded text so OCR spacing/case doesn't slip a toggle through.
-EXACT_UNSAFE_OR_NON_NAV_TEXT = {"App", "打开", "关闭", "开", "关", "On", "Off"}
+# Whole-label-only non-nav/off-limits tokens. These are unsafe only when the
+# ENTIRE label matches: as substrings they over-match real rows ("On" inside
+# "NotificatiOns"/"ActiOnButtOn") and even Chinese ("关" inside "关于本机"/About).
+# Matched on compacted+casefolded text so OCR spacing/case cannot slip through.
+EXACT_UNSAFE_OR_NON_NAV_TEXT = {
+    "App", "打开", "关闭", "开", "关", "On", "Off",
+    "AppleCare与保修", "AppleCare 与保修", "AppleCare & Warranty",
+    "隔空投送", "AirDrop",
+}
 BLOCKED_CHILD_NAVIGATION_MARKERS = (
     ("输入密码", (), "authentication required"),
     ("输入iPhone密码", (), "authentication required"),
@@ -1151,6 +1153,7 @@ class SettingsPolicy:
         }
 
     def root_search_query(self, label: str) -> str | None:
+        query_label = self.canonical_expected_root_label(label) or label
         try:
             from glassbox.config import get_config
             from glassbox.locale import resolve_locale
@@ -1158,11 +1161,11 @@ class SettingsPolicy:
             locale = resolve_locale(get_config())
             if locale.language == "en":
                 if locale.code in {"en-CN", "en-HK"}:
-                    return ROOT_SEARCH_QUERIES_GREATER_CHINA_EN.get(label)
-                return ROOT_SEARCH_QUERIES_EN.get(label)
+                    return ROOT_SEARCH_QUERIES_GREATER_CHINA_EN.get(query_label)
+                return ROOT_SEARCH_QUERIES_EN.get(query_label)
         except Exception:
             pass
-        return ROOT_SEARCH_QUERIES.get(label)
+        return ROOT_SEARCH_QUERIES.get(query_label)
 
     def visible_root_row_label(self, element: UIElement) -> str | None:
         text = (element.text or "").strip()
@@ -1330,21 +1333,22 @@ class IPadSettingsPolicy(SettingsPolicy):
         return super().find_search_result(scene, label)
 
     def root_search_query(self, label: str) -> str | None:
+        query_label = self.canonical_expected_root_label(label) or label
         try:
             from glassbox.config import get_config
             from glassbox.locale import resolve_locale
 
             locale = resolve_locale(get_config())
             if locale.language == "en":
-                override = IPAD_ROOT_SEARCH_QUERIES_EN.get(label)
+                override = IPAD_ROOT_SEARCH_QUERIES_EN.get(query_label)
                 if override is not None:
                     return override
-                extra = IPAD_EXTRA_TOP_LEVEL_ROOT_SEARCH_QUERIES_EN.get(label)
+                extra = IPAD_EXTRA_TOP_LEVEL_ROOT_SEARCH_QUERIES_EN.get(query_label)
                 if extra is not None:
                     return extra
         except Exception:
             pass
-        return super().root_search_query(label)
+        return super().root_search_query(query_label)
 
     def find_system_search_root_result(
         self,

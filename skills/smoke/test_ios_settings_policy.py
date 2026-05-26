@@ -417,6 +417,40 @@ def test_ipad_split_view_detail_root_can_still_be_blocked():
 
 
 @pytest.mark.smoke
+def test_settings_policy_rejects_applecare_warranty_child_navigation():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Settings", 48, 62, w=72, h=28),
+            _el("General", 70, 292, w=58, h=16),
+            _el("General", 420, 44, w=70, h=16),
+            _el("About", 314, 300, w=42, h=14),
+            _el("Software Update", 314, 344, w=130, h=14),
+            _el("iPad Storage", 314, 388, w=104, h=14),
+            _el("AppleCare & Warranty", 314, 432, w=168, h=14),
+            _el("AirDrop", 314, 476, w=64, h=14),
+        ],
+    )
+
+    assert policy.is_unsafe_navigation_text("AppleCare & Warranty")
+    assert policy.is_unsafe_navigation_text("AirDrop")
+    labels = [
+        (candidate.text or "").strip()
+        for candidate in policy.safe_navigation_candidates(
+            scene,
+            allow_sensitive_root_labels=False,
+            allow_known_without_affordance=False,
+        )
+    ]
+    assert "AppleCare & Warranty" not in labels
+    assert "AirDrop" not in labels
+    assert labels == ["About", "Software Update"]
+
+
+@pytest.mark.smoke
 def test_ipad_detail_child_accepts_trailing_value_disclosure_affordance():
     policy = IPadSettingsPolicy()
     scene = Scene(
@@ -1105,10 +1139,16 @@ def test_settings_policy_uses_english_root_search_queries_for_english_locale(mon
         policy = IPadSettingsPolicy()
 
         assert policy.root_search_query("无线局域网") == "WLAN"
+        assert policy.root_search_query("Wi-Fi") == "WLAN"
+        assert policy.root_search_query("General") == "General"
+        assert policy.root_search_query("Sounds") == "Sounds"
         assert policy.root_search_query("电池") == "Battery"
         assert policy.root_search_query("屏幕使用时间") == "Screen"
+        assert policy.root_search_query("Screen Time") == "Screen"
         assert policy.root_search_query("Face ID与密码") == "Passcode"
+        assert policy.root_search_query("Touch ID & Passcode") == "Passcode"
         assert policy.root_search_query("隐私与安全性") == "Privacy"
+        assert policy.root_search_query("Privacy & Security") == "Privacy"
         assert policy.root_search_query("Safari") == "Safari"
         assert policy.root_search_query("FaceTime") == "FaceTime"
         assert policy.root_search_query("Apps") == "Apps"

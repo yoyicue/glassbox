@@ -2606,6 +2606,92 @@ def test_return_one_level_falls_back_to_ipad_detail_pane_back_point(monkeypatch)
 
 
 @pytest.mark.smoke
+def test_return_one_level_ipad_does_not_accept_sidebar_overlap_as_parent(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    ticks = iter([0.0, 1.0, 4.0, 4.0, 4.0])
+    monkeypatch.setattr(walkthrough.time, "monotonic", lambda: next(ticks))
+    sidebar = [
+        _el("Accessibility", 70, 214, w=96),
+        _el("Camera", 70, 252, w=58),
+        _el("Control Centre", 70, 292, w=118),
+        _el("Display & Brightness", 70, 332, w=150),
+        _el("Home Screen &", 70, 372, w=116),
+        _el("App Library", 70, 412, w=86),
+        _el("Notifications", 70, 452, w=106),
+        _el("Sounds", 70, 492, w=62),
+        _el("Focus", 70, 532, w=48),
+        _el("Screen Time", 70, 572, w=96),
+        _el("Touch ID & Passcode", 70, 612, w=156),
+        _el("Privacy & Security", 70, 652, w=146),
+    ]
+    child = _scene(
+        *sidebar,
+        _el("Date & Time", 420, 44, w=96),
+        _el("24-Hour Time", 314, 160, w=110),
+        _el("Set Automatically", 314, 250, w=142),
+        _el("Time Zone", 314, 340, w=78),
+    )
+    parent = _scene(
+        *sidebar,
+        _el("General", 420, 44, w=70),
+        _el("Date & Time", 314, 300, w=96),
+        _el("Dictionary", 314, 344, w=82),
+        _el("Fonts", 314, 388, w=44),
+        _el("Keyboard", 314, 432, w=76),
+        _el("Language & Region", 314, 476, w=142),
+    )
+
+    class IPadTopLeftBackFallbackPhone(_TopLeftBackFallbackPhone):
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def _viewport_size(self):
+            return 640, 989
+
+    phone = IPadTopLeftBackFallbackPhone(child, parent)
+
+    assert _return_one_level(
+        phone,
+        parent_texts=[element.text for element in parent.elements],
+        parent_title="General",
+        parent_is_root=False,
+    )
+    assert phone.keys == [(0x08, 0x2F)]
+    assert phone.taps == [(305, 84)]
+
+
+@pytest.mark.smoke
+def test_return_one_level_ipad_final_settle_check_accepts_late_parent(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    child = _scene(
+        _el("About", 420, 44, w=60),
+        _el("Name", 314, 160, w=44),
+        _el("iPadOS Version", 314, 220, w=116),
+    )
+    parent = _scene(
+        _el("General", 420, 44, w=70),
+        _el("About", 314, 300, w=42),
+        _el("Software Update", 314, 344, w=130),
+    )
+    monkeypatch.setattr(walkthrough, "_wait_returned_to_parent", lambda *args, **kwargs: (False, child))
+
+    class IPadTopLeftBackFallbackPhone(_TopLeftBackFallbackPhone):
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def _viewport_size(self):
+            return 640, 989
+
+    phone = IPadTopLeftBackFallbackPhone(child, parent)
+
+    assert _return_one_level(
+        phone,
+        parent_texts=[element.text for element in parent.elements],
+        parent_title="General",
+        parent_is_root=False,
+    )
+    assert phone.taps == [(305, 84)]
+
+
+@pytest.mark.smoke
 def test_return_one_level_treats_unknown_back_shortcut_as_fallbackable(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
     ticks = iter([0.0, 1.0, 4.0, 4.0, 4.0])

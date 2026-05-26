@@ -227,6 +227,23 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   `navigation_success_proxy_rate=1.0`. This consolidates the prior six-root and
   tail-three evidence into one bounded hardware report; it is still not a claim
   of exhaustive iPad Settings child inventory.
+- A broader General-only multi-child audit
+  (`/private/tmp/ipad-settings-general-broad-child-6.json`) now passes on
+  hardware with an English target label (`General`) even when the visible
+  sidebar starts away from the General row. It opens `Settings > General`, then
+  reaches five Settings-native child pages in one bounded run: `About`,
+  `Software Update`, the iPad Storage app-list page OCR'd as `Q Applications`,
+  `AirPlay & Continuity`, and `Screen Capture`. The iPad Storage/app-list page is
+  stopped as `dynamic app list rows`, so the run does not open individual app
+  storage rows. The report has `target_roots_missing_child=[]`,
+  `target_failures=[]`, `limits_hit=[]`, no known issues,
+  `return_root_failed=false`, and `navigation_success_proxy_rate=1.0`.
+  Fixes behind this run are generic: shared-root English labels are canonicalized
+  before top-search query selection, iPad split-view return confirmation no
+  longer accepts left-sidebar text overlap as proof that the right detail pane
+  returned to its parent, a final strict settle check catches late iPad back
+  animations, and non-returnable/purchase-or-selector child labels such as
+  `AppleCare & Warranty` and `AirDrop` are not entered as broad child samples.
 - A blocked-target child audit
   (`/tmp/ipad-settings-child-audit-blocked-3-1.json`) now proves the remaining
   actionable shared roots on this iPad profile are handled conservatively:
@@ -498,8 +515,10 @@ top-left point.
   generic root surfaces.
 - Remaining: keep broadening Settings sampling beyond the current twelve
   actionable shared roots plus these first fourteen extra top-level pages and six
-  explicit blocked stop points, and keep stale-detail/return semantics under real
-  multi-level pages without turning the policy into a page-specific rule list.
+  explicit blocked stop points, and keep stale-detail/return semantics under
+  real multi-level pages without turning the policy into a page-specific rule
+  list. The General broad-child pass reduces this risk but does not make the
+  whole iPad Settings child inventory exhaustive.
 
 ### 3. Scene classifier / safe-area / springboard: pervasive single-column geometry
 Under-stated previously — the iPhone single-column assumption was not confined to
@@ -552,10 +571,11 @@ only when adapter/cabling/profile changes.
 
 Core stayed; the iPad profile and iPadOS platform baseline now exist and are
 hardware-proved for Settings root coverage, nine-root split-view child
-traversal, three additional safe-blocked Settings roots, fourteen extra safe
-top-level Settings pages beyond the shared-root gate, six extra pages that now
-stop as explicit read-only blocked targets, keyboard Home, native pointer taps,
-and visible/multi-page Home-icon foregrounding.
+traversal, a broader five-child General native-page sample, three additional
+safe-blocked Settings roots, fourteen extra safe top-level Settings pages beyond
+the shared-root gate, six extra pages that now stop as explicit read-only
+blocked targets, keyboard Home, native pointer taps, and visible/multi-page
+Home-icon foregrounding.
 
 The remaining work is narrower but still real: do not promote wheel scrolling
 until semantic movement is observed, do not claim arbitrary iPad SpringBoard
