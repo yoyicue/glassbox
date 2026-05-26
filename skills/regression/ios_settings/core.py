@@ -1405,6 +1405,8 @@ def _returned_to_parent_scene(
     if parent_is_root:
         return _scene_is_settings_root(scene)
     if parent_title and _title_matches_navigation_label(_page_title(scene), parent_title):
+        if ipad_target:
+            return settings_scene_state.same_visible_page(parent_texts, _texts(scene))
         return True
     if ipad_target and parent_title:
         return False

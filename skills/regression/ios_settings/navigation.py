@@ -693,6 +693,19 @@ def crawl_current_page(
                     continue
                 cand = relocated
                 scene = current
+            elif depth > 0:
+                # Child samples can stale just like root rows: returning from a
+                # prior detail page may settle with slightly shifted right-pane
+                # rows. Re-ground the remaining child label in the live parent
+                # scene before tapping, instead of trusting captured coordinates.
+                with contextlib.suppress(Exception):
+                    phone.invalidate_perceive_cache()
+                current = phone.perceive()
+                relocated = _relocate_detail_candidate(actions, current, label)
+                if relocated is None:
+                    continue
+                cand = relocated
+                scene = current
             attempted.add(label)
             before_texts = actions.texts(scene)
             if not actions.tap_settings_row(phone, cand):
@@ -863,3 +876,22 @@ def _record_inert_root_candidate(
         text=label,
         reason="inert_self_loop",
     ))
+
+
+def _relocate_detail_candidate(
+    actions: SettingsNavigationActions,
+    scene,
+    label: str,
+) -> UIElement | None:
+    live_candidates = actions.safe_navigation_candidates(
+        scene,
+        allow_sensitive_root_labels=False,
+        allow_known_without_affordance=False,
+    )
+    exact = next(
+        (element for element in live_candidates if (element.text or "").strip() == label),
+        None,
+    )
+    if exact is not None:
+        return exact
+    return actions.match_any(live_candidates, [label])

@@ -294,6 +294,17 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   OCR is missing, and right-detail safe child evidence can relax a selector
   blocker even when the left sidebar search panel still shows
   `Suggestions`/`Recents`.
+- A Focus multi-child audit (`/private/tmp/ipad-settings-focus-broad-child-4.json`)
+  now passes on hardware and covers the Personal/Work Focus configuration pages,
+  which iPadOS/OCR still titles as `Focus`. The report reaches two child pages,
+  has `target_roots_missing_child=[]`, no target failures, no hard limits, no
+  blocked pages, no navigation failures, and `navigation_success_proxy_rate=1.0`.
+  The failing predecessor
+  (`/private/tmp/ipad-settings-focus-broad-child-3.json`) exposed two generic
+  stale-detail issues: depth>0 child candidates also need live re-grounding
+  before tap, and iPad same-title returns must confirm parent text overlap rather
+  than accepting the title alone. This prevents a `Personal Focus` child page
+  from being mistaken for the parent `Focus` page after return.
 - A blocked-target child audit
   (`/tmp/ipad-settings-child-audit-blocked-3-1.json`) now proves the remaining
   actionable shared roots on this iPad profile are handled conservatively:
@@ -581,9 +592,9 @@ top-left point.
   actionable shared roots plus these first fourteen extra top-level pages and six
   explicit blocked stop points, and keep stale-detail/return semantics under
   real multi-level pages without turning the policy into a page-specific rule
-  list. The General, Accessibility, Siri, Notifications, Display & Brightness,
-  and Sounds & Haptics broad-child passes reduce this risk but do not make the
-  whole iPad Settings child inventory exhaustive.
+  list. The General, Accessibility, Siri, Notifications, Focus, Display &
+  Brightness, and Sounds & Haptics broad-child passes reduce this risk but do
+  not make the whole iPad Settings child inventory exhaustive.
 
 ### 3. Scene classifier / safe-area / springboard: pervasive single-column geometry
 Under-stated previously — the iPhone single-column assumption was not confined to
@@ -636,8 +647,8 @@ only when adapter/cabling/profile changes.
 
 Core stayed; the iPad profile and iPadOS platform baseline now exist and are
 hardware-proved for Settings root coverage, nine-root split-view child
-traversal, broader General, Accessibility, Siri, Notifications, Display &
-Brightness, and Sounds & Haptics child samples, three additional safe-blocked
+traversal, broader General, Accessibility, Siri, Notifications, Focus, Display
+& Brightness, and Sounds & Haptics child samples, three additional safe-blocked
 Settings roots, fourteen extra safe top-level Settings pages beyond the
 shared-root gate, six extra pages that now stop as explicit read-only blocked
 targets, keyboard Home, native pointer taps, and visible/multi-page Home-icon

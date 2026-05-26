@@ -1924,6 +1924,102 @@ def test_crawler_records_rejected_candidates_seen_after_scroll(monkeypatch):
         (("Settings", "通用"), "滚动新页面", "unknown_navigation_label"),
     ]
 
+
+@pytest.mark.smoke
+def test_child_crawler_regrounds_detail_candidate_after_return(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+    parent_before = _scene(
+        _el("Parent", 220, 80, w=72),
+        _el("Child A", 220, 260, w=72),
+        _el("Child B", 220, 320, w=72),
+    )
+    parent_after = _scene(
+        _el("Parent", 220, 80, w=72),
+        _el("Child A", 220, 260, w=72),
+        _el("Child B", 220, 420, w=72),
+    )
+    child_a = _scene(_el("Child A", 220, 80, w=72))
+    child_b = _scene(_el("Child B", 220, 80, w=72))
+
+    class _Phone:
+        def __init__(self):
+            self.scene = parent_before
+            self.tapped: list[tuple[str, tuple[int, int]]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+    phone = _Phone()
+
+    def safe_candidates(scene, **_kwargs):
+        if scene is parent_before:
+            return [
+                _el("Child A", 220, 260, w=72),
+                _el("Child B", 220, 320, w=72),
+            ]
+        if scene is parent_after:
+            return [
+                _el("Child A", 220, 260, w=72),
+                _el("Child B", 220, 420, w=72),
+            ]
+        return []
+
+    def tap_row(phone, row):
+        label = (row.text or "").strip()
+        phone.tapped.append((label, row.box.center))
+        phone.scene = child_a if label == "Child A" else child_b
+        return True
+
+    def child_crawl(_phone, *, path, visits, **_kwargs):
+        visits.append(PageVisit(path=path, title=path[-1], texts=(path[-1],)))
+
+    def return_one_level(phone, **_kwargs):
+        phone.scene = parent_after
+        return True
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        root_coverage_perceive=lambda phone, _depth: phone.perceive(),
+        record_visible_page=lambda **_kwargs: True,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=safe_candidates,
+        max_candidates_per_page=0,
+        tap_settings_row=tap_row,
+        same_page_after_tap=lambda before, after, **_kwargs: before is after,
+        page_title=lambda _scene: "Parent",
+        return_one_level=return_one_level,
+        scroll_budget_for_depth=lambda _depth: 1,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", parent_after),
+        crawl_current_page=child_crawl,
+    )
+    visits: list[PageVisit] = []
+
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings", "Parent"),
+        visits=visits,
+        seen_sigs=set(),
+        depth=1,
+        max_depth=2,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert phone.tapped == [
+        ("Child A", (256, 270)),
+        ("Child B", (256, 430)),
+    ]
+
+
 @pytest.mark.smoke
 def test_crawler_reports_max_pages_limit(monkeypatch):
     monkeypatch.setattr(walkthrough, "MAX_PAGES_VISITED", 1)
@@ -2657,6 +2753,42 @@ def test_return_one_level_ipad_does_not_accept_sidebar_overlap_as_parent(monkeyp
     )
     assert phone.keys == [(0x08, 0x2F)]
     assert phone.taps == [(305, 84)]
+
+
+@pytest.mark.smoke
+def test_return_one_level_ipad_does_not_accept_same_title_child_without_parent_text(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    ticks = iter([0.0, 1.0, 4.0, 4.0, 4.0])
+    monkeypatch.setattr(walkthrough.time, "monotonic", lambda: next(ticks))
+    parent = _scene(
+        _el("Focus", 420, 44, w=52),
+        _el("Do Not Disturb", 314, 188, w=118),
+        _el("Personal", 314, 242, w=72),
+        _el("Work", 314, 296, w=44),
+        _el("Share Across Devices", 314, 520, w=162),
+        _el("Focus Status", 314, 620, w=104),
+    )
+    same_title_child = _scene(
+        _el("Focus", 420, 44, w=52),
+        _el("Personal Focus", 314, 188, w=118),
+        _el("When you're spending time with family", 314, 242, w=260),
+        _el("Customise Focus", 314, 520, w=128),
+    )
+
+    assert not walkthrough._returned_to_parent_scene(
+        same_title_child,
+        parent_texts=[element.text for element in parent.elements],
+        parent_title="Focus",
+        parent_is_root=False,
+        ipad_target=True,
+    )
+    assert walkthrough._returned_to_parent_scene(
+        parent,
+        parent_texts=[element.text for element in parent.elements],
+        parent_title="Focus",
+        parent_is_root=False,
+        ipad_target=True,
+    )
 
 
 @pytest.mark.smoke
