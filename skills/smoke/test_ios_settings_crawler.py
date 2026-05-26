@@ -157,6 +157,34 @@ def test_child_audit_records_return_root_failed_not_exception(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_child_audit_records_initial_return_root_failed_not_exception(monkeypatch):
+    monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
+    monkeypatch.setattr(crawler, "_open_settings_from_home_if_visible", lambda phone: None)
+
+    def _return(_phone):
+        raise crawler.settings_recovery.SettingsRootUnreachable("dirty start")
+
+    monkeypatch.setattr(crawler, "_return_to_settings_root", _return)
+
+    result = crawler.crawl_high_value_child_settings(
+        object(),
+        target_root_labels=["Apple Pencil"],
+        max_depth=1,
+        max_pages=8,
+        max_child_scrolls_per_page=0,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+    )
+
+    assert result.target_failures == [
+        {"label": "Apple Pencil", "reason": "settings_root_unreachable"}
+    ]
+    assert result.return_root_failed is True
+    assert result.limits_hit == {"return_root_failed"}
+    assert "exception" not in result.limits_hit
+
+
+@pytest.mark.smoke
 def test_child_audit_records_return_root_failed_after_unopened_target(monkeypatch):
     """Unopened targets can leave a dirty search state; report both facts."""
     monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
@@ -187,6 +215,68 @@ def test_child_audit_records_return_root_failed_after_unopened_target(monkeypatc
     assert result.return_root_failed is True
     assert "return_root_failed" in result.limits_hit
     assert "exception" not in result.limits_hit
+
+
+@pytest.mark.smoke
+def test_child_audit_assume_settings_open_skips_foregrounding(monkeypatch):
+    monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
+    monkeypatch.setattr(crawler, "_current_scene_is_settings_context", lambda phone: True)
+    monkeypatch.setattr(
+        crawler,
+        "_open_settings_from_home_if_visible",
+        lambda phone: pytest.fail("assume_settings_open must not foreground Settings"),
+    )
+    monkeypatch.setattr(crawler, "_return_to_settings_root", lambda phone: None)
+    monkeypatch.setattr(crawler, "_open_target_root_page", lambda phone, label: True)
+    monkeypatch.setattr(crawler, "_crawl_current_page", lambda phone, **kwargs: None)
+
+    result = crawler.crawl_high_value_child_settings(
+        object(),
+        target_root_labels=["Apple Pencil"],
+        max_depth=1,
+        max_pages=4,
+        max_child_scrolls_per_page=0,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+        assume_settings_open=True,
+    )
+
+    assert result.opened_targets == ["Apple Pencil"]
+    assert result.config["assume_settings_open"] is True
+    assert not result.limits_hit
+
+
+@pytest.mark.smoke
+def test_child_audit_assume_settings_open_reports_non_settings_start(monkeypatch):
+    monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
+    monkeypatch.setattr(crawler, "_current_scene_is_settings_context", lambda phone: False)
+    monkeypatch.setattr(
+        crawler,
+        "_open_settings_from_home_if_visible",
+        lambda phone: pytest.fail("assume_settings_open must not foreground Settings"),
+    )
+    monkeypatch.setattr(
+        crawler,
+        "_return_to_settings_root",
+        lambda phone: pytest.fail("non-Settings starts should fail before Settings recovery"),
+    )
+
+    result = crawler.crawl_high_value_child_settings(
+        object(),
+        target_root_labels=["Apple Pencil"],
+        max_depth=1,
+        max_pages=4,
+        max_child_scrolls_per_page=0,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+        assume_settings_open=True,
+    )
+
+    assert result.target_failures == [
+        {"label": "Apple Pencil", "reason": "settings_not_foregrounded"}
+    ]
+    assert result.limits_hit == {"startup_not_settings"}
+    assert result.config["assume_settings_open"] is True
 
 
 @pytest.mark.smoke

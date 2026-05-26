@@ -349,6 +349,7 @@ def test_child_audit_cli_writes_report_with_requested_roots(monkeypatch, tmp_pat
         "--max-child-scrolls-per-page", "0",
         "--max-candidates-per-page", "0",
         "--allow-root-only-target-roots",
+        "--assume-settings-open",
         "--language", "en",
         "--region", "HK",
         "--phone-model", "ipad_mini_7",
@@ -364,4 +365,5 @@ def test_child_audit_cli_writes_report_with_requested_roots(monkeypatch, tmp_pat
     assert captured["max_child_scrolls_per_page"] == 0
     assert captured["max_candidates_per_page"] == 0
     assert captured["allow_root_only_target_roots"] is True
+    assert captured["assume_settings_open"] is True
     assert captured["closed"] is True

@@ -81,6 +81,7 @@ def crawl_high_value_child_settings(
     max_candidates_per_page: int,
     strict_child_candidate_audit: bool,
     allow_root_only_target_roots: bool = False,
+    assume_settings_open: bool = False,
 ) -> SettingsChildCrawlResult:
     """Sample stable child Settings pages without exposing walkthrough internals."""
     target_labels = tuple(target_root_labels)
@@ -112,56 +113,75 @@ def crawl_high_value_child_settings(
     settings_core._ACTIVE_TRACE = trace
     try:
         with _temporary_run_config(run_config):
-            _open_settings_from_home_if_visible(traced_phone)
-            already_open_target = False
-            if root_only_single_target and target_labels and hasattr(traced_phone, "perceive"):
-                already_open_target = _opened_requested_root(traced_phone.perceive(), target_labels[0])
-            if not already_open_target:
-                _return_to_settings_root(traced_phone)
-            for label in target_labels:
-                if len(visits) >= max_pages:
-                    limits_hit.add("max_pages")
-                    break
-                if not _open_target_root_page(traced_phone, label):
-                    target_failures.append({"label": label, "reason": "target_root_not_opened"})
-                    try:
-                        _return_to_settings_root(traced_phone)
-                    except settings_recovery.SettingsRootUnreachable:
-                        # Same soft-failure contract as post-visit recovery:
-                        # keep the unopened target evidence instead of letting
-                        # a dirty Settings search state crash the probe.
-                        return_root_failed = True
-                        limits_hit.add("return_root_failed")
-                        break
-                    continue
-                opened_targets.append(label)
-                try:
-                    _crawl_current_page(
-                        traced_phone,
-                        path=("Settings", label),
-                        visits=visits,
-                        seen_sigs=set(),
-                        depth=1,
-                        max_depth=max_depth,
-                        limits_hit=limits_hit,
-                        blocked_pages=blocked_pages,
-                        rejected_candidates=rejected_candidates,
-                        navigation_failures=navigation_failures,
+            startup_not_settings = False
+            if assume_settings_open:
+                startup_not_settings = not _current_scene_is_settings_context(traced_phone)
+                if startup_not_settings:
+                    limits_hit.add("startup_not_settings")
+                    target_failures.extend(
+                        {"label": label, "reason": "settings_not_foregrounded"}
+                        for label in target_labels
                     )
-                except settings_recovery.SettingsRootUnreachable:
-                    return_root_failed = True
-                    limits_hit.add("return_root_failed")
-                    break
-                if not root_only_single_target:
+            else:
+                _open_settings_from_home_if_visible(traced_phone)
+            if not startup_not_settings:
+                already_open_target = False
+                if root_only_single_target and target_labels and hasattr(traced_phone, "perceive"):
+                    already_open_target = _opened_requested_root(traced_phone.perceive(), target_labels[0])
+                if not already_open_target:
                     try:
                         _return_to_settings_root(traced_phone)
                     except settings_recovery.SettingsRootUnreachable:
-                        # Soft return-failure path: record it and stop the child
-                        # audit gracefully instead of letting the distinct recovery
-                        # exception fall through to the crash/re-raise handler below.
+                        return_root_failed = True
+                        limits_hit.add("return_root_failed")
+                        target_failures.extend(
+                            {"label": label, "reason": "settings_root_unreachable"}
+                            for label in target_labels
+                        )
+                for label in (() if return_root_failed else target_labels):
+                    if len(visits) >= max_pages:
+                        limits_hit.add("max_pages")
+                        break
+                    if not _open_target_root_page(traced_phone, label):
+                        target_failures.append({"label": label, "reason": "target_root_not_opened"})
+                        try:
+                            _return_to_settings_root(traced_phone)
+                        except settings_recovery.SettingsRootUnreachable:
+                            # Same soft-failure contract as post-visit recovery:
+                            # keep the unopened target evidence instead of letting
+                            # a dirty Settings search state crash the probe.
+                            return_root_failed = True
+                            limits_hit.add("return_root_failed")
+                            break
+                        continue
+                    opened_targets.append(label)
+                    try:
+                        _crawl_current_page(
+                            traced_phone,
+                            path=("Settings", label),
+                            visits=visits,
+                            seen_sigs=set(),
+                            depth=1,
+                            max_depth=max_depth,
+                            limits_hit=limits_hit,
+                            blocked_pages=blocked_pages,
+                            rejected_candidates=rejected_candidates,
+                            navigation_failures=navigation_failures,
+                        )
+                    except settings_recovery.SettingsRootUnreachable:
                         return_root_failed = True
                         limits_hit.add("return_root_failed")
                         break
+                    if not root_only_single_target:
+                        try:
+                            _return_to_settings_root(traced_phone)
+                        except settings_recovery.SettingsRootUnreachable:
+                            # Soft return-failure path: record it and stop the child
+                            # audit gracefully instead of letting the distinct recovery
+                            # exception fall through to the crash/re-raise handler below.
+                            return_root_failed = True
+                            limits_hit.add("return_root_failed")
+                            break
     except BaseException:
         limits_hit.add("exception")
         raise
@@ -175,6 +195,8 @@ def crawl_high_value_child_settings(
         if limit in {"max_candidates_per_page", "max_depth", "max_scrolls_per_page"}
     )
     limits_hit.difference_update(sample_limits_hit)
+    report_config = run_config.to_child_audit_report_config()
+    report_config["assume_settings_open"] = assume_settings_open
     return SettingsChildCrawlResult(
         target_root_labels=target_labels,
         opened_targets=opened_targets,
@@ -187,7 +209,7 @@ def crawl_high_value_child_settings(
         navigation_failures=navigation_failures,
         trace_payload=trace.payload if trace is not None else None,
         sample_limits_hit=sample_limits_hit,
-        config=run_config.to_child_audit_report_config(),
+        config=report_config,
     )
 
 
@@ -321,6 +343,26 @@ def _open_target_root_page(phone, label: str) -> bool:
     ):
         return True
     return _wait_opened_requested_root(phone, label)
+
+
+def _current_scene_is_settings_context(phone) -> bool:
+    if not hasattr(phone, "perceive"):
+        return False
+    scene = phone.perceive()
+    if (
+        settings_core._scene_is_settings_root(scene)
+        or settings_core._scene_looks_like_settings_detail(scene)
+        or settings_core._is_settings_search_scene(scene)
+    ):
+        return True
+    return settings_core._scene_kind(scene, phone=phone) in {
+        "settings_root",
+        "settings_detail",
+        "settings_search",
+        "settings_search_home",
+        "settings_search_results",
+        "settings_blocked_safety",
+    }
 
 
 def _visible_root_candidate_for_label(phone, label: str):

@@ -578,6 +578,17 @@ top-left point.
   opens only the Camera detail page, records
   `app permission/access selector rows`, and exposes `safe_candidate_texts=[]`.
   Future broader child samples should prefer settings-native, read-only pages.
+- The public child-audit runner now has an `--assume-settings-open` mode for
+  fresh-device sampling. In this mode it refuses to foreground Settings from
+  Home/SpringBoard and only audits if the current screen is already a Settings
+  root/detail/search surface. A live negative check on the connected iPad
+  (`/private/tmp/ipad-settings-assume-open-apple-pencil-root-only-2.json`) wrote
+  a failed report instead of crashing or opening apps:
+  `target_failures=[{"label":"Apple Pencil","reason":"settings_root_unreachable"}]`,
+  `limits_hit=["return_root_failed"]`, `opened_target_roots=[]`, and
+  `exception_hit=false`. This is not Apple Pencil coverage; it is evidence that
+  fresh-device audits now fail closed and that dirty Settings root recovery is
+  still a real prerequisite before collecting more child inventory proof.
 - Screen Time has the same fresh-install boundary at `Always Allowed`: the page
   is an allowed-apps selector, not useful read-only Settings structure on a
   not-yet-authorized iPad. The policy now excludes that row from child

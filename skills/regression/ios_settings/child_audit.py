@@ -35,6 +35,7 @@ def probe_high_value_child_audit(
     strict_child_candidate_audit: bool = False,
     allow_blocked_target_roots: bool = False,
     allow_root_only_target_roots: bool = False,
+    assume_settings_open: bool = False,
 ) -> dict[str, Any]:
     """Sample child Settings pages using the existing readonly crawler."""
     result = settings_crawler.crawl_high_value_child_settings(
@@ -46,6 +47,7 @@ def probe_high_value_child_audit(
         max_candidates_per_page=max_candidates_per_page,
         strict_child_candidate_audit=strict_child_candidate_audit,
         allow_root_only_target_roots=allow_root_only_target_roots,
+        assume_settings_open=assume_settings_open,
     )
     return _build_report(
         target_root_labels=result.target_root_labels,
@@ -462,6 +464,7 @@ def _run_live_child_audit(args: argparse.Namespace) -> int:
                 strict_child_candidate_audit=args.strict_child_candidate_audit,
                 allow_blocked_target_roots=args.allow_blocked_target_roots,
                 allow_root_only_target_roots=args.allow_root_only_target_roots,
+                assume_settings_open=args.assume_settings_open,
             )
     except (RuntimeUnavailable, settings_crawler.SettingsCrawlerUnavailable) as exc:
         print(f"ERROR: {exc}")
@@ -500,6 +503,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--strict-child-candidate-audit", action="store_true")
     parser.add_argument("--allow-blocked-target-roots", action="store_true")
     parser.add_argument("--allow-root-only-target-roots", action="store_true")
+    parser.add_argument(
+        "--assume-settings-open",
+        action="store_true",
+        help=(
+            "Do not foreground Settings from Home/SpringBoard; fail with a report "
+            "if the current screen is not already a Settings root/detail/search surface."
+        ),
+    )
     parser.add_argument("--language", default=None)
     parser.add_argument("--region", default=None)
     parser.add_argument("--phone-model", default=None)
