@@ -331,6 +331,92 @@ def test_ipad_settings_policy_blocks_settings_native_layout_customization_pages(
 
 
 @pytest.mark.smoke
+def test_ipad_blocked_reason_ignores_sidebar_marker_collisions():
+    policy = IPadSettingsPolicy()
+    apps = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 34, 90, w=72, h=18),
+            _el("WLAN", 70, 214, w=44, h=16),
+            _el("kacier", 70, 242, w=50, h=12),
+            _el("Notifications", 70, 330, w=92, h=16),
+            _el("Sounds", 70, 360, w=52, h=16),
+            _el("Apps", 268, 44, w=42, h=16),
+            _el("Detault Apps", 314, 120, w=84, h=14),
+            _el("Manage default apps on iPad", 314, 146, w=190, h=12),
+            _el("App Store", 314, 250, w=76, h=14),
+            _el("Books", 314, 290, w=46, h=14),
+            _el("Calculator", 314, 330, w=76, h=14),
+        ],
+    )
+    game_center = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 34, 90, w=72, h=18),
+            _el("WLAN", 70, 214, w=44, h=16),
+            _el("kacier", 70, 242, w=50, h=12),
+            _el("Bluetooth", 70, 292, w=70, h=16),
+            _el("Game Center", 268, 44, w=96, h=16),
+            _el("Customize Profile", 314, 180, w=128, h=14),
+            _el("Friends", 314, 260, w=58, h=14),
+            _el("Friend Requests", 314, 300, w=118, h=14),
+            _el("Invite Friends", 314, 340, w=100, h=14),
+            _el("Share Friends List", 314, 390, w=132, h=14),
+        ],
+    )
+    benign = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 34, 90, w=72, h=18),
+            _el("WLAN", 70, 214, w=44, h=16),
+            _el("kacier", 70, 242, w=50, h=12),
+            _el("Notifications", 70, 330, w=92, h=16),
+            _el("Sounds", 70, 360, w=52, h=16),
+            _el("Example", 420, 44, w=72, h=16),
+            _el("Read Only", 314, 180, w=80, h=14),
+        ],
+    )
+
+    assert policy.blocked_child_navigation_reason(apps) == "dynamic app list rows"
+    assert policy.blocked_child_navigation_reason(game_center) == "game center profile/social rows"
+    assert policy.blocked_child_navigation_reason(benign) is None
+
+
+@pytest.mark.smoke
+def test_ipad_split_view_detail_root_can_still_be_blocked():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Settings", 48, 62, w=72, h=28),
+            _el("WLAN", 70, 214, w=44, h=16),
+            _el("Bluetooth", 70, 252, w=70, h=16),
+            _el("General", 70, 292, w=58, h=16),
+            _el("Accessibility", 70, 332, w=96, h=16),
+            _el("Apps", 420, 44, w=42, h=16),
+            _el("Detault Apps", 314, 120, w=84, h=14),
+            _el("Manage default apps on iPad", 314, 146, w=190, h=12),
+            _el("App Store", 314, 250, w=76, h=14),
+            _el("Books", 314, 290, w=46, h=14),
+            _el("Calculator", 314, 330, w=76, h=14),
+        ],
+    )
+
+    assert policy.classify_scene(scene).kind == "settings_detail"
+    assert policy.scene_is_settings_root(scene) is True
+    assert policy.blocked_child_navigation_reason(scene) == "dynamic app list rows"
+    assert policy.safe_navigation_candidates(scene) == []
+
+
+@pytest.mark.smoke
 def test_ipad_detail_child_accepts_trailing_value_disclosure_affordance():
     policy = IPadSettingsPolicy()
     scene = Scene(

@@ -415,8 +415,25 @@ BLOCKED_CHILD_NAVIGATION_MARKERS = (
     ("蓝牙", ("设备",), "dynamic Bluetooth device rows"),
     ("Bluetooth", ("My Devices", "Other Devices"), "dynamic Bluetooth device rows"),
     ("Bluetooth", ("Devices",), "dynamic Bluetooth device rows"),
+    ("Touch ID & Passcode", ("Use Touch ID For", "Fingerprints", "Turn Passcode On", "Change Passcode"), "passcode and biometric settings"),
+    ("Face ID & Passcode", ("Use Face ID For", "Face ID", "Turn Passcode On", "Change Passcode"), "passcode and biometric settings"),
+    ("电池", ("充电上限", "优化电池充电", "电池百分比"), "Battery selector/toggle rows"),
+    ("Battery", ("Charging Limit", "Optimized Battery Charging", "Battery Percentage"), "Battery selector/toggle rows"),
+    ("通知", ("显示为", "定时推送摘要", "显示预览", "通知样式"), "Notification selector/toggle rows"),
+    ("Notifications", ("Display As", "Scheduled Summary", "Show Previews", "Notification Style"), "Notification selector/toggle rows"),
+    ("通知", ("允许通知", "即时通知", "提醒", "声音", "标记"), "Notification app selector/toggle rows"),
+    ("Notifications", ("Allow Notifications", "Immediate Delivery", "Alerts", "Sounds", "Badges"), "Notification app selector/toggle rows"),
+    ("显示预览", ("始终", "解锁时", "永不"), "Notification preview selector rows"),
+    ("Show Previews", ("Always", "When Unlocked", "Never"), "Notification preview selector rows"),
+    ("隔空投送", ("接收关闭", "仅限联系人", "所有人（10分钟）"), "AirDrop selector rows"),
+    ("AirDrop", ("Receiving Off", "Contacts Only", "Everyone"), "AirDrop selector rows"),
+)
+
+IPAD_BLOCKED_CHILD_NAVIGATION_MARKERS = (
+    *BLOCKED_CHILD_NAVIGATION_MARKERS,
     ("Allow Safari to Access", ("Siri", "Search"), "app permission/access selector rows"),
     ("Allow Weather to Access", ("Location", "Siri", "Search"), "app permission/access selector rows"),
+    ("Allow Books to Access", ("Siri", "Search", "Background App Refresh"), "app permission/access selector rows"),
     (
         "Allow Location Access",
         ("Never", "Ask Next Time", "While Using", "Always", "Precise Location"),
@@ -434,25 +451,28 @@ BLOCKED_CHILD_NAVIGATION_MARKERS = (
         ("Full-Screen Apps", "Windowed Apps", "Stage Manager"),
         "multitasking layout selector rows",
     ),
-    ("Touch ID & Passcode", ("Use Touch ID For", "Fingerprints", "Turn Passcode On", "Change Passcode"), "passcode and biometric settings"),
-    ("Face ID & Passcode", ("Use Face ID For", "Face ID", "Turn Passcode On", "Change Passcode"), "passcode and biometric settings"),
-    ("电池", ("充电上限", "优化电池充电", "电池百分比"), "Battery selector/toggle rows"),
-    ("Battery", ("Charging Limit", "Optimized Battery Charging", "Battery Percentage"), "Battery selector/toggle rows"),
-    ("通知", ("显示为", "定时推送摘要", "显示预览", "通知样式"), "Notification selector/toggle rows"),
-    ("Notifications", ("Display As", "Scheduled Summary", "Show Previews", "Notification Style"), "Notification selector/toggle rows"),
-    ("通知", ("允许通知", "即时通知", "提醒", "声音", "标记"), "Notification app selector/toggle rows"),
-    ("Notifications", ("Allow Notifications", "Immediate Delivery", "Alerts", "Sounds", "Badges"), "Notification app selector/toggle rows"),
-    ("显示预览", ("始终", "解锁时", "永不"), "Notification preview selector rows"),
-    ("Show Previews", ("Always", "When Unlocked", "Never"), "Notification preview selector rows"),
-    ("隔空投送", ("接收关闭", "仅限联系人", "所有人（10分钟）"), "AirDrop selector rows"),
-    ("AirDrop", ("Receiving Off", "Contacts Only", "Everyone"), "AirDrop selector rows"),
+    ("Apps", ("Default Apps", "Manage default apps", "App Store", "Books", "Calculator"), "dynamic app list rows"),
+    (
+        "Game Center",
+        ("Customize Profile", "Friends", "Friend Requests", "Invite Friends", "Share Friends List"),
+        "game center profile/social rows",
+    ),
+    (
+        "Game Center",
+        ("自定义个人资料", "朋友", "朋友请求", "邀请朋友", "共享朋友列表"),
+        "game center profile/social rows",
+    ),
 )
 
 
-def _blocked_child_navigation_reason_from_texts(texts: list[str] | tuple[str, ...]) -> str | None:
+def _blocked_child_navigation_reason_from_texts(
+    texts: list[str] | tuple[str, ...],
+    *,
+    markers=BLOCKED_CHILD_NAVIGATION_MARKERS,
+) -> str | None:
     stable = stable_visible_texts(texts)
     joined = "\n".join(stable)
-    for page_marker, row_markers, reason in BLOCKED_CHILD_NAVIGATION_MARKERS:
+    for page_marker, row_markers, reason in markers:
         page_key = compact_text(page_marker).casefold()
         row_keys = tuple(compact_text(marker).casefold() for marker in row_markers)
         if page_key in joined and (not row_keys or any(marker in joined for marker in row_keys)):
@@ -1361,9 +1381,18 @@ class IPadSettingsPolicy(SettingsPolicy):
         return super().page_title(scene)
 
     def blocked_child_navigation_reason(self, scene) -> str | None:
-        reason = super().blocked_child_navigation_reason(scene)
-        if reason is None:
-            reason = _blocked_child_navigation_reason_from_texts(self.texts(scene))
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        classified = self.classify_scene(scene, viewport_size=viewport_size)
+        if classified is not None and classified.kind == "settings_root":
+            return None
+        title_scoped_reason = self._title_scoped_blocked_child_navigation_reason(scene)
+        if title_scoped_reason is not None:
+            return title_scoped_reason
+        blocking_texts = self._detail_pane_blocking_texts(scene)
+        reason = _blocked_child_navigation_reason_from_texts(
+            blocking_texts if blocking_texts else self.texts(scene),
+            markers=IPAD_BLOCKED_CHILD_NAVIGATION_MARKERS,
+        )
         if reason not in self._RELAXABLE_SELECTOR_BLOCK_REASONS:
             return reason
         if self._ipad_search_active(scene):
@@ -1371,6 +1400,55 @@ class IPadSettingsPolicy(SettingsPolicy):
         if self._has_safe_detail_disclosure_candidate(scene):
             return None
         return reason
+
+    def _title_scoped_blocked_child_navigation_reason(self, scene) -> str | None:
+        title = self.page_title(scene)
+        texts = self.texts(scene)
+        joined = "\n".join(stable_visible_texts(texts))
+        if self.title_matches_navigation_label(title, "Apps") and any(
+            compact_text(marker).casefold() in joined
+            for marker in (
+                "Default Apps",
+                "Detault Apps",
+                "Manage default apps",
+                "App Store",
+                "Books",
+                "Calculator",
+            )
+        ):
+            return "dynamic app list rows"
+        if self.title_matches_navigation_label(title, "Game Center"):
+            if any(
+                compact_text(marker).casefold() in joined
+                for marker in ("Welcome to Game Center", "Continue")
+            ):
+                return "game center onboarding requires action"
+            if any(
+                compact_text(marker).casefold() in joined
+                for marker in ("Customize Profile", "Friends", "Friend Requests", "Invite Friends", "Share Friends List")
+            ):
+                return "game center profile/social rows"
+        return None
+
+    def _detail_pane_blocking_texts(self, scene) -> tuple[str, ...]:
+        """Use only the right detail pane for iPad split-view block markers."""
+        viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
+        from glassbox.ipados.scene import sidebar_right_x
+
+        sidebar_right = sidebar_right_x(viewport_size[0])
+        elements = [
+            element for element in scene.elements
+            if (element.text or "").strip()
+            and element.box.center[0] > sidebar_right + 24
+        ]
+        if not elements:
+            return ()
+        elements.sort(key=lambda element: (element.box.center[1], element.box.center[0]))
+        texts = [(element.text or "").strip() for element in elements]
+        title = self.page_title(scene)
+        if title and title not in texts:
+            texts.insert(0, title)
+        return tuple(texts)
 
     def safe_navigation_candidates(
         self,

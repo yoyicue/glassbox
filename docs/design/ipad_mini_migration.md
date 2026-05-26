@@ -32,8 +32,8 @@ Implemented baseline:
 Remaining hardening: iPad SpringBoard real Home-folder modeling beyond visible
 and multi-page Home icons, broader split-view Settings inventory beyond the
 current twelve actionable shared roots plus the first fourteen extra safe top-level
-pages, and a replacement for the disproven Settings sidebar wheel-scroll
-assumption.
+pages and six explicit blocked stop points, and a replacement for the disproven
+Settings sidebar wheel-scroll assumption.
 
 Hardware corrections from the connected iPad mini rig (2026-05-25):
 - `wheelReport` ACKs but does **not** semantically scroll the iPad Settings
@@ -287,6 +287,12 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   page title, and an empty top-search `Suggestions`/`Recents` panel must not be
   treated as normal sidebar root rows. `Search` remains observed but not accepted
   because it is ambiguous with the sidebar search control.
+  A later fresh-install read-only check
+  (`/private/tmp/ipad-settings-apps-gamecenter-root-blocked-readonly-2.json`)
+  upgrades `Apps` from root-only coverage to an explicit blocked stop point:
+  it opens only the `Apps` root detail page, records `dynamic app list rows`,
+  and exposes no safe child candidates, so the crawler does not drill into app
+  permission panels such as `Books`.
 - A sixth extra top-level inventory audit
   (`/tmp/ipad-settings-extra-inventory-game-center-2.json`) now accepts
   `Game Center` as root-only coverage. The report starts from the already opened
@@ -298,6 +304,9 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   This is intentionally root-only: `Game Center` onboarding/profile setup text is
   treated as a child-traversal block, so the crawler observes the page but does
   not chase profile, friend, sign-out, or setup controls.
+  The same later read-only check now records `Game Center` as
+  `game center onboarding requires action` with no safe child candidates, again
+  without tapping through first-run setup.
 - A seventh extra top-level inventory audit
   (`/tmp/ipad-settings-extra-inventory-weather-2.json`) now accepts `Weather` as
   root-only coverage. The report starts from a different selected Settings page
@@ -435,9 +444,12 @@ top-left point.
   and `Home Screen & App Library`; and
   `/tmp/ipad-settings-extra-inventory-search-open-2-1.json` covers `Safari` and
   `FaceTime` through top-search fallback. `/tmp/ipad-settings-extra-inventory-apps-6.json`
-  covers `Apps` as root-only coverage, and
-  `/tmp/ipad-settings-extra-inventory-game-center-2.json` covers `Game Center`
-  as root-only coverage. `/tmp/ipad-settings-extra-inventory-weather-2.json`
+  and `/tmp/ipad-settings-extra-inventory-game-center-2.json` first covered
+  `Apps` and `Game Center` as root-only coverage; the later fresh-install
+  read-only check
+  `/private/tmp/ipad-settings-apps-gamecenter-root-blocked-readonly-2.json`
+  turns both into explicit blocked stop points before any app-specific child
+  page is tapped. `/tmp/ipad-settings-extra-inventory-weather-2.json`
   covers `Weather` as root-only coverage, and
   `/tmp/ipad-settings-extra-inventory-books-translate-1.json` covers `Books`
   and `Translate` as root-only coverage. `Search` remains observed but not
@@ -476,10 +488,18 @@ top-left point.
   roots opened, all four covered by `target_roots_blocked`, no target failures,
   no limits, no known issues, `return_root_failed=false`, and
   `navigation_success_proxy_rate=1.0`.
+- A fresh-install app-list/onboarding read-only check
+  (`/private/tmp/ipad-settings-apps-gamecenter-root-blocked-readonly-2.json`)
+  now opens only the `Apps` and `Game Center` root detail pages and stops there.
+  `Apps` is blocked as `dynamic app list rows`; `Game Center` is blocked as
+  `game center onboarding requires action`; both expose `safe_candidate_texts=[]`.
+  This also fixes the iPad split-view guard: pages with a live left sidebar can
+  still be classified as blocked right-detail pages instead of being skipped as
+  generic root surfaces.
 - Remaining: keep broadening Settings sampling beyond the current twelve
-  actionable shared roots plus these first fourteen extra top-level pages, and keep
-  stale-detail/return semantics under real multi-level pages without turning the
-  policy into a page-specific rule list.
+  actionable shared roots plus these first fourteen extra top-level pages and six
+  explicit blocked stop points, and keep stale-detail/return semantics under real
+  multi-level pages without turning the policy into a page-specific rule list.
 
 ### 3. Scene classifier / safe-area / springboard: pervasive single-column geometry
 Under-stated previously — the iPhone single-column assumption was not confined to
@@ -533,9 +553,9 @@ only when adapter/cabling/profile changes.
 Core stayed; the iPad profile and iPadOS platform baseline now exist and are
 hardware-proved for Settings root coverage, nine-root split-view child
 traversal, three additional safe-blocked Settings roots, fourteen extra safe
-top-level Settings pages beyond the shared-root gate, four settings-native
-extra pages that now stop as explicit read-only blocked targets, keyboard Home,
-native pointer taps, and visible/multi-page Home-icon foregrounding.
+top-level Settings pages beyond the shared-root gate, six extra pages that now
+stop as explicit read-only blocked targets, keyboard Home, native pointer taps,
+and visible/multi-page Home-icon foregrounding.
 
 The remaining work is narrower but still real: do not promote wheel scrolling
 until semantic movement is observed, do not claim arbitrary iPad SpringBoard
