@@ -109,10 +109,11 @@ def crawl_high_value_child_settings(
     )
 
     previous_trace = settings_core._ACTIVE_TRACE
-    traced_phone, trace = settings_core._wrap_phone_with_trace_if_enabled(phone)
-    settings_core._ACTIVE_TRACE = trace
+    trace = None
     try:
         with _temporary_run_config(run_config):
+            traced_phone, trace = settings_core._wrap_phone_with_trace_if_enabled(phone)
+            settings_core._ACTIVE_TRACE = trace
             startup_not_settings = False
             if assume_settings_open:
                 startup_not_settings = not _current_scene_is_settings_context(traced_phone)
@@ -128,7 +129,11 @@ def crawl_high_value_child_settings(
                 already_open_target = False
                 if root_only_single_target and target_labels and hasattr(traced_phone, "perceive"):
                     already_open_target = _opened_requested_root(traced_phone.perceive(), target_labels[0])
-                if not already_open_target:
+                visible_target_root = (
+                    _is_ipad_target(traced_phone)
+                    and any(_visible_root_candidate_for_label(traced_phone, label) is not None for label in target_labels)
+                )
+                if not already_open_target and not visible_target_root:
                     try:
                         _return_to_settings_root(traced_phone)
                     except settings_recovery.SettingsRootUnreachable:
@@ -142,7 +147,15 @@ def crawl_high_value_child_settings(
                     if len(visits) >= max_pages:
                         limits_hit.add("max_pages")
                         break
-                    if not _open_target_root_page(traced_phone, label):
+                    try:
+                        opened_target = _open_target_root_page(traced_phone, label)
+                    except settings_recovery.SettingsRootUnreachable:
+                        opened_target = False
+                        return_root_failed = True
+                        limits_hit.add("return_root_failed")
+                        target_failures.append({"label": label, "reason": "settings_root_unreachable"})
+                        break
+                    if not opened_target:
                         target_failures.append({"label": label, "reason": "target_root_not_opened"})
                         try:
                             _return_to_settings_root(traced_phone)
@@ -312,30 +325,23 @@ def _open_target_root_page(phone, label: str) -> bool:
         current = phone.perceive()
         if _opened_requested_root(current, label):
             return True
+    if _is_ipad_target(phone) and _tap_visible_root_candidate(phone, label):
+        return True
     _return_to_settings_root(phone)
     _scroll_to_vertical_boundary(phone, direction="up")
     current = phone.perceive()
     if _opened_requested_root(current, label):
         return True
     row = _visible_root_candidate_for_label(phone, label)
-    if row is None:
-        row = settings_navigation.open_visible_or_scroll_to_row(
-            phone,
-            (label,),
-            settings_core._navigation_actions(),
-        )
-    if row is not None:
-        before = phone.perceive()
-        settings_navigation.tap_settings_row(phone, row, settings_core._navigation_actions())
-        time.sleep(1.0)
-        phone.invalidate_perceive_cache()
-        after = phone.perceive()
-        if _opened_requested_root(after, label):
-            return True
-        if _wait_opened_requested_root(phone, label):
-            return True
-        if not _is_ipad_target(phone) and not settings_scene_state.same_page_after_tap(before, after, expected_title=label):
-            return True
+    if row is not None and _tap_root_candidate_and_confirm(phone, label, row):
+        return True
+    row = settings_navigation.open_visible_or_scroll_to_row(
+        phone,
+        (label,),
+        settings_core._navigation_actions(),
+    )
+    if row is not None and _tap_root_candidate_and_confirm(phone, label, row):
+        return True
     if settings_navigation.open_root_label_via_search(
         phone,
         label,
@@ -343,6 +349,30 @@ def _open_target_root_page(phone, label: str) -> bool:
     ):
         return True
     return _wait_opened_requested_root(phone, label)
+
+
+def _tap_visible_root_candidate(phone, label: str) -> bool:
+    row = _visible_root_candidate_for_label(phone, label)
+    if row is None:
+        return False
+    return _tap_root_candidate_and_confirm(phone, label, row)
+
+
+def _tap_root_candidate_and_confirm(phone, label: str, row) -> bool:
+    before = phone.perceive()
+    settings_navigation.tap_settings_row(phone, row, settings_core._navigation_actions())
+    time.sleep(1.0)
+    phone.invalidate_perceive_cache()
+    after = phone.perceive()
+    if _opened_requested_root(after, label):
+        return True
+    if _wait_opened_requested_root(phone, label):
+        return True
+    return not _is_ipad_target(phone) and not settings_scene_state.same_page_after_tap(
+        before,
+        after,
+        expected_title=label,
+    )
 
 
 def _current_scene_is_settings_context(phone) -> bool:
@@ -370,6 +400,10 @@ def _visible_root_candidate_for_label(phone, label: str):
     scene = phone.perceive()
     if actions.is_settings_search_scene(scene):
         return None
+    if _is_ipad_target(phone):
+        sidebar_candidate = _visible_ipad_sidebar_root_candidate_for_label(phone, scene, label)
+        if sidebar_candidate is not None:
+            return sidebar_candidate
     target = actions.canonical_expected_root_label(label) or label
     candidates = actions.safe_navigation_candidates(
         scene,
@@ -385,6 +419,38 @@ def _visible_root_candidate_for_label(phone, label: str):
         ):
             return candidate
     return None
+
+
+def _visible_ipad_sidebar_root_candidate_for_label(phone, scene, label: str):
+    try:
+        from glassbox.ipados.scene import sidebar_right_x
+
+        width, height = getattr(scene, "viewport_size", None) or phone._viewport_size()
+        sidebar_right = sidebar_right_x(width)
+    except Exception:
+        return None
+    actions = settings_core._navigation_actions()
+    target = actions.canonical_expected_root_label(label) or label
+    matches = []
+    for element in scene.elements:
+        text = (element.text or "").strip()
+        if not text:
+            continue
+        cx, cy = element.box.center
+        if cx > sidebar_right or cy < int(height * 0.10) or cy > int(height * 0.96):
+            continue
+        if cy <= int(height * 0.18) and text.lower().startswith("q "):
+            continue
+        if (
+            text == label
+            or actions.canonical_expected_root_label(text) == target
+            or actions.match_any((element,), (label,)) is not None
+        ):
+            matches.append(element)
+    if not matches:
+        return None
+    matches.sort(key=lambda element: (element.box.center[1], element.box.center[0]))
+    return matches[0]
 
 
 def _opened_requested_root(scene, label: str) -> bool:

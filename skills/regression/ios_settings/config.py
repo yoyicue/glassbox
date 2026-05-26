@@ -90,6 +90,9 @@ class SettingsRunConfig:
             strict_child_candidate_audit=strict_child_candidate_audit,
             max_candidates_per_page=max_candidates_per_page,
             require_exhaustive=False,
+            trace_actions=os.environ.get("IOS_SETTINGS_TRACE_ACTIONS") == "1",
+            save_view_snapshots=os.environ.get("IOS_SETTINGS_SAVE_VIEW_SNAPSHOTS") == "1",
+            artifact_dir=os.environ.get("IOS_SETTINGS_ARTIFACT_DIR"),
         )
 
     def to_report_config(self) -> dict[str, object]:
@@ -145,6 +148,9 @@ class SettingsRunConfig:
             "max_child_scrolls_per_page": self.max_child_scrolls_per_page,
             "max_candidates_per_page": self.max_candidates_per_page,
             "strict_child_candidate_audit": self.strict_child_candidate_audit,
+            "trace_actions": self.trace_actions,
+            "save_view_snapshots": self.save_view_snapshots,
+            "artifact_dir": self.artifact_dir,
         }
 
 

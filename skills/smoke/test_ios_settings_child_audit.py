@@ -348,6 +348,7 @@ def test_child_audit_cli_writes_report_with_requested_roots(monkeypatch, tmp_pat
         "--max-pages", "5",
         "--max-child-scrolls-per-page", "0",
         "--max-candidates-per-page", "0",
+        "--startup-settle-s", "0",
         "--allow-root-only-target-roots",
         "--assume-settings-open",
         "--language", "en",

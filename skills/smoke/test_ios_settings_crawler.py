@@ -218,6 +218,74 @@ def test_child_audit_records_return_root_failed_after_unopened_target(monkeypatc
 
 
 @pytest.mark.smoke
+def test_child_audit_records_open_target_root_recovery_failure(monkeypatch):
+    monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
+    monkeypatch.setattr(crawler, "_open_settings_from_home_if_visible", lambda phone: None)
+    monkeypatch.setattr(crawler, "_return_to_settings_root", lambda phone: None)
+
+    def _open(_phone, _label):
+        raise crawler.settings_recovery.SettingsRootUnreachable("fallback root failed")
+
+    monkeypatch.setattr(crawler, "_open_target_root_page", _open)
+
+    result = crawler.crawl_high_value_child_settings(
+        object(),
+        target_root_labels=["Apple Pencil"],
+        max_depth=1,
+        max_pages=8,
+        max_child_scrolls_per_page=0,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+    )
+
+    assert result.target_failures == [
+        {"label": "Apple Pencil", "reason": "settings_root_unreachable"}
+    ]
+    assert result.return_root_failed is True
+    assert result.limits_hit == {"return_root_failed"}
+
+
+@pytest.mark.smoke
+def test_child_audit_applies_trace_config_before_wrapping(monkeypatch):
+    monkeypatch.setenv("IOS_SETTINGS_TRACE_ACTIONS", "1")
+    calls: list[bool] = []
+
+    class Trace:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+        @property
+        def payload(self):
+            return {"closed": self.closed}
+
+    trace = Trace()
+
+    def wrap(phone):
+        calls.append(settings_core.TRACE_ACTIONS)
+        return phone, trace
+
+    monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", wrap)
+    monkeypatch.setattr(crawler, "_open_settings_from_home_if_visible", lambda phone: None)
+    monkeypatch.setattr(crawler, "_return_to_settings_root", lambda phone: None)
+
+    result = crawler.crawl_high_value_child_settings(
+        object(),
+        target_root_labels=[],
+        max_depth=1,
+        max_pages=4,
+        max_child_scrolls_per_page=0,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+    )
+
+    assert calls == [True]
+    assert result.trace_payload == {"closed": True}
+
+
+@pytest.mark.smoke
 def test_child_audit_assume_settings_open_skips_foregrounding(monkeypatch):
     monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
     monkeypatch.setattr(crawler, "_current_scene_is_settings_context", lambda phone: True)
@@ -238,6 +306,7 @@ def test_child_audit_assume_settings_open_skips_foregrounding(monkeypatch):
         max_child_scrolls_per_page=0,
         max_candidates_per_page=0,
         strict_child_candidate_audit=False,
+        allow_root_only_target_roots=True,
         assume_settings_open=True,
     )
 
@@ -269,6 +338,7 @@ def test_child_audit_assume_settings_open_reports_non_settings_start(monkeypatch
         max_child_scrolls_per_page=0,
         max_candidates_per_page=0,
         strict_child_candidate_audit=False,
+        allow_root_only_target_roots=True,
         assume_settings_open=True,
     )
 
@@ -277,6 +347,37 @@ def test_child_audit_assume_settings_open_reports_non_settings_start(monkeypatch
     ]
     assert result.limits_hit == {"startup_not_settings"}
     assert result.config["assume_settings_open"] is True
+
+
+@pytest.mark.smoke
+def test_child_audit_skips_initial_root_recovery_when_ipad_target_sidebar_row_visible(monkeypatch):
+    target = object()
+    monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
+    monkeypatch.setattr(crawler, "_current_scene_is_settings_context", lambda phone: True)
+    monkeypatch.setattr(crawler, "_is_ipad_target", lambda phone: True)
+    monkeypatch.setattr(crawler, "_visible_root_candidate_for_label", lambda phone, label: target)
+    monkeypatch.setattr(
+        crawler,
+        "_return_to_settings_root",
+        lambda phone: pytest.fail("visible iPad sidebar target should skip initial root recovery"),
+    )
+    monkeypatch.setattr(crawler, "_open_target_root_page", lambda phone, label: True)
+    monkeypatch.setattr(crawler, "_crawl_current_page", lambda phone, **kwargs: None)
+
+    result = crawler.crawl_high_value_child_settings(
+        object(),
+        target_root_labels=["Apple Pencil"],
+        max_depth=1,
+        max_pages=4,
+        max_child_scrolls_per_page=0,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+        allow_root_only_target_roots=True,
+        assume_settings_open=True,
+    )
+
+    assert result.opened_targets == ["Apple Pencil"]
+    assert not result.limits_hit
 
 
 @pytest.mark.smoke
@@ -344,6 +445,80 @@ def test_child_audit_accepts_current_requested_root_before_search(monkeypatch):
     )
 
     assert crawler._open_target_root_page(phone, "屏幕使用时间") is True
+
+
+@pytest.mark.smoke
+def test_ipad_child_audit_taps_visible_sidebar_root_before_root_recovery(monkeypatch):
+    policy = IPadSettingsPolicy()
+    monkeypatch.setattr(settings_core, "DEFAULT_SETTINGS_POLICY", policy)
+    monkeypatch.setattr(settings_scene_state, "DEFAULT_SETTINGS_POLICY", policy)
+    monkeypatch.setattr(crawler.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        crawler,
+        "_return_to_settings_root",
+        lambda phone: pytest.fail("visible iPad sidebar root should not require root recovery"),
+    )
+    monkeypatch.setattr(crawler, "_scroll_to_vertical_boundary", lambda phone, *, direction: None)
+    monkeypatch.setattr(
+        crawler.settings_navigation,
+        "open_visible_or_scroll_to_row",
+        lambda phone, labels, actions: pytest.fail("visible iPad sidebar root should not scroll"),
+    )
+    monkeypatch.setattr(
+        crawler.settings_navigation,
+        "open_root_label_via_search",
+        lambda phone, label, actions: pytest.fail("visible iPad sidebar root should not search"),
+    )
+    bluetooth = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(744, 1133),
+        elements=[
+            UIElement(type="text", box=Box(x=48, y=72, w=72, h=28), text="Settings", confidence=0.9),
+            UIElement(type="list_item", box=Box(x=72, y=276, w=76, h=24), text="Bluetooth", confidence=0.9),
+            UIElement(type="list_item", box=Box(x=72, y=444, w=104, h=24), text="Apple Pencil", confidence=0.9),
+            UIElement(type="text", box=Box(x=418, y=76, w=96, h=28), text="Bluetooth", confidence=0.9),
+            UIElement(type="text", box=Box(x=384, y=180, w=120, h=24), text="Devices", confidence=0.9),
+        ],
+    )
+    apple_pencil = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(744, 1133),
+        elements=[
+            UIElement(type="text", box=Box(x=48, y=72, w=72, h=28), text="Settings", confidence=0.9),
+            UIElement(type="text", box=Box(x=72, y=444, w=104, h=24), text="Apple Pencil", confidence=0.9),
+            UIElement(type="text", box=Box(x=418, y=76, w=132, h=28), text="Apple Pencil", confidence=0.9),
+            UIElement(type="text", box=Box(x=384, y=260, w=148, h=24), text="Bottom Left Corner", confidence=0.9),
+            UIElement(type="text", box=Box(x=384, y=316, w=156, h=24), text="Bottom Right Corner", confidence=0.9),
+        ],
+    )
+
+    class Phone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self):
+            self.scene = bluetooth
+            self.taps: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def _viewport_size(self):
+            return (744, 1133)
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def tap_xy(self, x, y):
+            self.taps.append((x, y))
+            self.scene = apple_pencil
+            return True
+
+    phone = Phone()
+
+    assert crawler._open_target_root_page(phone, "Apple Pencil") is True
+    assert phone.taps
 
 
 @pytest.mark.smoke

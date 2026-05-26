@@ -12,6 +12,7 @@ import argparse
 import contextlib
 import json
 import os
+import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
@@ -454,6 +455,10 @@ def _run_live_child_audit(args: argparse.Namespace) -> int:
             cfg = get_config()
             source = make_source(cfg=cfg)
             runtime = build_phone(source=source, cfg=cfg)
+            if args.startup_settle_s > 0:
+                time.sleep(args.startup_settle_s)
+                with contextlib.suppress(Exception):
+                    runtime.phone.invalidate_perceive_cache()
             report = probe_high_value_child_audit(
                 runtime.phone,
                 target_root_labels=tuple(args.target_root),
@@ -500,6 +505,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-pages", type=int, default=24)
     parser.add_argument("--max-child-scrolls-per-page", type=int, default=1)
     parser.add_argument("--max-candidates-per-page", type=int, default=2)
+    parser.add_argument(
+        "--startup-settle-s",
+        type=float,
+        default=0.0,
+        help="Seconds to wait after opening the live source before the first perception.",
+    )
     parser.add_argument("--strict-child-candidate-audit", action="store_true")
     parser.add_argument("--allow-blocked-target-roots", action="store_true")
     parser.add_argument("--allow-root-only-target-roots", action="store_true")

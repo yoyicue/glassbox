@@ -589,6 +589,17 @@ top-left point.
   `exception_hit=false`. This is not Apple Pencil coverage; it is evidence that
   fresh-device audits now fail closed and that dirty Settings root recovery is
   still a real prerequisite before collecting more child inventory proof.
+  Follow-up attempts exposed two generic harness issues rather than new Settings
+  coverage: right-detail blocked-page markers such as the Bluetooth device list
+  must not suppress visible iPad sidebar root rows, and `SettingsRootUnreachable`
+  raised from a target-open fallback must be reported as a target failure instead
+  of escaping the CLI. The crawler now has iPad sidebar-root matching independent
+  of right-pane child blocking and soft-catches that target-open recovery
+  failure. Later live reports
+  (`/private/tmp/ipad-settings-assume-open-apple-pencil-child-4.json` and
+  `/private/tmp/ipad-settings-assume-open-apple-pencil-root-only-5.json`) still
+  failed with `settings_root_unreachable`, so they remain negative evidence; do
+  not count them as Apple Pencil child/root coverage.
 - Screen Time has the same fresh-install boundary at `Always Allowed`: the page
   is an allowed-apps selector, not useful read-only Settings structure on a
   not-yet-authorized iPad. The policy now excludes that row from child
