@@ -31,7 +31,7 @@ Implemented baseline:
 
 Remaining hardening: iPad SpringBoard real Home-folder modeling beyond visible
 and multi-page Home icons, broader split-view Settings inventory beyond the
-current twelve actionable shared roots plus the first twelve extra safe top-level
+current twelve actionable shared roots plus the first fourteen extra safe top-level
 pages, and a replacement for the disproven Settings sidebar wheel-scroll
 assumption.
 
@@ -309,6 +309,14 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   non-shared extra-root title validation, visible iPad search-result taps before
   keyboard input, and Weather search/detail overlays not being treated as
   SpringBoard.
+- An eighth extra top-level inventory audit
+  (`/tmp/ipad-settings-extra-inventory-books-translate-1.json`) now accepts
+  `Books` and `Translate` as root-only coverage. The report opens
+  `Settings > Books` and `Settings > Translate`, records
+  `opened_target_roots=["Books", "Translate"]`,
+  `target_roots_without_child=["Books", "Translate"]`, `target_failures=[]`,
+  `target_roots_missing_child=[]`, `limits_hit=[]`, no known issues,
+  `return_root_failed=false`, and `navigation_success_proxy_rate=1.0`.
 - iPad SpringBoard foregrounding is now proved beyond Settings for a visible Home
   icon: `/tmp/ipad-springboard-files-open-2.json` opened `Files` from the current
   iPad Home page (`ok=true`, `is_home_after_open=false`). The first Files run also
@@ -419,7 +427,7 @@ top-left point.
   `Touch ID & Passcode` open but do not traverse dynamic network/device rows or
   passcode/biometric controls.
 - Broader top-level Settings inventory beyond the shared-root gate now has
-  hardware proof for twelve extra safe pages:
+  hardware proof for fourteen extra safe pages:
   `/tmp/ipad-settings-extra-inventory-camera-wallpaper-2.json` covers `Camera`
   and `Wallpaper`, and `/tmp/ipad-settings-extra-inventory-3-1.json` covers
   `Control Centre`, `Display & Brightness`, and `Multitasking & Gestures`;
@@ -430,10 +438,12 @@ top-left point.
   covers `Apps` as root-only coverage, and
   `/tmp/ipad-settings-extra-inventory-game-center-2.json` covers `Game Center`
   as root-only coverage. `/tmp/ipad-settings-extra-inventory-weather-2.json`
-  covers `Weather` as root-only coverage. `Search` remains observed but not
+  covers `Weather` as root-only coverage, and
+  `/tmp/ipad-settings-extra-inventory-books-translate-1.json` covers `Books`
+  and `Translate` as root-only coverage. `Search` remains observed but not
   accepted after broader attempts failed to open it reliably.
 - Remaining: keep broadening Settings sampling beyond the current twelve
-  actionable shared roots plus these first twelve extra top-level pages, and keep
+  actionable shared roots plus these first fourteen extra top-level pages, and keep
   stale-detail/return semantics under real multi-level pages without turning the
   policy into a page-specific rule list.
 
@@ -488,7 +498,7 @@ only when adapter/cabling/profile changes.
 
 Core stayed; the iPad profile and iPadOS platform baseline now exist and are
 hardware-proved for Settings root coverage, nine-root split-view child
-traversal, three additional safe-blocked Settings roots, twelve extra safe
+traversal, three additional safe-blocked Settings roots, fourteen extra safe
 top-level Settings pages beyond the shared-root gate, keyboard Home, native
 pointer taps, and visible/multi-page Home-icon foregrounding.
 
