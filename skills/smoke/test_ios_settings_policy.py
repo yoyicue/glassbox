@@ -167,7 +167,7 @@ def test_ipad_settings_policy_allows_screen_time_rows_without_chevron_ocr():
         allow_known_without_affordance=False,
     )
 
-    assert [candidate.text for candidate in candidates] == ["Downtime", "App Limits", "Always Allowed"]
+    assert [candidate.text for candidate in candidates] == ["Downtime", "App Limits"]
 
 
 @pytest.mark.smoke
@@ -463,6 +463,36 @@ def test_settings_policy_rejects_applecare_warranty_child_navigation():
     assert "AppleCare & Warranty" not in labels
     assert "AirDrop" not in labels
     assert labels == ["About", "Software Update"]
+
+
+@pytest.mark.smoke
+def test_settings_policy_rejects_always_allowed_app_list_navigation():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Screen Time", 70, 292, w=96, h=16),
+            _el("Screen Time", 420, 44, w=96, h=16),
+            _el("Downtime", 314, 300, w=76, h=14),
+            _el("Schedule time away from the screen", 314, 320, w=220, h=12),
+            _el("App Limits", 314, 370, w=78, h=14),
+            _el("Set time limits for apps", 314, 390, w=170, h=12),
+            _el("Always Allowed", 314, 440, w=116, h=14),
+            _el("Choose apps to allow at all times", 314, 460, w=220, h=12),
+        ],
+    )
+
+    assert policy.is_unsafe_navigation_text("Always Allowed")
+    assert [
+        (candidate.text or "").strip()
+        for candidate in policy.safe_navigation_candidates(
+            scene,
+            allow_sensitive_root_labels=False,
+            allow_known_without_affordance=False,
+        )
+    ] == ["Downtime", "App Limits"]
 
 
 @pytest.mark.smoke

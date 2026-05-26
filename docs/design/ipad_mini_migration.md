@@ -520,6 +520,14 @@ top-left point.
   opens only the Camera detail page, records
   `app permission/access selector rows`, and exposes `safe_candidate_texts=[]`.
   Future broader child samples should prefer settings-native, read-only pages.
+- Screen Time has the same fresh-install boundary at `Always Allowed`: the page
+  is an allowed-apps selector, not useful read-only Settings structure on a
+  not-yet-authorized iPad. The policy now excludes that row from child
+  candidates. A broader follow-up
+  (`/private/tmp/ipad-settings-screen-time-broad-child-2.json`) reached the
+  settings-native `Downtime` and `App Limits` child pages, then failed only when
+  continuing into lower Screen Time rows that did not transition on this device;
+  do not count that report as a passing broad-child sample.
 - A settings-native blocked-target follow-up
   (`/private/tmp/ipad-settings-extra-blocked-native-1.json`) now turns four
   previously root-only pages into explicit read-only stop points:

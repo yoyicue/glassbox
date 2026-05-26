@@ -398,6 +398,7 @@ EXACT_UNSAFE_OR_NON_NAV_TEXT = {
     "App", "打开", "关闭", "开", "关", "On", "Off",
     "AppleCare与保修", "AppleCare 与保修", "AppleCare & Warranty",
     "隔空投送", "AirDrop",
+    "始终允许", "Always Allowed",
 }
 BLOCKED_CHILD_NAVIGATION_MARKERS = (
     ("输入密码", (), "authentication required"),
