@@ -193,6 +193,8 @@ def test_picokvm_ipad_connect_runs_wheel_activation_once(monkeypatch):
     assert "root@picokvm.test" in ssh_calls[0]
     assert "glassbox_ipad_wheel_armed" in ssh_calls[0][-1]
     assert "ffb00000.usb" in ssh_calls[0][-1]
+    assert "/dev/hidg1" in ssh_calls[0][-1]
+    assert "hidg1 not ready after UDC bounce" in ssh_calls[0][-1]
     assert sleeps == [1.0]
     assert [method for method, _params in rpc.calls].count("ping") >= 2
 

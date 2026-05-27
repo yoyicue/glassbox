@@ -19,7 +19,8 @@ authoritative on the iPad profile.
 
 There is one caveat — an unexplained one-time "activation" step that may be
 needed on a fresh iPad ↔ PicoKVM pair. The recovery procedure (UDC bounce) is
-below.
+below. Later latency probes showed wheel is already stable by t+3 s after the
+bounce, so glassbox uses a 6 s settle by default.
 
 ## What was validated (2026-05-27)
 
@@ -34,6 +35,9 @@ the sidebar pixel region `frame[65:1000, 640:820]` for visible scroll.
 | `kvm_app` JSON-RPC `wheelReport` × 10 (batch typical of a single scroll step) | **scrolled**, max-diff = 255 |
 | `kvm_app` JSON-RPC `wheelReport` × 1 (single tick) | max-diff ≈ 12 — visually not noticeable but accumulates |
 | `kvm_app` `absMouseReport` click via hidg1 RID 1 alongside wheel | **clicks still register**, right-pane title changed |
+| `vidpid_v2`: UDC bounce + probe at t+3/8/15/25 s for default VID/PID and Logitech VID/PID | **8/8 scrolled**; activation latency ≤3 s; VID/PID did not matter |
+| `soak`: 8 alternating 30-tick trials across spaced idle gaps up to 5 min | **8/8 scrolled**, identical 213 px shifts; no decay over ~28 min |
+| `decay_30min`: one UDC bounce + probes at t+0/5/15/30 min | **4/4 scrolled**, activation lifetime ≥30 min including ≥10 min idle gaps |
 
 Raw probe scripts and snapshots are preserved locally under
 `artifacts/wheel_probe_2026-05-27/` (gitignored evidence bundle).
@@ -68,7 +72,11 @@ only" to "wheel authoritative" in glassbox.
 5. Settings drill-down (skills/regression/ios_settings) now treats iPad wheel
    as a real root-coverage scroll path: when root scrolling appears stuck but
    required roots remain missing, iPad targets with wheel support get the same
-   bounded root reset pass before search recovery.
+   bounded root reset pass before search recovery. This consumer path is not
+   yet production-proved: a 2026-05-27 live drill-down rerun with VLM disabled
+   still entered only 5/17 required roots, so coverage improvement remains a
+   follow-up for the Settings crawler rather than a PicoKVM wheel capability
+   question.
 
 ## Single-tick is not visually noticeable; use 5-10+ tick batches
 
@@ -87,10 +95,12 @@ pass `N >= 5`.
 Earlier in the 2026-05-27 debugging session, raw HID wheel reports were
 silently ignored by the same iPad — 7 different descriptor / interface
 configurations were probed, all failed to scroll. After one experimental
-gadget reconfiguration (UDC detach → modify hidg2 descriptor → reattach → 25 s
-wait), wheel started working — and continued to work across subsequent PicoKVM
+gadget reconfiguration (UDC detach → modify hidg2 descriptor → reattach),
+wheel started working — and continued to work across subsequent PicoKVM
 **cold reboots** (3 verified), even after the descriptor was reverted to
-factory.
+factory. The first write-up used a guessed long post-bounce wait; the later
+`vidpid_v2` run proved the wheel path was already stable at t+3 s, so the
+production hook waits 6 s.
 
 We could not cleanly isolate the trigger. Plausible explanations:
 
@@ -120,12 +130,13 @@ ssh root@<picokvm.local> '
   echo "" > /sys/kernel/config/usb_gadget/kvm/UDC
   sleep 1
   echo "ffb00000.usb" > /sys/kernel/config/usb_gadget/kvm/UDC
+  # wait until /dev/hidg1 exists and UDC state is configured
 '
-# wait 25 seconds, then retest wheel
+# wait 6 seconds, then retest wheel
 ```
 
 Confirmed to wake iPad's wheel handling during the 2026-05-27 session. Cost:
-25 s setup; not required on already-activated rigs.
+~6 s setup; not required on already-activated rigs.
 
 If even that doesn't help, a structural-descriptor change is on file as a
 last-resort fallback (see "What was tried and turned out unnecessary" below).
@@ -139,9 +150,10 @@ We expect not to need it.
 - the transient marker file on PicoKVM (`/tmp/glassbox_ipad_wheel_armed` by
   default) is missing.
 
-After the bounce, glassbox writes the marker and sleeps 25 s before continuing.
-Cost: 25 s on the very first connect for a given PicoKVM boot. After that, the
-marker short-circuits.
+After the bounce, glassbox waits until `/dev/hidg1` exists and the UDC state is
+`configured`, writes the marker, then sleeps 6 s before continuing. Cost: ~6 s
+plus a short readiness poll on the very first connect for a given PicoKVM boot.
+After that, the marker short-circuits.
 
 Default mode is `required`, so a failed SSH/UDC bounce makes PicoKVM connect
 fail visibly instead of silently advertising validated iPad wheel support on a
@@ -151,6 +163,32 @@ cold rig. For diagnostics or known-hot rigs:
 GLASSBOX_PICOKVM_IPAD_WHEEL_ACTIVATION=warn   # attempt but continue on failure
 GLASSBOX_PICOKVM_IPAD_WHEEL_ACTIVATION=off    # skip activation entirely
 ```
+
+### Prerequisite: SSH key on PicoKVM
+
+The activation hook uses `ssh -o BatchMode=yes`, so the controller machine's
+public key must be in PicoKVM's authorized keys before `connect()` can
+succeed in `required` mode. The Luckfox PicoKVM (kvm_app 0.1.2, `sshd_config`
+2026-05-27) has an **unusual `AuthorizedKeysFile`** — keys go to
+`/userdata/openssh/.ssh/authorized_keys`, **not** the default
+`/root/.ssh/authorized_keys`. Putting the key in the default path silently
+won't help. Provision once per rig:
+
+```bash
+PUBKEY="$(cat ~/.ssh/id_rsa.pub)"   # or id_ed25519.pub
+sshpass -p 'luckfox' ssh -o StrictHostKeyChecking=accept-new root@<picokvm.local> "
+  mkdir -p /userdata/openssh/.ssh
+  chmod 700 /userdata/openssh /userdata/openssh/.ssh
+  grep -qF '$PUBKEY' /userdata/openssh/.ssh/authorized_keys 2>/dev/null || \
+    echo '$PUBKEY' >> /userdata/openssh/.ssh/authorized_keys
+  chmod 600 /userdata/openssh/.ssh/authorized_keys
+"
+ssh -o BatchMode=yes root@<picokvm.local> 'echo ok'   # smoke
+```
+
+The actual `AuthorizedKeysFile` path is in `/etc/ssh/sshd_config` line
+starting `AuthorizedKeysFile` — verify on each new rig in case Luckfox changes
+the firmware default.
 
 ## What was tried and turned out unnecessary
 
@@ -187,7 +225,8 @@ production wheel path validated above.
 
 1. **Cold-iPad behavior**: test wheel after a physical USB-C unplug + 5 min,
    and after an iPad reboot. The connect-time activation hook is now mandatory
-   by default, but physical-unplug/iPad-reboot durability is still unmeasured.
+   by default, and a single bounce is proved to last at least 30 min, but
+   physical-unplug/iPad-reboot durability is still unmeasured.
 2. **Ticks-per-row calibration**: measure how many wheel-report ticks scroll
    the iPad Settings sidebar by exactly one row, for accurate drill-down
    coverage budgeting.

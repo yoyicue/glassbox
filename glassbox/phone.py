@@ -728,7 +728,7 @@ class Phone:
             return False
         return not policy.after_action_only or self._needs_stable_frame
 
-    def snapshot(self, *, stable: bool | None = None, scope: str | None = None) -> Frame:
+    def snapshot(self, *, stable: bool | None = None, scope: str | None = None) -> Frame | None:
         from glassbox.perception.source import Frame as _Frame
         frame_scope = self._normalize_observation_scope(scope or self.default_observation_scope)
         previous_scene_space = self._last_scene_coordinate_space if self._last_scene is not None else None

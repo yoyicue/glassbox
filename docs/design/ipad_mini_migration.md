@@ -699,7 +699,7 @@ scroll the iPad Settings sidebar end-to-end across 3 fresh PicoKVM cold
 reboots; no descriptor or firmware change was needed. The new reference doc
 covers production-side glassbox changes (promote `scroll_strategy="wheel"`
 from diagnostic to authoritative on the iPad profile), the one-time
-"activation" caveat (UDC bounce + 25 s wait if a freshly paired iPad does not
+"activation" caveat (UDC bounce + 6 s wait if a freshly paired iPad does not
 scroll), and which earlier hypotheses turned out to be red herrings.
 
 Historical context: this section originally said "do not promote wheel from

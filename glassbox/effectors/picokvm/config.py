@@ -70,7 +70,7 @@ class PicoKVMEffectorConfig(BaseSettings):
     ipad_wheel_activation_ssh_user: str = "root"
     ipad_wheel_activation_marker: str = "/tmp/glassbox_ipad_wheel_armed"
     ipad_wheel_activation_udc: str = "ffb00000.usb"
-    ipad_wheel_activation_wait_s: float = 25.0
+    ipad_wheel_activation_wait_s: float = 6.0
     ipad_wheel_activation_ssh_timeout_s: float = 8.0
 
     click_move_settle_ms: int = 250

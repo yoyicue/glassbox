@@ -18,7 +18,7 @@ def test_picokvm_config_defaults_match_bringup():
     assert cfg.ipad_wheel_activation_ssh_user == "root"
     assert cfg.ipad_wheel_activation_marker == "/tmp/glassbox_ipad_wheel_armed"
     assert cfg.ipad_wheel_activation_udc == "ffb00000.usb"
-    assert cfg.ipad_wheel_activation_wait_s == 25.0
+    assert cfg.ipad_wheel_activation_wait_s == 6.0
     assert cfg.assistive_touch_home_enabled is False
     assert cfg.keyboard_home_enabled is True
     assert cfg.keyboard_back_enabled is True

@@ -158,12 +158,23 @@ class PicoKVMEffector:
         marker = shlex.quote(self.config.ipad_wheel_activation_marker)
         udc = shlex.quote(self.config.ipad_wheel_activation_udc)
         remote = (
-            f"if [ -e {marker} ]; then echo already; exit 0; fi; "
+            f"marker={marker}; "
+            f"udc={udc}; "
+            'if [ -e "$marker" ]; then echo already; exit 0; fi; '
             "echo '' > /sys/kernel/config/usb_gadget/kvm/UDC; "
             "sleep 1; "
-            f"echo {udc} > /sys/kernel/config/usb_gadget/kvm/UDC; "
-            f"touch {marker}; "
-            "echo bounced"
+            'echo "$udc" > /sys/kernel/config/usb_gadget/kvm/UDC; '
+            "i=0; "
+            "while [ $i -lt 20 ]; do "
+            'state="$(cat "/sys/class/udc/$udc/state" 2>/dev/null || true)"; '
+            'if [ -e /dev/hidg1 ] && [ "$state" = configured ]; then '
+            'touch "$marker"; echo bounced; exit 0; '
+            "fi; "
+            "sleep 0.25; "
+            "i=$((i + 1)); "
+            "done; "
+            "echo 'hidg1 not ready after UDC bounce' >&2; "
+            "exit 1"
         )
         proc = subprocess.run(
             [
