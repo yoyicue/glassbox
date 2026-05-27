@@ -14,6 +14,11 @@ def test_picokvm_config_defaults_match_bringup():
     assert cfg.session_id == "codex-glassbox"
     assert cfg.trust_env is False
     assert cfg.wheel_enabled is False
+    assert cfg.ipad_wheel_activation == "required"
+    assert cfg.ipad_wheel_activation_ssh_user == "root"
+    assert cfg.ipad_wheel_activation_marker == "/tmp/glassbox_ipad_wheel_armed"
+    assert cfg.ipad_wheel_activation_udc == "ffb00000.usb"
+    assert cfg.ipad_wheel_activation_wait_s == 25.0
     assert cfg.assistive_touch_home_enabled is False
     assert cfg.keyboard_home_enabled is True
     assert cfg.keyboard_back_enabled is True
@@ -46,6 +51,8 @@ def test_picokvm_config_env_overrides(monkeypatch):
     monkeypatch.setenv("GLASSBOX_PICOKVM_WHEEL_ENABLED", "true")
     monkeypatch.setenv("GLASSBOX_PICOKVM_AUTH_MODE", "password")
     monkeypatch.setenv("GLASSBOX_PICOKVM_SESSION_ID", "unit-session")
+    monkeypatch.setenv("GLASSBOX_PICOKVM_IPAD_WHEEL_ACTIVATION", "warn")
+    monkeypatch.setenv("GLASSBOX_PICOKVM_IPAD_WHEEL_ACTIVATION_WAIT_S", "3")
 
     cfg = PicoKVMEffectorConfig(_env_file=None)
 
@@ -53,3 +60,5 @@ def test_picokvm_config_env_overrides(monkeypatch):
     assert cfg.wheel_enabled is True
     assert cfg.auth_mode == "password"
     assert cfg.session_id == "unit-session"
+    assert cfg.ipad_wheel_activation == "warn"
+    assert cfg.ipad_wheel_activation_wait_s == 3.0

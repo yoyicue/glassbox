@@ -167,6 +167,74 @@ def test_picokvm_ipad_profile_wheel_flag_is_no_longer_diagnostic():
 
 
 @pytest.mark.smoke
+def test_picokvm_ipad_connect_runs_wheel_activation_once(monkeypatch):
+    geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    rpc = FakeRpc()
+    cfg = PicoKVMEffectorConfig(
+        _env_file=None,
+        base_url="http://picokvm.test:8080",
+        ipad_wheel_activation_wait_s=1.0,
+    )
+    eff = PicoKVMEffector(config=cfg, rpc=rpc, device_geometry=geometry)
+    ssh_calls: list[list[str]] = []
+    sleeps: list[float] = []
+
+    def fake_run(argv, **_kwargs):
+        ssh_calls.append(list(argv))
+        return SimpleNamespace(returncode=0, stdout="bounced\n", stderr="")
+
+    monkeypatch.setattr("glassbox.effectors.picokvm.effector.subprocess.run", fake_run)
+    monkeypatch.setattr("glassbox.effectors.picokvm.effector.time.sleep", lambda seconds: sleeps.append(seconds))
+
+    eff.connect()
+
+    assert eff.is_connected() is True
+    assert ssh_calls
+    assert "root@picokvm.test" in ssh_calls[0]
+    assert "glassbox_ipad_wheel_armed" in ssh_calls[0][-1]
+    assert "ffb00000.usb" in ssh_calls[0][-1]
+    assert sleeps == [1.0]
+    assert [method for method, _params in rpc.calls].count("ping") >= 2
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_connect_skips_activation_wait_when_remote_marker_exists(monkeypatch):
+    geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    rpc = FakeRpc()
+    cfg = PicoKVMEffectorConfig(_env_file=None, ipad_wheel_activation_wait_s=1.0)
+    eff = PicoKVMEffector(config=cfg, rpc=rpc, device_geometry=geometry)
+    sleeps: list[float] = []
+
+    monkeypatch.setattr(
+        "glassbox.effectors.picokvm.effector.subprocess.run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="already\n", stderr=""),
+    )
+    monkeypatch.setattr("glassbox.effectors.picokvm.effector.time.sleep", lambda seconds: sleeps.append(seconds))
+
+    eff.connect()
+
+    assert sleeps == []
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_connect_fails_when_required_activation_fails(monkeypatch):
+    geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    rpc = FakeRpc()
+    cfg = PicoKVMEffectorConfig(_env_file=None, ipad_wheel_activation="required")
+    eff = PicoKVMEffector(config=cfg, rpc=rpc, device_geometry=geometry)
+
+    monkeypatch.setattr(
+        "glassbox.effectors.picokvm.effector.subprocess.run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=255, stdout="", stderr="Host key verification failed"),
+    )
+
+    with pytest.raises(RuntimeError, match="picokvm_iPad_wheel_activation_failed"):
+        eff.connect()
+
+    assert eff._connected is False
+
+
+@pytest.mark.smoke
 def test_picokvm_ipad_profile_derives_absolute_calibration_from_crop():
     geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
     crop = SimpleNamespace(crop_bbox=(640, 48, 642, 984))

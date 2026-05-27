@@ -8,8 +8,11 @@ are unsupported.
 
 from __future__ import annotations
 
+import shlex
+import subprocess
 import time
 from collections.abc import Iterable
+from urllib.parse import urlparse
 
 from glassbox.effector import ActionResult, BackendCapabilities, PreflightResult
 from glassbox.effectors.picokvm.config import PicoKVMEffectorConfig
@@ -71,6 +74,7 @@ class PicoKVMEffector:
 
     def connect(self) -> None:
         self.rpc.ping()
+        self._ensure_ipad_wheel_activation()
         self._connected = True
 
     def close(self) -> None:
@@ -133,6 +137,55 @@ class PicoKVMEffector:
 
     def _wheel_available(self) -> bool:
         return bool(self.config.wheel_enabled or self._is_ipad_target())
+
+    def _ensure_ipad_wheel_activation(self) -> None:
+        mode = str(self.config.ipad_wheel_activation or "off").strip().lower()
+        if mode == "off" or not self._is_ipad_target() or not self._wheel_available():
+            return
+        try:
+            activated = self._activate_ipad_wheel_once()
+        except Exception as exc:
+            if mode == "required":
+                raise RuntimeError(f"picokvm_iPad_wheel_activation_failed: {exc}") from exc
+            print(f"[picokvm] iPad wheel activation failed; continuing because mode={mode}: {exc}", flush=True)
+            return
+        if activated and self.config.ipad_wheel_activation_wait_s > 0:
+            time.sleep(float(self.config.ipad_wheel_activation_wait_s))
+            self.rpc.ping()
+
+    def _activate_ipad_wheel_once(self) -> bool:
+        host = _picokvm_ssh_host(self.config.base_url)
+        marker = shlex.quote(self.config.ipad_wheel_activation_marker)
+        udc = shlex.quote(self.config.ipad_wheel_activation_udc)
+        remote = (
+            f"if [ -e {marker} ]; then echo already; exit 0; fi; "
+            "echo '' > /sys/kernel/config/usb_gadget/kvm/UDC; "
+            "sleep 1; "
+            f"echo {udc} > /sys/kernel/config/usb_gadget/kvm/UDC; "
+            f"touch {marker}; "
+            "echo bounced"
+        )
+        proc = subprocess.run(
+            [
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                f"ConnectTimeout={max(1, int(self.config.ipad_wheel_activation_ssh_timeout_s))}",
+                f"{self.config.ipad_wheel_activation_ssh_user}@{host}",
+                remote,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=max(1.0, float(self.config.ipad_wheel_activation_ssh_timeout_s) + 3.0),
+            check=False,
+        )
+        if proc.returncode != 0:
+            stderr = (proc.stderr or "").strip()
+            stdout = (proc.stdout or "").strip()
+            detail = stderr or stdout or f"ssh exited {proc.returncode}"
+            raise RuntimeError(detail)
+        return "bounced" in (proc.stdout or "")
 
     def _apply_ipad_crop_calibration(self, crop) -> None:
         """Derive a PicoKVM absolute-pointer fit from the detected iPad crop.
@@ -589,3 +642,11 @@ class PicoKVMEffector:
 
     def paste(self) -> ActionResult:
         return self._failed("paste", ValueError("picokvm_paste_unverified"), unsupported=True)
+
+
+def _picokvm_ssh_host(base_url: str) -> str:
+    parsed = urlparse(base_url if "://" in base_url else f"http://{base_url}")
+    host = parsed.hostname
+    if not host:
+        raise ValueError(f"cannot derive PicoKVM SSH host from base_url={base_url!r}")
+    return host

@@ -2167,6 +2167,67 @@ def test_ipad_root_stuck_scroll_falls_through_to_search_without_reset(monkeypatc
 
 
 @pytest.mark.smoke
+def test_ipad_root_stuck_scroll_uses_wheel_reset_before_search_when_supported(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root = _scene(
+        _el("Settings", 48, 72, w=70),
+        _el("Notifications", 72, 300, w=110),
+    )
+
+    class IPadWheelPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def supports(self, action: str) -> bool:
+            return action == "scroll_wheel"
+
+        def perceive(self):
+            return root
+
+    reset_calls: list[str] = []
+    search_calls: list[dict] = []
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        root_coverage_perceive=lambda _phone, _depth: root,
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: False,
+        scroll_budget_for_depth=lambda _depth: 1,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", root),
+        scroll_to_top=lambda _phone: reset_calls.append("reset"),
+        max_root_scroll_resets=1,
+        root_coverage=lambda _visits, phone=None: {
+            "expected": ["电池"],
+            "visited": [],
+            "missing": ["电池"],
+        },
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        crawl_missing_root_pages_via_search=lambda _phone, **kwargs: search_calls.append(kwargs),
+    )
+
+    settings_navigation.crawl_current_page(
+        IPadWheelPhone(),
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert reset_calls == ["reset"]
+    assert len(search_calls) == 1
+
+
+@pytest.mark.smoke
 def test_crawler_records_navigation_failure_when_tap_does_not_open(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
     monkeypatch.setattr(walkthrough, "CHILD_NAVIGATION_ENABLED", True)

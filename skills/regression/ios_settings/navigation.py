@@ -828,7 +828,7 @@ def crawl_current_page(
             ]
             if (
                 depth == 0
-                and not _is_ipad_target(phone)
+                and (not _is_ipad_target(phone) or _supports_wheel_scroll(phone))
                 and actions.scroll_to_top is not None
                 and root_resets < actions.max_root_scroll_resets
                 and required_missing
@@ -876,6 +876,16 @@ def _record_inert_root_candidate(
         text=label,
         reason="inert_self_loop",
     ))
+
+
+def _supports_wheel_scroll(phone) -> bool:
+    supports = getattr(phone, "supports", None)
+    if not callable(supports):
+        return False
+    try:
+        return bool(supports("scroll_wheel"))
+    except Exception:
+        return False
 
 
 def _relocate_detail_candidate(

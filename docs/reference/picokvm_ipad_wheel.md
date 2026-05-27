@@ -44,8 +44,8 @@ descriptors was needed.
 
 ## Production-side action in glassbox
 
-These are the minimum edits to flip the iPad profile from "wheel diagnostic
-only" to "wheel authoritative".
+These are the minimum edits that flip the iPad profile from "wheel diagnostic
+only" to "wheel authoritative" in glassbox.
 
 1. `glassbox/effectors/picokvm/effector.py:_wheel_available()` — add iPad
    short-circuit so the iPad profile gets wheel without an explicit
@@ -65,9 +65,10 @@ only" to "wheel authoritative".
    docstring should be reworded to point at this doc instead.
 4. `docs/design/ipad_mini_migration.md §5` — leave the section but mark it as
    superseded by this doc.
-5. Settings drill-down (skills/regression/ios_settings) can stop treating
-   off-screen roots as "search-only recoverable" on iPad — wheel can reach them
-   directly. Calibrate ticks-per-row first (see open follow-ups).
+5. Settings drill-down (skills/regression/ios_settings) now treats iPad wheel
+   as a real root-coverage scroll path: when root scrolling appears stuck but
+   required roots remain missing, iPad targets with wheel support get the same
+   bounded root reset pass before search recovery.
 
 ## Single-tick is not visually noticeable; use 5-10+ tick batches
 
@@ -130,20 +131,26 @@ If even that doesn't help, a structural-descriptor change is on file as a
 last-resort fallback (see "What was tried and turned out unnecessary" below).
 We expect not to need it.
 
-## glassbox-side automation (optional, recommended)
+## glassbox-side automation
 
-To make the activation step painless for new rigs, add a one-shot in
-`PicoKVMEffector.connect()` that runs the UDC bounce when:
-- `phone_model.startswith("ipad")`, AND
-- a transient marker file on PicoKVM (e.g., `/tmp/glassbox_ipad_wheel_armed`)
-  is missing.
+`PicoKVMEffector.connect()` now runs a one-shot UDC bounce when:
+- `phone_model.startswith("ipad")`,
+- iPad wheel is enabled by the profile, and
+- the transient marker file on PicoKVM (`/tmp/glassbox_ipad_wheel_armed` by
+  default) is missing.
 
-After the bounce, write the marker and sleep 25 s before continuing. Cost: 25 s
-on the very first connect for a given PicoKVM boot. After that, the marker
-short-circuits.
+After the bounce, glassbox writes the marker and sleeps 25 s before continuing.
+Cost: 25 s on the very first connect for a given PicoKVM boot. After that, the
+marker short-circuits.
 
-If the cost is acceptable always, simpler: just always bounce on first connect
-each PicoKVM boot.
+Default mode is `required`, so a failed SSH/UDC bounce makes PicoKVM connect
+fail visibly instead of silently advertising validated iPad wheel support on a
+cold rig. For diagnostics or known-hot rigs:
+
+```bash
+GLASSBOX_PICOKVM_IPAD_WHEEL_ACTIVATION=warn   # attempt but continue on failure
+GLASSBOX_PICOKVM_IPAD_WHEEL_ACTIVATION=off    # skip activation entirely
+```
 
 ## What was tried and turned out unnecessary
 
@@ -179,8 +186,8 @@ production wheel path validated above.
 ## Open follow-ups
 
 1. **Cold-iPad behavior**: test wheel after a physical USB-C unplug + 5 min,
-   and after an iPad reboot. Decide whether the auto-bounce-on-connect in
-   glassbox is mandatory or just defensive.
+   and after an iPad reboot. The connect-time activation hook is now mandatory
+   by default, but physical-unplug/iPad-reboot durability is still unmeasured.
 2. **Ticks-per-row calibration**: measure how many wheel-report ticks scroll
    the iPad Settings sidebar by exactly one row, for accurate drill-down
    coverage budgeting.

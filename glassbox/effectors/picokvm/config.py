@@ -59,6 +59,20 @@ class PicoKVMEffectorConfig(BaseSettings):
     wheel_down_sign: Literal["negative", "positive"] = "positive"
     """wheelY=+1 scrolls content down a notch on iOS (verified on-device)."""
 
+    ipad_wheel_activation: Literal["off", "warn", "required"] = "required"
+    """How to handle the one-time iPad wheel USB-gadget activation on connect.
+
+    ``required`` fails PicoKVM connect if the UDC bounce cannot be confirmed,
+    preventing glassbox from advertising validated iPad wheel support on a cold
+    rig that may still ignore wheel reports. ``warn`` attempts the bounce but
+    continues on failure. ``off`` assumes the rig is already activated.
+    """
+    ipad_wheel_activation_ssh_user: str = "root"
+    ipad_wheel_activation_marker: str = "/tmp/glassbox_ipad_wheel_armed"
+    ipad_wheel_activation_udc: str = "ffb00000.usb"
+    ipad_wheel_activation_wait_s: float = 25.0
+    ipad_wheel_activation_ssh_timeout_s: float = 8.0
+
     click_move_settle_ms: int = 250
     """Conservative absolute-pointer settle before pressing.
 
@@ -144,11 +158,19 @@ class PicoKVMEffectorConfig(BaseSettings):
         "page_slide_start_edge_fraction",
         "page_slide_end_edge_fraction",
         "page_slide_y_fraction",
+        "ipad_wheel_activation_ssh_timeout_s",
     )
     @classmethod
     def _positive_float(cls, value: float) -> float:
         if float(value) <= 0:
             raise ValueError("value must be > 0")
+        return float(value)
+
+    @field_validator("ipad_wheel_activation_wait_s")
+    @classmethod
+    def _non_negative_float(cls, value: float) -> float:
+        if float(value) < 0:
+            raise ValueError("value must be >= 0")
         return float(value)
 
     @field_validator(
