@@ -11,12 +11,27 @@ from dataclasses import dataclass
 
 import numpy as np
 
-IPHONE_COMPAT_ASPECTS = (
-    393 / 852,
-    402 / 874,
-    430 / 932,
-    440 / 956,
-)
+IPHONE_COMPAT_ASPECTS = {
+    # UIKit point-size aspect ratios for iPhone-compat windows. Keep this list
+    # tied to glassbox/perception/device.py and add older/newer iPhone point
+    # sizes when a real iPad compatibility window proves a new ratio.
+    "se_8_class": 375 / 667,
+    "standard": 393 / 852,
+    "pro": 402 / 874,
+    "plus_max_legacy": 430 / 932,
+    "pro_max": 440 / 956,
+}
+
+DETECTED_VIEWPORT_BBOX_TOLERANCE_PX = 4
+
+
+def same_viewport_bbox(
+    left: tuple[int, int, int, int],
+    right: tuple[int, int, int, int],
+    *,
+    tolerance_px: int = DETECTED_VIEWPORT_BBOX_TOLERANCE_PX,
+) -> bool:
+    return all(abs(int(a) - int(b)) <= int(tolerance_px) for a, b in zip(left, right, strict=True))
 
 
 @dataclass(frozen=True)
@@ -27,6 +42,7 @@ class ViewportCrop:
     parent_coordinate_space: str
     coordinate_space: str
     bbox: tuple[int, int, int, int]
+    source: str = "configured"
 
     @property
     def size(self) -> tuple[int, int]:
@@ -40,6 +56,10 @@ class ViewportCrop:
     def child_to_parent(self, x: float, y: float) -> tuple[int, int]:
         bx, by, _w, _h = self.bbox
         return round(float(x) + bx), round(float(y) + by)
+
+
+def detected_viewport_needs_update(current: ViewportCrop, detected: ViewportCrop) -> bool:
+    return not same_viewport_bbox(current.bbox, detected.bbox)
 
 
 def detect_iphone_compat_viewport(
@@ -74,7 +94,7 @@ def detect_iphone_compat_viewport(
     if (bw * bh) / max(1, w * h) < float(min_area_ratio):
         return None
     aspect = bw / bh
-    if min(abs(aspect - target) / target for target in IPHONE_COMPAT_ASPECTS) > float(aspect_tolerance):
+    if min(abs(aspect - target) / target for target in IPHONE_COMPAT_ASPECTS.values()) > float(aspect_tolerance):
         return None
     center_x = _x + bw / 2
     if abs(center_x - w / 2) > w * float(center_tolerance):
@@ -84,6 +104,7 @@ def detect_iphone_compat_viewport(
         parent_coordinate_space="cropped_px",
         coordinate_space="app_px",
         bbox=bbox,
+        source="detected",
     )
 
 
@@ -118,4 +139,9 @@ def _trim_bbox(
     return x, y, w, h
 
 
-__all__ = ["ViewportCrop", "detect_iphone_compat_viewport"]
+__all__ = [
+    "ViewportCrop",
+    "detect_iphone_compat_viewport",
+    "detected_viewport_needs_update",
+    "same_viewport_bbox",
+]

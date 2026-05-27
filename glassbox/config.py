@@ -104,11 +104,16 @@ class AgentConfig(BaseSettings):
     ``device`` disables inner cropping, ``iphone_compat`` enables iPhone-shaped
     app-window detection, and ``auto`` uses an explicit bbox when provided then
     otherwise tries the safe iPhone-compat detector only when app scope is
-    requested.
+    requested. Use app scope only for real iPhone-compat apps on iPad; keep
+    device scope for SpringBoard, Settings, and other iPad-native split views.
     """
 
     default_observation_scope: Literal["device", "app"] = "device"
-    """Default scope for snapshot/perceive when callers do not pass scope."""
+    """Default scope for snapshot/perceive when callers do not pass scope.
+
+    ``app`` means "crop to an iPhone-compat foreground app window". It is not
+    appropriate for SpringBoard, Settings, or iPad-native split-view tasks.
+    """
 
     effector_crop_cache: str | None = None
     """Reserved plugin-effector last-good crop JSON path; no built-in consumer."""

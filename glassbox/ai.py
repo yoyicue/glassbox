@@ -169,8 +169,8 @@ class AIRawAccess:
     def __init__(self, owner: AIPhone):
         self._owner = owner
 
-    def tap_xy(self, x: int, y: int) -> ActionOutcome:
-        return self._owner.tap_xy(x, y)
+    def tap_xy(self, x: int, y: int, *, coordinate_space: str | None = None) -> ActionOutcome:
+        return self._owner.tap_xy(x, y, coordinate_space=coordinate_space)
 
     def latest_scene(self) -> dict[str, Any] | None:
         path = self._owner._latest_scene_path
@@ -352,10 +352,14 @@ class AIPhone:
         x: int,
         y: int,
         *,
+        coordinate_space: str | None = None,
         expect_visible: str | None = None,
         expect_page: str | None = None,
     ) -> ActionOutcome:
-        result = self._phone.tap_xy(int(x), int(y))
+        kwargs = {}
+        if coordinate_space is not None:
+            kwargs["coordinate_space"] = coordinate_space
+        result = self._phone.tap_xy(int(x), int(y), **kwargs)
         outcome = self._action_outcome("tap_xy", f"{int(x)},{int(y)}", result)
         return self._apply_expectation(outcome, expect_visible=expect_visible, expect_page=expect_page)
 

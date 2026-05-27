@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -21,6 +23,22 @@ class ImageSource:
     def snapshot(self):
         self.ts += 1.0
         return Frame(img=self.img.copy(), ts=self.ts)
+
+
+class SequenceSource:
+    coordinate_space = "frame_px"
+
+    def __init__(self, imgs: list[np.ndarray]):
+        self.imgs = imgs
+        self.resolution = (imgs[0].shape[1], imgs[0].shape[0])
+        self.index = 0
+        self.ts = 0.0
+
+    def snapshot(self):
+        self.ts += 1.0
+        img = self.imgs[min(self.index, len(self.imgs) - 1)]
+        self.index += 1
+        return Frame(img=img.copy(), ts=self.ts)
 
 
 class ShapeOCR:
@@ -92,6 +110,37 @@ def test_app_scope_coordinates_project_back_to_outer_device_frame():
 
 
 @pytest.mark.smoke
+def test_cross_scope_tap_requires_explicit_coordinate_space():
+    img = np.zeros((80, 100, 3), dtype=np.uint8)
+    crop = LetterboxCrop(crop_bbox=(10, 5, 50, 40), frame_size=(100, 80), phone_size=(500, 400))
+    app_viewport = ViewportCrop(
+        name="app",
+        parent_coordinate_space="cropped_px",
+        coordinate_space="app_px",
+        bbox=(20, 6, 10, 8),
+    )
+    effector = MockEffector()
+    phone = Phone(
+        source=ImageSource(img),
+        ocr=ShapeOCR(),
+        effector=effector,
+        crop=crop,
+        app_viewport=app_viewport,
+    )
+
+    phone.perceive(scope="app")
+    phone.snapshot(scope="device")
+
+    with pytest.raises(ValueError, match="coordinate_space"):
+        phone.tap_xy(3, 4)
+
+    phone.tap_xy(3, 4, coordinate_space="app_px")
+
+    assert effector.last().kwargs["x"] == 33
+    assert effector.last().kwargs["y"] == 15
+
+
+@pytest.mark.smoke
 def test_default_app_observation_scope_feeds_ocr_the_inner_viewport():
     img = np.zeros((80, 100, 3), dtype=np.uint8)
     app_viewport = ViewportCrop(
@@ -125,3 +174,39 @@ def test_detect_iphone_compat_viewport_finds_centered_non_background_window():
     assert viewport is not None
     assert viewport.coordinate_space == "app_px"
     assert viewport.bbox == (31, 9, 38, 82)
+    assert viewport.source == "detected"
+
+
+@pytest.mark.smoke
+def test_detect_iphone_compat_viewport_accepts_se_8_aspect():
+    img = np.zeros((100, 100, 3), dtype=np.uint8)
+    img[10:90, 27:72, :] = 240
+
+    viewport = detect_iphone_compat_viewport(img)
+
+    assert viewport is not None
+    assert viewport.bbox == (27, 10, 45, 80)
+
+
+@pytest.mark.smoke
+def test_auto_detected_app_viewport_updates_when_window_moves():
+    first = np.zeros((100, 120, 3), dtype=np.uint8)
+    second = np.zeros((100, 120, 3), dtype=np.uint8)
+    first[9:91, 41:79, :] = 240
+    second[9:91, 47:85, :] = 240
+    phone = Phone(
+        source=SequenceSource([first, second]),
+        ocr=ShapeOCR(),
+        effector=MockEffector(),
+        device_geometry=SimpleNamespace(model="ipad_mini_7"),
+        app_viewport_mode="iphone_compat",
+    )
+
+    first_frame = phone.snapshot(scope="app")
+    second_frame = phone.snapshot(scope="app")
+
+    assert first_frame.shape == (38, 82)
+    assert second_frame.shape == (38, 82)
+    assert phone.app_viewport is not None
+    assert phone.app_viewport.bbox == (47, 9, 38, 82)
+    assert phone.app_viewport.source == "detected"

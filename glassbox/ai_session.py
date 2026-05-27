@@ -62,7 +62,19 @@ class AISessionService:
         if command == "tap":
             return {"ok": True, "outcome": _outcome_payload(phone.tap(str(request["text"])))}
         if command == "tap_xy":
-            return {"ok": True, "outcome": _outcome_payload(phone.tap_xy(int(request["x"]), int(request["y"])))}
+            kwargs = {}
+            if request.get("coordinate_space") is not None:
+                kwargs["coordinate_space"] = request.get("coordinate_space")
+            return {
+                "ok": True,
+                "outcome": _outcome_payload(
+                    phone.tap_xy(
+                        int(request["x"]),
+                        int(request["y"]),
+                        **kwargs,
+                    )
+                ),
+            }
         if command == "swipe_xy":
             return {
                 "ok": True,

@@ -64,7 +64,11 @@ from glassbox.cognition.coldstart import apply_annotation_to_scene
 from glassbox.cognition.ocr_contract import ocr_results_to_elements
 from glassbox.cognition.vlm_kimi import enrich_scene
 from glassbox.effector import NOOP_CAPABILITIES, BackendCapabilities
-from glassbox.perception.app_viewport import ViewportCrop, detect_iphone_compat_viewport
+from glassbox.perception.app_viewport import (
+    ViewportCrop,
+    detect_iphone_compat_viewport,
+    detected_viewport_needs_update,
+)
 
 if TYPE_CHECKING:
     import numpy as np
@@ -199,6 +203,8 @@ class Phone:
         self._pending_actions_for_memory: list[ActionRecord] = []
         self._last_frame: Frame | None = None
         self._last_scene: Scene | None = None
+        self._last_scene_coordinate_space: str | None = None
+        self._implicit_coordinate_space_error: tuple[str, str] | None = None
         # frame cache: holds the (frame, scene) from the last completed OCR
         self._cache_frame: Frame | None = None
         self._cache_scene: Scene | None = None
@@ -212,20 +218,61 @@ class Phone:
         self.perceive_cache_stats = {"hits": 0, "misses": 0}
 
     # —— Coordinate transform ——
-    def _to_phone(self, x: float, y: float) -> tuple[int, int]:
-        """Cropped frame coords → coords the effector should see. Pass-through when there is no crop."""
-        if (
-            self.app_viewport is not None
-            and self._last_frame is not None
-            and self._last_frame.context.coordinate_space == self.app_viewport.coordinate_space
-        ):
+    def _to_phone(self, x: float, y: float, *, coordinate_space: str | None = None) -> tuple[int, int]:
+        """Observation coords -> coords the effector should see."""
+        if coordinate_space is None and self._implicit_coordinate_space_error is not None:
+            previous, current = self._implicit_coordinate_space_error
+            raise ValueError(
+                "implicit coordinate space is ambiguous after observation scope changed "
+                f"from {previous!r} to {current!r}; pass coordinate_space explicitly"
+            )
+        input_space = self._normalize_input_coordinate_space(coordinate_space)
+        if input_space == "app_px":
+            if self.app_viewport is None:
+                raise ValueError("coordinate_space='app_px' requires an app_viewport")
             x, y = self.app_viewport.child_to_parent(x, y)
+            input_space = self.app_viewport.parent_coordinate_space
+        if input_space == "frame_px":
+            return self._frame_to_effector(x, y)
+        if input_space == "cropped_px":
+            return self._cropped_to_effector(x, y)
+        raise ValueError(f"unsupported coordinate_space for phone input: {coordinate_space!r}")
+
+    def _normalize_input_coordinate_space(self, coordinate_space: str | None) -> str:
+        if coordinate_space is None:
+            return self._infer_input_coordinate_space()
+        normalized = str(coordinate_space).strip().lower().replace("-", "_")
+        if normalized in {"app", "app_px"}:
+            return "app_px"
+        if normalized in {"device", "cropped", "cropped_px"}:
+            return "cropped_px" if self.crop is not None else "frame_px"
+        if normalized in {"frame", "frame_px", "raw", "raw_frame"}:
+            return "frame_px"
+        return normalized
+
+    def _infer_input_coordinate_space(self) -> str:
+        if self._last_scene_coordinate_space is not None:
+            return self._last_scene_coordinate_space
+        if self._last_frame is not None:
+            return self._last_frame.context.coordinate_space
+        return "cropped_px" if self.crop is not None else "frame_px"
+
+    def _cropped_to_effector(self, x: float, y: float) -> tuple[int, int]:
         if self.crop is None:
             return round(x), round(y)
         effector_space = getattr(self.effector, "coordinate_space", None)
         if effector_space == "frame_px":
             return self.crop.cropped_to_frame(x, y)
         return self.crop.cropped_to_phone(x, y)
+
+    def _frame_to_effector(self, x: float, y: float) -> tuple[int, int]:
+        if self.crop is None:
+            return round(x), round(y)
+        effector_space = getattr(self.effector, "coordinate_space", None)
+        if effector_space == "frame_px":
+            return round(x), round(y)
+        cx, cy, _w, _h = self.crop.crop_bbox
+        return self.crop.cropped_to_phone(float(x) - cx, float(y) - cy)
 
     @staticmethod
     def _normalize_observation_scope(scope: str | None) -> str:
@@ -353,6 +400,11 @@ class Phone:
             raise RuntimeError(f"{op} failed: {detail}")
         return result
 
+    def _set_last_scene(self, scene: Scene, frame: Frame | None) -> None:
+        self._last_scene = scene
+        self._last_scene_coordinate_space = frame.context.coordinate_space if frame is not None else None
+        self._implicit_coordinate_space_error = None
+
     def _verify_fresh_action_result(
         self,
         action: str,
@@ -457,7 +509,7 @@ class Phone:
             self.typer.upgrade(scene, frame_img=frame.img)
         self._apply_profile(scene, frame.img)
         self._apply_scene_classifiers(scene, frame.img)
-        self._last_scene = scene
+        self._set_last_scene(scene, frame)
         self._cache_frame = None
         self._cache_scene = None
         self._needs_stable_frame = False
@@ -679,6 +731,7 @@ class Phone:
     def snapshot(self, *, stable: bool | None = None, scope: str | None = None) -> Frame:
         from glassbox.perception.source import Frame as _Frame
         frame_scope = self._normalize_observation_scope(scope or self.default_observation_scope)
+        previous_scene_space = self._last_scene_coordinate_space if self._last_scene is not None else None
         if self._should_wait_stable(stable):
             from glassbox.perception.stable import wait_stable_result
             policy = self.stability_policy
@@ -727,7 +780,13 @@ class Phone:
         if frame_scope == "app":
             raw = self._apply_app_viewport(raw)
         self._last_frame = raw
+        current_space = raw.context.coordinate_space
+        if previous_scene_space is not None and previous_scene_space != current_space:
+            self._implicit_coordinate_space_error = (previous_scene_space, current_space)
+        else:
+            self._implicit_coordinate_space_error = None
         self._last_scene = None   # invalidate
+        self._last_scene_coordinate_space = None
         if self.recorder is not None:
             self.recorder.snapshot(self._last_frame)
         return self._last_frame
@@ -736,10 +795,15 @@ class Phone:
         from glassbox.perception.source import Frame as _Frame
 
         viewport = self.app_viewport
-        if viewport is None and self._should_detect_app_viewport(frame):
-            viewport = detect_iphone_compat_viewport(frame.img)
-            if viewport is not None:
-                self.app_viewport = viewport
+        if self._should_detect_app_viewport(frame):
+            detected = detect_iphone_compat_viewport(frame.img)
+            if detected is not None:
+                detected = replace(detected, parent_coordinate_space=frame.context.coordinate_space)
+                if viewport is None or (
+                    viewport.source == "detected" and detected_viewport_needs_update(viewport, detected)
+                ):
+                    viewport = detected
+                    self.app_viewport = detected
         if viewport is None:
             return frame
         return _Frame(
@@ -763,6 +827,11 @@ class Phone:
             return False
         return self.app_viewport_mode in {"auto", "iphone_compat"}
 
+    def invalidate_app_viewport(self) -> None:
+        """Drop an auto-detected app viewport so the next app-scope snapshot re-detects it."""
+        if self.app_viewport is not None and self.app_viewport.source == "detected":
+            self.app_viewport = None
+
     def invalidate_perceive_cache(self) -> None:
         """Explicitly clear the Scene cache. After tap_*/swipe, Phone cannot
         tell whether the screen changed; a high-level walkthrough script can
@@ -770,6 +839,8 @@ class Phone:
         self._cache_frame = None
         self._cache_scene = None
         self._last_scene = None
+        self._last_scene_coordinate_space = None
+        self._implicit_coordinate_space_error = None
 
     def perceive(self, *, stable: bool | None = None, scope: str | None = None) -> Scene:
         """OCR → Layer 2 heuristic typing. Returns the full Scene.
@@ -810,7 +881,7 @@ class Phone:
             self._apply_scene_classifiers(scene, frame.img)
             self.perceive_cache_stats["hits"] += 1
             self._observe_memory(scene, frame.img)
-            self._last_scene = scene
+            self._set_last_scene(scene, frame)
             self._cache_scene = scene.model_copy(deep=True)
             if self.recorder is not None:
                 self.recorder.scene(scene)
@@ -838,7 +909,7 @@ class Phone:
         self._cache_frame = frame
         self._cache_scene = scene.model_copy(deep=True)
         self._cache_scope = frame_scope
-        self._last_scene = scene
+        self._set_last_scene(scene, frame)
         if self.recorder is not None:
             self.recorder.scene(scene)
         self._needs_stable_frame = False
@@ -913,7 +984,7 @@ class Phone:
         self._cache_scope = frame_scope
         if frame_img is not None:
             self._observe_memory(scene, frame_img)
-        self._last_scene = scene
+        self._set_last_scene(scene, last_frame)
         if self.recorder is not None:
             self.recorder.scene(scene)
         self._needs_stable_frame = False
@@ -1217,6 +1288,7 @@ class Phone:
             )
         candidates = CandidatePointGenerator().generate(element, preferred_point=preferred)
         coordinate_space = self._coordinate_space()
+        source_coordinate_space = self._last_scene_coordinate_space or self._infer_input_coordinate_space()
 
         def build_command(point: Point, attempt_index: int) -> ActuationCommand:
             # On a retry, re-perceive and re-locate the target. If it has DRIFTED
@@ -1226,14 +1298,16 @@ class Phone:
             # (small offsets) for ordinary targeting error.
             regrounded = False
             tap_point = point
+            tap_point_space = source_coordinate_space
             if attempt_index > 0:
                 fresh = self._reground_tap_point(target=target)
                 if fresh is not None:
                     orig_cx, orig_cy = element.box.center
                     if abs(fresh.x - orig_cx) + abs(fresh.y - orig_cy) > _REGROUND_MIN_SHIFT_PX:
                         tap_point = fresh
+                        tap_point_space = self._last_scene_coordinate_space or source_coordinate_space
                         regrounded = True
-            px, py = self._to_phone(tap_point.x, tap_point.y)
+            px, py = self._to_phone(tap_point.x, tap_point.y, coordinate_space=tap_point_space)
             return ActuationCommand(
                 call=lambda px=px, py=py: self.effector.tap(px, py),
                 kwargs={
@@ -1241,7 +1315,7 @@ class Phone:
                     "y": py,
                     "coordinate_space": coordinate_space,
                     "target_point": {"x": px, "y": py, "space": coordinate_space},
-                    "target_point_frame": tap_point.to_dict(space="frame_px"),
+                    "target_point_frame": tap_point.to_dict(space=tap_point_space),
                     "actuation_attempt_index": attempt_index,
                     "regrounded": regrounded,
                 },
@@ -1257,7 +1331,7 @@ class Phone:
             method="mouse_tap",
             control_bucket=control_bucket,
             target_roi=Rect.from_box(element.box),
-            roi_space="frame_px",
+            roi_space=source_coordinate_space,
             candidate_target_points=candidates,
             build_command=build_command,
         )
@@ -1522,9 +1596,10 @@ class Phone:
             **metadata,
         )
 
-    def tap_xy(self, x: int, y: int) -> ActionResult:
-        """Pass cropped frame coords (if self.crop is not None, they are transformed to phone logical coords before tapping)."""
-        px, py = self._to_phone(x, y)
+    def tap_xy(self, x: int, y: int, *, coordinate_space: str | None = None) -> ActionResult:
+        """Tap observation coordinates, optionally tagged with their source coordinate space."""
+        input_space = self._normalize_input_coordinate_space(coordinate_space)
+        px, py = self._to_phone(x, y, coordinate_space=coordinate_space)
         return self._execute_action(
             "tap",
             lambda: self.effector.tap(px, py),
@@ -1532,7 +1607,7 @@ class Phone:
             y=py,
             coordinate_space=self._coordinate_space(),
             target_point={"x": px, "y": py, "space": self._coordinate_space()},
-            target_point_frame={"x": x, "y": y, "space": "frame_px"},
+            target_point_frame={"x": x, "y": y, "space": input_space},
             via="tap_xy",
             **self._picokvm_fresh_verify_kwargs("tap"),
         )
@@ -1790,8 +1865,16 @@ class Phone:
             **metadata,
         )
 
-    def double_tap_xy(self, x: int, y: int, *, target: str | None = None) -> ActionResult:
-        px, py = self._to_phone(x, y)
+    def double_tap_xy(
+        self,
+        x: int,
+        y: int,
+        *,
+        coordinate_space: str | None = None,
+        target: str | None = None,
+    ) -> ActionResult:
+        input_space = self._normalize_input_coordinate_space(coordinate_space)
+        px, py = self._to_phone(x, y, coordinate_space=coordinate_space)
         metadata = {"target": target} if target else {}
         return self._execute_action(
             "double_tap",
@@ -1800,14 +1883,23 @@ class Phone:
             y=py,
             coordinate_space=self._coordinate_space(),
             target_point={"x": px, "y": py, "space": self._coordinate_space()},
-            target_point_frame={"x": x, "y": y, "space": "frame_px"},
+            target_point_frame={"x": x, "y": y, "space": input_space},
             via="double_tap_xy",
             **metadata,
             **self._picokvm_fresh_verify_kwargs("double_tap"),
         )
 
-    def long_press_xy(self, x: int, y: int, *, hold_ms: int = 500, target: str | None = None) -> ActionResult:
-        px, py = self._to_phone(x, y)
+    def long_press_xy(
+        self,
+        x: int,
+        y: int,
+        *,
+        coordinate_space: str | None = None,
+        hold_ms: int = 500,
+        target: str | None = None,
+    ) -> ActionResult:
+        input_space = self._normalize_input_coordinate_space(coordinate_space)
+        px, py = self._to_phone(x, y, coordinate_space=coordinate_space)
         metadata = {"target": target} if target else {}
         return self._execute_action(
             "long_press",
@@ -1816,7 +1908,7 @@ class Phone:
             y=py,
             coordinate_space=self._coordinate_space(),
             target_point={"x": px, "y": py, "space": self._coordinate_space()},
-            target_point_frame={"x": x, "y": y, "space": "frame_px"},
+            target_point_frame={"x": x, "y": y, "space": input_space},
             hold_ms=hold_ms,
             via="long_press_xy",
             **metadata,
@@ -1830,6 +1922,7 @@ class Phone:
         x2: int,
         y2: int,
         *,
+        coordinate_space: str | None = None,
         steps: int = 20,
         end_hold_ms: int = 100,
         via: str = "swipe_xy",
@@ -1846,8 +1939,8 @@ class Phone:
         expect_visible: str | tuple[str, ...] | list[str] | None = None,
         expect_page: str | None = None,
     ) -> ActionResult:
-        px1, py1 = self._to_phone(x1, y1)
-        px2, py2 = self._to_phone(x2, y2)
+        px1, py1 = self._to_phone(x1, y1, coordinate_space=coordinate_space)
+        px2, py2 = self._to_phone(x2, y2, coordinate_space=coordinate_space)
         action_kwargs = {
             "x1": px1,
             "y1": py1,
@@ -1889,6 +1982,7 @@ class Phone:
         x2: int,
         y2: int,
         *,
+        coordinate_space: str | None = None,
         down_hold_ms: int = 200,
         up_hold_ms: int = 100,
         settle_strategy: str | None = None,
@@ -1903,8 +1997,8 @@ class Phone:
         expect_visible: str | tuple[str, ...] | list[str] | None = None,
         expect_page: str | None = None,
     ) -> ActionResult:
-        px1, py1 = self._to_phone(x1, y1)
-        px2, py2 = self._to_phone(x2, y2)
+        px1, py1 = self._to_phone(x1, y1, coordinate_space=coordinate_space)
+        px2, py2 = self._to_phone(x2, y2, coordinate_space=coordinate_space)
         action_kwargs = {
             "x1": px1,
             "y1": py1,
