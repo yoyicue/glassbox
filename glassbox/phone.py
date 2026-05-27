@@ -759,6 +759,14 @@ class Phone:
             self._last_stable_frame = None
             self._last_stability_score = None
             self._last_stability_policy = None
+        if raw is None:
+            self._last_frame = None
+            self._last_scene = None
+            self._last_scene_coordinate_space = None
+            self._implicit_coordinate_space_error = None
+            if self.recorder is not None:
+                self.recorder.snapshot(None)
+            return None
         if self.crop is not None:
             if raw.shape != self.crop.frame_size:
                 from glassbox.perception.letterbox import LetterboxCrop
