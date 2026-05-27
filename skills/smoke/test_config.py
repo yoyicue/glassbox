@@ -21,6 +21,9 @@ def test_defaults():
     assert cfg.wheel_ticks_per_scroll == 90
     assert cfg.wheel_invert is False
     assert cfg.effector_crop_bbox is None
+    assert cfg.app_viewport_bbox is None
+    assert cfg.app_viewport_mode == "auto"
+    assert cfg.default_observation_scope == "device"
     assert cfg.effector_crop_cache is None
     assert cfg.effector_crop_retries == 3
     assert cfg.phone_model == "iphone_17_pro_max"
@@ -42,6 +45,9 @@ def test_env_override_int(monkeypatch):
     monkeypatch.setenv("GLASSBOX_ENABLE_VLM", "1")
     monkeypatch.setenv("GLASSBOX_VLM_CACHE_DIR", "/tmp/vlm-cache")
     monkeypatch.setenv("GLASSBOX_CRAWL_POLICY", "ios_settings")
+    monkeypatch.setenv("GLASSBOX_APP_VIEWPORT_BBOX", "10,20,300,600")
+    monkeypatch.setenv("GLASSBOX_APP_VIEWPORT_MODE", "iphone_compat")
+    monkeypatch.setenv("GLASSBOX_DEFAULT_OBSERVATION_SCOPE", "app")
 
     cfg = AgentConfig(_env_file=None)
 
@@ -51,6 +57,9 @@ def test_env_override_int(monkeypatch):
     assert cfg.enable_vlm is True
     assert cfg.vlm_cache_dir == "/tmp/vlm-cache"
     assert cfg.crawl_policy == "ios_settings"
+    assert cfg.app_viewport_bbox == (10, 20, 300, 600)
+    assert cfg.app_viewport_mode == "iphone_compat"
+    assert cfg.default_observation_scope == "app"
 
 
 @pytest.mark.smoke

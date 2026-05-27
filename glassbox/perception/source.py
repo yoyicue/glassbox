@@ -24,6 +24,17 @@ FRAME_CONTRACT_VERSION = 1
 
 
 @dataclass(frozen=True)
+class FrameProjection:
+    """One crop/projection hop in a frame's coordinate lineage."""
+
+    name: str
+    source_coordinate_space: str
+    target_coordinate_space: str
+    source_shape: tuple[int, int]
+    crop_bbox: tuple[int, int, int, int]
+
+
+@dataclass(frozen=True)
 class FrameContext:
     """Coordinate metadata that travels with a frame."""
 
@@ -34,6 +45,7 @@ class FrameContext:
     source_shape: tuple[int, int] | None = None
     crop_bbox: tuple[int, int, int, int] | None = None
     projection: str | None = None
+    projection_chain: tuple[FrameProjection, ...] = ()
 
     def with_crop(
         self,
@@ -41,6 +53,7 @@ class FrameContext:
         source_shape: tuple[int, int],
         crop_bbox: tuple[int, int, int, int],
         projection: str,
+        name: str = "crop",
     ) -> FrameContext:
         return FrameContext(
             coordinate_space=projection,
@@ -48,6 +61,16 @@ class FrameContext:
             source_shape=self.source_shape or source_shape,
             crop_bbox=crop_bbox,
             projection=projection,
+            projection_chain=(
+                *self.projection_chain,
+                FrameProjection(
+                    name=name,
+                    source_coordinate_space=self.coordinate_space,
+                    target_coordinate_space=projection,
+                    source_shape=source_shape,
+                    crop_bbox=crop_bbox,
+                ),
+            ),
         )
 
 

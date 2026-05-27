@@ -51,6 +51,15 @@ class FakeOCR:
         ]
 
 
+class ShapeOCR:
+    def __init__(self):
+        self.shapes: list[tuple[int, int]] = []
+
+    def recognize(self, image):
+        self.shapes.append((image.shape[1], image.shape[0]))
+        return []
+
+
 class FakeSettingsOCR:
     def recognize(self, _image):
         return [
@@ -320,6 +329,26 @@ def test_build_phone_activates_app_scene_classifier_by_bundle():
     assert runtime.phone.recovery_provider is not None
     assert scene.scene_type == "settings_root"
     assert scene.platform_scene_kind == "settings_root"
+
+
+@pytest.mark.smoke
+def test_build_phone_threads_configured_app_viewport_into_default_observation_scope():
+    source = FakeSource()
+    effector = FakeEffector()
+    ocr = ShapeOCR()
+    cfg = AgentConfig(
+        _env_file=None,
+        app_viewport_bbox=(10, 20, 50, 70),
+        default_observation_scope="app",
+    )
+
+    runtime = build_phone(source=source, cfg=cfg, ocr=ocr, effector=effector)
+    scene = runtime.phone.perceive()
+
+    assert ocr.shapes == [(50, 70)]
+    assert scene.viewport_size == (50, 70)
+    assert runtime.phone.app_viewport is not None
+    assert runtime.phone.app_viewport.bbox == (10, 20, 50, 70)
 
 
 @pytest.mark.smoke

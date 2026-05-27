@@ -32,7 +32,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +89,26 @@ class AgentConfig(BaseSettings):
 
     effector_crop_bbox: tuple[int, int, int, int] | None = None
     """Reserved plugin-effector crop bbox (x, y, w, h); no built-in consumer."""
+
+    app_viewport_bbox: tuple[int, int, int, int] | None = None
+    """Optional foreground app viewport bbox inside the device-cropped frame.
+
+    Use this for iPhone-only apps running in an iPad compatibility window:
+    hardware/device geometry remains the iPad, while app OCR/VLM can be scoped
+    to this inner bbox.
+    """
+
+    app_viewport_mode: Literal["auto", "device", "iphone_compat"] = "auto"
+    """How ``phone.snapshot(scope="app")`` resolves the app viewport.
+
+    ``device`` disables inner cropping, ``iphone_compat`` enables iPhone-shaped
+    app-window detection, and ``auto`` uses an explicit bbox when provided then
+    otherwise tries the safe iPhone-compat detector only when app scope is
+    requested.
+    """
+
+    default_observation_scope: Literal["device", "app"] = "device"
+    """Default scope for snapshot/perceive when callers do not pass scope."""
 
     effector_crop_cache: str | None = None
     """Reserved plugin-effector last-good crop JSON path; no built-in consumer."""
@@ -235,6 +255,19 @@ class AgentConfig(BaseSettings):
     walkthroughs without a profile, e.g. com.apple.Preferences."""
 
     # ─── Derived ─────────────────────────────────────────────────────
+    @field_validator("effector_crop_bbox", "app_viewport_bbox", mode="before")
+    @classmethod
+    def _parse_bbox(cls, value):
+        if value is None or isinstance(value, tuple):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            if "," in text and not text.startswith("["):
+                return tuple(int(part.strip()) for part in text.split(","))
+        return value
+
     def phone_size(self) -> tuple[int, int]:
         """Look up the model's native rendered pixel size (W, H)."""
         from glassbox.perception import device

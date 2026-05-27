@@ -450,6 +450,19 @@ def build_phone(
     except AttributeError:
         frame_size = None
     typer = HeuristicTyper(frame_size=frame_size)
+    app_viewport = None
+    if cfg.app_viewport_bbox is not None:
+        from glassbox.perception.app_viewport import ViewportCrop
+
+        x, y, w, h = (int(v) for v in cfg.app_viewport_bbox)
+        if w <= 0 or h <= 0:
+            raise RuntimeUnavailable(f"invalid app viewport bbox {cfg.app_viewport_bbox!r}")
+        app_viewport = ViewportCrop(
+            name="app",
+            parent_coordinate_space="cropped_px" if crop is not None else "frame_px",
+            coordinate_space="app_px",
+            bbox=(x, y, w, h),
+        )
 
     bundle_id = cfg.memory_bundle or (profile.app.bundle_id if profile else None)
     if bundle_id is None and memory is not None:
@@ -612,6 +625,9 @@ def build_phone(
                 else cfg.wheel_invert
             ),
         ),
+        app_viewport=app_viewport,
+        app_viewport_mode=cfg.app_viewport_mode,
+        default_observation_scope=cfg.default_observation_scope,
     )
     return PhoneRuntime(
         phone=phone,

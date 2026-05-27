@@ -64,6 +64,7 @@ from glassbox.cognition.coldstart import apply_annotation_to_scene
 from glassbox.cognition.ocr_contract import ocr_results_to_elements
 from glassbox.cognition.vlm_kimi import enrich_scene
 from glassbox.effector import NOOP_CAPABILITIES, BackendCapabilities
+from glassbox.perception.app_viewport import ViewportCrop, detect_iphone_compat_viewport
 
 if TYPE_CHECKING:
     import numpy as np
@@ -159,6 +160,9 @@ class Phone:
         recovery_provider=None,
         device_geometry=None,
         gesture_config: PhoneGestureConfig | None = None,
+        app_viewport: ViewportCrop | None = None,
+        app_viewport_mode: str = "auto",
+        default_observation_scope: str = "device",
     ):
         self.source = source
         self.ocr = ocr
@@ -187,6 +191,9 @@ class Phone:
         self.recovery_provider = recovery_provider
         self.device_geometry = device_geometry
         self.gesture_config = gesture_config or PhoneGestureConfig()
+        self.app_viewport = app_viewport
+        self.app_viewport_mode = str(app_viewport_mode or "auto").strip().lower()
+        self.default_observation_scope = self._normalize_observation_scope(default_observation_scope)
         self._cjk_foreground_settle_s = 2.0
         # effector actions since the last observed scene, consumed by memory on next perceive()
         self._pending_actions_for_memory: list[ActionRecord] = []
@@ -195,6 +202,7 @@ class Phone:
         # frame cache: holds the (frame, scene) from the last completed OCR
         self._cache_frame: Frame | None = None
         self._cache_scene: Scene | None = None
+        self._cache_scope = "device"
         self._needs_stable_frame = False
         self._last_observation_mode = "raw"
         self._last_stable_frame: bool | None = None
@@ -206,12 +214,25 @@ class Phone:
     # —— Coordinate transform ——
     def _to_phone(self, x: float, y: float) -> tuple[int, int]:
         """Cropped frame coords → coords the effector should see. Pass-through when there is no crop."""
+        if (
+            self.app_viewport is not None
+            and self._last_frame is not None
+            and self._last_frame.context.coordinate_space == self.app_viewport.coordinate_space
+        ):
+            x, y = self.app_viewport.child_to_parent(x, y)
         if self.crop is None:
             return round(x), round(y)
         effector_space = getattr(self.effector, "coordinate_space", None)
         if effector_space == "frame_px":
             return self.crop.cropped_to_frame(x, y)
         return self.crop.cropped_to_phone(x, y)
+
+    @staticmethod
+    def _normalize_observation_scope(scope: str | None) -> str:
+        normalized = str(scope or "device").strip().lower().replace("-", "_")
+        if normalized in {"app", "foreground", "foreground_app"}:
+            return "app"
+        return "device"
 
     def _coordinate_space(self) -> str:
         if self.coordinate_space != "auto":
@@ -655,8 +676,9 @@ class Phone:
             return False
         return not policy.after_action_only or self._needs_stable_frame
 
-    def snapshot(self, *, stable: bool | None = None) -> Frame:
+    def snapshot(self, *, stable: bool | None = None, scope: str | None = None) -> Frame:
         from glassbox.perception.source import Frame as _Frame
+        frame_scope = self._normalize_observation_scope(scope or self.default_observation_scope)
         if self._should_wait_stable(stable):
             from glassbox.perception.stable import wait_stable_result
             policy = self.stability_policy
@@ -699,13 +721,47 @@ class Phone:
                     source_shape=raw.shape,
                     crop_bbox=self.crop.crop_bbox,
                     projection="cropped_px",
+                    name="device",
                 ),
             )
+        if frame_scope == "app":
+            raw = self._apply_app_viewport(raw)
         self._last_frame = raw
         self._last_scene = None   # invalidate
         if self.recorder is not None:
             self.recorder.snapshot(self._last_frame)
         return self._last_frame
+
+    def _apply_app_viewport(self, frame: Frame) -> Frame:
+        from glassbox.perception.source import Frame as _Frame
+
+        viewport = self.app_viewport
+        if viewport is None and self._should_detect_app_viewport(frame):
+            viewport = detect_iphone_compat_viewport(frame.img)
+            if viewport is not None:
+                self.app_viewport = viewport
+        if viewport is None:
+            return frame
+        return _Frame(
+            img=viewport.crop(frame.img),
+            ts=frame.ts,
+            context=frame.context.with_crop(
+                source_shape=frame.shape,
+                crop_bbox=viewport.bbox,
+                projection=viewport.coordinate_space,
+                name=viewport.name,
+            ),
+        )
+
+    def _should_detect_app_viewport(self, frame: Frame) -> bool:
+        if self.app_viewport_mode == "device":
+            return False
+        if frame.context.coordinate_space not in {"cropped_px", "frame_px"}:
+            return False
+        model = str(getattr(getattr(self, "device_geometry", None), "model", "") or "").lower().replace("-", "_")
+        if model and not model.startswith("ipad"):
+            return False
+        return self.app_viewport_mode in {"auto", "iphone_compat"}
 
     def invalidate_perceive_cache(self) -> None:
         """Explicitly clear the Scene cache. After tap_*/swipe, Phone cannot
@@ -715,7 +771,7 @@ class Phone:
         self._cache_scene = None
         self._last_scene = None
 
-    def perceive(self, *, stable: bool | None = None) -> Scene:
+    def perceive(self, *, stable: bool | None = None, scope: str | None = None) -> Scene:
         """OCR → Layer 2 heuristic typing. Returns the full Scene.
 
         frame diff cache: when the mean absdiff against the last OCR'd frame
@@ -725,7 +781,8 @@ class Phone:
         """
         from glassbox.perception.stable import frame_diff_ratio
 
-        frame = self.snapshot(stable=stable)
+        frame_scope = self._normalize_observation_scope(scope or self.default_observation_scope)
+        frame = self.snapshot(stable=stable, scope=frame_scope)
         observation_mode = self._last_observation_mode
         stable_frame = self._last_stable_frame
 
@@ -734,6 +791,7 @@ class Phone:
             self.perceive_cache_diff > 0
             and self._cache_frame is not None
             and self._cache_scene is not None
+            and self._cache_scope == frame_scope
             and self._cache_frame.img.shape == frame.img.shape
             and frame_diff_ratio(self._cache_frame.img, frame.img) < self.perceive_cache_diff
         ):
@@ -779,6 +837,7 @@ class Phone:
         self._observe_memory(scene, frame.img)
         self._cache_frame = frame
         self._cache_scene = scene.model_copy(deep=True)
+        self._cache_scope = frame_scope
         self._last_scene = scene
         if self.recorder is not None:
             self.recorder.scene(scene)
@@ -790,7 +849,7 @@ class Phone:
             return ocr_results_to_elements(self.ocr.recognize(frame))
         return ocr_results_to_elements(self.ocr.recognize(frame.img))
 
-    def perceive_voted(self, n: int = 2, *, text_normalizer=None) -> Scene:
+    def perceive_voted(self, n: int = 2, *, text_normalizer=None, scope: str | None = None) -> Scene:
         """Perceive a STABLE screen `n` times and vote per-row text (D).
 
         For accuracy-critical reads where the screen is not moving — OCR
@@ -799,7 +858,8 @@ class Phone:
         back to a single perceive().
         """
         if n <= 1:
-            return self.perceive()
+            return self.perceive(scope=scope)
+        frame_scope = self._normalize_observation_scope(scope or self.default_observation_scope)
         from glassbox.cognition.ocr_vote import vote_scenes
 
         scenes: list[Scene] = []
@@ -807,7 +867,7 @@ class Phone:
         source_frame_ids: list[int] = []
         source_timestamps: list[float] = []
         for _ in range(n):
-            frame = self.snapshot()
+            frame = self.snapshot(scope=frame_scope)
             last_frame = frame
             frame_id = int(frame.ts * 1000)
             source_frame_ids.append(frame_id)
@@ -850,6 +910,7 @@ class Phone:
         # cannot reuse a stale single-frame scene against this voted one.
         self._cache_frame = None
         self._cache_scene = None
+        self._cache_scope = frame_scope
         if frame_img is not None:
             self._observe_memory(scene, frame_img)
         self._last_scene = scene
