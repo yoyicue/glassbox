@@ -127,7 +127,7 @@ def test_picokvm_effector_preflight_and_supports():
 
 
 @pytest.mark.smoke
-def test_picokvm_ipad_profile_uses_native_pointer_without_default_wheel():
+def test_picokvm_ipad_profile_uses_native_pointer_with_default_wheel():
     geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
     eff, rpc = make_eff(device_geometry=geometry)
 
@@ -136,18 +136,19 @@ def test_picokvm_ipad_profile_uses_native_pointer_without_default_wheel():
     assert caps.requires_assistive_touch is False
     assert caps.home_strategy == "keyboard_combo"
     assert caps.back_strategy == "keyboard_combo"
-    assert caps.scroll_strategy == "unsupported"
-    assert caps.wheel_diagnostic is True
+    assert caps.scroll_strategy == "wheel"
+    assert caps.wheel_diagnostic is False
     assert caps.scroll_strategy_validated is True
-    assert eff.supports("scroll_wheel") is False
+    assert caps.scroll_evidence is None
+    assert eff.supports("scroll_wheel") is True
 
     result = eff.scroll_wheel(1, interval_ms=0, focus_x=744, focus_y=1133)
-    assert result.unsupported is True
-    assert not any(method == "wheelReport" for method, _params in rpc.calls)
+    assert result.ok is True
+    assert rpc.calls[-2:] == [("wheelReport", {"wheelY": 1}), ("wheelReport", {"wheelY": 0})]
 
 
 @pytest.mark.smoke
-def test_picokvm_ipad_profile_can_opt_into_wheel_diagnostic():
+def test_picokvm_ipad_profile_wheel_flag_is_no_longer_diagnostic():
     geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
     eff, rpc = make_eff(device_geometry=geometry, wheel_enabled=True)
 
@@ -155,9 +156,9 @@ def test_picokvm_ipad_profile_can_opt_into_wheel_diagnostic():
 
     assert caps.requires_assistive_touch is False
     assert caps.scroll_strategy == "wheel"
-    assert caps.wheel_diagnostic is True
-    assert caps.scroll_strategy_validated is False
-    assert caps.scroll_evidence == "ack_only"
+    assert caps.wheel_diagnostic is False
+    assert caps.scroll_strategy_validated is True
+    assert caps.scroll_evidence is None
     assert eff.supports("scroll_wheel") is True
 
     result = eff.scroll_wheel(1, interval_ms=0, focus_x=744, focus_y=1133)

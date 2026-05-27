@@ -8,10 +8,12 @@ Implemented baseline:
 - `ipad_mini_7` device geometry (1488×2266 pixels, 744×1133 points).
 - `ipados` platform variant with iPad safe-area geometry and split-view Settings
   scene classification.
-- PicoKVM iPad behavior: no AssistiveTouch requirement, wheel transport kept
-  behind an explicit opt-in diagnostic flag on the current rig, and crop-derived
+- PicoKVM iPad behavior: no AssistiveTouch requirement, and crop-derived
   absolute-pointer calibration unless `GLASSBOX_PICOKVM_ABS_*` values are
-  explicitly provided.
+  explicitly provided. Wheel scrolling on iPad is now validated end-to-end
+  through the existing `kvm_app.wheelReport` RPC — see
+  [docs/reference/picokvm_ipad_wheel.md](../reference/picokvm_ipad_wheel.md).
+  The historical "wheel diagnostic-only" stance below in §5 is superseded.
 - iPad Settings navigation hooks: sidebar-only root candidates, right-detail-pane
   child candidates, iPad row tap points, and no back action after root-sidebar
   selection.
@@ -689,20 +691,20 @@ Settings back fallback is detail-pane aware.
   Settings and Home foregrounding, and should stay behind platform-specific
   capability checks.
 
-### 5. Replace the wheel assumption for Settings sidebar coverage
-The iPad profile no longer advertises wheel scrolling by default. `wheelReport`
-can still be explicitly enabled as a diagnostic transport, but the connected rig
-proved that ACKed wheel events do not move the Settings sidebar. Do not build
-acceptance on wheel movement until a new HID path is proven. Current viable
-direction: use visible sidebar rows + top-search recovery for missing root
-sections. The Settings crawler also avoids falling back to PicoKVM swipe-drag on
-iPad when wheel is unavailable, so missing off-screen roots fall through to
-search instead of reintroducing the unproved scroll path. Keep wheel attempts
-opt-in/diagnostic rather than authoritative. A future firmware/native
-relative-wheel path or real trackpad gesture may still replace this. If a later
-iPadOS hardware run proves semantic wheel movement, update this section with the
-report path, probe point, tick count, and before/after sidebar evidence before
-promoting wheel from diagnostic to accepted coverage machinery.
+### 5. Wheel scrolling on iPad — superseded
+**Status (2026-05-27): superseded by
+[docs/reference/picokvm_ipad_wheel.md](../reference/picokvm_ipad_wheel.md).**
+Wheel via the existing `kvm_app.wheelReport` RPC has now been validated to
+scroll the iPad Settings sidebar end-to-end across 3 fresh PicoKVM cold
+reboots; no descriptor or firmware change was needed. The new reference doc
+covers production-side glassbox changes (promote `scroll_strategy="wheel"`
+from diagnostic to authoritative on the iPad profile), the one-time
+"activation" caveat (UDC bounce + 25 s wait if a freshly paired iPad does not
+scroll), and which earlier hypotheses turned out to be red herrings.
+
+Historical context: this section originally said "do not promote wheel from
+diagnostic to accepted until a new HID path proves semantic movement". That
+gating evidence now exists; see the reference doc.
 
 ### 6. Platform seam: an iPadOS variant (implemented baseline)
 `glassbox/platforms.py` can select the `ipados` backend, which swaps in iPad

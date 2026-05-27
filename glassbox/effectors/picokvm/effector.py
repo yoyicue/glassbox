@@ -45,9 +45,8 @@ class PicoKVMEffector:
     """Drive iOS through PicoKVM HID RPCs.
 
     iPhone targets need AssistiveTouch or external pointer support. iPadOS uses
-    the native pointer path, but wheel support still stays behind the explicit
-    ``wheel_enabled`` diagnostic flag: the connected iPad ACKed wheel reports
-    without semantically scrolling the Settings sidebar.
+    the native pointer path and advertises PicoKVM wheel scrolling by default
+    after the 2026-05-27 Settings-sidebar frame-diff validation.
     """
 
     coordinate_space = "frame_px"
@@ -95,12 +94,10 @@ class PicoKVMEffector:
         scroll_strategy = "unsupported"
         scroll_strategy_validated = True
         scroll_evidence = None
+        is_ipad = self._is_ipad_target()
         if self._wheel_available():
             direct_actions = direct_actions | frozenset({"scroll_wheel", "wheel_scroll_down", "wheel_scroll_up"})
             scroll_strategy = "wheel"
-            if self._is_ipad_target():
-                scroll_strategy_validated = False
-                scroll_evidence = "ack_only"
         home_strategy = "unsupported"
         if self.config.assistive_touch_home_enabled:
             home_strategy = "assistive_touch"
@@ -123,19 +120,19 @@ class PicoKVMEffector:
             notification_center_strategy="unsupported",
             switch_input_source_strategy="unsupported",
             paste_strategy="unsupported",
-            requires_assistive_touch=not self._is_ipad_target(),
+            requires_assistive_touch=not is_ipad,
             requires_connection=True,
             transport_label="picokvm-http",
             scroll_strategy_validated=scroll_strategy_validated,
             scroll_evidence=scroll_evidence,
-            wheel_diagnostic=self._is_ipad_target(),
+            wheel_diagnostic=False,
         )
 
     def _is_ipad_target(self) -> bool:
         return self._device_model.startswith("ipad")
 
     def _wheel_available(self) -> bool:
-        return bool(self.config.wheel_enabled)
+        return bool(self.config.wheel_enabled or self._is_ipad_target())
 
     def _apply_ipad_crop_calibration(self, crop) -> None:
         """Derive a PicoKVM absolute-pointer fit from the detected iPad crop.

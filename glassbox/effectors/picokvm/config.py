@@ -47,18 +47,14 @@ class PicoKVMEffectorConfig(BaseSettings):
     abs_origin_offset_y: float = 53.8
 
     wheel_enabled: bool = False
-    """Off by default: iOS's mouse wheel under AssistiveTouch is INTERMITTENT.
-    The report-ID-2 wheel on the absolute-mouse interface CAN scroll precisely
-    (~1 row/tick, no fling) when the pointer HOVERS over the scrollable region
-    (a click breaks it) — verified on-device 2026-05-23 — but it "constantly
-    stops working" under AssistiveTouch (Apple's documented limitation; observed:
-    worked ~5×, then stayed dead the rest of the session, even fresh at root).
-    A drill-down with it enabled regressed (overshoot→stuck→search fallback), so
-    the default scroll stays the swipe. The hover+positive-sign mechanism below
-    is kept correct for explicit opt-in (set GLASSBOX_PICOKVM_WHEEL_ENABLED=1).
-    iPadOS also keeps this behind explicit opt-in: the connected iPad ACKed
-    report-ID-2 wheel events but did not semantically scroll the Settings
-    sidebar, so wheel remains diagnostic until hardware proof says otherwise."""
+    """Opt-in wheel for iPhone/AssistiveTouch targets.
+
+    iOS's mouse wheel under AssistiveTouch is intermittent on the iPhone rig, so
+    the iPhone default stays on drag/swipe scrolling unless explicitly enabled
+    with GLASSBOX_PICOKVM_WHEEL_ENABLED=1. iPadOS uses the native pointer path
+    and enables the PicoKVM wheel automatically; see
+    docs/reference/picokvm_ipad_wheel.md for the 2026-05-27 validation.
+    """
 
     wheel_down_sign: Literal["negative", "positive"] = "positive"
     """wheelY=+1 scrolls content down a notch on iOS (verified on-device)."""

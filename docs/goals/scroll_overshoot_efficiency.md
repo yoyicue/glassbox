@@ -49,16 +49,14 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
    has been unreliable; harden it so any band the fling skips is deterministically
    reached via in-app search rather than re-flinging. (Watch the StandBy/search
    mis-tap failure mode observed live.)
-3. **iPad migration (hardware, still useful but not a wheel win).** iPad's native
-   pointer consumes the same Generic-Desktop mouse reports, which removes the
-   AssistiveTouch dependency and makes pointer taps/key Home much cleaner. The
-   current connected iPad did not semantically scroll Settings from ACKed wheel
-   reports, so iPadOS coverage must come from visible rows, title-checked search,
-   and graph/search recovery. `wheel_enabled=True` is diagnostic only until a
-   hardware report proves before/after sidebar movement.
-
-Direction 3 reduces the iPhone-specific AssistiveTouch pain, but it does not make
-1 and 2 obsolete unless a future iPadOS HID path proves semantic scrolling.
+3. **iPad migration (hardware, IS a wheel win — updated 2026-05-27).** iPad's
+   native pointer consumes the same Generic-Desktop mouse reports. The current
+   connected iPad now scrolls Settings sidebar reliably via the existing
+   `kvm_app.wheelReport` RPC — 3 fresh-reboot rounds, both directions,
+   reproducible. Details, glassbox-side flip, and the one-time "activation"
+   caveat in [docs/reference/picokvm_ipad_wheel.md](../reference/picokvm_ipad_wheel.md).
+   With wheel authoritative on iPad, Direction 3 makes 1 and 2 obsolete on the
+   iPad rig (they remain the value-now options on the iPhone rig).
 
 ## Acceptance
 
@@ -74,7 +72,8 @@ Direction 3 reduces the iPhone-specific AssistiveTouch pain, but it does not mak
   wheel is not restorable on demand. iOS ignores the HID digitizer/touchpad;
   only a Generic-Desktop mouse works, and AssistiveTouch is mandatory for it.
 - Keep the swipe path as the iPhone default; the wheel stays explicit opt-in /
-  diagnostic, including on iPadOS.
+  diagnostic on iPhone. **On iPadOS the wheel is now authoritative** — see
+  `docs/reference/picokvm_ipad_wheel.md`.
 - Background: `docs/design/ipad_mini_migration.md`; the on-device wheel/fling
   experiments are recorded in the project memory
   (`picokvm-scroll-overshoot-hardware-limit`, `ios-ignores-usb-hid-digitizer`).
