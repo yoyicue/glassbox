@@ -26,8 +26,8 @@ class PicoKVMEffectorConfig(BaseSettings):
     request_timeout_s: float = 3.0
     connect_timeout_s: float = 2.0
     retries: int = 1
-    session_id: str = "codex-glassbox"
-    """HTTP fallback RPC session id, matching the frontend's X-Session-ID shape."""
+    session_id: str = ""
+    """Optional HTTP fallback RPC session id; empty means per-client generated."""
     trust_env: bool = False
     """Do not route local PicoKVM RPC through host HTTP proxy environment by default."""
 

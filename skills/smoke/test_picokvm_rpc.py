@@ -25,7 +25,7 @@ def test_picokvm_rpc_sends_jsonrpc_envelope_and_accepts_null_result():
     seen = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["X-Session-ID"] == "codex-glassbox"
+        assert request.headers["X-Session-ID"].startswith("glassbox-")
         body = json.loads(request.content.decode())
         seen.append(body)
         return httpx.Response(200, json={"jsonrpc": "2.0", "id": body["id"], "result": None})
@@ -106,6 +106,50 @@ def test_picokvm_rpc_refreshes_invalidated_session_id():
     response = rpc.call("getDeviceID")
 
     assert response.result == "unit-device"
-    assert seen_sessions[0] == "codex-glassbox"
-    assert seen_sessions[1].startswith("codex-glassbox-")
+    assert seen_sessions[0].startswith("glassbox-")
+    assert seen_sessions[1].startswith("glassbox-")
     assert seen_sessions[1] != seen_sessions[0]
+
+
+@pytest.mark.smoke
+def test_picokvm_rpc_generates_distinct_default_session_ids():
+    first = _client(lambda _request: httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": None}))
+    second = _client(lambda _request: httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": None}))
+
+    assert first._session_id.startswith("glassbox-")
+    assert second._session_id.startswith("glassbox-")
+    assert first._session_id != second._session_id
+
+
+@pytest.mark.smoke
+def test_picokvm_rpc_preserves_explicit_session_id_until_refresh():
+    seen_sessions = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode())
+        seen_sessions.append(request.headers["X-Session-ID"])
+        if len(seen_sessions) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": body["id"],
+                    "error": {"code": -32001, "message": "Session invalidated"},
+                },
+            )
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": body["id"], "result": None})
+
+    transport = httpx.MockTransport(handler)
+    http = httpx.Client(transport=transport)
+    cfg = PicoKVMEffectorConfig(
+        _env_file=None,
+        base_url="http://picokvm.test",
+        retries=0,
+        session_id="unit-session",
+    )
+    rpc = PicoKVMRpcClient(cfg, client=http)
+
+    rpc.call("ping")
+
+    assert seen_sessions[0] == "unit-session"
+    assert seen_sessions[1].startswith("unit-session-")

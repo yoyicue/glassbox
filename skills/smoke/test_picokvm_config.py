@@ -11,7 +11,7 @@ def test_picokvm_config_defaults_match_bringup():
 
     assert cfg.base_url == "http://picokvm.local"
     assert cfg.auth_mode == "nopassword"
-    assert cfg.session_id == "codex-glassbox"
+    assert cfg.session_id == ""
     assert cfg.trust_env is False
     assert cfg.wheel_enabled is False
     assert cfg.ipad_wheel_activation == "required"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -49,7 +49,7 @@ class PicoKVMRpcClient:
         self._seq = 0
         self._lock = threading.Lock()
         self._auth_token: str | None = None
-        self._session_id = self.config.session_id
+        self._session_id = self._new_session_id()
 
     @property
     def rpc_url(self) -> str:
@@ -154,5 +154,11 @@ class PicoKVMRpcClient:
         return "Session invalidated" in message
 
     def _refresh_session_id(self) -> None:
-        base = self.config.session_id or "codex-glassbox"
-        self._session_id = f"{base}-{int(time.time() * 1000)}"
+        self._session_id = self._new_session_id(refresh=True)
+
+    def _new_session_id(self, *, refresh: bool = False) -> str:
+        configured = str(self.config.session_id or "").strip()
+        if configured and not refresh:
+            return configured
+        base = configured or "glassbox"
+        return f"{base}-{uuid.uuid4().hex[:8]}"
