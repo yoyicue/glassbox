@@ -195,6 +195,8 @@ def test_picokvm_ipad_connect_runs_wheel_activation_once(monkeypatch):
     assert "ffb00000.usb" in ssh_calls[0][-1]
     assert "/dev/hidg1" in ssh_calls[0][-1]
     assert "hidg1 not ready after UDC bounce" in ssh_calls[0][-1]
+    assert "while [ $i -lt 60 ]" in ssh_calls[0][-1]
+    assert "sleep 0.5" in ssh_calls[0][-1]
     assert sleeps == [1.0]
     assert [method for method, _params in rpc.calls].count("ping") >= 2
 
@@ -335,7 +337,7 @@ def test_picokvm_iphone_wheel_activation_polls_hid_until_ready(monkeypatch):
     eff.connect()
 
     assert eff.capabilities().scroll_strategy_validated is True
-    assert sleeps == [0.25, 0.25]
+    assert sleeps == [0.5, 0.5]
     assert [method for method, _params in rpc.calls] == [
         "ping",
         "absMouseReport",

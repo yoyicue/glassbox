@@ -24,10 +24,6 @@ from skills.regression.ios_settings.config import DEFAULT_SETTINGS_WHEEL_TICKS_P
 ActionIntent = Callable[..., AbstractContextManager[Any]]
 TextsFn = Callable[[Any], Iterable[str]]
 
-_ADAPTIVE_WHEEL_TICKS_ATTR = "_ios_settings_adaptive_wheel_ticks"
-_MIN_ADAPTIVE_WHEEL_TICKS = 5
-_MAX_ADAPTIVE_WHEEL_TICKS = 30
-
 
 def wait_screen_settled(
     phone,
@@ -89,26 +85,24 @@ def scroll_down_confirmed(
     idx: int = 0,
 ):
     """Scroll once, settle, then classify progress/stuck/overshoot."""
-    ticks = _settings_wheel_ticks_for_probe(phone)
+    ticks = settings_wheel_ticks_per_swipe()
     wheel_scroll_down(phone, action_intent=action_intent, ticks=ticks)
     time.sleep(0.8)
     phone.invalidate_perceive_cache()
     after = phone.perceive()
     outcome = _classify_scene_scroll_outcome(_classify_scroll_attempt(before_texts, texts(after)).outcome, after)
-    _record_wheel_probe(phone, outcome=outcome, ticks=ticks)
     print(f"[scroll] depth={depth} idx={idx} ticks={ticks} probe={outcome}", flush=True)
     if outcome != "stuck":
         return outcome, after
     if _is_ipad_target(phone):
         return "stuck", after
-    retry_ticks = _settings_wheel_ticks_for_probe(phone)
+    retry_ticks = settings_wheel_ticks_per_swipe()
     wheel_scroll_down(phone, action_intent=action_intent, ticks=retry_ticks)
     time.sleep(0.8)
     phone.invalidate_perceive_cache()
     retry = phone.perceive()
     retry_result = _classify_scroll_attempt(before_texts, texts(after), retry_texts=texts(retry))
     retry_outcome = _classify_scene_scroll_outcome(retry_result.retry_outcome or retry_result.outcome, retry)
-    _record_wheel_probe(phone, outcome=retry_outcome, ticks=retry_ticks)
     print(f"[scroll] depth={depth} idx={idx} ticks={retry_ticks} retry={retry_outcome}", flush=True)
     if retry_outcome == "stuck":
         return "stuck", retry
@@ -168,36 +162,6 @@ def settings_wheel_ticks_per_swipe() -> int:
     except (TypeError, ValueError):
         ticks = DEFAULT_SETTINGS_WHEEL_TICKS_PER_SWIPE
     return max(1, ticks)
-
-
-def _settings_wheel_ticks_for_probe(phone) -> int:
-    if not _is_adaptive_wheel_target(phone):
-        return settings_wheel_ticks_per_swipe()
-    raw = getattr(phone, _ADAPTIVE_WHEEL_TICKS_ATTR, None)
-    if raw is None:
-        return settings_wheel_ticks_per_swipe()
-    try:
-        ticks = int(raw)
-    except (TypeError, ValueError):
-        return settings_wheel_ticks_per_swipe()
-    return max(1, ticks)
-
-
-def _record_wheel_probe(phone, *, outcome: str, ticks: int) -> None:
-    if not _is_adaptive_wheel_target(phone):
-        return
-    current = max(1, int(ticks))
-    if outcome == "stuck":
-        next_ticks = min(_MAX_ADAPTIVE_WHEEL_TICKS, max(current + 2, round(current * 1.5)))
-    elif outcome in {"overshoot", "top-overshoot"}:
-        next_ticks = max(_MIN_ADAPTIVE_WHEEL_TICKS, current // 2)
-    else:
-        return
-    setattr(phone, _ADAPTIVE_WHEEL_TICKS_ATTR, next_ticks)
-
-
-def _is_adaptive_wheel_target(phone) -> bool:
-    return not _is_ipad_target(phone) and _phone_supports(phone, "scroll_wheel")
 
 
 def _classify_scene_scroll_outcome(outcome: str, scene) -> str:

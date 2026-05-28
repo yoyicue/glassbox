@@ -9,7 +9,7 @@ from pathlib import Path
 
 from skills.regression.ios_settings.policy import EXPECTED_ROOT_NAV_TEXT_ZH
 
-DEFAULT_SETTINGS_WHEEL_TICKS_PER_SWIPE = 8
+DEFAULT_SETTINGS_WHEEL_TICKS_PER_SWIPE = 12
 
 
 @dataclass(frozen=True)

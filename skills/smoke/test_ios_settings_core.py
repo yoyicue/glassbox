@@ -176,12 +176,12 @@ def test_settings_wheel_scroll_uses_conservative_default_ticks(monkeypatch):
 
     _wheel_scroll_down(phone)
 
-    assert phone.down_ticks == [8]   # iPhone wheel 30 ticks skips 3-4 rows on-device.
-    assert _settings_wheel_ticks_per_swipe() == 8
+    assert phone.down_ticks == [12]   # Static mid-batch after adaptive-8 regressed on-device.
+    assert _settings_wheel_ticks_per_swipe() == 12
 
 
 @pytest.mark.smoke
-def test_scroll_down_confirmed_adapts_iphone_wheel_ticks_after_overshoot(monkeypatch):
+def test_scroll_down_confirmed_keeps_static_wheel_ticks_after_overshoot(monkeypatch):
     monkeypatch.delenv("IOS_SETTINGS_WHEEL_TICKS_PER_SWIPE", raising=False)
     monkeypatch.delenv("GLASSBOX_WHEEL_TICKS_PER_SCROLL", raising=False)
     monkeypatch.setattr(settings_scrolling.time, "sleep", lambda _seconds: None)
@@ -211,18 +211,18 @@ def test_scroll_down_confirmed_adapts_iphone_wheel_ticks_after_overshoot(monkeyp
 
     assert outcome == "overshoot"
     assert outcome2 == "progress"
-    assert phone.down_ticks == [8, 5]
+    assert phone.down_ticks == [12, 12]
 
 
 @pytest.mark.smoke
-def test_scroll_down_confirmed_adapts_iphone_wheel_ticks_for_stuck_retry(monkeypatch):
+def test_scroll_down_confirmed_treats_two_static_stucks_as_boundary(monkeypatch):
     monkeypatch.delenv("IOS_SETTINGS_WHEEL_TICKS_PER_SWIPE", raising=False)
     monkeypatch.delenv("GLASSBOX_WHEEL_TICKS_PER_SCROLL", raising=False)
     monkeypatch.setattr(settings_scrolling.time, "sleep", lambda _seconds: None)
     scenes = [
         _scene_from_texts(["Settings", "Wi-Fi", "Bluetooth", "Cellular", "Notifications"]),
         _scene_from_texts(["Settings", "Wi-Fi", "Bluetooth", "Cellular", "Notifications"]),
-        _scene_from_texts(["Bluetooth", "Cellular", "Notifications", "Sounds", "Focus"]),
+        _scene_from_texts(["Settings", "Wi-Fi", "Bluetooth", "Cellular", "Notifications"]),
     ]
     phone = _ScrollingPhone(scenes)
 
@@ -235,8 +235,8 @@ def test_scroll_down_confirmed_adapts_iphone_wheel_ticks_for_stuck_retry(monkeyp
         idx=0,
     )
 
-    assert outcome == "progress"
-    assert phone.down_ticks == [8, 12]
+    assert outcome == "stuck"
+    assert phone.down_ticks == [12, 12]
 
 
 @pytest.mark.smoke

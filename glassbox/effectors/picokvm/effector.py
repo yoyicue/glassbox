@@ -211,13 +211,13 @@ class PicoKVMEffector:
     def _wait_for_iphone_hid_ready(self) -> None:
         x, y = self._logical_fraction_point(0.5, 0.5)
         last_exc: Exception | None = None
-        for _idx in range(20):
+        for _idx in range(60):
             try:
                 self._abs_logical_report(x, y, 0)
                 return
             except Exception as exc:
                 last_exc = exc
-                time.sleep(0.25)
+                time.sleep(0.5)
         if last_exc is not None:
             raise RuntimeError(f"iphone HID not ready after UDC bounce: {last_exc}") from last_exc
         raise RuntimeError("iphone HID not ready after UDC bounce")
@@ -263,12 +263,12 @@ class PicoKVMEffector:
             "sleep 1; "
             'echo "$udc" > /sys/kernel/config/usb_gadget/kvm/UDC; '
             "i=0; "
-            "while [ $i -lt 20 ]; do "
+            "while [ $i -lt 60 ]; do "
             'state="$(cat "/sys/class/udc/$udc/state" 2>/dev/null || true)"; '
             'if [ -e /dev/hidg1 ] && [ "$state" = configured ]; then '
             'touch "$marker"; echo bounced; exit 0; '
             "fi; "
-            "sleep 0.25; "
+            "sleep 0.5; "
             "i=$((i + 1)); "
             "done; "
             "echo 'hidg1 not ready after UDC bounce' >&2; "
@@ -286,7 +286,7 @@ class PicoKVMEffector:
             ],
             capture_output=True,
             text=True,
-            timeout=max(1.0, float(self.config.ipad_wheel_activation_ssh_timeout_s) + 3.0),
+            timeout=max(1.0, float(self.config.ipad_wheel_activation_ssh_timeout_s) + 35.0),
             check=False,
         )
         if proc.returncode != 0:

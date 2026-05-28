@@ -4,7 +4,9 @@ Status: **open; iPhone wheel transport is reliable, but wheel has not yet won
 end-to-end.** The 2026-05-28 iPhone wheel drill-down reached the same result as
 the swipe baseline in about 6 minutes: 15/17 coverage, 0 navigation failures,
 `success_rate=1.0`, and `exhaustive_ready=true`. `limits_hit` still included
-`scroll_overshoot`, so the core inefficiency remains.
+`scroll_overshoot`, so the core inefficiency remains. A follow-up adaptive
+8-tick run regressed to 14/17 coverage with one navigation failure and +59% HID
+calls.
 
 ## Problem
 
@@ -30,6 +32,10 @@ On the PicoKVM iPhone rig, the default production scroll is still a
   groups just like a swipe-fling. Rejected candidates such as
   `AirplaneMOde`/`PersOnalHOtspOt`/`Wallet&ApplePay`/`iClOud` show the same
   merged-token overrun mechanism.
+- A naive adaptive controller also failed: 8-tick batches worked in the middle
+  of the sidebar, but near the boundary the loop oscillated
+  `stuck -> larger batch -> overshoot -> smaller batch -> stuck`. Until boundary
+  signals are part of the controller, static mid-batches are safer.
 
 Symptoms during a crawl: `[scroll] probe=overshoot` / `probe=stuck`, multi-pass
 root re-scans, and the `scroll_overshoot` limit. The sections most at risk are
@@ -44,11 +50,11 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
 
 ## Directions (none free; pick by appetite)
 
-1. **Tune iPhone wheel batch size before judging the hardware path.** The first
-   Settings consumer should use small wheel batches (5-10 ticks, default 8) and
-   adapt from probe feedback: `stuck` increases ticks, `overshoot` decreases
-   ticks. Treat the 30-tick result as proof that wheel delivery is reliable, not
-   proof that the crawl is more efficient.
+1. **Tune iPhone wheel batch size before judging the hardware path.** The current
+   safe experiment point is a static 12-tick batch: smaller than the 30-tick
+   overshoot batch, but without the observed adaptive-8 boundary oscillation.
+   Do not re-enable adaptive ticks until boundary detection is a terminal signal
+   in the controller.
 2. **Add explicit overshoot boundary signals.** Status-bar boundary OCR is a
    useful special case: if the cursor region lands in the top chrome (`y < 100`)
    and OCR sees a time-like token, classify the scroll as `top-overshoot` and
@@ -87,12 +93,14 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
 - Keep the swipe path available until small-batch wheel proves lower
   `scroll_overshoot` or lower HID cost on the same coverage. The hardware wheel
   path itself is no longer a known dead end, but the 30-tick Settings run only
-  tied the baseline. **On iPadOS the wheel is already authoritative** — see
-  `docs/reference/picokvm_ipad_wheel.md`.
+  tied the baseline and the adaptive-8 run regressed. **On iPadOS the wheel is
+  already authoritative** — see `docs/reference/picokvm_ipad_wheel.md`.
 - The 2026-05-28 `Settings > Sign Out` alert was a Game Center welcome-page
   misclassification: the page title contained a `Sign Out` button. It was not a
   real Apple Account sign-out path. See
   `artifacts/wheel_probe_2026-05-27/iphone_drill_down_2026-05-28/`.
+- The adaptive-8 regression is recorded in
+  `artifacts/wheel_probe_2026-05-27/iphone_drill_down_v2_2026-05-28/`.
 - Background: `docs/design/ipad_mini_migration.md`; the on-device wheel/fling
   experiments are recorded in the project memory
   (`picokvm-scroll-overshoot-hardware-limit`, `ios-ignores-usb-hid-digitizer`).
