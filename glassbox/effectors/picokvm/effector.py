@@ -69,6 +69,10 @@ class PicoKVMEffector:
         self.coordinate_space = coordinate_space or "frame_px"
         self._phone_size = getattr(device_geometry, "phone_size", None)
         self._device_model = str(getattr(device_geometry, "model", "") or "").lower().replace("-", "_")
+        self._abs_origin_offset_x = float(self.config.abs_origin_offset_x)
+        self._abs_origin_offset_y = float(self.config.abs_origin_offset_y)
+        self._abs_to_phone_scale_x = float(self.config.abs_to_phone_scale_x)
+        self._abs_to_phone_scale_y = float(self.config.abs_to_phone_scale_y)
         self._apply_ipad_crop_calibration(crop)
         self._connected = False
         self._wheel_activation_status: str | None = None
@@ -303,10 +307,10 @@ class PicoKVMEffector:
         if w <= 0 or h <= 0:
             return
         maxv = max(1, int(self.config.abs_logical_max))
-        self.config.abs_origin_offset_x = float(x)
-        self.config.abs_origin_offset_y = float(y)
-        self.config.abs_to_phone_scale_x = float(w) / maxv
-        self.config.abs_to_phone_scale_y = float(h) / maxv
+        self._abs_origin_offset_x = float(x)
+        self._abs_origin_offset_y = float(y)
+        self._abs_to_phone_scale_x = float(w) / maxv
+        self._abs_to_phone_scale_y = float(h) / maxv
 
     def preflight(self) -> PreflightResult:
         try:
@@ -371,12 +375,11 @@ class PicoKVMEffector:
             time.sleep(ms / 1000.0)
 
     def _point_to_logical(self, x: int, y: int) -> tuple[int, int]:
-        cfg = self.config
-        maxv = int(cfg.abs_logical_max)
+        maxv = int(self.config.abs_logical_max)
         if self.coordinate_space != "frame_px":
             raise ValueError(f"picokvm_coordinate_space_unsupported:{self.coordinate_space}")
-        lx = round((int(x) - cfg.abs_origin_offset_x) / cfg.abs_to_phone_scale_x)
-        ly = round((int(y) - cfg.abs_origin_offset_y) / cfg.abs_to_phone_scale_y)
+        lx = round((int(x) - self._abs_origin_offset_x) / self._abs_to_phone_scale_x)
+        ly = round((int(y) - self._abs_origin_offset_y) / self._abs_to_phone_scale_y)
         return max(0, min(maxv, lx)), max(0, min(maxv, ly))
 
     def _abs_report(self, x: int, y: int, buttons: int) -> PicoKVMRpcResponse:

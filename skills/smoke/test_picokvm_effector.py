@@ -322,12 +322,34 @@ def test_picokvm_iphone_wheel_reprimes_before_each_scroll_even_when_status_says_
 def test_picokvm_ipad_profile_derives_absolute_calibration_from_crop():
     geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
     crop = SimpleNamespace(crop_bbox=(640, 48, 642, 984))
-    eff, _ = make_eff(device_geometry=geometry, crop=crop)
+    cfg = PicoKVMEffectorConfig(_env_file=None)
+    eff = PicoKVMEffector(config=cfg, rpc=FakeRpc(), device_geometry=geometry, crop=crop)
 
-    assert eff.config.abs_origin_offset_x == 640.0
-    assert eff.config.abs_origin_offset_y == 48.0
-    assert eff.config.abs_to_phone_scale_x == pytest.approx(642 / 32767)
-    assert eff.config.abs_to_phone_scale_y == pytest.approx(984 / 32767)
+    assert eff._abs_origin_offset_x == 640.0
+    assert eff._abs_origin_offset_y == 48.0
+    assert eff._abs_to_phone_scale_x == pytest.approx(642 / 32767)
+    assert eff._abs_to_phone_scale_y == pytest.approx(984 / 32767)
+    assert cfg.abs_origin_offset_x == 736.4
+    assert cfg.abs_origin_offset_y == 53.8
+    assert cfg.abs_to_phone_scale_x == pytest.approx(0.01363)
+    assert cfg.abs_to_phone_scale_y == pytest.approx(0.02968)
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_crop_calibration_does_not_leak_through_shared_config():
+    cfg = PicoKVMEffectorConfig(_env_file=None)
+    ipad_geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    iphone_geometry = SimpleNamespace(model="iphone_17", phone_size=(1179, 2556), phone_points=(393, 852))
+    crop = SimpleNamespace(crop_bbox=(640, 48, 642, 984))
+
+    ipad_eff = PicoKVMEffector(config=cfg, rpc=FakeRpc(), device_geometry=ipad_geometry, crop=crop)
+    iphone_eff = PicoKVMEffector(config=cfg, rpc=FakeRpc(), device_geometry=iphone_geometry)
+
+    assert ipad_eff._abs_origin_offset_x == 640.0
+    assert iphone_eff._abs_origin_offset_x == 736.4
+    assert iphone_eff._abs_origin_offset_y == 53.8
+    assert iphone_eff._abs_to_phone_scale_x == pytest.approx(0.01363)
+    assert iphone_eff._abs_to_phone_scale_y == pytest.approx(0.02968)
 
 
 @pytest.mark.smoke
