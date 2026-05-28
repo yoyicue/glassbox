@@ -1004,6 +1004,7 @@ class ActionOrchestrator:
             )
             command_completed_at = time.monotonic()
             phone._needs_stable_frame = True
+            phone._fresh_source_reopened_after_action = False
             phone.invalidate_perceive_cache()
 
             if semantic is None and command_result.ok:

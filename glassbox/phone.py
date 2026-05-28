@@ -306,6 +306,7 @@ class Phone:
         from glassbox.memory.schema import ActionRecord
         self._pending_actions_for_memory.append(ActionRecord.from_op(op, action_kwargs))
         self._needs_stable_frame = True
+        self._fresh_source_reopened_after_action = False
         self.invalidate_perceive_cache()
 
     def supports(self, action: str) -> bool:
@@ -743,7 +744,10 @@ class Phone:
             return bool(fresh)
         if self._fresh_source_reopened_after_action:
             return False
-        return self._needs_stable_frame and self._is_picokvm_backend()
+        return self._needs_stable_frame and self._source_supports_fresh_snapshot()
+
+    def _source_supports_fresh_snapshot(self) -> bool:
+        return callable(getattr(self.source, "fresh_snapshot", None))
 
     def _source_snapshot(self, *, fresh: bool) -> Frame | None:
         if fresh:
@@ -770,14 +774,16 @@ class Phone:
             from glassbox.perception.stable import wait_stable_result
             policy = self.stability_policy
             assert policy is not None
+            initial_frame = None
             if fresh_source:
-                self._reopen_source_for_fresh_capture()
+                initial_frame = self._source_snapshot(fresh=True)
             result = wait_stable_result(
                 self.source,
                 timeout=policy.timeout,
                 diff_threshold=policy.diff_threshold,
                 consecutive=policy.consecutive,
                 poll_interval=policy.poll_interval,
+                initial_frame=initial_frame,
             )
             raw = result.frame
             self._last_observation_mode = "stable"

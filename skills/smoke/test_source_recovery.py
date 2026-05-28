@@ -136,6 +136,16 @@ class _SequenceCap(_FakeCap):
         return False, None
 
 
+class _ValueCap(_FakeCap):
+    def __init__(self, value: int):
+        super().__init__(alive=True)
+        self.value = int(value)
+
+    def read(self):
+        import numpy as np
+        return True, np.full((4, 4, 3), self.value, dtype="uint8")
+
+
 @pytest.mark.smoke
 def test_open_probe_passes_on_alive_device(monkeypatch):
     """Device healthy -> open() succeeds, probe passes."""
@@ -381,6 +391,25 @@ def test_snapshot_reopens_once_after_idle_read_failures(monkeypatch):
     assert stale.released
     assert src.cap is reopened
     assert frame.shape == (4, 4)
+    src.close()
+
+
+@pytest.mark.smoke
+def test_avf_fresh_snapshot_reopens_before_read(monkeypatch):
+    import cv2
+
+    stale = _ValueCap(0)
+    fresh = _ValueCap(200)
+    monkeypatch.setattr(cv2, "VideoCapture", lambda *a, **kw: fresh)
+    monkeypatch.setattr("glassbox.perception.source.time.sleep", lambda _seconds: None)
+
+    src = AVFFrameSource(device_index=0)
+    src.cap = stale
+    frame = src.fresh_snapshot()
+
+    assert stale.released is True
+    assert src.cap is fresh
+    assert int(frame.img.mean()) == 200
     src.close()
 
 

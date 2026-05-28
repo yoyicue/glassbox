@@ -58,6 +58,7 @@ def wait_stable(
     diff_threshold: float = 0.005,    # 0.5% mean absdiff counts as stable
     consecutive: int = 2,              # at least `consecutive` stable frames in a row
     poll_interval: float = 0.05,       # interval between frame grabs
+    initial_frame: Frame | None = None,
 ) -> Frame:
     """Block until the screen settles. Returns the last frame.
 
@@ -70,6 +71,7 @@ def wait_stable(
         diff_threshold=diff_threshold,
         consecutive=consecutive,
         poll_interval=poll_interval,
+        initial_frame=initial_frame,
     ).frame
 
 
@@ -80,6 +82,7 @@ def wait_stable_result(
     diff_threshold: float = 0.005,
     consecutive: int = 2,
     poll_interval: float = 0.05,
+    initial_frame: Frame | None = None,
 ) -> StabilityResult:
     """Block until the screen settles and return frame plus stability metadata."""
 
@@ -90,7 +93,7 @@ def wait_stable_result(
         consecutive=consecutive,
         poll_interval=poll_interval,
     )
-    prev = src.snapshot()
+    prev = initial_frame if initial_frame is not None else src.snapshot()
     deadline = time.monotonic() + timeout
     stable_count = 0
     last_diff: float | None = None

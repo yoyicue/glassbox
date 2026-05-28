@@ -327,6 +327,21 @@ class AVFFrameSource:
             f"frame grab failed after {retries} retries (cap.read keeps returning ok=False)"
         )
 
+    def fresh_snapshot(self) -> Frame:
+        """Grab a frame after reopening the capture handle.
+
+        UVC/AVFoundation capture uses a long-lived ``cv2.VideoCapture`` buffer.
+        After HID actions the next buffered frame can predate the action, so
+        callers that need post-action evidence can force a capture boundary.
+        The ffmpeg fallback is already one-shot, so it is fresh by construction.
+        """
+        if self._ffmpeg_fallback:
+            return self._ffmpeg_snapshot()
+        self.close()
+        time.sleep(0.05)
+        self.open(auto_recover=None)
+        return self.snapshot(retries=8, retry_delay_s=0.05, reopen_on_failure=True)
+
     def _read_snapshot_frame(self, *, retries: int, retry_delay_s: float) -> Frame | None:
         if self.cap is None:
             return None

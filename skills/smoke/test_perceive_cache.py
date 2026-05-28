@@ -17,7 +17,7 @@ import pytest
 
 from glassbox.cognition import Box, KimiResponse, UIElement
 from glassbox.cognition.heuristic import HeuristicTyper
-from glassbox.effector import ActionResult, BackendCapabilities, MockEffector
+from glassbox.effector import MockEffector
 from glassbox.obs import Recorder
 from glassbox.obs.recorder import iter_events
 from glassbox.perception.source import Frame
@@ -78,28 +78,23 @@ class ReopenFreshSource:
         self.opens += 1
 
 
-class PicoKVMEffectorStub:
-    coordinate_space = "frame_px"
+class FreshSnapshotSource:
+    resolution = (100, 100)
 
     def __init__(self):
-        self.config = type("Config", (), {"semantic_verify_enabled": False})()
+        self.snapshots = 0
+        self.fresh_snapshots = 0
+        self._fresh = False
 
-    def capabilities(self):
-        return BackendCapabilities(
-            backend="picokvm",
-            coordinate_space="frame_px",
-            direct_actions=frozenset({"tap"}),
-            requires_connection=True,
-        )
+    def snapshot(self):
+        self.snapshots += 1
+        value = 200 if self._fresh else 0
+        return Frame(img=np.full((100, 100, 3), value, dtype=np.uint8), ts=time.monotonic())
 
-    def is_connected(self):
-        return True
-
-    def supports(self, action):
-        return action == "tap"
-
-    def tap(self, *_args, **_kwargs):
-        return ActionResult(ok=True, backend="picokvm", connected=True)
+    def fresh_snapshot(self):
+        self.fresh_snapshots += 1
+        self._fresh = True
+        return Frame(img=np.full((100, 100, 3), 200, dtype=np.uint8), ts=time.monotonic())
 
 
 def _frame(value=0):
@@ -219,17 +214,44 @@ def test_snapshot_fresh_reopens_source():
 
 
 @pytest.mark.smoke
-def test_picokvm_snapshot_after_action_reopens_for_fresh_frame():
-    source = ReopenFreshSource()
-    phone = Phone(source=source, ocr=CountingOCR(), effector=PicoKVMEffectorStub())
+def test_snapshot_after_action_uses_source_fresh_snapshot_capability():
+    source = FreshSnapshotSource()
+    phone = Phone(source=source, ocr=CountingOCR(), effector=MockEffector())
     phone._last_frame = _frame(0)
 
     phone.tap_xy(1, 1)
     frame = phone.snapshot()
 
     assert int(frame.img.mean()) == 200
-    assert source.closes == 1
-    assert source.opens == 1
+    assert source.fresh_snapshots == 1
+    assert source.snapshots == 0
+
+
+@pytest.mark.smoke
+def test_stable_snapshot_after_action_starts_from_source_fresh_snapshot():
+    source = FreshSnapshotSource()
+    phone = Phone(
+        source=source,
+        ocr=CountingOCR(),
+        effector=MockEffector(),
+        stability_policy=StabilityPolicy(
+            enabled=True,
+            after_action_only=True,
+            timeout=0.2,
+            diff_threshold=0.001,
+            consecutive=1,
+            poll_interval=0.0,
+        ),
+    )
+    phone._last_frame = _frame(0)
+
+    phone.tap_xy(1, 1)
+    frame = phone.snapshot()
+
+    assert int(frame.img.mean()) == 200
+    assert source.fresh_snapshots == 1
+    assert source.snapshots == 1
+    assert phone._last_observation_mode == "stable"
 
 
 @pytest.mark.smoke
