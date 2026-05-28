@@ -286,15 +286,61 @@ def test_picokvm_iphone_wheel_opt_in_connect_bounces_and_primes(monkeypatch):
     assert sleeps == [0.5]
     assert [method for method, _params in rpc.calls] == [
         "ping",
-        "ping",
+        "absMouseReport",
         "wheelReport",
         "wheelReport",
         "ping",
     ]
-    assert rpc.calls[2:] == [
+    assert rpc.calls[1:] == [
+        ("absMouseReport", {"x": 16384, "y": 16384, "buttons": 0}),
         ("wheelReport", {"wheelY": 1}),
         ("wheelReport", {"wheelY": 0}),
         ("ping", None),
+    ]
+
+
+@pytest.mark.smoke
+def test_picokvm_iphone_wheel_activation_polls_hid_until_ready(monkeypatch):
+    class FlakyHidRpc(FakeRpc):
+        def __init__(self):
+            super().__init__()
+            self.failures = 2
+
+        def call(self, method, params=None):
+            if method == "absMouseReport" and self.failures > 0:
+                self.failures -= 1
+                self.next_id += 1
+                self.calls.append((method, params))
+                raise RuntimeError("hid fd stale")
+            return super().call(method, params)
+
+    geometry = SimpleNamespace(model="iphone_17", phone_size=(1179, 2556), phone_points=(393, 852))
+    rpc = FlakyHidRpc()
+    cfg = PicoKVMEffectorConfig(
+        _env_file=None,
+        base_url="http://picokvm.test:8080",
+        wheel_enabled=True,
+        iphone_wheel_activation_wait_s=0,
+        iphone_wheel_prime_ticks=0,
+    )
+    eff = PicoKVMEffector(config=cfg, rpc=rpc, device_geometry=geometry)
+    sleeps: list[float] = []
+
+    def fake_run(_argv, **_kwargs):
+        return SimpleNamespace(returncode=0, stdout="bounced\n", stderr="")
+
+    monkeypatch.setattr("glassbox.effectors.picokvm.effector.subprocess.run", fake_run)
+    monkeypatch.setattr("glassbox.effectors.picokvm.effector.time.sleep", lambda seconds: sleeps.append(seconds))
+
+    eff.connect()
+
+    assert eff.capabilities().scroll_strategy_validated is True
+    assert sleeps == [0.25, 0.25]
+    assert [method for method, _params in rpc.calls] == [
+        "ping",
+        "absMouseReport",
+        "absMouseReport",
+        "absMouseReport",
     ]
 
 

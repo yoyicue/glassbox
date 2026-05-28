@@ -176,8 +176,92 @@ def test_settings_wheel_scroll_uses_conservative_default_ticks(monkeypatch):
 
     _wheel_scroll_down(phone)
 
-    assert phone.down_ticks == [15]   # 动量悬崖下的受控默认档
-    assert _settings_wheel_ticks_per_swipe() == 15
+    assert phone.down_ticks == [8]   # iPhone wheel 30 ticks skips 3-4 rows on-device.
+    assert _settings_wheel_ticks_per_swipe() == 8
+
+
+@pytest.mark.smoke
+def test_scroll_down_confirmed_adapts_iphone_wheel_ticks_after_overshoot(monkeypatch):
+    monkeypatch.delenv("IOS_SETTINGS_WHEEL_TICKS_PER_SWIPE", raising=False)
+    monkeypatch.delenv("GLASSBOX_WHEEL_TICKS_PER_SCROLL", raising=False)
+    monkeypatch.setattr(settings_scrolling.time, "sleep", lambda _seconds: None)
+    scenes = [
+        _scene_from_texts(["Settings", "Wi-Fi", "Bluetooth", "Cellular", "Notifications"]),
+        _scene_from_texts(["Wallet", "Game Center", "Apps", "Passwords", "Privacy"]),
+        _scene_from_texts(["Apps", "Passwords", "Privacy", "Safari", "Battery"]),
+    ]
+    phone = _ScrollingPhone(scenes)
+
+    outcome, _after = settings_scrolling.scroll_down_confirmed(
+        phone,
+        ["Settings", "Wi-Fi", "Bluetooth", "Cellular", "Notifications"],
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        texts=lambda observed: [element.text for element in observed.elements if element.text],
+        depth=0,
+        idx=0,
+    )
+    outcome2, _after2 = settings_scrolling.scroll_down_confirmed(
+        phone,
+        ["Wallet", "Game Center", "Apps", "Passwords", "Privacy"],
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        texts=lambda observed: [element.text for element in observed.elements if element.text],
+        depth=0,
+        idx=1,
+    )
+
+    assert outcome == "overshoot"
+    assert outcome2 == "progress"
+    assert phone.down_ticks == [8, 5]
+
+
+@pytest.mark.smoke
+def test_scroll_down_confirmed_adapts_iphone_wheel_ticks_for_stuck_retry(monkeypatch):
+    monkeypatch.delenv("IOS_SETTINGS_WHEEL_TICKS_PER_SWIPE", raising=False)
+    monkeypatch.delenv("GLASSBOX_WHEEL_TICKS_PER_SCROLL", raising=False)
+    monkeypatch.setattr(settings_scrolling.time, "sleep", lambda _seconds: None)
+    scenes = [
+        _scene_from_texts(["Settings", "Wi-Fi", "Bluetooth", "Cellular", "Notifications"]),
+        _scene_from_texts(["Settings", "Wi-Fi", "Bluetooth", "Cellular", "Notifications"]),
+        _scene_from_texts(["Bluetooth", "Cellular", "Notifications", "Sounds", "Focus"]),
+    ]
+    phone = _ScrollingPhone(scenes)
+
+    outcome, _after = settings_scrolling.scroll_down_confirmed(
+        phone,
+        ["Settings", "Wi-Fi", "Bluetooth", "Cellular", "Notifications"],
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        texts=lambda observed: [element.text for element in observed.elements if element.text],
+        depth=0,
+        idx=0,
+    )
+
+    assert outcome == "progress"
+    assert phone.down_ticks == [8, 12]
+
+
+@pytest.mark.smoke
+def test_scroll_down_confirmed_marks_top_status_bar_boundary_overshoot(monkeypatch):
+    monkeypatch.setattr(settings_scrolling.time, "sleep", lambda _seconds: None)
+    before = ["Settings", "Wi-Fi", "Bluetooth", "Cellular", "Notifications"]
+    after = _scene(
+        _el("13:04", 24, 40, w=48),
+        _el("Wallet & Apple Pay", 70, 260, w=160),
+        _el("Game Center", 70, 300, w=120),
+        _el("Apps", 70, 340, w=80),
+        _el("Safari", 70, 380, w=80),
+    )
+    phone = _ScrollingPhone([_scene_from_texts(before), after])
+
+    outcome, _after = settings_scrolling.scroll_down_confirmed(
+        phone,
+        before,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        texts=lambda observed: [element.text for element in observed.elements if element.text],
+        depth=0,
+        idx=0,
+    )
+
+    assert outcome == "top-overshoot"
 
 @pytest.mark.smoke
 def test_ipad_settings_wheel_clicks_sidebar_focus_before_wheel():

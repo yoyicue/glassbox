@@ -1,12 +1,10 @@
 # Goal — Reduce iPhone scroll-overshoot inefficiency
 
-Status: **open, wheel-revalidation proved; consumer rollout pending.** This is the only remaining signal on a
-healthy en-HK exhaustive run — `limits_hit: scroll_overshoot` (a `warning`-level
-known issue, `ios-settings-scroll-overshoot`), not an outage. Coverage is
-honest 15/17 and `verify_report` passes; the cost is wasted re-scans, not missed
-sections. The previous hard-ceiling story for the iPhone scroll primitive is
-superseded by 2026-05-28 PicoKVM RPC wheel validation after UDC bounce +
-warmup + throwaway prime.
+Status: **open; iPhone wheel transport is reliable, but wheel has not yet won
+end-to-end.** The 2026-05-28 iPhone wheel drill-down reached the same result as
+the swipe baseline in about 6 minutes: 15/17 coverage, 0 navigation failures,
+`success_rate=1.0`, and `exhaustive_ready=true`. `limits_hit` still included
+`scroll_overshoot`, so the core inefficiency remains.
 
 ## Problem
 
@@ -21,11 +19,17 @@ On the PicoKVM iPhone rig, the default production scroll is still a
   is not tunable by config alone.
 - The mouse **wheel** used to be classified as severely intermittent under
   AssistiveTouch. A 2026-05-28 PicoKVM RPC retest with UDC bounce + warmup
-  overturned that: after one throwaway first wheel attempt, R02-R10 were stable
-  at a fixed 599 px per 30 ticks, with no observed decay. An isolated colleague
-  rerun reproduced the effect at 10/10 rounds. The interim 0px local rerun was
-  a stale long-lived video-stream artifact: direct ffmpeg frames moved while
-  `Phone.snapshot()` returned an old frame until the source was reopened.
+  overturned that transport-level story: after one throwaway first wheel
+  attempt, R02-R10 were stable at a fixed 599 px per 30 ticks, with no observed
+  decay. An isolated colleague rerun reproduced the effect at 10/10 rounds. The
+  interim 0px local rerun was a stale long-lived video-stream artifact: direct
+  ffmpeg frames moved while `Phone.snapshot()` returned an old frame until the
+  source was reopened.
+- The end-to-end Settings run did **not** prove a wheel win. A 30-tick batch is
+  still about 600 px, or roughly 3-4 Settings rows, so it can skip whole row
+  groups just like a swipe-fling. Rejected candidates such as
+  `AirplaneMOde`/`PersOnalHOtspOt`/`Wallet&ApplePay`/`iClOud` show the same
+  merged-token overrun mechanism.
 
 Symptoms during a crawl: `[scroll] probe=overshoot` / `probe=stuck`, multi-pass
 root re-scans, and the `scroll_overshoot` limit. The sections most at risk are
@@ -40,21 +44,26 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
 
 ## Directions (none free; pick by appetite)
 
-1. **Promote opt-in iPhone wheel into Settings consumers.** The production
-   shape is UDC bounce + long iPhone warmup + one throwaway wheel prime, then
-   RPC `wheelReport` batches. `Phone.scroll_wheel()` must reopen the PicoKVM
-   source for fresh verification so stale stream buffers do not hide movement.
-2. **Closed-loop overshoot recovery (software fallback).** Detect a fling's
+1. **Tune iPhone wheel batch size before judging the hardware path.** The first
+   Settings consumer should use small wheel batches (5-10 ticks, default 8) and
+   adapt from probe feedback: `stuck` increases ticks, `overshoot` decreases
+   ticks. Treat the 30-tick result as proof that wheel delivery is reliable, not
+   proof that the crawl is more efficient.
+2. **Add explicit overshoot boundary signals.** Status-bar boundary OCR is a
+   useful special case: if the cursor region lands in the top chrome (`y < 100`)
+   and OCR sees a time-like token, classify the scroll as `top-overshoot` and
+   keep charging `scroll_overshoot`.
+3. **Closed-loop overshoot recovery (software fallback).** Detect a fling's
    landing band (already classified `overshoot`/`progress`/`stuck`) and
    re-scroll a corrective short amount toward the missed band, instead of a fixed
    multi-pass re-scan from the top. Needs a control loop over the existing probe
    classifier in `skills/regression/ios_settings/scrolling.py`; bounded retries.
-3. **Reliable search-based missed-page recovery (software fallback).**
+4. **Reliable search-based missed-page recovery (software fallback).**
    `crawl_missing_root_pages_via_search` is meant to recover skipped sections but
    has been unreliable; harden it so any band the fling skips is deterministically
    reached via in-app search rather than re-flinging. (Watch the StandBy/search
    mis-tap failure mode observed live.)
-4. **iPad migration (hardware, IS a wheel win — updated 2026-05-27).** iPad's
+5. **iPad migration (hardware, IS a wheel win — updated 2026-05-27).** iPad's
    native pointer consumes the same Generic-Desktop mouse reports. The current
    connected iPad now scrolls Settings sidebar reliably via the existing
    `kvm_app.wheelReport` RPC — 3 fresh-reboot rounds, both directions,
@@ -75,10 +84,15 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
 
 - iOS still ignores the HID digitizer/touchpad; only a Generic-Desktop mouse
   works, and AssistiveTouch is mandatory on iPhone.
-- Keep the swipe path as the iPhone default until a bounce+warmup+prime wheel
-  Settings run proves coverage. The hardware wheel path itself is no longer a
-  known dead end. **On iPadOS the wheel is already authoritative** — see
+- Keep the swipe path available until small-batch wheel proves lower
+  `scroll_overshoot` or lower HID cost on the same coverage. The hardware wheel
+  path itself is no longer a known dead end, but the 30-tick Settings run only
+  tied the baseline. **On iPadOS the wheel is already authoritative** — see
   `docs/reference/picokvm_ipad_wheel.md`.
+- The 2026-05-28 `Settings > Sign Out` alert was a Game Center welcome-page
+  misclassification: the page title contained a `Sign Out` button. It was not a
+  real Apple Account sign-out path. See
+  `artifacts/wheel_probe_2026-05-27/iphone_drill_down_2026-05-28/`.
 - Background: `docs/design/ipad_mini_migration.md`; the on-device wheel/fling
   experiments are recorded in the project memory
   (`picokvm-scroll-overshoot-hardware-limit`, `ios-ignores-usb-hid-digitizer`).

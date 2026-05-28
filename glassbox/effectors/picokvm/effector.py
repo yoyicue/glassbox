@@ -199,13 +199,28 @@ class PicoKVMEffector:
             self._wheel_activation_status = "bounced" if activated else "already"
             if activated and self.config.iphone_wheel_activation_wait_s > 0:
                 time.sleep(float(self.config.iphone_wheel_activation_wait_s))
-                self.rpc.ping()
+            if activated:
+                self._wait_for_iphone_hid_ready()
             self._prime_iphone_wheel()
         except Exception as exc:
             self._wheel_activation_status = "failed"
             if mode == "required":
                 raise RuntimeError(f"picokvm_iPhone_wheel_activation_failed: {exc}") from exc
             print(f"[picokvm] iPhone wheel activation failed; continuing because mode={mode}: {exc}", flush=True)
+
+    def _wait_for_iphone_hid_ready(self) -> None:
+        x, y = self._logical_fraction_point(0.5, 0.5)
+        last_exc: Exception | None = None
+        for _idx in range(20):
+            try:
+                self._abs_logical_report(x, y, 0)
+                return
+            except Exception as exc:
+                last_exc = exc
+                time.sleep(0.25)
+        if last_exc is not None:
+            raise RuntimeError(f"iphone HID not ready after UDC bounce: {last_exc}") from last_exc
+        raise RuntimeError("iphone HID not ready after UDC bounce")
 
     def _prime_iphone_wheel(self) -> None:
         self._send_iphone_wheel_prime(verify=True)

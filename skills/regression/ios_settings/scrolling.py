@@ -17,11 +17,16 @@ from glassbox.cognition.text_match import confusion_compact
 from glassbox.ios.crawl import call_scroll_method as _call_scroll_method_generic
 from glassbox.ios.crawl import classify_scroll_attempt as _classify_scroll_attempt
 from glassbox.ios.crawl import phone_supports as _phone_supports
+from glassbox.ios.progress import is_time_text as _is_time_text
 from glassbox.ios.progress import screen_signature as _screen_signature
 from skills.regression.ios_settings.config import DEFAULT_SETTINGS_WHEEL_TICKS_PER_SWIPE
 
 ActionIntent = Callable[..., AbstractContextManager[Any]]
 TextsFn = Callable[[Any], Iterable[str]]
+
+_ADAPTIVE_WHEEL_TICKS_ATTR = "_ios_settings_adaptive_wheel_ticks"
+_MIN_ADAPTIVE_WHEEL_TICKS = 5
+_MAX_ADAPTIVE_WHEEL_TICKS = 30
 
 
 def wait_screen_settled(
@@ -84,25 +89,31 @@ def scroll_down_confirmed(
     idx: int = 0,
 ):
     """Scroll once, settle, then classify progress/stuck/overshoot."""
-    wheel_scroll_down(phone, action_intent=action_intent)
+    ticks = _settings_wheel_ticks_for_probe(phone)
+    wheel_scroll_down(phone, action_intent=action_intent, ticks=ticks)
     time.sleep(0.8)
     phone.invalidate_perceive_cache()
     after = phone.perceive()
-    outcome = _classify_scroll_attempt(before_texts, texts(after)).outcome
-    print(f"[scroll] depth={depth} idx={idx} probe={outcome}", flush=True)
+    outcome = _classify_scene_scroll_outcome(_classify_scroll_attempt(before_texts, texts(after)).outcome, after)
+    _record_wheel_probe(phone, outcome=outcome, ticks=ticks)
+    print(f"[scroll] depth={depth} idx={idx} ticks={ticks} probe={outcome}", flush=True)
     if outcome != "stuck":
         return outcome, after
     if _is_ipad_target(phone):
         return "stuck", after
-    wheel_scroll_down(phone, action_intent=action_intent)
+    retry_ticks = _settings_wheel_ticks_for_probe(phone)
+    wheel_scroll_down(phone, action_intent=action_intent, ticks=retry_ticks)
     time.sleep(0.8)
     phone.invalidate_perceive_cache()
     retry = phone.perceive()
     retry_result = _classify_scroll_attempt(before_texts, texts(after), retry_texts=texts(retry))
-    retry_outcome = retry_result.retry_outcome or retry_result.outcome
-    print(f"[scroll] depth={depth} idx={idx} retry={retry_outcome}", flush=True)
+    retry_outcome = _classify_scene_scroll_outcome(retry_result.retry_outcome or retry_result.outcome, retry)
+    _record_wheel_probe(phone, outcome=retry_outcome, ticks=retry_ticks)
+    print(f"[scroll] depth={depth} idx={idx} ticks={retry_ticks} retry={retry_outcome}", flush=True)
     if retry_outcome == "stuck":
         return "stuck", retry
+    if retry_outcome in {"overshoot", "top-overshoot"}:
+        return retry_outcome, retry
     return "progress", retry
 
 
@@ -157,6 +168,56 @@ def settings_wheel_ticks_per_swipe() -> int:
     except (TypeError, ValueError):
         ticks = DEFAULT_SETTINGS_WHEEL_TICKS_PER_SWIPE
     return max(1, ticks)
+
+
+def _settings_wheel_ticks_for_probe(phone) -> int:
+    if not _is_adaptive_wheel_target(phone):
+        return settings_wheel_ticks_per_swipe()
+    raw = getattr(phone, _ADAPTIVE_WHEEL_TICKS_ATTR, None)
+    if raw is None:
+        return settings_wheel_ticks_per_swipe()
+    try:
+        ticks = int(raw)
+    except (TypeError, ValueError):
+        return settings_wheel_ticks_per_swipe()
+    return max(1, ticks)
+
+
+def _record_wheel_probe(phone, *, outcome: str, ticks: int) -> None:
+    if not _is_adaptive_wheel_target(phone):
+        return
+    current = max(1, int(ticks))
+    if outcome == "stuck":
+        next_ticks = min(_MAX_ADAPTIVE_WHEEL_TICKS, max(current + 2, round(current * 1.5)))
+    elif outcome in {"overshoot", "top-overshoot"}:
+        next_ticks = max(_MIN_ADAPTIVE_WHEEL_TICKS, current // 2)
+    else:
+        return
+    setattr(phone, _ADAPTIVE_WHEEL_TICKS_ATTR, next_ticks)
+
+
+def _is_adaptive_wheel_target(phone) -> bool:
+    return not _is_ipad_target(phone) and _phone_supports(phone, "scroll_wheel")
+
+
+def _classify_scene_scroll_outcome(outcome: str, scene) -> str:
+    if outcome == "overshoot" and _has_top_status_bar_time(scene):
+        return "top-overshoot"
+    return outcome
+
+
+def _has_top_status_bar_time(scene) -> bool:
+    for element in getattr(scene, "elements", []) or []:
+        text = str(getattr(element, "text", "") or "").strip()
+        box = getattr(element, "box", None)
+        if not text or box is None or not _is_time_text(text):
+            continue
+        try:
+            if box.center[1] < 100:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def scroll_to_vertical_boundary(

@@ -807,7 +807,7 @@ def crawl_current_page(
             depth=depth,
             idx=scroll_idx,
         )
-        if outcome == "overshoot":
+        if outcome in {"overshoot", "top-overshoot"}:
             limits_hit.add("scroll_overshoot")
         elif outcome == "stuck":
             # Reached the bottom (or a jammed fling). On the root list the
