@@ -127,6 +127,7 @@ def _connect_effector_if_needed(
         raise RuntimeUnavailable(preflight.message)
     try:
         effector.connect()
+        _freshen_source_after_effector_connect(source)
     except Exception as exc:
         effector.close()
         if not getattr(cfg, "allow_noop_fallback", False):
@@ -146,6 +147,18 @@ def _connect_effector_if_needed(
             device_geometry=device_geometry,
         )
     return effector
+
+
+def _freshen_source_after_effector_connect(source) -> bool:
+    fresh_snapshot = getattr(source, "fresh_snapshot", None)
+    if not callable(fresh_snapshot):
+        return False
+    try:
+        fresh_snapshot()
+        return True
+    except Exception as exc:
+        print(f"[runtime] source fresh snapshot after effector connect failed: {exc}")
+        return False
 
 
 def make_effector(
@@ -403,13 +416,16 @@ def build_phone(
     capabilities = _effector_capabilities(effector)
     coordinate_space = capabilities.coordinate_space
 
+    auto_refresh_letterbox_crop = False
     if crop is None:
+        auto_refresh_letterbox_crop = _crop_config_value(cfg, capabilities, "crop_bbox") is None
         crop = detect_crop(
             source,
             cfg=cfg,
             device_geometry=device_geometry,
             effector_capabilities=capabilities,
         )
+        auto_refresh_letterbox_crop = auto_refresh_letterbox_crop and crop is not None
 
     if not provided_effector:
         effector_resolution = effector_frame_resolution(
@@ -595,6 +611,7 @@ def build_phone(
         memory=memory,
         coldstart=coldstart,
         crop=crop,
+        auto_refresh_letterbox_crop=auto_refresh_letterbox_crop,
         coordinate_space=coordinate_space,
         stability_policy=StabilityPolicy(
             enabled=cfg.stable_after_action,

@@ -59,6 +59,7 @@ def wait_stable(
     consecutive: int = 2,              # at least `consecutive` stable frames in a row
     poll_interval: float = 0.05,       # interval between frame grabs
     initial_frame: Frame | None = None,
+    fresh_start: bool = False,
 ) -> Frame:
     """Block until the screen settles. Returns the last frame.
 
@@ -72,6 +73,7 @@ def wait_stable(
         consecutive=consecutive,
         poll_interval=poll_interval,
         initial_frame=initial_frame,
+        fresh_start=fresh_start,
     ).frame
 
 
@@ -83,6 +85,7 @@ def wait_stable_result(
     consecutive: int = 2,
     poll_interval: float = 0.05,
     initial_frame: Frame | None = None,
+    fresh_start: bool = False,
 ) -> StabilityResult:
     """Block until the screen settles and return frame plus stability metadata."""
 
@@ -93,7 +96,13 @@ def wait_stable_result(
         consecutive=consecutive,
         poll_interval=poll_interval,
     )
-    prev = initial_frame if initial_frame is not None else src.snapshot()
+    if initial_frame is not None:
+        prev = initial_frame
+    elif fresh_start:
+        fresh_snapshot = getattr(src, "fresh_snapshot", None)
+        prev = fresh_snapshot() if callable(fresh_snapshot) else src.snapshot()
+    else:
+        prev = src.snapshot()
     deadline = time.monotonic() + timeout
     stable_count = 0
     last_diff: float | None = None

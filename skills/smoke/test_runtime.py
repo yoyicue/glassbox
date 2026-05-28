@@ -39,6 +39,16 @@ class FakeSource:
         self.closed = True
 
 
+class FreshSource(FakeSource):
+    def __init__(self):
+        super().__init__()
+        self.fresh_snapshots = 0
+
+    def fresh_snapshot(self):
+        self.fresh_snapshots += 1
+        return self.snapshot()
+
+
 class FakeOCR:
     def recognize(self, _image):
         return [
@@ -405,6 +415,36 @@ def test_phone_refreshes_letterbox_crop_when_source_resolution_changes():
 
 
 @pytest.mark.smoke
+def test_phone_refreshes_letterbox_crop_when_bbox_changes_at_same_resolution():
+    class MovingCropSource:
+        resolution = (1920, 1080)
+
+        def __init__(self):
+            self.calls = 0
+
+        def snapshot(self):
+            self.calls += 1
+            left = 711 if self.calls == 1 else 800
+            img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+            img[:, left:left + 498] = 255
+            return Frame(img=img, ts=0.0)
+
+    runtime = build_phone(
+        source=MovingCropSource(),
+        cfg=AgentConfig(_env_file=None),
+        ocr=FakeOCR(),
+        effector=FakeEffector(),
+    )
+
+    frame = runtime.phone.snapshot()
+
+    assert runtime.phone.crop is not None
+    assert runtime.phone.crop.frame_size == (1920, 1080)
+    assert runtime.phone.crop.crop_bbox == (800, 0, 498, 1080)
+    assert frame.shape == (498, 1080)
+
+
+@pytest.mark.smoke
 def test_build_phone_takes_platform_subcapabilities_from_registry(monkeypatch):
     class Platform:
         name = "unit"
@@ -519,3 +559,60 @@ def test_build_phone_loads_out_of_tree_effector_from_entry_point(monkeypatch):
     assert runtime.phone.coordinate_space == "phone_pt"
     assert runtime.phone.gesture_config.wheel_ticks_per_scroll == 7
     assert runtime.phone.gesture_config.wheel_invert is True
+
+
+@pytest.mark.smoke
+def test_build_phone_freshens_source_after_effector_connect(monkeypatch):
+    class ConnectingEffector:
+        coordinate_space = "frame_px"
+
+        def __init__(self, **_kwargs):
+            self.connected = False
+
+        def capabilities(self):
+            return BackendCapabilities(
+                backend="unit",
+                coordinate_space="frame_px",
+                requires_connection=True,
+            )
+
+        def preflight(self):
+            return PreflightResult(ok=True)
+
+        def connect(self):
+            self.connected = True
+
+        def close(self):
+            self.connected = False
+
+        def is_connected(self):
+            return self.connected
+
+        def supports(self, _action):
+            return True
+
+    class ConnectingEntryPoint:
+        def load(self):
+            return BackendRegistration(
+                name="unit_connect",
+                factory=lambda **kwargs: ConnectingEffector(**kwargs),
+            )
+
+    def fake_entry_points(*, group=None):
+        return [ConnectingEntryPoint()] if group == "glassbox.effectors" else []
+
+    old_registrations = dict(DEFAULT_EFFECTOR_REGISTRY._by_name)
+    old_loaded = DEFAULT_EFFECTOR_REGISTRY._entry_points_loaded
+    monkeypatch.setattr("glassbox.backend_registry.entry_points", fake_entry_points)
+    monkeypatch.setenv("GLASSBOX_EFFECTOR", "unit_connect")
+    DEFAULT_EFFECTOR_REGISTRY._entry_points_loaded = False
+    source = FreshSource()
+    try:
+        runtime = build_phone(source=source, cfg=AgentConfig(_env_file=None), ocr=FakeOCR())
+    finally:
+        DEFAULT_EFFECTOR_REGISTRY._by_name = old_registrations
+        DEFAULT_EFFECTOR_REGISTRY._entry_points_loaded = old_loaded
+
+    assert isinstance(runtime.effector, ConnectingEffector)
+    assert runtime.effector.connected is True
+    assert source.fresh_snapshots == 1

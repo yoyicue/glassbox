@@ -210,3 +210,24 @@ def test_auto_detected_app_viewport_updates_when_window_moves():
     assert phone.app_viewport is not None
     assert phone.app_viewport.bbox == (47, 9, 38, 82)
     assert phone.app_viewport.source == "detected"
+
+
+@pytest.mark.smoke
+def test_auto_detected_app_viewport_expires_when_detection_misses():
+    first = np.zeros((100, 120, 3), dtype=np.uint8)
+    second = np.zeros((100, 120, 3), dtype=np.uint8)
+    first[9:91, 41:79, :] = 240
+    phone = Phone(
+        source=SequenceSource([first, second]),
+        ocr=ShapeOCR(),
+        effector=MockEffector(),
+        device_geometry=SimpleNamespace(model="ipad_mini_7"),
+        app_viewport_mode="iphone_compat",
+    )
+
+    first_frame = phone.snapshot(scope="app")
+    second_frame = phone.snapshot(scope="app")
+
+    assert first_frame.shape == (38, 82)
+    assert second_frame.shape == (120, 100)
+    assert phone.app_viewport is None

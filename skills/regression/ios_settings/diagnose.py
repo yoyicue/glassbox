@@ -32,7 +32,8 @@ def _frame_check(cfg: AgentConfig) -> dict[str, Any]:
     source = None
     try:
         source = make_source(cfg=cfg)
-        frame = source.snapshot()
+        fresh_snapshot = getattr(source, "fresh_snapshot", None)
+        frame = fresh_snapshot() if callable(fresh_snapshot) else source.snapshot()
         width, height = frame.shape
         return {"ok": True, "resolution": [int(width), int(height)]}
     except RuntimeUnavailable as exc:

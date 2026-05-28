@@ -167,6 +167,7 @@ class Phone:
         app_viewport: ViewportCrop | None = None,
         app_viewport_mode: str = "auto",
         default_observation_scope: str = "device",
+        auto_refresh_letterbox_crop: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -178,6 +179,7 @@ class Phone:
         self.memory = memory               # ScreenMemory | None — UTG screen memory
         self.coldstart = coldstart         # ColdStartAnnotator | None — cold-start VLM annotation
         self.crop = crop
+        self.auto_refresh_letterbox_crop = bool(auto_refresh_letterbox_crop)
         self.coordinate_space = coordinate_space or "auto"
         self.stability_policy = stability_policy
         self.perceive_cache_diff = perceive_cache_diff
@@ -817,6 +819,8 @@ class Phone:
                     "letterbox crop refreshed after source resolution changed: "
                     f"frame={self.crop.frame_size} bbox={self.crop.crop_bbox}"
                 )
+            elif self.auto_refresh_letterbox_crop:
+                self._refresh_letterbox_crop_bbox(raw)
             raw = _Frame(
                 img=self.crop.crop(raw.img),
                 ts=raw.ts,
@@ -841,6 +845,22 @@ class Phone:
             self.recorder.snapshot(self._last_frame)
         return self._last_frame
 
+    def _refresh_letterbox_crop_bbox(self, raw: Frame) -> None:
+        if self.crop is None:
+            return
+        try:
+            from glassbox.perception.letterbox import LetterboxCrop
+            detected = LetterboxCrop.auto_detect(raw.img, phone_size=self.crop.phone_size)
+        except Exception:
+            return
+        if detected.crop_bbox == self.crop.crop_bbox:
+            return
+        self.crop = detected
+        logger.info(
+            "letterbox crop refreshed after source bbox changed: "
+            f"frame={self.crop.frame_size} bbox={self.crop.crop_bbox}"
+        )
+
     def _apply_app_viewport(self, frame: Frame) -> Frame:
         from glassbox.perception.source import Frame as _Frame
 
@@ -854,6 +874,9 @@ class Phone:
                 ):
                     viewport = detected
                     self.app_viewport = detected
+            elif viewport is not None and viewport.source == "detected":
+                self.app_viewport = None
+                viewport = None
         if viewport is None:
             return frame
         return _Frame(

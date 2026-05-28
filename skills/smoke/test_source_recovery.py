@@ -363,6 +363,34 @@ def test_wait_stable_starts_timeout_after_baseline_frame(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_wait_stable_can_start_from_fresh_snapshot():
+    import numpy as np
+
+    from glassbox.perception.stable import wait_stable
+
+    class FreshStartSource:
+        def __init__(self):
+            self.fresh_snapshots = 0
+            self.snapshots = 0
+
+        def fresh_snapshot(self):
+            self.fresh_snapshots += 1
+            return Frame(img=np.full((2, 2, 3), 7, dtype="uint8"), ts=0.0)
+
+        def snapshot(self):
+            self.snapshots += 1
+            return Frame(img=np.full((2, 2, 3), 7, dtype="uint8"), ts=float(self.snapshots))
+
+    src = FreshStartSource()
+
+    frame = wait_stable(src, timeout=0.1, consecutive=1, poll_interval=0.0, fresh_start=True)
+
+    assert int(frame.img.mean()) == 7
+    assert src.fresh_snapshots == 1
+    assert src.snapshots == 1
+
+
+@pytest.mark.smoke
 def test_snapshot_waits_between_transient_failed_reads(monkeypatch):
     cap = _SequenceCap([False, False, True])
     src = AVFFrameSource(device_index=0)
