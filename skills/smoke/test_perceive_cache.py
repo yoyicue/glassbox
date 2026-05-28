@@ -17,7 +17,7 @@ import pytest
 
 from glassbox.cognition import Box, KimiResponse, UIElement
 from glassbox.cognition.heuristic import HeuristicTyper
-from glassbox.effector import MockEffector
+from glassbox.effector import ActionResult, BackendCapabilities, MockEffector
 from glassbox.obs import Recorder
 from glassbox.obs.recorder import iter_events
 from glassbox.perception.source import Frame
@@ -56,6 +56,50 @@ class StepSource:
 
     def close(self):
         pass
+
+
+class ReopenFreshSource:
+    resolution = (100, 100)
+
+    def __init__(self):
+        self.opens = 0
+        self.closes = 0
+        self.reopened = False
+
+    def snapshot(self):
+        value = 200 if self.reopened else 0
+        return Frame(img=np.full((100, 100, 3), value, dtype=np.uint8), ts=time.monotonic())
+
+    def close(self):
+        self.closes += 1
+        self.reopened = True
+
+    def open(self):
+        self.opens += 1
+
+
+class PicoKVMEffectorStub:
+    coordinate_space = "frame_px"
+
+    def __init__(self):
+        self.config = type("Config", (), {"semantic_verify_enabled": False})()
+
+    def capabilities(self):
+        return BackendCapabilities(
+            backend="picokvm",
+            coordinate_space="frame_px",
+            direct_actions=frozenset({"tap"}),
+            requires_connection=True,
+        )
+
+    def is_connected(self):
+        return True
+
+    def supports(self, action):
+        return action == "tap"
+
+    def tap(self, *_args, **_kwargs):
+        return ActionResult(ok=True, backend="picokvm", connected=True)
 
 
 def _frame(value=0):
@@ -160,6 +204,32 @@ def test_perceive_waits_for_stable_frame_after_action(tmp_path):
     scene_events = [e for e in iter_events(tmp_path) if e["type"] == "scene"]
     assert scene_events[-1]["observation_mode"] == "stable"
     assert scene_events[-1]["stable_frame"] is True
+
+
+@pytest.mark.smoke
+def test_snapshot_fresh_reopens_source():
+    source = ReopenFreshSource()
+    phone = Phone(source=source, ocr=CountingOCR(), effector=MockEffector())
+
+    frame = phone.snapshot(fresh=True)
+
+    assert int(frame.img.mean()) == 200
+    assert source.closes == 1
+    assert source.opens == 1
+
+
+@pytest.mark.smoke
+def test_picokvm_snapshot_after_action_reopens_for_fresh_frame():
+    source = ReopenFreshSource()
+    phone = Phone(source=source, ocr=CountingOCR(), effector=PicoKVMEffectorStub())
+    phone._last_frame = _frame(0)
+
+    phone.tap_xy(1, 1)
+    frame = phone.snapshot()
+
+    assert int(frame.img.mean()) == 200
+    assert source.closes == 1
+    assert source.opens == 1
 
 
 @pytest.mark.smoke

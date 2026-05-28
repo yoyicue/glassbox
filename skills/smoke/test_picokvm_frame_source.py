@@ -37,3 +37,30 @@ def test_picokvm_frame_source_reopens_after_empty_read():
     result = source.snapshot()
 
     assert result.img is frame
+
+
+@pytest.mark.smoke
+def test_picokvm_frame_source_fresh_snapshot_reopens_stream():
+    stale = np.zeros((4, 6, 3), dtype=np.uint8)
+    fresh = np.full((4, 6, 3), 200, dtype=np.uint8)
+    captures = [
+        FakeCapture([(True, stale)]),
+        FakeCapture([(True, fresh)]),
+    ]
+    created = []
+    cfg = PicoKVMEffectorConfig(_env_file=None, base_url="http://picokvm.test")
+
+    def factory(_url):
+        cap = captures.pop(0)
+        created.append(cap)
+        return cap
+
+    source = PicoKVMFrameSource(config=cfg, capture_factory=factory)
+
+    first = source.snapshot()
+    second = source.fresh_snapshot()
+
+    assert first.img is stale
+    assert second.img is fresh
+    assert created[0].released is True
+    assert created[1].released is False

@@ -68,6 +68,19 @@ class PicoKVMFrameSource:
             self.open()
         raise RuntimeError(f"PicoKVM video stream read failed: {self.stream_url}: {last_error}")
 
+    def fresh_snapshot(self) -> Frame:
+        """Grab a frame after reopening the HTTP stream.
+
+        OpenCV can return stale buffered frames from PicoKVM's long-lived H.264
+        stream after HID actions. Reopening is slower than ``snapshot()``, but it
+        gives callers an explicit freshness boundary when they need visual
+        evidence after an action.
+        """
+        self.close()
+        time.sleep(0.05)
+        self.open()
+        return self.snapshot()
+
     def stream(self) -> Iterator[Frame]:
         while True:
             yield self.snapshot()

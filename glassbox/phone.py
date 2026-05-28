@@ -210,6 +210,7 @@ class Phone:
         self._cache_scene: Scene | None = None
         self._cache_scope = "device"
         self._needs_stable_frame = False
+        self._fresh_source_reopened_after_action = False
         self._last_observation_mode = "raw"
         self._last_stable_frame: bool | None = None
         self._last_stability_score: float | None = None
@@ -336,6 +337,12 @@ class Phone:
         name = self.effector.__class__.__name__
         return name[:-8].lower() if name.endswith("Effector") else name.lower()
 
+    def _is_picokvm_backend(self) -> bool:
+        capabilities = self._backend_capabilities()
+        if capabilities is not None:
+            return capabilities.backend == "picokvm"
+        return self._effector_backend() == "picokvm"
+
     def _failed_action_result(
         self,
         *,
@@ -375,6 +382,7 @@ class Phone:
         before_frame = self._last_frame
         before_scene = self._last_scene
         self._needs_stable_frame = True
+        self._fresh_source_reopened_after_action = False
         self.invalidate_perceive_cache()
         try:
             result = call()
@@ -515,17 +523,19 @@ class Phone:
         self._needs_stable_frame = False
         return frame, scene
 
-    def _reopen_source_for_fresh_capture(self) -> None:
+    def _reopen_source_for_fresh_capture(self) -> bool:
         close = getattr(self.source, "close", None)
         open_ = getattr(self.source, "open", None)
         if not callable(close) or not callable(open_):
-            return
+            return False
         close()
         time.sleep(0.05)
         open_()
+        self._fresh_source_reopened_after_action = True
+        return True
 
     def _picokvm_fresh_verify_kwargs(self, action: str) -> dict:
-        if self._effector_backend() != "picokvm":
+        if not self._is_picokvm_backend():
             return {}
         cfg = getattr(self.effector, "config", None)
         if cfg is None or not bool(getattr(cfg, "semantic_verify_enabled", True)):
@@ -728,14 +738,40 @@ class Phone:
             return False
         return not policy.after_action_only or self._needs_stable_frame
 
-    def snapshot(self, *, stable: bool | None = None, scope: str | None = None) -> Frame | None:
+    def _should_fresh_snapshot(self, fresh: bool | None) -> bool:
+        if fresh is not None:
+            return bool(fresh)
+        if self._fresh_source_reopened_after_action:
+            return False
+        return self._needs_stable_frame and self._is_picokvm_backend()
+
+    def _source_snapshot(self, *, fresh: bool) -> Frame | None:
+        if fresh:
+            fresh_snapshot = getattr(self.source, "fresh_snapshot", None)
+            if callable(fresh_snapshot):
+                frame = fresh_snapshot()
+                self._fresh_source_reopened_after_action = True
+                return frame
+            self._reopen_source_for_fresh_capture()
+        return self.source.snapshot()
+
+    def snapshot(
+        self,
+        *,
+        stable: bool | None = None,
+        scope: str | None = None,
+        fresh: bool | None = None,
+    ) -> Frame | None:
         from glassbox.perception.source import Frame as _Frame
         frame_scope = self._normalize_observation_scope(scope or self.default_observation_scope)
         previous_scene_space = self._last_scene_coordinate_space if self._last_scene is not None else None
+        fresh_source = self._should_fresh_snapshot(fresh)
         if self._should_wait_stable(stable):
             from glassbox.perception.stable import wait_stable_result
             policy = self.stability_policy
             assert policy is not None
+            if fresh_source:
+                self._reopen_source_for_fresh_capture()
             result = wait_stable_result(
                 self.source,
                 timeout=policy.timeout,
@@ -754,7 +790,7 @@ class Phone:
                 "poll_interval": policy.poll_interval,
             }
         else:
-            raw = self.source.snapshot()
+            raw = self._source_snapshot(fresh=fresh_source)
             self._last_observation_mode = "raw"
             self._last_stable_frame = None
             self._last_stability_score = None
@@ -850,7 +886,13 @@ class Phone:
         self._last_scene_coordinate_space = None
         self._implicit_coordinate_space_error = None
 
-    def perceive(self, *, stable: bool | None = None, scope: str | None = None) -> Scene:
+    def perceive(
+        self,
+        *,
+        stable: bool | None = None,
+        scope: str | None = None,
+        fresh: bool | None = None,
+    ) -> Scene:
         """OCR → Layer 2 heuristic typing. Returns the full Scene.
 
         frame diff cache: when the mean absdiff against the last OCR'd frame
@@ -861,7 +903,7 @@ class Phone:
         from glassbox.perception.stable import frame_diff_ratio
 
         frame_scope = self._normalize_observation_scope(scope or self.default_observation_scope)
-        frame = self.snapshot(stable=stable, scope=frame_scope)
+        frame = self.snapshot(stable=stable, scope=frame_scope, fresh=fresh)
         observation_mode = self._last_observation_mode
         stable_frame = self._last_stable_frame
 

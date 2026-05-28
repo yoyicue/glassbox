@@ -2133,6 +2133,8 @@ class ActionOrchestrator:
         close()
         time.sleep(0.05)
         open_()
+        if hasattr(phone, "_fresh_source_reopened_after_action"):
+            phone._fresh_source_reopened_after_action = True
         return True
 
     @staticmethod
