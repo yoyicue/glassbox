@@ -299,6 +299,26 @@ def test_picokvm_iphone_wheel_opt_in_connect_bounces_and_primes(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_picokvm_iphone_wheel_reprimes_before_each_scroll_even_when_status_says_primed():
+    geometry = SimpleNamespace(model="iphone_17", phone_size=(1179, 2556), phone_points=(393, 852))
+    eff, rpc = make_eff(wheel_enabled=True, device_geometry=geometry)
+    eff._wheel_activation_status = "primed"
+
+    result = eff.scroll_wheel(2, interval_ms=0, focus=False)
+
+    assert result.ok is True
+    assert result.executed_count == 3
+    assert eff._wheel_activation_status == "primed"
+    assert rpc.calls == [
+        ("wheelReport", {"wheelY": 1}),
+        ("wheelReport", {"wheelY": 0}),
+        ("wheelReport", {"wheelY": 1}),
+        ("wheelReport", {"wheelY": 1}),
+        ("wheelReport", {"wheelY": 0}),
+    ]
+
+
+@pytest.mark.smoke
 def test_picokvm_ipad_profile_derives_absolute_calibration_from_crop():
     geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
     crop = SimpleNamespace(crop_bbox=(640, 48, 642, 984))

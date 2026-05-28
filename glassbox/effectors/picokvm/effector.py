@@ -204,6 +204,10 @@ class PicoKVMEffector:
             print(f"[picokvm] iPhone wheel activation failed; continuing because mode={mode}: {exc}", flush=True)
 
     def _prime_iphone_wheel(self) -> None:
+        self._send_iphone_wheel_prime(verify=True)
+        self._wheel_activation_status = "primed"
+
+    def _send_iphone_wheel_prime(self, *, verify: bool = False) -> None:
         ticks = int(self.config.iphone_wheel_prime_ticks)
         if ticks == 0:
             return
@@ -214,7 +218,13 @@ class PicoKVMEffector:
             self._call("wheelReport", {"wheelY": step})
             self._sleep_ms(int(self.config.iphone_wheel_prime_interval_ms))
         self._call("wheelReport", {"wheelY": 0})
-        self.rpc.ping()
+        if verify:
+            self.rpc.ping()
+
+    def _prime_iphone_wheel_before_scroll(self) -> None:
+        if not self._is_iphone_target() or not self.config.wheel_enabled:
+            return
+        self._send_iphone_wheel_prime(verify=False)
         self._wheel_activation_status = "primed"
 
     def _activate_wheel_usb_gadget(self, *, marker: str, udc: str, skip_if_marker: bool) -> bool:
@@ -583,6 +593,7 @@ class PicoKVMEffector:
             count = abs(int(ticks))
             if count == 0:
                 return ActionResult(ok=True, backend="picokvm", connected=True, executed_count=0)
+            self._prime_iphone_wheel_before_scroll()
             sign = -1 if self.config.wheel_down_sign == "negative" else 1
             step = sign if ticks > 0 else -sign
             responses: list[PicoKVMRpcResponse] = []

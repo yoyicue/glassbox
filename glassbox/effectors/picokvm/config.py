@@ -81,8 +81,8 @@ class PicoKVMEffectorConfig(BaseSettings):
     This is ignored unless ``wheel_enabled`` is true on an iPhone target. iPhone
     USB host re-enumeration is slower than iPadOS on the current rig, so the
     default wait is intentionally longer. The first wheel attempt after warmup
-    may still be swallowed; ``iphone_wheel_prime_ticks`` sends a tiny throwaway
-    RPC wheel before production scrolls are used.
+    may still be swallowed; ``iphone_wheel_prime_ticks`` sends tiny throwaway
+    RPC wheel reports during activation and before each production scroll.
     """
     iphone_wheel_activation_marker: str = "/tmp/glassbox_iphone_wheel_armed"
     iphone_wheel_activation_wait_s: float = 25.0
