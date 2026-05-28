@@ -574,6 +574,27 @@ def test_settings_root_only_uses_known_safe_navigation_labels():
 
     assert labels == ["无线局域网", "蓝牙", "通知", "通用", "伴机息示"]
 
+
+@pytest.mark.smoke
+def test_status_bar_clock_ocr_is_not_used_as_title_or_navigation_candidate():
+    scene = _scene(
+        _el("2:02 C", 48, 74, w=68),
+        _el("Bluetooth", 198, 112, w=96),
+        _el("Connect to accessories you can use for", 76, 180, w=280),
+        _el("2:03₺", 80, 370, w=68),
+        _el("2:0x C", 80, 430, w=72),
+        _el("Notifications", 80, 500, w=110),
+        _el(">", 354, 500, w=18),
+    )
+
+    labels = [e.text for e in _safe_navigation_candidates(scene, allow_sensitive_root_labels=True)]
+
+    assert settings_scene_state.page_title(scene) == "Bluetooth"
+    assert DEFAULT_SETTINGS_POLICY.is_status_bar_clock_text("2:0x C")
+    assert DEFAULT_SETTINGS_POLICY.is_status_bar_clock_text("12:09 €")
+    assert labels == ["Notifications"]
+
+
 @pytest.mark.smoke
 def test_sensitive_password_root_rows_are_allowed_only_on_root_scan():
     scene = _scene(

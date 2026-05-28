@@ -1,12 +1,12 @@
 # Goal — Reduce iPhone scroll-overshoot inefficiency
 
-Status: **open; iPhone wheel transport is reliable, but wheel has not yet won
-end-to-end.** The 2026-05-28 iPhone wheel drill-down reached the same result as
-the swipe baseline in about 6 minutes: 15/17 coverage, 0 navigation failures,
-`success_rate=1.0`, and `exhaustive_ready=true`. `limits_hit` still included
-`scroll_overshoot`, so the core inefficiency remains. A follow-up adaptive
-8-tick run regressed to 14/17 coverage with one navigation failure and +59% HID
-calls.
+Status: **partially landed (2026-05-28).** Static 12-tick wheel (v3) matches v1
+coverage (15/17, `root_required_missing_count=0`) at **−13% HID calls (39→34)
+and −45% wasted scrolls (11→6)**, AND `scroll_overshoot` is now absent from
+`limits_hit` — the primary acceptance criterion. The adaptive 8-tick attempt
+(v2) regressed: 14/17 coverage, +59% HID calls, lost `专注模式`. Evidence:
+`artifacts/wheel_probe_2026-05-27/iphone_drill_down_v3_2026-05-28/`. Remaining
+work: broader run set before flipping wheel from opt-in to default.
 
 ## Problem
 
@@ -50,15 +50,16 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
 
 ## Directions (none free; pick by appetite)
 
-1. **Tune iPhone wheel batch size before judging the hardware path.** The current
-   safe experiment point is a static 12-tick batch: smaller than the 30-tick
-   overshoot batch, but without the observed adaptive-8 boundary oscillation.
-   Do not re-enable adaptive ticks until boundary detection is a terminal signal
-   in the controller.
-2. **Add explicit overshoot boundary signals.** Status-bar boundary OCR is a
-   useful special case: if the cursor region lands in the top chrome (`y < 100`)
-   and OCR sees a time-like token, classify the scroll as `top-overshoot` and
-   keep charging `scroll_overshoot`.
+1. **Tune iPhone wheel batch size before judging the hardware path.** ✅ Done
+   2026-05-28: static 12 (v3) is the chosen point. It eliminates
+   `scroll_overshoot` from `limits_hit`, matches v1 coverage at lower HID cost,
+   and (with the new "two consecutive `stuck` = boundary" terminator) is
+   stable. Do not re-enable adaptive ticks until boundary handling has broader
+   run coverage.
+2. **Add explicit overshoot boundary signals.** ✅ Done 2026-05-28: status-bar
+   clock OCR variants such as `2:02 C`, `2:03₺`, and `12:09 €` are ignored for
+   page titles and navigation candidates, and top-clock landing still classifies
+   as `top-overshoot` / `scroll_overshoot`.
 3. **Closed-loop overshoot recovery (software fallback).** Detect a fling's
    landing band (already classified `overshoot`/`progress`/`stuck`) and
    re-scroll a corrective short amount toward the missed band, instead of a fixed

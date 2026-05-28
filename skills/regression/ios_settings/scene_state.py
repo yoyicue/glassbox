@@ -191,6 +191,10 @@ def is_unsafe_navigation_text(text: str, *, allow_sensitive_root_labels: bool = 
     )
 
 
+def is_status_bar_clock_text(text: str) -> bool:
+    return DEFAULT_SETTINGS_POLICY.is_status_bar_clock_text(text)
+
+
 def matches_label(text: str, label: str) -> bool:
     return DEFAULT_SETTINGS_POLICY.matches_label(text, label)
 

@@ -430,7 +430,13 @@ def _observed_path_label(
 
 def _observed_title_missing_or_noise(title: str) -> bool:
     text = (title or "").strip()
-    return not text or text == "?" or text in {"<", "‹", "〈", "返回", "Back"} or is_time_text(text)
+    return (
+        not text
+        or text == "?"
+        or text in {"<", "‹", "〈", "返回", "Back"}
+        or is_time_text(text)
+        or settings_scene_state.is_status_bar_clock_text(text)
+    )
 
 
 def _backend_pointer_kind(phone) -> str:

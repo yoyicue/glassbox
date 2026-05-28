@@ -28,6 +28,9 @@ from skills.regression.ios_settings.sections import (
 ROOT_TITLE = SETTINGS_TITLE_LABELS
 HARNESS_APP_MARKERS = ("GlassboxHelper", "Mac 大脑", "服务有问题", "最近活动")
 FAILURE_CATEGORY_KEYS = ("perception", "operation", "recovery", "efficiency", "safety")
+_STATUS_BAR_CLOCK_NOISE_RE = re.compile(
+    r"^\d{1,2}[:：.]?[\dOolBSIxX]{2,4}[A-Za-z€₺$¢()（）]*$",
+)
 
 UNSAFE_OR_NON_NAV_TEXT = (
     "飞行模式", "Airplane Mode",
@@ -898,13 +901,13 @@ class SettingsPolicy:
                 element.text
                 and element.type != "nav_back"
                 and element.text.strip() not in {"<", "‹", "〈", "返回", "Back"}
-                and not is_time_text(element.text)
+                and not self.is_status_bar_clock_text(element.text)
                 and 50 <= element.box.center[1] <= 170
                 and len(element.text.strip()) <= 18
             )
         ]
         if not candidates:
-            texts = self.texts(scene)
+            texts = [text for text in self.texts(scene) if not self.is_status_bar_clock_text(text)]
             return texts[0] if texts else "?"
         candidates.sort(key=lambda element: (abs(element.box.center[1] - 90), abs(element.box.center[0] - 224)))
         return candidates[0].text.strip()
@@ -1083,6 +1086,8 @@ class SettingsPolicy:
         text = (element.text or "").strip()
         if not text:
             return None
+        if self.is_status_bar_clock_text(text):
+            return None
         cx, cy = element.box.center
         if cy < 260 or cy > 900 or cx > 260:
             return None
@@ -1105,6 +1110,18 @@ class SettingsPolicy:
         if text in ROOT_TITLE or text in HARNESS_APP_MARKERS:
             return None
         return text
+
+    @staticmethod
+    def is_status_bar_clock_text(text: str) -> bool:
+        raw = (text or "").strip()
+        if not raw:
+            return False
+        if is_time_text(raw):
+            return True
+        compact = re.sub(r"\s+", "", raw)
+        if len(compact) > 8:
+            return False
+        return bool(_STATUS_BAR_CLOCK_NOISE_RE.fullmatch(compact))
 
     def is_settings_section_header(self, scene, element: UIElement) -> bool:
         if not self.has_visible_back_affordance(scene):
@@ -1631,6 +1648,8 @@ class IPadSettingsPolicy(SettingsPolicy):
         text = (element.text or "").strip()
         if not text:
             return None
+        if self.is_status_bar_clock_text(text):
+            return None
         _w, h = viewport_size
         cx, cy = element.box.center
         if cy < int(h * 0.10) or cy > int(h * 0.96) or cx > sidebar_right:
@@ -1669,6 +1688,8 @@ class IPadSettingsPolicy(SettingsPolicy):
     ) -> str | None:
         text = re.sub(r"\s*[>›→❯˃＞]\s*$", "", (element.text or "").strip()).strip()
         if not text:
+            return None
+        if self.is_status_bar_clock_text(text):
             return None
         _w, h = viewport_size
         cx, cy = element.box.center
