@@ -237,6 +237,68 @@ def test_picokvm_ipad_connect_fails_when_required_activation_fails(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_picokvm_iphone_opt_in_wheel_is_diagnostic_until_activation():
+    geometry = SimpleNamespace(model="iphone_17", phone_size=(1179, 2556), phone_points=(393, 852))
+    eff, _rpc = make_eff(device_geometry=geometry, wheel_enabled=True)
+
+    caps = eff.capabilities()
+
+    assert caps.scroll_strategy == "wheel"
+    assert caps.scroll_strategy_validated is False
+    assert caps.wheel_diagnostic is True
+    assert caps.scroll_evidence == "iphone_opt_in_requires_udc_bounce_warmup_prime"
+
+
+@pytest.mark.smoke
+def test_picokvm_iphone_wheel_opt_in_connect_bounces_and_primes(monkeypatch):
+    geometry = SimpleNamespace(model="iphone_17", phone_size=(1179, 2556), phone_points=(393, 852))
+    rpc = FakeRpc()
+    cfg = PicoKVMEffectorConfig(
+        _env_file=None,
+        base_url="http://picokvm.test:8080",
+        wheel_enabled=True,
+        iphone_wheel_activation_wait_s=0.5,
+        iphone_wheel_prime_ticks=1,
+        iphone_wheel_prime_interval_ms=0,
+    )
+    eff = PicoKVMEffector(config=cfg, rpc=rpc, device_geometry=geometry)
+    ssh_calls: list[list[str]] = []
+    sleeps: list[float] = []
+
+    def fake_run(argv, **_kwargs):
+        ssh_calls.append(list(argv))
+        return SimpleNamespace(returncode=0, stdout="bounced\n", stderr="")
+
+    monkeypatch.setattr("glassbox.effectors.picokvm.effector.subprocess.run", fake_run)
+    monkeypatch.setattr("glassbox.effectors.picokvm.effector.time.sleep", lambda seconds: sleeps.append(seconds))
+
+    eff.connect()
+
+    caps = eff.capabilities()
+    assert caps.scroll_strategy == "wheel"
+    assert caps.scroll_strategy_validated is True
+    assert caps.wheel_diagnostic is False
+    assert caps.scroll_evidence == "udc_bounce_warmup_prime"
+    assert ssh_calls
+    assert "root@picokvm.test" in ssh_calls[0]
+    assert "glassbox_iphone_wheel_armed" in ssh_calls[0][-1]
+    assert "rm -f \"$marker\"" in ssh_calls[0][-1]
+    assert sleeps == [0.5]
+    assert [method for method, _params in rpc.calls] == [
+        "ping",
+        "ping",
+        "wheelReport",
+        "wheelReport",
+        "ping",
+    ]
+    assert rpc.calls[2:] == [
+        ("wheelReport", {"wheelY": 1}),
+        ("wheelReport", {"wheelY": 0}),
+        ("ping", None),
+    ]
+
+
+@pytest.mark.smoke
 def test_picokvm_ipad_profile_derives_absolute_calibration_from_crop():
     geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
     crop = SimpleNamespace(crop_bbox=(640, 48, 642, 984))
@@ -480,7 +542,8 @@ def test_picokvm_type_reports_partial_when_late_character_is_unsupported():
 
 @pytest.mark.smoke
 def test_picokvm_wheel_off_by_default_but_hovers_then_scrolls_when_enabled():
-    # Wheel is OFF by default (iOS wheel under AssistiveTouch is intermittent).
+    # Wheel is OFF by default on iPhone until the bounce+warmup+prime path is
+    # proved in the Settings crawler.
     eff, _ = make_eff()
     assert eff.scroll_wheel(3).unsupported is True
 

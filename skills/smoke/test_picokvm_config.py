@@ -19,6 +19,11 @@ def test_picokvm_config_defaults_match_bringup():
     assert cfg.ipad_wheel_activation_marker == "/tmp/glassbox_ipad_wheel_armed"
     assert cfg.ipad_wheel_activation_udc == "ffb00000.usb"
     assert cfg.ipad_wheel_activation_wait_s == 6.0
+    assert cfg.iphone_wheel_activation == "required"
+    assert cfg.iphone_wheel_activation_marker == "/tmp/glassbox_iphone_wheel_armed"
+    assert cfg.iphone_wheel_activation_wait_s == 25.0
+    assert cfg.iphone_wheel_prime_ticks == 1
+    assert cfg.iphone_wheel_prime_interval_ms == 40
     assert cfg.assistive_touch_home_enabled is False
     assert cfg.keyboard_home_enabled is True
     assert cfg.keyboard_back_enabled is True
@@ -53,6 +58,9 @@ def test_picokvm_config_env_overrides(monkeypatch):
     monkeypatch.setenv("GLASSBOX_PICOKVM_SESSION_ID", "unit-session")
     monkeypatch.setenv("GLASSBOX_PICOKVM_IPAD_WHEEL_ACTIVATION", "warn")
     monkeypatch.setenv("GLASSBOX_PICOKVM_IPAD_WHEEL_ACTIVATION_WAIT_S", "3")
+    monkeypatch.setenv("GLASSBOX_PICOKVM_IPHONE_WHEEL_ACTIVATION", "off")
+    monkeypatch.setenv("GLASSBOX_PICOKVM_IPHONE_WHEEL_ACTIVATION_WAIT_S", "11")
+    monkeypatch.setenv("GLASSBOX_PICOKVM_IPHONE_WHEEL_PRIME_TICKS", "2")
 
     cfg = PicoKVMEffectorConfig(_env_file=None)
 
@@ -62,3 +70,6 @@ def test_picokvm_config_env_overrides(monkeypatch):
     assert cfg.session_id == "unit-session"
     assert cfg.ipad_wheel_activation == "warn"
     assert cfg.ipad_wheel_activation_wait_s == 3.0
+    assert cfg.iphone_wheel_activation == "off"
+    assert cfg.iphone_wheel_activation_wait_s == 11.0
+    assert cfg.iphone_wheel_prime_ticks == 2

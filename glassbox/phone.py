@@ -2089,6 +2089,7 @@ class Phone:
         }
         if focus_click:
             action_kwargs["focus_click"] = True
+        action_kwargs.update(self._picokvm_fresh_verify_kwargs("scroll_wheel"))
         return self._execute_action(
             "scroll_wheel",
             lambda: self.effector.scroll_wheel(int(ticks), **kwargs),

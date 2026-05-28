@@ -230,9 +230,13 @@ production wheel path validated above.
 2. **Ticks-per-row calibration**: measure how many wheel-report ticks scroll
    the iPad Settings sidebar by exactly one row, for accurate drill-down
    coverage budgeting.
-3. **iPhone**: the existing `picokvm-scroll-overshoot-hardware-limit` finding
-   (iPhone+AssistiveTouch makes wheel 5-7% intermittent and unrecoverable)
-   stands — this doc is iPad-only.
+3. **iPhone**: the old `picokvm-scroll-overshoot-hardware-limit` finding
+   (iPhone+AssistiveTouch makes wheel 5-7% intermittent and unrecoverable) is
+   superseded for the bounce+warmup path. A 2026-05-28 isolated rerun of
+   `iphone_bounce.py` on the iPhone 17 rig reproduced stable PicoKVM RPC wheel:
+   R01 moved ±352 px and R02-R10 moved a fixed ±599 px per 30 ticks. The earlier
+   local 0px result was traced to stale `Phone.snapshot()` frames from the
+   long-lived cv2 stream; direct ffmpeg frames showed the wheel movement.
 4. **Update existing docs**: `docs/design/ipad_mini_migration.md §5` and the
    `picokvm-scroll-overshoot-hardware-limit` memory should point here for the
    iPad case.

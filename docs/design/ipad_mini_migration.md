@@ -455,23 +455,25 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
 
 ## Why consider it
 
-On iPhone (iOS) we exhausted the precise-scroll / touch problem and hit hard
-platform walls (all on-device verified):
+On iPhone (iOS), the pre-bounce precise-scroll / touch probes looked like hard
+platform walls:
 
 - HID **digitizer / touchpad / Magic-Trackpad** input is ignored by iOS — only
   Generic-Desktop **mouse** works. No native touch, no two-finger scroll.
-- Mouse **wheel** under AssistiveTouch (which iPhone *requires* for any pointer)
-  is severely intermittent (~5–7%) and not revivable from the PicoKVM side
-  (USB re-enumeration at 1 s / 12 s / full reboot all fail to reset it).
-- So iPhone scrolling is stuck with the imprecise **swipe-drag fling**
-  (shared Settings acceptance coverage varies 9–15 of the 17-label
-  iPhone/cross-device vocabulary because of overshoot).
+- Mouse **wheel** under AssistiveTouch was previously classified as severely
+  intermittent (~5–7%) and not revivable from the PicoKVM side. A later
+  2026-05-28 PicoKVM RPC retest overturned that story: after UDC bounce +
+  warmup + a throwaway first wheel attempt, the iPhone 17 rig produced stable
+  wheel scrolls at a fixed 599 px per 30 ticks. An isolated colleague rerun
+  reproduced 10/10 rounds; the local 0px counter-result was traced to stale
+  long-lived `Phone.snapshot()` video frames rather than HID wheel failure.
+- The production default still uses imprecise **swipe-drag fling** until an
+  end-to-end Settings run proves wheel coverage, but iPhone wheel is now an
+  opt-in candidate rather than a closed question.
 
-iPadOS removes the AssistiveTouch dependency and accepts native pointer clicks,
-but the connected PicoKVM rig has **not** proved reliable Settings sidebar wheel
-scrolling. The same USB-HID gadget plugs in directly and keyboard Home works;
-precise scrolling and app foregrounding still need iPad-specific handling. See
-the memory notes
+iPadOS removes the AssistiveTouch dependency and accepts native pointer clicks;
+the connected PicoKVM rig later proved reliable Settings sidebar wheel scrolling
+with the same USB-HID gadget. See the memory notes
 `ios-ignores-usb-hid-digitizer`, `picokvm-scroll-overshoot-hardware-limit`,
 `iphone-vs-ipad-mouse-keyboard-support`.
 

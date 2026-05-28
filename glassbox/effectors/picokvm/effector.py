@@ -71,10 +71,11 @@ class PicoKVMEffector:
         self._device_model = str(getattr(device_geometry, "model", "") or "").lower().replace("-", "_")
         self._apply_ipad_crop_calibration(crop)
         self._connected = False
+        self._wheel_activation_status: str | None = None
 
     def connect(self) -> None:
         self.rpc.ping()
-        self._ensure_ipad_wheel_activation()
+        self._ensure_wheel_activation()
         self._connected = True
 
     def close(self) -> None:
@@ -98,10 +99,22 @@ class PicoKVMEffector:
         scroll_strategy = "unsupported"
         scroll_strategy_validated = True
         scroll_evidence = None
+        wheel_diagnostic = False
         is_ipad = self._is_ipad_target()
+        is_iphone = self._is_iphone_target()
         if self._wheel_available():
             direct_actions = direct_actions | frozenset({"scroll_wheel", "wheel_scroll_down", "wheel_scroll_up"})
             scroll_strategy = "wheel"
+            if is_iphone and self.config.wheel_enabled:
+                scroll_strategy_validated = self._wheel_activation_status == "primed"
+                wheel_diagnostic = not scroll_strategy_validated
+                scroll_evidence = (
+                    "udc_bounce_warmup_prime"
+                    if scroll_strategy_validated
+                    else "udc_bounce_warmup_ack_only"
+                    if self._wheel_activation_status == "bounced"
+                    else "iphone_opt_in_requires_udc_bounce_warmup_prime"
+                )
         home_strategy = "unsupported"
         if self.config.assistive_touch_home_enabled:
             home_strategy = "assistive_touch"
@@ -129,14 +142,23 @@ class PicoKVMEffector:
             transport_label="picokvm-http",
             scroll_strategy_validated=scroll_strategy_validated,
             scroll_evidence=scroll_evidence,
-            wheel_diagnostic=False,
+            wheel_diagnostic=wheel_diagnostic,
         )
 
     def _is_ipad_target(self) -> bool:
         return self._device_model.startswith("ipad")
 
+    def _is_iphone_target(self) -> bool:
+        return self._device_model.startswith("iphone")
+
     def _wheel_available(self) -> bool:
         return bool(self.config.wheel_enabled or self._is_ipad_target())
+
+    def _ensure_wheel_activation(self) -> None:
+        if self._is_ipad_target():
+            self._ensure_ipad_wheel_activation()
+        elif self._is_iphone_target():
+            self._ensure_iphone_wheel_activation()
 
     def _ensure_ipad_wheel_activation(self) -> None:
         mode = str(self.config.ipad_wheel_activation or "off").strip().lower()
@@ -154,13 +176,60 @@ class PicoKVMEffector:
             self.rpc.ping()
 
     def _activate_ipad_wheel_once(self) -> bool:
+        return self._activate_wheel_usb_gadget(
+            marker=self.config.ipad_wheel_activation_marker,
+            udc=self.config.ipad_wheel_activation_udc,
+            skip_if_marker=True,
+        )
+
+    def _ensure_iphone_wheel_activation(self) -> None:
+        mode = str(self.config.iphone_wheel_activation or "off").strip().lower()
+        if mode == "off" or not self.config.wheel_enabled:
+            return
+        try:
+            activated = self._activate_wheel_usb_gadget(
+                marker=self.config.iphone_wheel_activation_marker,
+                udc=self.config.ipad_wheel_activation_udc,
+                skip_if_marker=False,
+            )
+            self._wheel_activation_status = "bounced" if activated else "already"
+            if activated and self.config.iphone_wheel_activation_wait_s > 0:
+                time.sleep(float(self.config.iphone_wheel_activation_wait_s))
+                self.rpc.ping()
+            self._prime_iphone_wheel()
+        except Exception as exc:
+            self._wheel_activation_status = "failed"
+            if mode == "required":
+                raise RuntimeError(f"picokvm_iPhone_wheel_activation_failed: {exc}") from exc
+            print(f"[picokvm] iPhone wheel activation failed; continuing because mode={mode}: {exc}", flush=True)
+
+    def _prime_iphone_wheel(self) -> None:
+        ticks = int(self.config.iphone_wheel_prime_ticks)
+        if ticks == 0:
+            return
+        count = abs(ticks)
+        sign = -1 if self.config.wheel_down_sign == "negative" else 1
+        step = sign if ticks > 0 else -sign
+        for _idx in range(count):
+            self._call("wheelReport", {"wheelY": step})
+            self._sleep_ms(int(self.config.iphone_wheel_prime_interval_ms))
+        self._call("wheelReport", {"wheelY": 0})
+        self.rpc.ping()
+        self._wheel_activation_status = "primed"
+
+    def _activate_wheel_usb_gadget(self, *, marker: str, udc: str, skip_if_marker: bool) -> bool:
         host = _picokvm_ssh_host(self.config.base_url)
-        marker = shlex.quote(self.config.ipad_wheel_activation_marker)
-        udc = shlex.quote(self.config.ipad_wheel_activation_udc)
+        marker = shlex.quote(marker)
+        udc = shlex.quote(udc)
+        marker_action = (
+            'if [ -e "$marker" ]; then echo already; exit 0; fi; '
+            if skip_if_marker
+            else 'rm -f "$marker"; '
+        )
         remote = (
             f"marker={marker}; "
             f"udc={udc}; "
-            'if [ -e "$marker" ]; then echo already; exit 0; fi; '
+            f"{marker_action}"
             "echo '' > /sys/kernel/config/usb_gadget/kvm/UDC; "
             "sleep 1; "
             'echo "$udc" > /sys/kernel/config/usb_gadget/kvm/UDC; '

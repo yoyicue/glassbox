@@ -49,11 +49,13 @@ class PicoKVMEffectorConfig(BaseSettings):
     wheel_enabled: bool = False
     """Opt-in wheel for iPhone/AssistiveTouch targets.
 
-    iOS's mouse wheel under AssistiveTouch is intermittent on the iPhone rig, so
-    the iPhone default stays on drag/swipe scrolling unless explicitly enabled
-    with GLASSBOX_PICOKVM_WHEEL_ENABLED=1. iPadOS uses the native pointer path
-    and enables the PicoKVM wheel automatically; see
-    docs/reference/picokvm_ipad_wheel.md for the 2026-05-27 validation.
+    The iPhone default stays on drag/swipe scrolling unless explicitly enabled
+    with GLASSBOX_PICOKVM_WHEEL_ENABLED=1. 2026-05-28 iPhone validation found
+    PicoKVM RPC wheel stable after UDC bounce, warmup, and throwaway prime. The
+    local 0px rerun was traced to stale long-lived video frames; PicoKVM wheel
+    actions therefore reopen the source for fresh verification. iPadOS uses the
+    native pointer path and enables the PicoKVM wheel automatically; see
+    docs/reference/picokvm_ipad_wheel.md.
     """
 
     wheel_down_sign: Literal["negative", "positive"] = "positive"
@@ -72,6 +74,20 @@ class PicoKVMEffectorConfig(BaseSettings):
     ipad_wheel_activation_udc: str = "ffb00000.usb"
     ipad_wheel_activation_wait_s: float = 6.0
     ipad_wheel_activation_ssh_timeout_s: float = 8.0
+
+    iphone_wheel_activation: Literal["off", "warn", "required"] = "required"
+    """Activation policy for opt-in iPhone wheel.
+
+    This is ignored unless ``wheel_enabled`` is true on an iPhone target. iPhone
+    USB host re-enumeration is slower than iPadOS on the current rig, so the
+    default wait is intentionally longer. The first wheel attempt after warmup
+    may still be swallowed; ``iphone_wheel_prime_ticks`` sends a tiny throwaway
+    RPC wheel before production scrolls are used.
+    """
+    iphone_wheel_activation_marker: str = "/tmp/glassbox_iphone_wheel_armed"
+    iphone_wheel_activation_wait_s: float = 25.0
+    iphone_wheel_prime_ticks: int = 1
+    iphone_wheel_prime_interval_ms: int = 40
 
     click_move_settle_ms: int = 250
     """Conservative absolute-pointer settle before pressing.
@@ -166,7 +182,7 @@ class PicoKVMEffectorConfig(BaseSettings):
             raise ValueError("value must be > 0")
         return float(value)
 
-    @field_validator("ipad_wheel_activation_wait_s")
+    @field_validator("ipad_wheel_activation_wait_s", "iphone_wheel_activation_wait_s")
     @classmethod
     def _non_negative_float(cls, value: float) -> float:
         if float(value) < 0:
@@ -190,6 +206,8 @@ class PicoKVMEffectorConfig(BaseSettings):
         "semantic_verify_delay_ms",
         "semantic_verify_timeout_ms",
         "semantic_verify_sample_interval_ms",
+        "iphone_wheel_prime_ticks",
+        "iphone_wheel_prime_interval_ms",
     )
     @classmethod
     def _non_negative_int(cls, value: int) -> int:

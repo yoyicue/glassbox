@@ -1,15 +1,17 @@
 # Goal — Reduce iPhone scroll-overshoot inefficiency
 
-Status: **open, hardware-bounded.** This is the only remaining signal on a
+Status: **open, wheel-revalidation proved; consumer rollout pending.** This is the only remaining signal on a
 healthy en-HK exhaustive run — `limits_hit: scroll_overshoot` (a `warning`-level
 known issue, `ios-settings-scroll-overshoot`), not an outage. Coverage is
 honest 15/17 and `verify_report` passes; the cost is wasted re-scans, not missed
-sections. The hard ceiling is the iPhone scroll primitive — accept that and
-attack the *recovery cost*, or change the hardware.
+sections. The previous hard-ceiling story for the iPhone scroll primitive is
+superseded by 2026-05-28 PicoKVM RPC wheel validation after UDC bounce +
+warmup + throwaway prime.
 
 ## Problem
 
-On the PicoKVM iPhone rig, the only usable scroll is a **momentum swipe-fling**:
+On the PicoKVM iPhone rig, the default production scroll is still a
+**momentum swipe-fling**:
 
 - HID-mouse-as-touch supports only a coarse fling. Small/medium drags
   (~0.20–0.40 of viewport) do not register (`stuck`); only the large ~0.55 drag
@@ -17,14 +19,13 @@ On the PicoKVM iPhone rig, the only usable scroll is a **momentum swipe-fling**:
   jump from top to near-bottom). Reducing distance/velocity to cut overshoot
   drops below the registration threshold (`stuck`, worse) — so gesture precision
   is not tunable by config alone.
-- The mouse **wheel** scrolls precisely (~1 row/tick, no fling) but is **severely
-  intermittent (~5–7%) under AssistiveTouch**, which the iPhone *requires* for any
-  pointer. It worked ~5× early in a session then stayed dead (rigorous 40-trial:
-  0/20 raw, 0/20 RPC). Not revivable from the PicoKVM side (reboot / gadget
-  unbind-rebind at 1s and 12s gaps all failed); format/interface-independent
-  (abs report-ID-2 and M4-style relative both 0/n). It is the documented iOS
-  AssistiveTouch wheel bug. So the wheel stays **opt-in** (`GLASSBOX_PICOKVM_
-  WHEEL_ENABLED=1`), reliable on iPad only (corrected mechanism, commit `32d21e4`).
+- The mouse **wheel** used to be classified as severely intermittent under
+  AssistiveTouch. A 2026-05-28 PicoKVM RPC retest with UDC bounce + warmup
+  overturned that: after one throwaway first wheel attempt, R02-R10 were stable
+  at a fixed 599 px per 30 ticks, with no observed decay. An isolated colleague
+  rerun reproduced the effect at 10/10 rounds. The interim 0px local rerun was
+  a stale long-lived video-stream artifact: direct ffmpeg frames moved while
+  `Phone.snapshot()` returned an old frame until the source was reopened.
 
 Symptoms during a crawl: `[scroll] probe=overshoot` / `probe=stuck`, multi-pass
 root re-scans, and the `scroll_overshoot` limit. The sections most at risk are
@@ -39,24 +40,28 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
 
 ## Directions (none free; pick by appetite)
 
-1. **Closed-loop overshoot recovery (software, iPhone-stays).** Detect a fling's
+1. **Promote opt-in iPhone wheel into Settings consumers.** The production
+   shape is UDC bounce + long iPhone warmup + one throwaway wheel prime, then
+   RPC `wheelReport` batches. `Phone.scroll_wheel()` must reopen the PicoKVM
+   source for fresh verification so stale stream buffers do not hide movement.
+2. **Closed-loop overshoot recovery (software fallback).** Detect a fling's
    landing band (already classified `overshoot`/`progress`/`stuck`) and
    re-scroll a corrective short amount toward the missed band, instead of a fixed
    multi-pass re-scan from the top. Needs a control loop over the existing probe
    classifier in `skills/regression/ios_settings/scrolling.py`; bounded retries.
-2. **Reliable search-based missed-page recovery (software, iPhone-stays).**
+3. **Reliable search-based missed-page recovery (software fallback).**
    `crawl_missing_root_pages_via_search` is meant to recover skipped sections but
    has been unreliable; harden it so any band the fling skips is deterministically
    reached via in-app search rather than re-flinging. (Watch the StandBy/search
    mis-tap failure mode observed live.)
-3. **iPad migration (hardware, IS a wheel win — updated 2026-05-27).** iPad's
+4. **iPad migration (hardware, IS a wheel win — updated 2026-05-27).** iPad's
    native pointer consumes the same Generic-Desktop mouse reports. The current
    connected iPad now scrolls Settings sidebar reliably via the existing
    `kvm_app.wheelReport` RPC — 3 fresh-reboot rounds, both directions,
    reproducible. Details, glassbox-side flip, and the one-time "activation"
    caveat in [docs/reference/picokvm_ipad_wheel.md](../reference/picokvm_ipad_wheel.md).
-   With wheel authoritative on iPad, Direction 3 makes 1 and 2 obsolete on the
-   iPad rig (they remain the value-now options on the iPhone rig).
+   With wheel authoritative on iPad, this makes the fallback directions obsolete
+   on the iPad rig.
 
 ## Acceptance
 
@@ -68,11 +73,11 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
 
 ## Constraints / reality (do not re-litigate)
 
-- No reliable precise-scroll path exists on **iPhone** from the PicoKVM side; the
-  wheel is not restorable on demand. iOS ignores the HID digitizer/touchpad;
-  only a Generic-Desktop mouse works, and AssistiveTouch is mandatory for it.
-- Keep the swipe path as the iPhone default; the wheel stays explicit opt-in /
-  diagnostic on iPhone. **On iPadOS the wheel is now authoritative** — see
+- iOS still ignores the HID digitizer/touchpad; only a Generic-Desktop mouse
+  works, and AssistiveTouch is mandatory on iPhone.
+- Keep the swipe path as the iPhone default until a bounce+warmup+prime wheel
+  Settings run proves coverage. The hardware wheel path itself is no longer a
+  known dead end. **On iPadOS the wheel is already authoritative** — see
   `docs/reference/picokvm_ipad_wheel.md`.
 - Background: `docs/design/ipad_mini_migration.md`; the on-device wheel/fling
   experiments are recorded in the project memory
