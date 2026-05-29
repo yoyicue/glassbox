@@ -225,31 +225,40 @@ strategy, give up on failure" and "try the next reliable primitive."
 
 ## Phase E — Remaining rig-dependent / large-rework code items
 
-The flag-gated reliability work is shipped (Phases A–D enumerate every flag). What
-remains genuinely needs a rig to exercise, or is a large rework whose regression
-risk can't be judged offline. Priority order:
+The flag-gated reliability work is shipped (Phases A–D enumerate every flag). Only
+**four** items genuinely remain — each cannot be meaningfully implemented offline
+(the test would be vacuous, the file is off-limits, or it's a rig-coupled
+rewrite), so they are the rig session's job:
 
-1. **CUQ-0.1 rest — wire `scroll`/`tap`/`launch_app` onto the strategy ladder.**
-   `back` is shipped; the rest are NOT a clean mechanical port — the scroll ladder
-   (`wheel→drag`) is device-specific (iPhone wheel intermittent) and its drag
-   strategy doesn't match the preset-swipe primitives, and `tap`/`launch_app` need
-   the CUQ-0.8 nested-orchestration suppression. Validate per-op on the rig.
-2. **CUQ-0.3 — expected_state on the production walkthrough/crawler.** Without it
-   the P1/P2 coverage (Phase A) stays low and the ladder (Phase C) has nothing to
-   verify against. High leverage; large Settings-skill change; pairs with Phase A/C.
+1. **CUQ-0.1 rest — `tap` / `launch_app` onto the strategy ladder.** `back` and
+   `scroll` are shipped (flag-gated); `tap`/`launch_app` need the CUQ-0.8
+   nested-orchestration suppression (their strategy callables re-enter the
+   orchestrator). `home` already ladders bespoke. Validate per-op on the rig.
+2. **CUQ-0.12 — let recovery alter the current action's outcome.** Today recovery
+   runs *after* the group finalizes (so it primes the next action, not this one);
+   moving it in-flight is a finalization-semantics rewrite whose value (does
+   altering the just-failed verdict help?) and regression risk against the
+   CUQ-0.9-tuned post-group recovery can only be judged on the rig.
 3. **CUQ-3.4 — canonical-primitive task benchmarks** (go-home / launch-app / back /
-   scroll-to-bottom). These give the A–B passes above a stable, meaningful
-   denominator. The task definitions can be authored offline, but they must *run*
-   on the rig. Build alongside the first rig session.
-4. **CUQ-3.7 — per-session auto-calibration probe** (Phase D). Probe logic is
-   buildable offline; the landing-error measurement needs the rig.
+   scroll-to-bottom). They give the A–B passes a stable denominator, but the task
+   set must match what the rig/app actually supports — authoring blind is
+   speculative. Build alongside the first rig session.
+4. **CUQ-3.7 — per-session auto-calibration probe** (Phase D). The landing-error
+   *measurement* requires the rig; there is no real landing to measure offline.
 
-Already shipped (flag-gated) since the first draft of this runbook, now validated
-via Phases A–D rather than re-implemented: CUQ-0.5 (memory-path recovery),
-CUQ-3.15 (iPad wheel scroll), CUQ-2.6 (settings_detail tightening), CUQ-2.3
-(toggle controls), CUQ-2.5 (Set-of-Mark), CUQ-3.13 (robust capture), CUQ-3.14
-(letterbox hysteresis, default-on), CUQ-3.21 (memory selection prior), CUQ-1.3
-(fresh re-verify).
+(**CUQ-3.17** is a doc self-contradiction in `ipad_mini_migration.md`, which has
+uncommitted local edits and is out of scope for this campaign — resolve it there.)
+
+New flags to A–B (shipped after the first draft): `GLASSBOX_VLM_REGROUND_SELECTION`
+(CUQ-0.4, selection-time VLM grounding), `GLASSBOX_WHITEBOX_HINT_SELECTION` (CUQ-2.10,
+whitebox-identity selection), `GLASSBOX_IDEMPOTENT_RETRY_BUDGET` (CUQ-0.11, retry
+safe ops on `unknown`), and `GLASSBOX_SEMANTIC_PLAN_OPS=back,scroll` (CUQ-0.1,
+scroll now ladders wheel→swipe). CUQ-0.3 (`AIPhone.tap` expectations) and CUQ-0.10
+(legacy transport retry) are opt-in via call kwargs / `transport_retry_budget`.
+
+Already shipped (flag-gated), now validated via Phases A–D rather than
+re-implemented: CUQ-0.3 / 0.4 / 0.5 / 0.10 / 0.11 / 1.3 / 2.3 / 2.5 / 2.6 / 2.10 /
+3.13 / 3.14 / 3.15 / 3.21.
 
 ---
 
