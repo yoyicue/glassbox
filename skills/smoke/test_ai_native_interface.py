@@ -76,6 +76,7 @@ class FakePhone:
 
     def tap_text(self, target, **_kw):
         self.actions.append(("tap_text", target))
+        self.action_kwargs.append(dict(_kw))  # CUQ-0.3: record expected_state etc.
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
     def tap_xy(self, x, y):
@@ -156,6 +157,29 @@ def _ai_phone(tmp_path: Path, scenes: list[Scene]) -> AIPhone:
     orchestrator = type("Orchestrator", (), {"store": store})()
     runtime = FakeRuntime(FakePhone(scenes), orchestrator)
     return AIPhone(runtime, run_name="unit")
+
+
+@pytest.mark.smoke
+def test_ai_tap_threads_expected_state_into_orchestrator(tmp_path):
+    """CUQ-0.3: AIPhone.tap(expect_visible/expect_page) threads an expected_state
+    into tap_text -> orchestrator, engaging P1/P2 verification on the default
+    agent tap path. Without an expectation, tap_text gets expected_state=None
+    (byte-identical to before)."""
+    phone = _ai_phone(tmp_path, [_scene("通用"), _scene("通用")])
+
+    # No expectation -> expected_state must be None on the default path.
+    phone.tap("通用")
+    assert phone._phone.action_kwargs[-1].get("expected_state") is None
+
+    # expect_visible -> a visible_text expected_state reaches tap_text.
+    phone.tap("通用", expect_visible="通用")
+    es = phone._phone.action_kwargs[-1].get("expected_state")
+    assert es == {"kind": "visible_text", "payload": {"any_of": ["通用"]}}
+
+    # expect_page -> a page_id expected_state reaches tap_text.
+    phone.tap("通用", expect_page="settings/general")
+    es = phone._phone.action_kwargs[-1].get("expected_state")
+    assert es == {"kind": "page_id", "payload": {"page_id": "settings/general"}}
 
 
 @pytest.mark.smoke

@@ -1807,7 +1807,9 @@ class Phone:
         }
         return plan, metadata
 
-    def tap_text(self, target: str, **kw) -> ActionResult:
+    def tap_text(
+        self, target: str, *, expected_state: dict[str, Any] | None = None, **kw
+    ) -> ActionResult:
         actuation_options = self._pop_actuation_options(kw)
         el = self.expect_text(target, **kw)
         op, plan, metadata = self._target_actuation_plan(
@@ -1818,6 +1820,13 @@ class Phone:
             actuation_options=actuation_options,
             selection_source=self._last_selection_source,
         )
+        # CUQ-0.3: when the caller declares what the tap should achieve, thread it
+        # into the orchestrator metadata so the expected-state verification (P2)
+        # and VLM-gated escalation (P1) engage on the default agent tap path —
+        # not just on the Settings walkthrough. None preserves today's generic
+        # scene-progressed verification (byte-identical).
+        if expected_state is not None:
+            metadata = {**metadata, "expected_state": expected_state}
         return self._execute_action(
             op,
             plan,

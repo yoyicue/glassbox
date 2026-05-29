@@ -337,15 +337,30 @@ class AIPhone:
     def viewport(self, *, refresh: bool = False) -> tuple[int, int] | None:
         return self.perceive(refresh=refresh).viewport_size
 
-    def tap(self, text: str | None = None, *, intent: str | None = None) -> ActionOutcome:
+    def tap(
+        self,
+        text: str | None = None,
+        *,
+        intent: str | None = None,
+        expect_visible: str | Sequence[str] | None = None,
+        expect_page: str | None = None,
+    ) -> ActionOutcome:
         if (text is None) == (intent is None):
             raise ValueError("tap() requires exactly one of text or intent")
         if intent is not None:
             raise NotImplementedError("tap(intent=...) is reserved for semantic intent routing and is not implemented yet")
         target = text if text is not None else intent
         assert target is not None
-        result = self._phone.tap_text(target)
-        return self._action_outcome("tap", target, result)
+        # CUQ-0.3: declaring what the tap should achieve (expect_visible /
+        # expect_page) threads an expected_state into the orchestrator so its
+        # expected-state verification (P2) and VLM-gated escalation (P1) engage on
+        # the default agent tap path — not only the Settings walkthrough. Without
+        # an expectation this is byte-identical to before (expected_state=None,
+        # and the post-tap _apply_expectation is a no-op).
+        expected_state = _expected_state(expect_visible=expect_visible, expect_page=expect_page)
+        result = self._phone.tap_text(target, expected_state=expected_state)
+        outcome = self._action_outcome("tap", target, result)
+        return self._apply_expectation(outcome, expect_visible=expect_visible, expect_page=expect_page)
 
     def tap_xy(
         self,

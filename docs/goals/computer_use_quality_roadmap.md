@@ -122,7 +122,20 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   fixture fires recovery and reaches `recovered=True` (P3 acceptance criterion).
 
 ### CUQ-0.3 — Attach `expected_state` on the production walkthrough/crawler
-- [ ] **critical→high · effort large · design-gap**
+- [~] **critical→high · effort large · design-gap** — GENERIC-PATH SLICE DONE: the
+  primary agent tap (`AIPhone.tap`) now accepts `expect_visible` / `expect_page`
+  and threads an `expected_state` through `Phone.tap_text(expected_state=...)`
+  into the orchestrator metadata, so the expected-state verification (P2) and
+  VLM-gated escalation (P1) engage on the **default agent tap path** — previously
+  only the Settings walkthrough set it, leaving the P1/P2 coverage telemetry
+  (CUQ-3.2) structurally zero on generic runs. `AIPhone.tap_xy`/`swipe_xy` already
+  carried expectations; this closes the main `tap(text=...)` path. Default (no
+  expectation) is byte-identical (`expected_state=None`, post-tap
+  `_apply_expectation` is a no-op). Test in `test_ai_native_interface.py`
+  (visible_text + page_id threaded; none → None). **Remaining:** have the
+  Settings/whitebox walkthrough crawler annotate each navigation step with its
+  target page_id so the end-to-end canonical run also drives verification (the
+  large app-specific half).
 - Gap: expected-state verification only runs when a caller puts a dict in
   `metadata['expected_state']`; the only non-test caller is the `ai.py` facade.
   The canonical end-to-end check (the Settings walkthrough/crawler) never sets
