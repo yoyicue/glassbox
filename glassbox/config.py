@@ -274,6 +274,14 @@ class AgentConfig(BaseSettings):
     intermittent so this stays off there. Env GLASSBOX_AI_SCROLL_PREFER_WHEEL.
     Default off → swipe-fling everywhere (byte-identical)."""
 
+    vlm_reground_selection: bool = False
+    """CUQ-0.4: when OCR cannot find a selection target (expect_text / tap_text),
+    escalate ONCE to the VLM (describe → find-by-description / intent) before
+    failing, instead of hard-failing. Default off so the default path is
+    byte-identical — no billed describe() on an OCR miss — even when a VLM client
+    is wired. Env GLASSBOX_VLM_REGROUND_SELECTION. Requires a VLM client; pairs
+    with vlm_set_of_mark. Validate VLM cost/benefit on-rig before enabling."""
+
     strict_settings_detail: bool = False
     """CUQ-2.6: require a Settings-distinguishing signal (a system noun like
     Wi-Fi/Bluetooth/Face ID, or a Learn-More footnote) before the generic
@@ -339,10 +347,13 @@ class AgentConfig(BaseSettings):
     """Comma-separated core ops routed through the first-class SemanticActionPlan
     strategy ladder instead of the legacy single-strategy path (CUQ-0.1/0.8).
     Empty (default) preserves today's behavior; e.g. set
-    GLASSBOX_SEMANTIC_PLAN_OPS=home,back so a verified-failed strategy switches
-    to the next reliable primitive (keyboard -> AssistiveTouch -> gesture)
-    instead of giving up. Flag-gated pending on-rig validation before
-    default-on. Supported ops: home, back, scroll, tap, launch_app."""
+    GLASSBOX_SEMANTIC_PLAN_OPS=back so a verified-failed strategy switches to the
+    next reliable primitive (nav_back_tap -> keyboard_back -> edge_back_gesture)
+    instead of giving up. Flag-gated pending on-rig validation before default-on.
+    **Currently only `back` has a wired routing call site**; `home`/`scroll`/`tap`/
+    `launch_app` plans exist but are not yet routed (CUQ-0.1 remaining work —
+    they are device-specific / need nested-orchestration suppression), so listing
+    them here has no effect until those call sites land."""
 
     computer_use_observation_producer_mode: str = "scoped_source_owner"
     """Computer-use observation producer mode. v1 defaults to

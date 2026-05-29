@@ -174,3 +174,23 @@ def test_default_snapshot_returns_first_ok_frame_even_if_flat():
     result = source.snapshot()
 
     assert result.img is flat
+
+
+@pytest.mark.smoke
+def test_fresh_snapshot_uses_production_warmup_settle_defaults():
+    """CUQ-3.10 (audit fix): fresh_snapshot's warmup-discard + settle behavior is
+    a DEFAULT-ON change, but production constructs PicoKVMFrameSource(config=...)
+    with no warmup args. Lock the constructor defaults (2 / 4) so a regression in
+    them is visible (every other fresh_snapshot test passes them explicitly)."""
+    cfg = PicoKVMEffectorConfig(_env_file=None, base_url="http://picokvm.test")
+    source = PicoKVMFrameSource(config=cfg)  # no warmup args -> production defaults
+
+    assert source._fresh_warmup_frames == 2
+    assert source._fresh_settle_reads == 4
+
+    # And the default warmup is actually applied: 2 warmup frames are discarded,
+    # the first decoded frame after them is returned.
+    fresh = _decoded(9)
+    captures = [FakeCapture([(True, _decoded(1)), (True, _decoded(2)), (True, fresh)])]
+    source2 = PicoKVMFrameSource(config=cfg, capture_factory=lambda _u: captures.pop(0))
+    assert source2.fresh_snapshot().img is fresh

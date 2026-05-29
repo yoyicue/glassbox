@@ -1,10 +1,25 @@
 # Goal — Raise end-to-end computer-use quality (wire the reliability machinery)
 
-Status: **audit complete (2026-05-29), not yet actioned.** A 13-dimension,
-adversarially-verified code review (70 confirmed findings) found that the
-biggest computer-use quality lever is **wiring the already-built reliability
-machinery into the production path**, not building more. This doc is the
-trackable gap-list and sequencing plan. It is the operational companion to
+Status: **~40 items shipped (PRs #2–#34), then post-hoc audit-hardened.** A
+13-dimension, adversarially-verified code review (70 confirmed findings) found
+that the biggest computer-use quality lever is **wiring the already-built
+reliability machinery into the production path**, not building more. The
+machinery is now wired (default-safe or flag-gated). This doc is the trackable
+gap-list and sequencing plan.
+
+> **Post-campaign audit (2026-05-29):** a 78-agent adversarial audit of the full
+> campaign diff (`main...pass-33`, 6 risk dimensions, 31/36 findings confirmed)
+> hardened the result. Fixes applied: CUQ-0.4 selection-time VLM reground is now
+> flag-gated (`vlm_reground_selection`, default off) — it had been running on any
+> VLM-wired run, the one true byte-identity leak; the status-bar clock filter
+> (CUQ-2.7) is now position-anchored so body time rows ("5:00 AM", "3:45") stay
+> tappable; the unactuatable gate (CUQ-1.2) gained a hard-cap escape hatch so a
+> single-identity dead control is eventually disabled, and load (CUQ-3.6) now
+> clears a stale `unactuatable` label; the reground path honors the ambiguity
+> guard (CUQ-1.5); letterbox hysteresis (CUQ-3.14) is jitter-tolerant. Plus
+> mutation-killing wiring tests for the previously-untested config→Phone→consumer
+> legs, and a default-on changelog in the rig runbook to honestly scope the
+> byte-identity claim. It is the operational companion to
 [`docs/design/computer_use_success_rate.md`](../design/computer_use_success_rate.md):
 that doc says *what to build* (Step 0 / P1 / P2 / P3); this doc records *what is
 built but not wired*, plus the independent correctness leaks found alongside.

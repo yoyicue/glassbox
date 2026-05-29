@@ -8,11 +8,22 @@ from glassbox.cognition import Box, Scene, UIElement
 from glassbox.ios.springboard import (
     _icon_label_candidates,
     _opened_expected_app_or_recover,
+    _strict_home,
     find_springboard_icon,
     is_ios_home_screen,
     open_app_from_springboard,
     open_app_via_spotlight,
 )
+
+
+@pytest.mark.smoke
+def test_strict_home_reads_phone_require_home_icon_grid_flag():
+    """CUQ-2.2 wiring (audit fix): the Phone flag _require_home_icon_grid actually
+    drives strict home recognition. Locks the config->Phone->strict_springboard
+    leg that the function-level is_ios_home_screen tests bypass."""
+    assert _strict_home(SimpleNamespace(_require_home_icon_grid=True)) is True
+    assert _strict_home(SimpleNamespace(_require_home_icon_grid=False)) is False
+    assert _strict_home(SimpleNamespace()) is False  # missing attr -> default off
 
 
 def _el(text: str, x: int, y: int, w: int = 54, h: int = 20) -> UIElement:

@@ -33,15 +33,31 @@ def test_ocr_tap_candidates_keeps_actionable_and_text_rows():
 
 @pytest.mark.smoke
 def test_ocr_tap_candidates_skips_status_bar_clock_typed_as_text():
-    """CUQ-2.7: a status-bar clock OCR'd as plain 'text' (not status_bar) must
-    not be picked as a tap candidate."""
-    scene = Scene(frame_id=1, timestamp=0.0, elements=[
-        _el("text", "9:41", 10),        # clock mis-typed as text
-        _el("text", "2:03 C", 12),      # clock + OCR noise
+    """CUQ-2.7: a status-bar clock OCR'd as plain 'text' (not status_bar) that
+    sits in the TOP status-bar band must not be picked as a tap candidate."""
+    scene = Scene(frame_id=1, timestamp=0.0, viewport_size=(440, 956), elements=[
+        _el("text", "9:41", 10),        # clock mis-typed as text (top band)
+        _el("text", "2:03 C", 12),      # clock + OCR noise (top band)
         _el("list_item", "无线局域网", 200),
     ])
     labels = {c.label for c in ocr_tap_candidates(scene)}
     assert labels == {"无线局域网"}
+
+
+@pytest.mark.smoke
+def test_ocr_tap_candidates_keeps_body_time_rows():
+    """CUQ-2.7 audit fix: a clock-SHAPED label in the body (alarm "5:00 AM",
+    track duration "3:45", calendar "12:30 PM") is NOT the status-bar clock and
+    must stay tappable — only the top-band clock is filtered."""
+    scene = Scene(frame_id=1, timestamp=0.0, viewport_size=(440, 956), elements=[
+        _el("text", "9:41", 10),          # the real status-bar clock (top) — dropped
+        _el("list_item", "5:00 AM", 300),  # alarm row (body) — kept
+        _el("text", "3:45", 460),          # track duration (body) — kept
+        _el("button", "12:30 PM", 620),    # calendar slot (body) — kept
+    ])
+    labels = {c.label for c in ocr_tap_candidates(scene)}
+    assert labels == {"5:00 AM", "3:45", "12:30 PM"}
+    assert "9:41" not in labels
 
 
 @pytest.mark.smoke

@@ -36,15 +36,21 @@ class TapCandidate:
 def ocr_tap_candidates(scene: Any) -> list[TapCandidate]:
     """Baseline strategy: tap-candidates from OCR + Layer-2 heuristic typing."""
     out: list[TapCandidate] = []
+    viewport = getattr(scene, "viewport_size", None)
+    h = int(viewport[1]) if viewport else 0
     for el in scene.elements:
         if el.type not in _OCR_TAPPABLE_TYPES:
             continue
         label = (el.text or "").strip()
         if not label:
             continue
-        # CUQ-2.7: a status-bar clock (often OCR'd as plain 'text') is never a
-        # navigation target; skip it so it cannot be picked as a tap candidate.
-        if looks_like_status_bar_clock(label):
+        # CUQ-2.7 (+audit fix): a status-bar clock (often OCR'd as plain 'text')
+        # is never a navigation target. Skip a clock-shaped label ONLY when it
+        # sits in the top status-bar band — a body time row (alarm "5:00 AM",
+        # track duration "3:45", calendar "12:30 PM") is shape-identical and must
+        # stay tappable. When the viewport height is unknown, fall back to the
+        # text-only skip (CUQ-2.7's original behavior).
+        if looks_like_status_bar_clock(label) and (h <= 0 or el.box.center[1] <= h * 0.06):
             continue
         out.append(TapCandidate(label=label, center=el.box.center, source="ocr"))
     return out

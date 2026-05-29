@@ -500,6 +500,37 @@ def test_phone_does_not_refit_letterbox_crop_on_transient_frame():
 
 
 @pytest.mark.smoke
+def test_phone_refits_letterbox_crop_despite_detector_jitter():
+    """CUQ-3.14 audit fix: a sustained re-fit whose detected bbox jitters by a
+    few px between frames must still commit (within-tolerance detections
+    accumulate toward the hysteresis threshold instead of resetting it forever)."""
+    class JitteryCropSource:
+        resolution = (1920, 1080)
+
+        def __init__(self):
+            self.calls = 0
+
+        def snapshot(self):
+            self.calls += 1
+            # call 1 (setup) = 711; then a sustained move to ~800 that jitters 800/801.
+            left = 711 if self.calls == 1 else (800 if self.calls == 2 else 801)
+            img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+            img[:, left:left + 498] = 255
+            return Frame(img=img, ts=0.0)
+
+    runtime = build_phone(
+        source=JitteryCropSource(),
+        cfg=AgentConfig(_env_file=None),
+        ocr=FakeOCR(),
+        effector=FakeEffector(),
+    )
+
+    runtime.phone.snapshot()   # call 2: 800 -> pending (count 1)
+    runtime.phone.snapshot()   # call 3: 801 (within tol of 800) -> count 2 -> commit latest
+    assert runtime.phone.crop.crop_bbox == (801, 0, 498, 1080)
+
+
+@pytest.mark.smoke
 def test_build_phone_takes_platform_subcapabilities_from_registry(monkeypatch):
     class Platform:
         name = "unit"

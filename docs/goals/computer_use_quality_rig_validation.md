@@ -11,6 +11,35 @@ Everything here needs a live PicoKVM rig (iPhone and/or iPad mini 7) because the
 open questions are all "does this actually raise the success rate / hit the right
 control / read the right pixels on real hardware" — none can be answered offline.
 
+## Default-on changes (byte-identity scope) — read before A/B
+
+A 78-agent adversarial audit of the campaign diff (2026-05-29) confirmed the
+flag-OFF path is byte-identical, with one corrected leak (CUQ-0.4 was running on
+any VLM-wired run → now gated behind `vlm_reground_selection`, default off). It
+also correctly noted that the "byte-identical" claim is scoped to the *flag-gated*
+features: the campaign ALSO ships these **intentional default-on** changes (each a
+correctness fix, none flag-gated), so a true pre-campaign baseline differs from a
+flags-all-off run by exactly this set:
+
+- CUQ-0.2 recovery hook installed · CUQ-0.6 default-on landing retry ·
+  CUQ-1.1 pixel-upgrade restriction · CUQ-1.2 unactuatable gate (3→5 tries +
+  distinct-identity, now with a hard-cap escape hatch) · CUQ-1.6 dhash signature
+  + fuzzy stuck matching · CUQ-1.7 nullable FrameDiff on shape mismatch ·
+  CUQ-2.7 status-bar clock filter (now position-anchored) · CUQ-3.1
+  scroll-filler-excluded success rate · CUQ-3.6 de-poison-on-load (now also
+  clears a stale label) · CUQ-3.8 correction-pair outlier rejection · CUQ-3.10
+  fresh_snapshot keyframe warmup · CUQ-3.14 letterbox hysteresis (default 2, now
+  jitter-tolerant) · CUQ-3.19 power-off/lock/crash → `blocked` · CUQ-3.20
+  transition-mismatch signal · CUQ-3.22 memory autosave (every 12) · CUQ-3.23
+  reliability-weighted BFS.
+
+**Accepted residual risks to watch on-rig** (audit-flagged, not defects but
+behavior changes): (1) CUQ-1.6+0.2+stuck-fuzzy can Home-reset a slowly-progressing
+*visually-similar* screen run once the stuck threshold trips — confirm legitimate
+deep drill-downs are not abandoned; (2) CUQ-0.6 landing retry re-taps a
+destructive-but-allowed control whose first tap didn't visibly change the ROI —
+ensure destructive call sites pass `forbid_landing_retry`.
+
 ## How to run a validation pass
 
 Each flag is validated by a **before/after A–B comparison** on a fixed task set,

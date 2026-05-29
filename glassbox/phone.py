@@ -112,6 +112,23 @@ _KEY_ESC = 0x29
 # first seen; smaller misses keep the candidate-point progression.
 _REGROUND_MIN_SHIFT_PX = 24
 
+# CUQ-3.14 (audit fix): treat two letterbox bboxes within this many px on every
+# coordinate as the same, so detector jitter (±1-2px from HDMI noise/animation)
+# does not (a) churn a re-fit around the current crop or (b) reset the hysteresis
+# counter forever and strand a genuinely-needed re-fit on a stale crop.
+_LETTERBOX_BBOX_TOLERANCE_PX = 4
+
+
+def _bbox_within_tolerance(
+    a: tuple[int, int, int, int] | None,
+    b: tuple[int, int, int, int] | None,
+    tol: int,
+) -> bool:
+    if a is None or b is None:
+        return False
+    return all(abs(int(a[i]) - int(b[i])) <= tol for i in range(4))
+
+
 # GlassboxHelper's Home-screen icon name — for the CJK clipboard A-dance.
 _HIDGLASSBOX_LABELS = ("GlassboxHelper",)
 
@@ -180,6 +197,7 @@ class Phone:
         memory_locate_priors: bool = False,
         strict_settings_detail: bool = False,
         ai_scroll_prefer_wheel: bool = False,
+        vlm_reground_selection: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -242,6 +260,10 @@ class Phone:
         # supports it (the iPad rig, where the wheel is validated). Flag-gated
         # (default off → swipe-fling), read by AIPhone via getattr.
         self._ai_scroll_prefer_wheel = bool(ai_scroll_prefer_wheel)
+        # CUQ-0.4: selection-time VLM reground on an OCR miss. Flag-gated (default
+        # off) so the default expect_text path is byte-identical — no billed
+        # describe() on a miss — even when a VLM client is wired.
+        self._vlm_reground_selection_enabled = bool(vlm_reground_selection)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.
@@ -944,7 +966,9 @@ class Phone:
             detected = LetterboxCrop.auto_detect(raw.img, phone_size=self.crop.phone_size)
         except Exception:
             return
-        if detected.crop_bbox == self.crop.crop_bbox:
+        tol = _LETTERBOX_BBOX_TOLERANCE_PX
+        if _bbox_within_tolerance(detected.crop_bbox, self.crop.crop_bbox, tol):
+            # Within detector noise of the current crop → no meaningful change.
             self._pending_crop_bbox = None
             self._pending_crop_count = 0
             return
@@ -952,12 +976,14 @@ class Phone:
         # consecutive frames before it commits, so a single transient-content
         # frame (fullscreen image/video/splash) cannot silently re-fit the crop
         # and drift every subsequent coordinate. With consecutive == 1 this
-        # commits on the first detection (legacy behavior).
-        if detected.crop_bbox == self._pending_crop_bbox:
+        # commits on the first detection (legacy behavior). The tolerance lets
+        # ±few-px detector jitter still ACCUMULATE toward the threshold (audit
+        # fix) instead of resetting the count forever; the latest bbox commits.
+        if _bbox_within_tolerance(detected.crop_bbox, self._pending_crop_bbox, tol):
             self._pending_crop_count += 1
         else:
-            self._pending_crop_bbox = detected.crop_bbox
             self._pending_crop_count = 1
+        self._pending_crop_bbox = detected.crop_bbox
         if self._pending_crop_count < self._letterbox_refresh_consecutive:
             return
         self.crop = detected
@@ -1305,12 +1331,14 @@ class Phone:
 
         When OCR cannot locate the target, escalate to the VLM through the
         gate and retry the lookup before failing, instead of hard-failing the
-        step. Gated on a VLM client being wired (so VLM-disabled runs are
-        unchanged) and budgeted to a single grounding call per selection.
-        Returns the grounded element, or None when VLM is unavailable / the
-        budget is spent / the target still cannot be resolved.
+        step. Flag-gated (`vlm_reground_selection`, default off) AND requires a
+        VLM client — so the default path is byte-identical (no billed describe()
+        on an OCR miss) even when a VLM client is wired. Budgeted to a single
+        grounding call per selection. Returns the grounded element, or None when
+        the flag is off / VLM is unavailable / the budget is spent / the target
+        still cannot be resolved.
         """
-        if self.kimi is None:
+        if not self._vlm_reground_selection_enabled or self.kimi is None:
             return None
         from glassbox.cognition.vlm_gate import VLMEscalationGate, VLMGateInput
 
@@ -1323,8 +1351,12 @@ class Phone:
         # Try raw text first, then the VLM-enriched intent labels: describe()
         # adds intent_label/scene semantics (it does not re-OCR raw text, see
         # CUQ-1.3), so find_by_intent is what rescues a target OCR mis-read or
-        # could not surface as plain text.
-        hit = find_text(elements, target, fuzzy_ratio=fuzzy_ratio)
+        # could not surface as plain text. Both honor the ambiguity guard so a
+        # strict run does not let the reground re-introduce an ambiguous match.
+        hit = find_text(
+            elements, target, fuzzy_ratio=fuzzy_ratio,
+            ambiguity_guard=self._strict_target_matching,
+        )
         if hit is None:
             hit = find_by_intent(
                 elements, target, fuzzy_ratio=fuzzy_ratio,

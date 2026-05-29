@@ -274,6 +274,36 @@ def test_build_recovery_hook_is_home_only_without_target():
 
 
 @pytest.mark.smoke
+def test_build_recovery_hook_parses_target_set_config():
+    """CUQ-0.5 (audit fix): the flag-ON branch — target page + comma-split
+    allowed-actions + float min-success-rate — must reach make_try_memory_path_hook.
+    The only prior test covered the OFF branch, leaving the parse wiring unverified."""
+    from glassbox.runtime import _build_recovery_hook
+
+    captured = {}
+
+    def fake_factory(*, target_page, allowed_actions, min_success_rate, fallback):
+        captured.update(target_page=target_page, allowed_actions=allowed_actions,
+                        min_success_rate=min_success_rate, fallback=fallback)
+        return "sentinel-hook"
+
+    class _Cfg:
+        recovery_target_page = "  app/root  "          # exercises .strip()
+        recovery_allowed_actions = " home , back ,, "    # comma-split + strip + empty-filter
+        recovery_min_success_rate = "0.75"              # float() from a string
+
+    hook = _build_recovery_hook(
+        _Cfg(), make_try_memory_path_hook=fake_factory, home_hook=recover_to_home_then_renavigate
+    )
+    assert hook == "sentinel-hook"
+    assert captured["target_page"] == "app/root"
+    assert captured["allowed_actions"] == {"home", "back"}
+    assert captured["min_success_rate"] == 0.75
+    assert isinstance(captured["min_success_rate"], float)
+    assert captured["fallback"] is recover_to_home_then_renavigate
+
+
+@pytest.mark.smoke
 def test_orchestrator_stuck_recovery_invokes_installed_hook(tmp_path):
     """CUQ-0.2 end-to-end: with the real hook installed, a repeated identical
     failure trips the stuck detector and actually drives recovery (recovered)."""

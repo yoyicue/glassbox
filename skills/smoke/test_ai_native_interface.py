@@ -300,6 +300,23 @@ def test_ai_scroll_falls_back_to_swipe_without_wheel_support(tmp_path):
 
 
 @pytest.mark.smoke
+def test_ai_scroll_flag_off_with_wheel_support_stays_on_swipe(tmp_path):
+    """CUQ-3.15 default-safety (audit fix): the byte-identical default branch —
+    flag OFF/absent while the backend DOES support the wheel must still swipe.
+    (The other 'fallback' test had the flag ON with no wheel support, so it never
+    exercised the flag-gate itself.)"""
+    phone = _ai_phone(tmp_path, [_scene("Top"), _scene("Bottom")])
+    phone._phone._supported = {"scroll_wheel"}  # iPad-like backend (wheel available)
+    # _ai_scroll_prefer_wheel deliberately NOT set (default off)
+
+    phone.scroll(direction="down")
+
+    ops = [op for op, _ in phone._phone.actions]
+    assert "swipe_up" in ops
+    assert "wheel_scroll_down" not in ops
+
+
+@pytest.mark.smoke
 def test_ai_action_outcome_downgrades_visual_only_success_to_unknown(tmp_path):
     phone = _ai_phone(tmp_path, [_scene("设置")])
     result = ActionResult(

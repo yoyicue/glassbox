@@ -362,6 +362,15 @@ class ActuationProfile:
                     if entry.actuability == "unactuatable":
                         entry.actuability = "unknown"  # type: ignore[assignment]
                 entry.methods[method] = stats
+            # Audit fix: keep the persisted actuability label consistent with the
+            # current (possibly stricter, post-CUQ-1.2) gate. A bucket persisted
+            # "unactuatable" under the OLD gate whose loaded stats no longer
+            # qualify must not keep the stale label — should_skip_bucket recomputes
+            # from stats, so a disagreeing label would only mislead exports/audit.
+            if entry.actuability == "unactuatable" and not any(
+                _method_is_unactuatable(s) for s in entry.methods.values()
+            ):
+                entry.actuability = "unknown"  # type: ignore[assignment]
             profile.entries[key] = entry
         return profile
 
@@ -475,6 +484,11 @@ def _updated_offset(
 # stubborn target cannot silently poison the class.
 _MIN_UNACTUATABLE_TRIES = 5
 _MIN_DISTINCT_NEGATIVES = 2
+# Escape hatch (audit fix): the >=2-distinct-identities rule prevents one stubborn
+# target from poisoning a class, but a control that fails EVERY try past this hard
+# cap is genuinely dead even under a single identity — disable it so it is not
+# re-probed forever.
+_HARD_UNACTUATABLE_TRIES = 10
 
 
 # CUQ-3.8: a legitimate tap-landing correction is small (candidate-point nudge);
@@ -499,7 +513,11 @@ def _method_is_unactuatable(stats: MethodStats) -> bool:
     # controls; fall back to the count-only gate when identities were not
     # recorded (older artifacts / paths that omit target_identity).
     if stats.negative_identities:
-        return len(stats.negative_identities) >= _MIN_DISTINCT_NEGATIVES
+        if len(stats.negative_identities) >= _MIN_DISTINCT_NEGATIVES:
+            return True
+        # Single repeating identity: still disable once it fails past the hard
+        # cap, so a genuinely-dead control is not re-probed every session forever.
+        return stats.command_tries >= _HARD_UNACTUATABLE_TRIES
     return True
 
 

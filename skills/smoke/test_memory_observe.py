@@ -572,6 +572,37 @@ def test_autosave_off_by_default_and_tolerates_save_errors():
 
 
 @pytest.mark.smoke
+def test_memory_autosave_every_defaults_on():
+    """CUQ-3.22 (audit fix): the PRODUCTION default is ON (every 12 obs). The
+    existing tests use the ScreenMemory constructor default (0 = off), the
+    opposite of production, so this pins the config default against a 12->0
+    regression."""
+    from glassbox.config import AgentConfig
+
+    assert AgentConfig(_env_file=None).memory_autosave_every == 12
+
+
+@pytest.mark.smoke
+def test_wrap_with_memory_builds_autosave_callback(tmp_path):
+    """CUQ-3.22 (audit fix): wrap_with_memory_if_enabled wires the save callback
+    when autosave_every>0 and omits it when 0 — the factory leg the unit tests
+    (which inject autosave directly) bypass."""
+    from glassbox.memory.store import wrap_with_memory_if_enabled
+
+    on = wrap_with_memory_if_enabled(
+        bundle_id="com.x", enabled=True, memory_dir=str(tmp_path), autosave_every=1
+    )
+    on.observe(_scene("首页"))
+    assert (tmp_path / "com.x.json").exists()  # incremental save fired via the factory lambda
+
+    off = wrap_with_memory_if_enabled(
+        bundle_id="com.y", enabled=True, memory_dir=str(tmp_path), autosave_every=0
+    )
+    off.observe(_scene("首页"))
+    assert not (tmp_path / "com.y.json").exists()  # no callback built at 0
+
+
+@pytest.mark.smoke
 def test_observe_flags_transition_mismatch_against_learned_edge():
     """CUQ-3.20: when an action lands on a different node than a learned
     high-success edge predicted, observe() records a transition mismatch."""

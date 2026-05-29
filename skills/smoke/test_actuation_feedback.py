@@ -549,6 +549,52 @@ def test_loaded_profile_drops_unactuatable_verdict_but_keeps_offset(tmp_path):
 
 
 @pytest.mark.smoke
+def test_single_identity_dead_control_disables_at_hard_cap():
+    """Audit fix: the >=2-distinct-identities rule must not let a control that
+    fails EVERY try under ONE identity be re-probed forever — a hard try cap
+    still disables it."""
+    from glassbox.action.actuation_profile import MethodStats, _method_is_unactuatable
+
+    def one_identity(tries: int) -> MethodStats:
+        return MethodStats(command_tries=tries, by_label={"missed": tries},
+                           negative_identities={"row_0"})
+
+    assert not _method_is_unactuatable(one_identity(5))   # single identity, below hard cap
+    assert not _method_is_unactuatable(one_identity(9))
+    assert _method_is_unactuatable(one_identity(10))       # hard cap -> disabled
+    # Two distinct identities still disable at the normal (lower) try threshold.
+    assert _method_is_unactuatable(
+        MethodStats(command_tries=5, by_label={"missed": 5}, negative_identities={"a", "b"})
+    )
+
+
+@pytest.mark.smoke
+def test_loaded_profile_clears_stale_unactuatable_label_below_new_gate():
+    """Audit fix: a bucket persisted 'unactuatable' under the OLD (3-try) gate
+    whose loaded stats no longer qualify under the stricter post-CUQ-1.2 gate
+    must not keep the stale label (should_skip_bucket recomputes from stats)."""
+    bucket = {"control_role": "switch", "size_bucket": "small", "region_zone": "center"}
+    payload = {
+        "platform": "ios", "os_version": "unknown", "device_model": "iphone_test",
+        "entries": [{
+            "key": {"platform": "ios", "os_version": "unknown", "device_model": "iphone_test",
+                    **bucket},
+            "value": {
+                "actuability": "unactuatable",   # stale label from the old 3-try gate
+                "methods": {"mouse_tap": {
+                    "command_tries": 3, "landed_attempts": 0, "semantic_ok": 0,
+                    "by_label": {"missed": 3}, "negative_identities": ["row_0"],
+                }},
+            },
+        }],
+    }
+    loaded = ActuationProfile.from_dict(payload)
+    entry = loaded.entry_for_bucket(bucket)
+    # 3 tries < the new 5-try gate -> not unactuatable now -> stale label cleared.
+    assert entry.actuability == "unknown"
+
+
+@pytest.mark.smoke
 def test_static_actuation_seed_and_recovery_seed_stay_separate():
     profile = ActuationProfile()
     profile.apply_seed({
