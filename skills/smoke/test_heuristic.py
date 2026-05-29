@@ -328,3 +328,28 @@ def test_already_typed_elements_untouched():
     # type was not overwritten
     assert el.type == "button"
     assert el.suggested_actions == ["tap"]
+
+
+@pytest.mark.smoke
+def test_find_button_and_intent_ambiguity_guard():
+    """CUQ-1.5: find_button / find_by_intent also gain the closest-length +
+    near-tie-escalate guard (default off keeps first-match)."""
+    from glassbox.cognition import find_by_intent
+
+    btns = [
+        UIElement(type="button", box=Box(x=0, y=0, w=200, h=20),
+                  text="保存并继续", confidence=0.9, element_id=0),  # long, contains 保存
+        UIElement(type="button", box=Box(x=0, y=30, w=90, h=20),
+                  text="保存设置", confidence=0.9, element_id=1),     # closer to 保存
+    ]
+    assert find_button(btns, "保存").element_id == 0  # default: first containing
+    assert find_button(btns, "保存", ambiguity_guard=True).element_id == 1  # closest length
+
+    intents = [
+        UIElement(type="text", box=Box(x=0, y=0, w=80, h=20),
+                  text="a", intent_label="abcdefgX", confidence=0.9, element_id=0),
+        UIElement(type="text", box=Box(x=0, y=30, w=80, h=20),
+                  text="b", intent_label="abcdefXh", confidence=0.9, element_id=1),
+    ]
+    assert find_by_intent(intents, "abcdefgh") is not None  # default: guesses one
+    assert find_by_intent(intents, "abcdefgh", ambiguity_guard=True) is None  # near-tie -> escalate

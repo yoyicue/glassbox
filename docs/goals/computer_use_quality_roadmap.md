@@ -302,15 +302,16 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   "wrong target even when OCR is correct" class.
 
 ### CUQ-1.5 — `find_text`/`find_button`/`find_by_intent` have no ambiguity guard
-- [~] **medium · effort medium** (flag-gated, default-off) — DONE for `find_text`:
+- [x] **medium · effort medium** (flag-gated, default-off) — DONE for all three:
   an `ambiguity_guard` mode makes the substring tier prefer the closest-length
   containing row (not the first) and the fuzzy tier return None when the best
   match doesn't beat the runner-up by a margin (so an ambiguous read escalates
   instead of guessing — the doc's #1 leak even when OCR is correct). Behind
   `cfg.strict_target_matching`; the default path is byte-identical, so it's safe
   to ship and rig-validate before flipping on. Also addresses **CUQ-2.8**
-  (substring-before-fuzzy short-needle). Test in `test_ocr_vision.py`.
-  **Remaining:** apply the same guard to `find_button`/`find_by_intent`.
+  (substring-before-fuzzy short-needle). The same guard is applied to
+  `find_button` and `find_by_intent` (wired through `tap_button`/`tap_intent`/
+  the CUQ-0.4 reground). Tests in `test_ocr_vision.py` + `test_heuristic.py`.
 - Gap: all three return the **first** exact→substring→fuzzy match, with no
   closest-length / best-vs-second margin check. `match_known_label`
   (`text_match.py:237-278`) already implements the right margin rule but the

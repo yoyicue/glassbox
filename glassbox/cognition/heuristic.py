@@ -380,12 +380,24 @@ def find_by_type(elements: list[UIElement], element_type: ElementType) -> list[U
     return [e for e in elements if e.type == element_type]
 
 
-def find_button(elements: list[UIElement], text: str, *, fuzzy_ratio: float = 0.8) -> UIElement | None:
-    """Find the button (already typed) with the given text. Minus glyph aliases are normalized automatically."""
+def find_button(
+    elements: list[UIElement],
+    text: str,
+    *,
+    fuzzy_ratio: float = 0.8,
+    ambiguity_guard: bool = False,
+    ambiguity_margin: float = 0.1,
+) -> UIElement | None:
+    """Find the button (already typed) with the given text. Minus glyph aliases are normalized automatically.
+
+    ``ambiguity_guard`` (CUQ-1.5): prefer the closest-length containing button
+    and return None on a near-tie fuzzy read; default off keeps first-match.
+    """
     from glassbox.cognition.text_match import (
         fuzzy_ratio as _fr,
     )
     from glassbox.cognition.text_match import (
+        norm_text,
         text_contains,
         texts_match,
     )
@@ -396,15 +408,24 @@ def find_button(elements: list[UIElement], text: str, *, fuzzy_ratio: float = 0.
         if texts_match(b.text, text):
             return b
     # substring
-    for b in buttons:
-        if text_contains(b.text, text):
-            return b
+    containing = [b for b in buttons if text_contains(b.text, text)]
+    if containing:
+        if ambiguity_guard:
+            tgt_len = len(norm_text(text))
+            return min(containing, key=lambda b: abs(len(norm_text(b.text)) - tgt_len))
+        return containing[0]
     # fuzzy
-    best, best_r = None, fuzzy_ratio
+    best, best_r, second_r = None, fuzzy_ratio, 0.0
     for b in buttons:
         r = _fr(text, b.text)
         if r >= best_r:
+            if best is not None:
+                second_r = max(second_r, best_r)
             best, best_r = b, r
+        elif r > second_r:
+            second_r = r
+    if ambiguity_guard and best is not None and (best_r - second_r) < ambiguity_margin:
+        return None
     return best
 
 
@@ -413,16 +434,22 @@ def find_by_intent(
     intent: str,
     *,
     fuzzy_ratio: float = 0.7,
+    ambiguity_guard: bool = False,
+    ambiguity_margin: float = 0.1,
 ) -> UIElement | None:
     """Find an element by the intent_label populated by Layer 3.
 
     Match order: exact → substring → substring (swapped) → fuzzy ratio.
     intent is shorter than text, so the fuzzy threshold is relaxed to 0.7.
+
+    ``ambiguity_guard`` (CUQ-1.5): prefer the closest-length matching label and
+    return None on a near-tie fuzzy read; default off keeps first-match.
     """
     from glassbox.cognition.text_match import (
         fuzzy_ratio as _fr,
     )
     from glassbox.cognition.text_match import (
+        norm_text,
         text_contains,
         texts_match,
     )
@@ -433,13 +460,25 @@ def find_by_intent(
         if texts_match(e.intent_label, intent):
             return e
     # substring (intent is short, may be a substring of intent_label)
-    for e in candidates:
-        if text_contains(e.intent_label, intent) or text_contains(intent, e.intent_label):
-            return e
+    containing = [
+        e for e in candidates
+        if text_contains(e.intent_label, intent) or text_contains(intent, e.intent_label)
+    ]
+    if containing:
+        if ambiguity_guard:
+            tgt_len = len(norm_text(intent))
+            return min(containing, key=lambda e: abs(len(norm_text(e.intent_label)) - tgt_len))
+        return containing[0]
     # fuzzy
-    best, best_r = None, fuzzy_ratio
+    best, best_r, second_r = None, fuzzy_ratio, 0.0
     for e in candidates:
         r = _fr(intent, e.intent_label)
         if r >= best_r:
+            if best is not None:
+                second_r = max(second_r, best_r)
             best, best_r = e, r
+        elif r > second_r:
+            second_r = r
+    if ambiguity_guard and best is not None and (best_r - second_r) < ambiguity_margin:
+        return None
     return best

@@ -1254,7 +1254,10 @@ class Phone:
         # could not surface as plain text.
         hit = find_text(elements, target, fuzzy_ratio=fuzzy_ratio)
         if hit is None:
-            hit = find_by_intent(elements, target, fuzzy_ratio=fuzzy_ratio)
+            hit = find_by_intent(
+                elements, target, fuzzy_ratio=fuzzy_ratio,
+                ambiguity_guard=self._strict_target_matching,
+            )
         return hit
 
     def _rows_before_nav_title(self, elements: list[UIElement]) -> list[UIElement]:
@@ -1727,7 +1730,8 @@ class Phone:
         recognize the button as a filled block).
         """
         scene = self.perceive()
-        btn = find_button(scene.elements, label, fuzzy_ratio=fuzzy_ratio)
+        btn = find_button(scene.elements, label, fuzzy_ratio=fuzzy_ratio,
+                          ambiguity_guard=self._strict_target_matching)
         actuation_options = {
             "forbid_landing_retry": forbid_landing_retry,
         }
@@ -1770,7 +1774,10 @@ class Phone:
         Kimi not wired up (self.kimi is None) → fall back to tap_button(intent).
         """
         scene = self._last_scene if self._last_scene is not None else self.perceive()
-        el = find_by_intent(scene.elements, intent, fuzzy_ratio=fuzzy_ratio) if scene else None
+        el = find_by_intent(
+            scene.elements, intent, fuzzy_ratio=fuzzy_ratio,
+            ambiguity_guard=self._strict_target_matching,
+        ) if scene else None
         if el is None:
             if self.kimi is None:
                 if all(e.intent_label is None for e in scene.elements):
@@ -1778,7 +1785,10 @@ class Phone:
             else:
                 self.describe(scene_hint=scene_hint or intent)
                 scene = self._last_scene   # type: ignore[assignment]
-                el = find_by_intent(scene.elements, intent, fuzzy_ratio=fuzzy_ratio) if scene else None
+                el = find_by_intent(
+            scene.elements, intent, fuzzy_ratio=fuzzy_ratio,
+            ambiguity_guard=self._strict_target_matching,
+        ) if scene else None
         if el is None:
             raise AssertionError(
                 f"tap_intent({intent!r}) — no matching intent_label found in the current scene, "
