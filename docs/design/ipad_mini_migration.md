@@ -45,6 +45,10 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   A later bounded drill-down still recorded all `scroll_wheel` actions as
   no-progress in the HID trace; any `probe=progress` line is treated as weak OCR
   or page-state signal, not proof that wheel scrolling works.
+  **Superseded (2026-05-27): §5 / [docs/reference/picokvm_ipad_wheel.md](../reference/picokvm_ipad_wheel.md)
+  later validated iPad wheel scrolling via the existing `kvm_app.wheelReport` RPC.
+  This 2026-05-25 finding is the historical diagnostic-only stance, kept for
+  context; the wheel is now authoritative on iPad.**
 - iPad top search can show Settings search results, but the old iPhone search
   recovery was wrong because it assumed the bottom Search tab and bottom clear
   control. The code now avoids the bottom clear fallback on iPad top search and
@@ -101,6 +105,9 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   `search_no_result`, and passes `verify_report --allow-partial`. It is still
   not exhaustive: several root sections remain missing because top-search
   fallback hit rate is insufficient and wheel scrolling is not authoritative.
+  (Superseded 2026-05-27: wheel scrolling is now validated/authoritative on iPad —
+  see §5 / [docs/reference/picokvm_ipad_wheel.md](../reference/picokvm_ipad_wheel.md);
+  this records the earlier no-wheel coverage state.)
 - A later bounded hardware drill-down
   (`IOS_SETTINGS_MAX_PAGES=32`, `IOS_SETTINGS_MAX_SCROLLS_PER_PAGE=2`, depth 1,
   en-HK; report `/tmp/ipad-settings-search-drill-6.json`) added an iPad
@@ -170,6 +177,11 @@ Hardware corrections from the connected iPad mini rig (2026-05-25):
   yet. Acceptance should continue to come from visible sidebar rows, title-checked
   top-search fallback, and graph/search recovery until a new HID path proves
   semantic scroll movement.
+  **Superseded (2026-05-27): the "new HID path" condition was met — iPad wheel
+  scrolling is now validated via `kvm_app.wheelReport` (§5 /
+  [docs/reference/picokvm_ipad_wheel.md](../reference/picokvm_ipad_wheel.md)).
+  This is the historical no-progress finding; visible-row/search acceptance
+  remains a valid independent fallback.**
 - A follow-up public quick drill after disabling iPad default wheel and
   swipe-drag fallback
   (`/private/tmp/ipad-settings-quick-drill-noswipe-1.json`) passed verification
@@ -460,6 +472,15 @@ platform walls:
 
 - HID **digitizer / touchpad / Magic-Trackpad** input is ignored by iOS — only
   Generic-Desktop **mouse** works. No native touch, no two-finger scroll.
+  iPad is no friendlier here: a 2026-05-28 PicoKVM experiment loaded the
+  official Apple Accessory Design Guidelines Ch 15 multi-touch trackpad
+  descriptor onto a 4th HID function (`hid.usb3`), enumerated cleanly, and
+  iPadOS silently dropped every INPUT report across four descriptor / VID-PID
+  / interface-conflict variants. Apple's *native* multi-touch trackpad
+  recognition path is gated on either MFi hardware-IC handshake or a
+  USBDriverKit driver-extension app on the iPad — both break zero
+  intrusiveness. See `[[ipad-usb-hid-trackpad-mfi-gated]]` and the local
+  artifacts under `.cache/mt_descriptor/` (gitignored).
 - Mouse **wheel** under AssistiveTouch was previously classified as severely
   intermittent (~5–7%) and not revivable from the PicoKVM side. A later
   2026-05-28 PicoKVM RPC retest overturned that story: after UDC bounce +
@@ -487,7 +508,10 @@ core rewrite.
 - The **HID gadget descriptors** (keyboard + absolute mouse + relative mouse +
   report-ID-2 wheel). iPad consumes absolute pointer clicks, but report-ID-2
   wheel ACK is not enough: Settings sidebar semantic movement is currently 0/n
-  on hardware.
+  on hardware. (Superseded 2026-05-27: report-ID-2 wheel was subsequently
+  validated to scroll the iPad Settings sidebar — see §5 /
+  [docs/reference/picokvm_ipad_wheel.md](../reference/picokvm_ipad_wheel.md);
+  this records the earlier 0/n diagnostic state.)
 - PicoKVM hardware/firmware; the kvm_app RPCs (`absMouseReport`, `wheelReport`,
   `keyboardReport`, …).
 

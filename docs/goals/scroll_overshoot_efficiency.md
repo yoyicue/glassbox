@@ -90,7 +90,13 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
 ## Constraints / reality (do not re-litigate)
 
 - iOS still ignores the HID digitizer/touchpad; only a Generic-Desktop mouse
-  works, and AssistiveTouch is mandatory on iPhone.
+  works, and AssistiveTouch is mandatory on iPhone. iPadOS is the same on
+  this dimension — a 2026-05-28 PicoKVM experiment loaded the official
+  Apple Ch 15 multi-touch trackpad descriptor onto `hid.usb3`, enumerated
+  cleanly, and iPadOS silently dropped every INPUT report. Native iPad
+  multi-touch HID is gated on MFi-IC or USBDriverKit-app; neither fits
+  zero intrusiveness. See `[[ipad-usb-hid-trackpad-mfi-gated]]`. The
+  wheel-via-`kvm_app.wheelReport` path stays authoritative on iPad.
 - Keep the swipe path available until small-batch wheel proves lower
   `scroll_overshoot` or lower HID cost on the same coverage. The hardware wheel
   path itself is no longer a known dead end, but the 30-tick Settings run only
@@ -104,4 +110,5 @@ HID-call count, latency, and the chance of a re-scan landing somewhere unexpecte
   `artifacts/wheel_probe_2026-05-27/iphone_drill_down_v2_2026-05-28/`.
 - Background: `docs/design/ipad_mini_migration.md`; the on-device wheel/fling
   experiments are recorded in the project memory
-  (`picokvm-scroll-overshoot-hardware-limit`, `ios-ignores-usb-hid-digitizer`).
+  (`picokvm-scroll-overshoot-hardware-limit`, `ios-ignores-usb-hid-digitizer`,
+  `ipad-usb-hid-trackpad-mfi-gated`).

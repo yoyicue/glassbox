@@ -248,4 +248,6 @@ production wheel path validated above.
 - Related project docs: `docs/design/ipad_mini_migration.md`,
   `docs/goals/scroll_overshoot_efficiency.md`.
 - Related project memory: `picokvm-scroll-overshoot-hardware-limit`,
-  `ios-ignores-usb-hid-digitizer`, `iphone-vs-ipad-mouse-keyboard-support`.
+  `ios-ignores-usb-hid-digitizer`, `iphone-vs-ipad-mouse-keyboard-support`,
+  `ipad-usb-hid-trackpad-mfi-gated` (why we cannot upgrade from wheel to
+  native multi-touch trackpad on iPad — 2026-05-28 four-variant experiment).
