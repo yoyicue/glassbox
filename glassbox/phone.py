@@ -229,6 +229,10 @@ class Phone:
         # strategy ladder (verified-failure -> switch to next primitive) instead
         # of the legacy single-strategy path. Empty by default; flag-gated.
         self._semantic_plan_ops = frozenset(semantic_plan_ops or ())
+        # CUQ-0.1: set while a strategy ladder runs, so an orchestrated actuation
+        # invoked by a strategy callable (tap_text / swipe_up) does not re-route
+        # into the plan (recursion) or fire its own mid-plan stuck recovery.
+        self._in_semantic_plan = False
         # CUQ-2.1: inject no-text icon regions into perceive() so icon-only
         # controls become tap candidates. Flag-gated (default off).
         self._detect_icons_in_perceive = bool(detect_icons_in_perceive)
@@ -520,7 +524,21 @@ class Phone:
         from glassbox.action.semantic_plan import default_semantic_action_plan
 
         plan = default_semantic_action_plan(self, op, expected_state, **(params or {}))
-        return self.action_orchestrator.execute(self, op, plan, actor=actor, **exec_kwargs)
+        # CUQ-0.1: mark that a strategy ladder is running. A strategy callable may
+        # itself actuate through an orchestrated Phone method (e.g. tap_text /
+        # swipe_up), whose nested execute() would otherwise (a) re-route back into
+        # this plan — infinite recursion — and (b) fire its own stuck-recovery
+        # mid-plan (a Home reset in the middle of the ladder). The guard makes
+        # tap_text run its actuation in place (no re-route) and suppresses the
+        # nested execute's recovery (orchestrator checks phone._in_semantic_plan);
+        # the OUTER plan's own recovery is unaffected. Re-entrancy-safe (restores
+        # the prior value, so nested plans don't clear it early).
+        previous = getattr(self, "_in_semantic_plan", False)
+        self._in_semantic_plan = True
+        try:
+            return self.action_orchestrator.execute(self, op, plan, actor=actor, **exec_kwargs)
+        finally:
+            self._in_semantic_plan = previous
 
     def _set_last_scene(self, scene: Scene, frame: Frame | None) -> None:
         self._last_scene = scene
@@ -1829,6 +1847,25 @@ class Phone:
     def tap_text(
         self, target: str, *, expected_state: dict[str, Any] | None = None, **kw
     ) -> ActionResult:
+        # CUQ-0.1: when `tap` is flagged, route the top-level tap through the
+        # strategy ladder (target_tap -> keyboard_focus_activate, verified-failure
+        # switching). The `_in_semantic_plan` guard ensures the ladder's own
+        # target_tap strategy (which calls back here) actuates in place rather
+        # than recursing into the plan. Default (tap not flagged) is unchanged.
+        if self._uses_semantic_plan("tap") and not self._in_semantic_plan:
+            params: dict[str, Any] = {"target": target}
+            x = kw.get("x")
+            y = kw.get("y")
+            if x is not None and y is not None:
+                params["x"], params["y"] = x, y
+            return self._run_semantic_plan(
+                "tap",
+                expected_state=expected_state,
+                params=params,
+                via="tap_text",
+                policy_action="tap",
+                **self._picokvm_fresh_verify_kwargs("tap"),
+            )
         actuation_options = self._pop_actuation_options(kw)
         el = self.expect_text(target, **kw)
         op, plan, metadata = self._target_actuation_plan(

@@ -387,7 +387,12 @@ class ActionOrchestrator:
             group_status=final.semantic.status,
             terminal_reason=final.semantic.disqualifying_state or final.semantic.reason,
         )
-        self._maybe_recover_stuck(phone, final, group_id=group_id)
+        # CUQ-0.1: do not fire stuck-recovery for a NESTED legacy actuation that a
+        # strategy ladder invoked (tap_text / swipe_up inside a plan). The outer
+        # plan owns recovery; a nested recovery here would Home-reset mid-ladder.
+        # The flag is only set while _run_semantic_plan is active (default off).
+        if not getattr(phone, "_in_semantic_plan", False):
+            self._maybe_recover_stuck(phone, final, group_id=group_id)
 
         enriched = self._enrich_result(final.result, final.semantic, final.attempt_id, group_id)
         if final.command_exception is not None:

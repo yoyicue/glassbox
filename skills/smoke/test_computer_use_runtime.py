@@ -2477,3 +2477,60 @@ def test_idempotent_retry_budget_enables_unknown_retry_only_for_safe_ops(tmp_pat
     assert home0["retry_budget"] == 0
     assert home0["unknown_policy"] == "continue"
     orch0.close()
+
+
+@pytest.mark.smoke
+def test_tap_text_routes_through_plan_without_recursion_when_flagged(tmp_path):
+    """CUQ-0.1: with `tap` flagged, the top-level tap_text routes through the
+    strategy ladder exactly ONCE; the ladder's target_tap strategy (which calls
+    back into tap_text) actuates in place under the _in_semantic_plan guard
+    instead of re-routing — proving the recursion is broken."""
+    phone, orchestrator, _store = _make_phone(tmp_path, [["Done"]] * 8)
+    phone._semantic_plan_ops = frozenset({"tap"})
+
+    runs = {"n": 0}
+    original = phone._run_semantic_plan
+
+    def spy(op, **kw):
+        runs["n"] += 1
+        return original(op, **kw)
+
+    phone._run_semantic_plan = spy
+    result = phone.tap_text("Done")
+    orchestrator.close()
+
+    assert result is not None
+    assert runs["n"] == 1  # top-level routed once; nested target_tap did NOT re-route
+    assert phone._in_semantic_plan is False  # guard restored after the plan
+
+
+@pytest.mark.smoke
+def test_in_semantic_plan_guard_skips_legacy_stuck_recovery(tmp_path):
+    """CUQ-0.1: a NESTED legacy actuation (a strategy ladder calling tap_text /
+    swipe_up) runs with _in_semantic_plan set, and the legacy execute path must
+    then SKIP stuck recovery — so a nested actuation can't fire a Home reset in
+    the middle of the ladder. Off (default) the legacy path recovers as before."""
+    phone, orchestrator, _store = _make_phone(tmp_path, [["Done"]] * 4)
+    calls = {"n": 0}
+    original = orchestrator._maybe_recover_stuck
+
+    def spy(*args, **kwargs):
+        calls["n"] += 1
+        return original(*args, **kwargs)
+
+    orchestrator._maybe_recover_stuck = spy
+
+    def ok_call():
+        return ActionResult(ok=True, backend="test", connected=True)
+
+    # Default (not in a plan): the legacy path reaches the recovery check.
+    phone._in_semantic_plan = False
+    phone._execute_action("tap", ok_call)
+    assert calls["n"] == 1
+
+    # In a plan (nested actuation): the legacy path skips recovery.
+    calls["n"] = 0
+    phone._in_semantic_plan = True
+    phone._execute_action("tap", ok_call)
+    orchestrator.close()
+    assert calls["n"] == 0
