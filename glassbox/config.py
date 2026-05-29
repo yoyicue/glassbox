@@ -274,6 +274,14 @@ class AgentConfig(BaseSettings):
     intermittent so this stays off there. Env GLASSBOX_AI_SCROLL_PREFER_WHEEL.
     Default off → swipe-fling everywhere (byte-identical)."""
 
+    recover_then_retry: bool = False
+    """CUQ-0.12: when stuck/loop recovery succeeds, re-attempt the failed action
+    once from the recovered (clean) state, so recovery alters the CURRENT action's
+    outcome instead of only priming the next one. Env GLASSBOX_RECOVER_THEN_RETRY.
+    Default off (byte-identical: recovery stays post-action). Re-entrancy-guarded
+    (a retry can't itself retry); validate on-rig that re-attempting from the
+    recovered state helps rather than double-applies."""
+
     idempotent_retry_budget: int = 0
     """CUQ-0.11: semantic retry budget for ops declared idempotent (home /
     scroll_wheel / control_center / notification_center / recents — safe to

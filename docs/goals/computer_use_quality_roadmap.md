@@ -300,9 +300,19 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   byte-identical. Test in `test_computer_use_runtime.py` (home gets the budget +
   retry policy; tap stays 0/continue; default 0 → no-op). **Remaining:** on-rig
   confirm a retried scroll/home on `unknown` helps and doesn't over-scroll.
-- [ ] **CUQ-0.12** Stuck/loop recovery runs only after a group finalizes and
+- [x] **CUQ-0.12** Stuck/loop recovery runs only after a group finalizes and
   cannot alter the current action's outcome (`stuck.py:62 observe_and_recover` is
-  dead; orchestrator uses `observe()` directly). *medium*
+  dead; orchestrator uses `observe()` directly). *medium* — DONE (flag-gated,
+  default-off): `_maybe_recover_stuck` now returns whether recovery succeeded, and
+  `cfg.recover_then_retry` (env `GLASSBOX_RECOVER_THEN_RETRY`) makes a successful
+  recovery of a still-failed action (`failed`/`unknown`/`partial`) **re-attempt
+  the action once from the recovered (clean) state** — so recovery alters the
+  CURRENT outcome, not only the next action. Re-entrancy-guarded
+  (`_in_recover_retry`, a retry can't itself retry) and skipped inside a plan
+  (the plan owns its recovery). Default off → byte-identical (recovery stays
+  post-action). Tests: reattempts-once-when-recovered / no-reattempt-when-off.
+  **Remaining:** on-rig validate that re-attempting from the recovered state
+  helps rather than double-applies (per-op; pairs with the idempotency gate).
 
 ---
 

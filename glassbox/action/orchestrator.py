@@ -151,6 +151,7 @@ class ActionOrchestrator:
         stuck_detector: StuckLoopDetector | None = None,
         max_stuck_recoveries: int = 3,
         idempotent_retry_budget: int = 0,
+        recover_then_retry: bool = False,
     ):
         if observation_producer_mode not in OBSERVATION_PRODUCER_MODES:
             expected = ", ".join(sorted(OBSERVATION_PRODUCER_MODES))
@@ -170,6 +171,11 @@ class ActionOrchestrator:
         # (_default_idempotent). 0 (default) keeps retry_budget at 0 so the
         # unknown->retry policy stays a no-op — byte-identical to before.
         self._idempotent_retry_budget = max(0, int(idempotent_retry_budget))
+        # CUQ-0.12: opt-in — when stuck recovery succeeds, re-attempt the failed
+        # action once from the recovered state so recovery alters the CURRENT
+        # outcome (not only the next action). Default off (byte-identical).
+        self._recover_then_retry = bool(recover_then_retry)
+        self._in_recover_retry = False
         self.semantic_fail_fast = semantic_fail_fast
         self.observation_producer_mode = observation_producer_mode
         self._group_seq = 0
@@ -391,8 +397,33 @@ class ActionOrchestrator:
         # strategy ladder invoked (tap_text / swipe_up inside a plan). The outer
         # plan owns recovery; a nested recovery here would Home-reset mid-ladder.
         # The flag is only set while _run_semantic_plan is active (default off).
+        recovered = False
         if not getattr(phone, "_in_semantic_plan", False):
-            self._maybe_recover_stuck(phone, final, group_id=group_id)
+            recovered = self._maybe_recover_stuck(phone, final, group_id=group_id)
+
+        # CUQ-0.12: opt-in — recovery normally only primes the NEXT action. When
+        # enabled, a *successful* recovery of a still-failed action re-attempts it
+        # once from the recovered (clean) state, so the action's recorded outcome
+        # can reflect the post-recovery result. Re-entrancy-guarded (a retry can't
+        # itself retry) and skipped inside a plan. Default off → byte-identical.
+        if (
+            self._recover_then_retry
+            and recovered
+            and not self._in_recover_retry
+            and not getattr(phone, "_in_semantic_plan", False)
+            and final.semantic.status in {"failed", "unknown", "partial"}
+        ):
+            self.store.audit.append(
+                "stuck_detector.recover_then_retry",
+                attempt_id=final.attempt_id,
+                attempt_group_id=group_id,
+                payload={"op": op, "prior_status": final.semantic.status},
+            )
+            self._in_recover_retry = True
+            try:
+                return self.execute(phone, op, call, **kwargs)
+            finally:
+                self._in_recover_retry = False
 
         enriched = self._enrich_result(final.result, final.semantic, final.attempt_id, group_id)
         if final.command_exception is not None:
@@ -656,15 +687,18 @@ class ActionOrchestrator:
         final: AttemptExecution,
         *,
         group_id: str,
-    ) -> None:
+    ) -> bool:
+        """Run stuck/loop recovery if the detector trips. Returns True iff a
+        recovery actually succeeded (so CUQ-0.12's opt-in retry can re-attempt the
+        action from the recovered state)."""
         status = final.semantic.status
         if status == "succeeded":
             self.stuck_detector.reset()
-            return
+            return False
         if status in {"blocked", "approval_required", "exception"}:
-            return
+            return False
         if final.semantic.disqualifying_state:
-            return
+            return False
         observation = final.action_payload.get("observation") if final.action_payload else None
         signature = (
             observation.get("screen_signature")
@@ -672,7 +706,7 @@ class ActionOrchestrator:
             else None
         )
         if not isinstance(signature, str) or not signature:
-            return
+            return False
         reason = final.semantic.disqualifying_state or final.semantic.reason or status
         decision = self.stuck_detector.observe(StuckSample(signature, str(reason)))
         self.store.audit.append(
@@ -688,7 +722,7 @@ class ActionOrchestrator:
             },
         )
         if not decision.should_recover:
-            return
+            return False
         self.store.audit.append(
             "stuck_detector.recovery.started",
             attempt_id=final.attempt_id,
@@ -722,7 +756,7 @@ class ActionOrchestrator:
         # on exhaustion surface a terminal marker instead of retrying forever.
         if recovery.recovered:
             self._stuck_recovery_failures = 0
-            return
+            return True
         self._stuck_recovery_failures += 1
         if self._stuck_recovery_failures >= self.max_stuck_recoveries:
             self.store.audit.append(
@@ -735,8 +769,9 @@ class ActionOrchestrator:
                     "recovery_failures": self._stuck_recovery_failures,
                 },
             )
-            return
+            return False
         self.stuck_detector.rearm()
+        return False
 
     def _skipped_result(
         self,

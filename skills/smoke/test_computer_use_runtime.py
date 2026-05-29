@@ -2534,3 +2534,45 @@ def test_in_semantic_plan_guard_skips_legacy_stuck_recovery(tmp_path):
     phone._execute_action("tap", ok_call)
     orchestrator.close()
     assert calls["n"] == 0
+
+
+@pytest.mark.smoke
+def test_recover_then_retry_reattempts_after_successful_recovery(tmp_path):
+    """CUQ-0.12: with recover_then_retry on, a failed action whose stuck recovery
+    SUCCEEDS is re-attempted once from the recovered state — so recovery alters
+    the current action's outcome, not just the next one. Re-entrancy-guarded."""
+    phone, orchestrator, _store = _make_phone(tmp_path, [["停滞"]] * 8)
+    orchestrator._recover_then_retry = True
+    # Force recovery to report success so the retry branch is exercised.
+    orchestrator._maybe_recover_stuck = lambda _p, _final, *, group_id: True
+
+    calls = {"n": 0}
+
+    def static_call():
+        calls["n"] += 1  # lands, but the scene never progresses -> semantic "unknown"
+        return ActionResult(ok=True, backend="test", connected=True)
+
+    phone._execute_action("tap", static_call)
+    orchestrator.close()
+
+    assert calls["n"] == 2  # initial attempt + one post-recovery retry (then guarded)
+
+
+@pytest.mark.smoke
+def test_recover_then_retry_off_does_not_reattempt(tmp_path):
+    """CUQ-0.12 default-safety: with the flag off (default), a successful recovery
+    does NOT re-attempt — byte-identical to before (recovery primes the next)."""
+    phone, orchestrator, _store = _make_phone(tmp_path, [["停滞"]] * 8)
+    assert orchestrator._recover_then_retry is False
+    orchestrator._maybe_recover_stuck = lambda _p, _final, *, group_id: True
+
+    calls = {"n": 0}
+
+    def static_call():
+        calls["n"] += 1
+        return ActionResult(ok=True, backend="test", connected=True)
+
+    phone._execute_action("tap", static_call)
+    orchestrator.close()
+
+    assert calls["n"] == 1  # no retry on the default path
