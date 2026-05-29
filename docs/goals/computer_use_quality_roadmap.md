@@ -63,7 +63,7 @@ All of these are facets of one root cause, confirmed independently ~10×. Gate
 every change on the Step-0 harness; ship behind a flag, then default-on.
 
 ### CUQ-0.1 — Route core ops through `default_semantic_action_plan` (the strategy ladder is dead code)
-- [ ] **critical→high · effort large · design-gap**
+- [~] **critical→high · effort large · design-gap** — FOUNDATION + `back` DONE (flag-gated, default-off): added `cfg.semantic_plan_ops` (env `GLASSBOX_SEMANTIC_PLAN_OPS`) wired to `Phone._semantic_plan_ops`; `Phone._run_semantic_plan` builds `default_semantic_action_plan` and runs it through the orchestrator's `_execute_semantic_plan`. `back_gesture()` now routes through the `nav_back_tap → keyboard_back → edge_back_gesture` ladder with verified-failure switching when `back` is flagged (vs the legacy single-shot if/elif). **Key enabler:** `SemanticActionSpec.expected_state` is now optional — when None the op's *generic verifier* drives the ladder, so ops without a caller-supplied expectation can still switch strategies (orchestrator no longer injects a permissive expected_state that would short-circuit). Also fixed a latent frozen-`ActionResult` mutation bug in `_phone_nav_back_tap` that the (previously uncalled) binding hid. Tests: optional-expected_state round-trip, flag-on ladder routing, flag-off legacy. **Remaining:** wire `scroll`/`tap`/`launch_app` (mechanical, same pattern; `tap`/`launch_app` need the nested-orchestration suppression noted in CUQ-0.8), then on-rig validate and flip default-on.
 - Gap: `SemanticActionPlan` / `default_semantic_action_plan` have **zero
   non-test callers**. Every real action takes the legacy `_execute_action`
   branch, whose only multi-attempt behavior is re-tapping the *same* coordinate
@@ -195,7 +195,7 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   per-action budget on the default path.
 
 ### CUQ-0.8 — Migrate `home()` onto the plan runner as the 1:1 ladder template
-- [ ] **high · effort medium · design-gap**
+- [~] **high · effort medium · design-gap** — ENABLER DONE; `home` migration pending. The flag-gated routing infra (CUQ-0.1) + the optional-`expected_state` change make `home` a one-line `_run_semantic_plan("home")` gate. Deferred in this pass because the `assistive_touch_home` strategy callable (`_home_via_assistive_touch_menu`) re-enters the orchestrator (nested sub-tap recording) and the roadmap requires suppressing that nesting inside the strategy callable so outer attempt/group artifacts stay clean — best done with on-rig validation. `back` was migrated first instead (all-direct effector bindings, no nesting; highest-leverage per the audit).
 - Gap: P2 acceptance forbids new bespoke fallback code, yet `home()` /
   `_picokvm_home_pointer_fallback` / `_verified_pointer_home` are exactly that —
   a hand-coded fallback ladder plus a verify wrapper that deliberately bypasses

@@ -451,10 +451,14 @@ class ActionOrchestrator:
                     **kwargs,
                     "strategy": strategy.spec.name,
                     "semantic_action_strategy": strategy.spec.to_dict(),
-                    "expected_state": spec.expected_state.to_dict(),
                     "idempotent": spec.idempotent,
                     "attempt_index": attempt_index,
                 }
+                # Only inject expected_state when the spec carries one; otherwise
+                # the op's generic verifier alone drives the ladder (CUQ-0.1/0.8),
+                # rather than a missing/permissive expectation short-circuiting it.
+                if spec.expected_state is not None:
+                    attempt_kwargs["expected_state"] = spec.expected_state.to_dict()
                 attempt_metadata = {**metadata, **attempt_kwargs}
                 attempt = self._run_attempt(
                     phone,

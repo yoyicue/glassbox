@@ -9,7 +9,7 @@ the explicit verifier-outcome state machine.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from glassbox.effector import ActionResult
@@ -80,7 +80,12 @@ class StrategySpec:
 class SemanticActionSpec:
     op: str
     strategies: tuple[StrategySpec, ...]
-    expected_state: ExpectedState
+    # Optional: when None, the strategy ladder is verified by the op's generic
+    # verifier alone (e.g. home-screen-visible for `home`, scene-progress for
+    # `tap`). This lets ops without a caller-supplied expectation still run the
+    # ladder and switch strategy on verified failure (CUQ-0.1/0.8). A non-None
+    # expected_state additionally refines/overrides the generic verdict.
+    expected_state: ExpectedState | None = None
     recovery: str | None = None
     idempotent: bool = True
 
@@ -94,7 +99,7 @@ class SemanticActionSpec:
         return {
             "op": self.op,
             "strategies": [strategy.to_dict() for strategy in self.strategies],
-            "expected_state": self.expected_state.to_dict(),
+            "expected_state": self.expected_state.to_dict() if self.expected_state else None,
             "recovery": self.recovery,
             "idempotent": self.idempotent,
         }
@@ -104,10 +109,15 @@ class SemanticActionSpec:
         strategies = payload.get("strategies")
         if not isinstance(strategies, list):
             raise ValueError("semantic action strategies must be a list")
+        expected_payload = payload.get("expected_state")
         return cls(
             op=str(payload.get("op") or ""),
             strategies=tuple(StrategySpec.from_dict(item) for item in strategies),
-            expected_state=ExpectedState.from_dict(payload.get("expected_state") or {}),
+            expected_state=(
+                ExpectedState.from_dict(expected_payload)
+                if isinstance(expected_payload, Mapping)
+                else None
+            ),
             recovery=(
                 str(payload["recovery"])
                 if payload.get("recovery") is not None
@@ -487,7 +497,7 @@ def _element_query_label(query: Mapping[str, Any]) -> str:
 
 def default_semantic_action_spec(
     op: Literal["home", "back", "launch_app", "tap", "scroll"],
-    expected_state: ExpectedState,
+    expected_state: ExpectedState | None = None,
     *,
     recovery: str | None = "recover_to_home_then_renavigate",
     idempotent: bool = True,
@@ -534,7 +544,7 @@ def default_semantic_action_spec(
 def default_semantic_action_plan(
     phone: Any,
     op: Literal["home", "back", "launch_app", "tap", "scroll"],
-    expected_state: ExpectedState,
+    expected_state: ExpectedState | None = None,
     **params: Any,
 ) -> SemanticActionPlan:
     """Bind the default core action spec to a phone-like runtime object."""
@@ -640,7 +650,11 @@ def _phone_nav_back_tap(phone: Any) -> ActionResult:
     allowed, guard_reason, nav_back_point = context()
     if not allowed or nav_back_point is None:
         result = _unsupported(phone, "back", "nav_back_tap")
-        result.error = result.error or str(guard_reason or "nav back point unavailable")
+        # ActionResult is frozen — return a copy with the guard reason rather
+        # than mutating in place (this binding had no production caller before
+        # CUQ-0.1, so the in-place assignment had never run).
+        if not result.error:
+            result = replace(result, error=str(guard_reason or "nav back point unavailable"))
         return result
     x, y = nav_back_point
     px, py = phone._to_phone(x, y)

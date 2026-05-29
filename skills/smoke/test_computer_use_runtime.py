@@ -16,6 +16,8 @@ from glassbox.action import (
     SemanticActionSpec,
     StrategySpec,
     StuckLoopDetector,
+    default_semantic_action_plan,
+    default_semantic_action_spec,
     recover_to_home_then_renavigate,
 )
 from glassbox.cognition import Box, UIElement
@@ -465,6 +467,88 @@ def test_computer_use_runtime_semantic_plan_skips_unsupported_capability(tmp_pat
     skipped = next(event for event in audit if event["type"] == "semantic_plan.strategy_skipped")
     assert skipped["payload"]["strategy"]["name"] == "unsupported_first"
     assert skipped["payload"]["reason"] == "capability unsupported"
+
+
+@pytest.mark.smoke
+def test_default_semantic_action_spec_expected_state_optional_roundtrip():
+    """CUQ-0.1/0.8 enabler: a core-op plan can omit expected_state (the generic
+    op verifier drives the ladder), and the spec round-trips with it None."""
+    spec = default_semantic_action_spec("back")
+    assert spec.expected_state is None
+    assert [s.name for s in spec.strategies] == [
+        "nav_back_tap",
+        "keyboard_back",
+        "edge_back_gesture",
+    ]
+    payload = spec.to_dict()
+    assert payload["expected_state"] is None
+    restored = SemanticActionSpec.from_dict(payload)
+    assert restored.expected_state is None
+    assert restored.op == "back"
+    assert [s.name for s in restored.strategies] == [s.name for s in spec.strategies]
+
+    plan = default_semantic_action_plan(object(), "back")
+    assert len(plan.bound) == 3
+
+
+@pytest.mark.smoke
+def test_back_gesture_flag_routes_through_strategy_ladder(tmp_path):
+    """CUQ-0.1: with the op flagged, back_gesture() runs the first-class ladder
+    (nav_back_tap -> keyboard_back -> edge_back_gesture) with verified-failure
+    switching, instead of the legacy single-shot path."""
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store)
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR([["停滞"]] * 16),  # no scene progress -> strategies fail & switch
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+        semantic_plan_ops=frozenset({"back"}),
+    )
+
+    phone.back_gesture()
+    orchestrator.close()
+
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    plan_starts = [
+        e
+        for e in audit
+        if e["type"] == "attempt_group.started"
+        and isinstance(e.get("payload", {}).get("semantic_action_spec"), dict)
+    ]
+    assert plan_starts, "back was not routed through the SemanticActionPlan ladder"
+    assert plan_starts[0]["payload"]["semantic_action_spec"]["op"] == "back"
+    # the ladder engaged more than one strategy (switch and/or capability skip)
+    laddered = sum(
+        1
+        for e in audit
+        if e["type"] in {"semantic_plan.strategy_failed", "semantic_plan.strategy_skipped"}
+    )
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert laddered >= 1 or len(actions) >= 2
+
+
+@pytest.mark.smoke
+def test_back_gesture_without_flag_uses_legacy_single_shot_path(tmp_path):
+    """Default (flag off) preserves the legacy back path -- no SemanticActionPlan."""
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store)
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR([["停滞"]] * 6),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+
+    phone.back_gesture()
+    orchestrator.close()
+
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert not any(
+        isinstance(e.get("payload", {}).get("semantic_action_spec"), dict) for e in audit
+    )
 
 
 @pytest.mark.smoke

@@ -657,6 +657,9 @@ def build_phone(
         app_viewport=app_viewport,
         app_viewport_mode=cfg.app_viewport_mode,
         default_observation_scope=cfg.default_observation_scope,
+        semantic_plan_ops=frozenset(
+            op.strip() for op in (cfg.semantic_plan_ops or "").split(",") if op.strip()
+        ),
     )
     return PhoneRuntime(
         phone=phone,

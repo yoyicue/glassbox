@@ -229,6 +229,15 @@ class AgentConfig(BaseSettings):
     """Raise when computer-use verification returns semantic failed/blocked.
     Transport fail-fast remains controlled by GLASSBOX_ACTION_FAIL_FAST."""
 
+    semantic_plan_ops: str = ""
+    """Comma-separated core ops routed through the first-class SemanticActionPlan
+    strategy ladder instead of the legacy single-strategy path (CUQ-0.1/0.8).
+    Empty (default) preserves today's behavior; e.g. set
+    GLASSBOX_SEMANTIC_PLAN_OPS=home,back so a verified-failed strategy switches
+    to the next reliable primitive (keyboard -> AssistiveTouch -> gesture)
+    instead of giving up. Flag-gated pending on-rig validation before
+    default-on. Supported ops: home, back, scroll, tap, launch_app."""
+
     computer_use_observation_producer_mode: str = "scoped_source_owner"
     """Computer-use observation producer mode. v1 defaults to
     scoped_source_owner, where ActionOrchestrator owns the frame source during

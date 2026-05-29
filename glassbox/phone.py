@@ -168,6 +168,7 @@ class Phone:
         app_viewport_mode: str = "auto",
         default_observation_scope: str = "device",
         auto_refresh_letterbox_crop: bool = False,
+        semantic_plan_ops: frozenset[str] | None = None,
     ):
         self.source = source
         self.ocr = ocr
@@ -187,6 +188,10 @@ class Phone:
         self._platform_scene_classifier = platform_scene_classifier
         self.action_fail_fast = action_fail_fast
         self.action_orchestrator = action_orchestrator
+        # CUQ-0.1/0.8: ops routed through the first-class SemanticActionPlan
+        # strategy ladder (verified-failure -> switch to next primitive) instead
+        # of the legacy single-strategy path. Empty by default; flag-gated.
+        self._semantic_plan_ops = frozenset(semantic_plan_ops or ())
         # CJK type() routes through the clipboard; the A-dance foregrounds apps
         # via HID (opening from the Home screen), needing the controlled app's
         # Home-screen name(s) and a springboard icon map.
@@ -410,6 +415,30 @@ class Phone:
             detail = getattr(result, "error", None) or "reported action failure"
             raise RuntimeError(f"{op} failed: {detail}")
         return result
+
+    def _uses_semantic_plan(self, op: str) -> bool:
+        """CUQ-0.1/0.8: is this op routed through the first-class strategy ladder?"""
+        return op in self._semantic_plan_ops and self.action_orchestrator is not None
+
+    def _run_semantic_plan(
+        self,
+        op: str,
+        *,
+        expected_state=None,
+        actor: str = "agent",
+        params: dict[str, Any] | None = None,
+        **exec_kwargs: Any,
+    ) -> ActionResult:
+        """Run a core op through default_semantic_action_plan: the orchestrator
+        executes each strategy in order and switches to the next on verified
+        failure (recovering after exhaustion), instead of the legacy
+        single-strategy path. ``params`` feed the plan's strategy bindings;
+        ``exec_kwargs`` become orchestrator metadata (via/policy_action/fresh
+        verify)."""
+        from glassbox.action.semantic_plan import default_semantic_action_plan
+
+        plan = default_semantic_action_plan(self, op, expected_state, **(params or {}))
+        return self.action_orchestrator.execute(self, op, plan, actor=actor, **exec_kwargs)
 
     def _set_last_scene(self, scene: Scene, frame: Frame | None) -> None:
         self._last_scene = scene
@@ -2381,6 +2410,16 @@ class Phone:
         back path. The method name and its back_gesture/back trace metadata are
         kept so existing callers and the memory graph keep working.
         """
+        if self._uses_semantic_plan("back"):
+            # CUQ-0.1: ladder nav_back_tap -> keyboard_back -> edge_back_gesture
+            # with verified-failure switching, instead of the single-shot path
+            # below that commits to ONE strategy with no escalation.
+            return self._run_semantic_plan(
+                "back",
+                via="back_gesture",
+                policy_action="back",
+                **self._picokvm_fresh_verify_kwargs("back"),
+            )
         strategy = self._system_action_strategy("back")
         if strategy == "unsupported":
             return self._unsupported_action("back_gesture", strategy=strategy)
