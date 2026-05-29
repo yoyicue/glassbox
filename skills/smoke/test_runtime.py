@@ -436,7 +436,9 @@ def test_phone_refreshes_letterbox_crop_when_source_resolution_changes():
 
 
 @pytest.mark.smoke
-def test_phone_refreshes_letterbox_crop_when_bbox_changes_at_same_resolution():
+def test_phone_refreshes_letterbox_crop_when_bbox_change_is_sustained():
+    """CUQ-3.14: a SUSTAINED bbox change re-fits — but only after the hysteresis
+    (default 2 consecutive frames), not on the first differing frame."""
     class MovingCropSource:
         resolution = (1920, 1080)
 
@@ -445,7 +447,7 @@ def test_phone_refreshes_letterbox_crop_when_bbox_changes_at_same_resolution():
 
         def snapshot(self):
             self.calls += 1
-            left = 711 if self.calls == 1 else 800
+            left = 711 if self.calls == 1 else 800  # call 1 (setup) = 711, then 800
             img = np.zeros((1080, 1920, 3), dtype=np.uint8)
             img[:, left:left + 498] = 255
             return Frame(img=img, ts=0.0)
@@ -457,12 +459,44 @@ def test_phone_refreshes_letterbox_crop_when_bbox_changes_at_same_resolution():
         effector=FakeEffector(),
     )
 
+    # First 800 frame: pending under hysteresis, crop NOT yet re-fit.
+    runtime.phone.snapshot()
+    assert runtime.phone.crop.crop_bbox == (711, 0, 498, 1080)
+    # Second consecutive 800 frame: hysteresis met, crop commits.
     frame = runtime.phone.snapshot()
-
-    assert runtime.phone.crop is not None
     assert runtime.phone.crop.frame_size == (1920, 1080)
     assert runtime.phone.crop.crop_bbox == (800, 0, 498, 1080)
     assert frame.shape == (498, 1080)
+
+
+@pytest.mark.smoke
+def test_phone_does_not_refit_letterbox_crop_on_transient_frame():
+    """CUQ-3.14: a single transient-content frame (one-off different bbox) must
+    NOT drift the crop — the hysteresis discards it when the bbox reverts."""
+    class TransientCropSource:
+        resolution = (1920, 1080)
+
+        def __init__(self):
+            self.calls = 0
+
+        def snapshot(self):
+            self.calls += 1
+            left = 800 if self.calls == 2 else 711  # call 2 is a one-off transient
+            img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+            img[:, left:left + 498] = 255
+            return Frame(img=img, ts=0.0)
+
+    runtime = build_phone(
+        source=TransientCropSource(),
+        cfg=AgentConfig(_env_file=None),
+        ocr=FakeOCR(),
+        effector=FakeEffector(),
+    )
+
+    runtime.phone.snapshot()   # call 2: transient 800 -> pending only
+    runtime.phone.snapshot()   # call 3: back to 711 -> pending discarded
+
+    assert runtime.phone.crop.crop_bbox == (711, 0, 498, 1080)
 
 
 @pytest.mark.smoke

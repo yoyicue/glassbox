@@ -169,6 +169,7 @@ class Phone:
         app_viewport_mode: str = "auto",
         default_observation_scope: str = "device",
         auto_refresh_letterbox_crop: bool = False,
+        letterbox_refresh_consecutive: int = 1,
         semantic_plan_ops: frozenset[str] | None = None,
         detect_icons_in_perceive: bool = False,
         strict_target_matching: bool = False,
@@ -189,6 +190,12 @@ class Phone:
         self.coldstart = coldstart         # ColdStartAnnotator | None — cold-start VLM annotation
         self.crop = crop
         self.auto_refresh_letterbox_crop = bool(auto_refresh_letterbox_crop)
+        # CUQ-3.14: hysteresis for auto-refresh — require this many consecutive
+        # identical detections of a new bbox before committing it (so transient
+        # content can't drift the crop). 1 = commit on first detection (legacy).
+        self._letterbox_refresh_consecutive = max(1, int(letterbox_refresh_consecutive))
+        self._pending_crop_bbox: tuple[int, int, int, int] | None = None
+        self._pending_crop_count = 0
         self.coordinate_space = coordinate_space or "auto"
         self.stability_policy = stability_policy
         self.perceive_cache_diff = perceive_cache_diff
@@ -922,8 +929,24 @@ class Phone:
         except Exception:
             return
         if detected.crop_bbox == self.crop.crop_bbox:
+            self._pending_crop_bbox = None
+            self._pending_crop_count = 0
+            return
+        # CUQ-3.14: hysteresis — a NEW bbox must be detected on this many
+        # consecutive frames before it commits, so a single transient-content
+        # frame (fullscreen image/video/splash) cannot silently re-fit the crop
+        # and drift every subsequent coordinate. With consecutive == 1 this
+        # commits on the first detection (legacy behavior).
+        if detected.crop_bbox == self._pending_crop_bbox:
+            self._pending_crop_count += 1
+        else:
+            self._pending_crop_bbox = detected.crop_bbox
+            self._pending_crop_count = 1
+        if self._pending_crop_count < self._letterbox_refresh_consecutive:
             return
         self.crop = detected
+        self._pending_crop_bbox = None
+        self._pending_crop_count = 0
         logger.info(
             "letterbox crop refreshed after source bbox changed: "
             f"frame={self.crop.frame_size} bbox={self.crop.crop_bbox}"

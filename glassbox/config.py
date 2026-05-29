@@ -266,6 +266,15 @@ class AgentConfig(BaseSettings):
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 
+    letterbox_refresh_consecutive: int = 2
+    """CUQ-3.14: how many consecutive frames must agree on a NEW letterbox crop
+    bbox before auto-refresh commits it (hysteresis). >1 stops a single
+    transient-content frame (a fullscreen image/video/splash) from silently
+    re-fitting the crop and drifting every subsequent coordinate. 1 restores the
+    old commit-on-first-detection behavior. Env
+    GLASSBOX_LETTERBOX_REFRESH_CONSECUTIVE. Only matters when the crop is
+    auto-detected (no configured bbox), where auto-refresh is on."""
+
     memory_locate_priors: bool = False
     """CUQ-3.21: when OCR cannot find a selection target, use the UTG position
     memory as a tap-point prior (recognize the screen → a remembered element

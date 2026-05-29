@@ -656,6 +656,7 @@ def build_phone(
         coldstart=coldstart,
         crop=crop,
         auto_refresh_letterbox_crop=auto_refresh_letterbox_crop,
+        letterbox_refresh_consecutive=cfg.letterbox_refresh_consecutive,
         coordinate_space=coordinate_space,
         stability_policy=StabilityPolicy(
             enabled=cfg.stable_after_action,

@@ -669,8 +669,20 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   raises-on-budget-exhaustion, default-returns-flat). **Remaining:** on-rig tune
   the attempt budget/backoff; a frozen-stream (identical-frame) liveness signal
   is deferred (ambiguous against a legitimately static screen).
-- [ ] **CUQ-3.14** Per-frame letterbox auto-refresh can silently re-fit the crop to
-  transient content and drift coordinates. *medium*
+- [x] **CUQ-3.14** Per-frame letterbox auto-refresh can silently re-fit the crop to
+  transient content and drift coordinates. *medium* — DONE (default-fixed, with a
+  knob): `_refresh_letterbox_crop_bbox` now applies consecutive-confirmation
+  hysteresis — a NEW bbox must be detected on `cfg.letterbox_refresh_consecutive`
+  (default 2) consecutive frames before it commits, so a single transient-content
+  frame (fullscreen image/video/splash) can no longer re-fit the crop and drift
+  every subsequent coordinate. A reverting bbox clears the pending state. This is
+  a defect fix so it ships **on by default** (the one-frame-delayed re-fit of a
+  genuine sustained change is immaterial); set the knob to 1 to restore the old
+  commit-on-first-detection behavior (env `GLASSBOX_LETTERBOX_REFRESH_CONSECUTIVE`).
+  Only active when the crop is auto-detected (where auto-refresh runs). Tests in
+  `test_runtime.py` (sustained change commits on the 2nd frame; a one-off
+  transient is discarded). **Remaining:** on-rig confirm the threshold suits the
+  observed bbox-detection noise.
 
 ### Input fidelity
 
