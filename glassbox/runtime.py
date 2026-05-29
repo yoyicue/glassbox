@@ -662,6 +662,7 @@ def build_phone(
             op.strip() for op in (cfg.semantic_plan_ops or "").split(",") if op.strip()
         ),
         detect_icons_in_perceive=cfg.detect_icons_in_perceive,
+        strict_target_matching=cfg.strict_target_matching,
     )
     return PhoneRuntime(
         phone=phone,

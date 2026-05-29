@@ -138,16 +138,24 @@ def find_text(
     *,
     fuzzy_ratio: float = 0.8,
     exact_first: bool = True,
+    ambiguity_guard: bool = False,
+    ambiguity_margin: float = 0.1,
 ) -> UIElement | None:
     """Find the element matching target in OCR results.
 
     fuzzy_ratio: levenshtein-like similarity threshold (0..1); 0.8 means 80% identical characters counts as a hit
     exact_first: when True, try exact matching first, fall back to fuzzy if nothing is found
+    ambiguity_guard: CUQ-1.5 — when True, the substring tier prefers the
+        closest-length containing row (not the first), and the fuzzy tier returns
+        None when the best match does not beat the runner-up by ``ambiguity_margin``
+        (so an ambiguous read escalates instead of guessing). Default off keeps
+        the historical first-match behavior byte-for-byte.
     """
     from glassbox.cognition.text_match import (
         fuzzy_ratio as _fr,
     )
     from glassbox.cognition.text_match import (
+        norm_text,
         text_contains,
         texts_match,
     )
@@ -157,16 +165,26 @@ def find_text(
             if el.text and texts_match(el.text, target):
                 return el
     # substring
-    for el in elements:
-        if el.text and text_contains(el.text, target):
-            return el
+    containing = [el for el in elements if el.text and text_contains(el.text, target)]
+    if containing:
+        if ambiguity_guard:
+            tgt_len = len(norm_text(target))
+            return min(containing, key=lambda el: abs(len(norm_text(el.text)) - tgt_len))
+        return containing[0]
     # fuzzy
     best: UIElement | None = None
     best_ratio = fuzzy_ratio
+    second_best_ratio = 0.0
     for el in elements:
         if not el.text:
             continue
         r = _fr(target, el.text)
         if r >= best_ratio:
+            if best is not None:
+                second_best_ratio = max(second_best_ratio, best_ratio)
             best, best_ratio = el, r
+        elif r > second_best_ratio:
+            second_best_ratio = r
+    if ambiguity_guard and best is not None and (best_ratio - second_best_ratio) < ambiguity_margin:
+        return None
     return best

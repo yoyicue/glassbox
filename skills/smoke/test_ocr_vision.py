@@ -90,6 +90,31 @@ def test_canonical_label_normalizes_ocr_confusions_for_aliases():
 
 # ─── find_text / find_button integration ─────────────────────────────
 @pytest.mark.smoke
+def test_find_text_ambiguity_guard_prefers_closest_and_escalates():
+    """CUQ-1.5: the ambiguity guard prefers the closest-length containing row
+    and returns None on a near-tie fuzzy read; default (off) keeps first-match."""
+    from glassbox.cognition import find_text
+
+    substr = [
+        UIElement(type="text", box=Box(x=0, y=0, w=200, h=10),
+                  text="系统通用设置项", confidence=0.9, element_id=0),  # long, contains 通用
+        UIElement(type="text", box=Box(x=0, y=20, w=90, h=10),
+                  text="通用网络", confidence=0.9, element_id=1),          # closer to "通用"
+    ]
+    assert find_text(substr, "通用").element_id == 0  # default: first containing
+    assert find_text(substr, "通用", ambiguity_guard=True).element_id == 1  # closest length
+
+    ambiguous = [
+        UIElement(type="text", box=Box(x=0, y=0, w=80, h=10),
+                  text="abcdefgX", confidence=0.9, element_id=0),
+        UIElement(type="text", box=Box(x=0, y=20, w=80, h=10),
+                  text="abcdefXh", confidence=0.9, element_id=1),
+    ]
+    assert find_text(ambiguous, "abcdefgh") is not None  # default: guesses one
+    assert find_text(ambiguous, "abcdefgh", ambiguity_guard=True) is None  # near-tie -> escalate
+
+
+@pytest.mark.smoke
 def test_find_text_matches_em_dash_with_hyphen_query():
     from glassbox.cognition.ocr_vision import find_text
     elements = [

@@ -171,6 +171,7 @@ class Phone:
         auto_refresh_letterbox_crop: bool = False,
         semantic_plan_ops: frozenset[str] | None = None,
         detect_icons_in_perceive: bool = False,
+        strict_target_matching: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -197,6 +198,9 @@ class Phone:
         # CUQ-2.1: inject no-text icon regions into perceive() so icon-only
         # controls become tap candidates. Flag-gated (default off).
         self._detect_icons_in_perceive = bool(detect_icons_in_perceive)
+        # CUQ-1.5: ambiguity-aware find_text (closest-length substring + fuzzy
+        # margin). Flag-gated (default off) — changes which element a tap hits.
+        self._strict_target_matching = bool(strict_target_matching)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.
@@ -1220,7 +1224,8 @@ class Phone:
         """
         scene = self.perceive()
         return find_text(self._rows_before_nav_title(scene.elements),
-                         target, fuzzy_ratio=fuzzy_ratio)
+                         target, fuzzy_ratio=fuzzy_ratio,
+                         ambiguity_guard=self._strict_target_matching)
 
     def _vlm_reground_selection(self, target: str, *, fuzzy_ratio: float) -> UIElement | None:
         """CUQ-0.4: selection-time VLM escalation (P1 trigger #2 — target not

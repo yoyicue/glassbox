@@ -216,6 +216,14 @@ class AgentConfig(BaseSettings):
     perceive and changes the candidate set); validate on-rig before enabling.
     Scene classification is unaffected (icons are injected after classifiers)."""
 
+    strict_target_matching: bool = False
+    """CUQ-1.5: make find_text ambiguity-aware — the substring tier prefers the
+    closest-length containing row (not the first), and the fuzzy tier returns no
+    match when the best candidate does not beat the runner-up by a margin, so an
+    ambiguous read escalates (e.g. to VLM grounding) instead of guessing the
+    wrong row. Default off (changes which element a tap resolves to); validate
+    on-rig before enabling."""
+
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 
