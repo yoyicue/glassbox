@@ -197,6 +197,10 @@ class Phone:
         # CUQ-2.1: inject no-text icon regions into perceive() so icon-only
         # controls become tap candidates. Flag-gated (default off).
         self._detect_icons_in_perceive = bool(detect_icons_in_perceive)
+        # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
+        # into the next tap's metadata so selection_source is recorded at
+        # selection time rather than inferred post-hoc.
+        self._last_selection_source: str = "ocr"
         # CJK type() routes through the clipboard; the A-dance foregrounds apps
         # via HID (opening from the Home screen), needing the controlled app's
         # Home-screen name(s) and a springboard icon map.
@@ -1282,6 +1286,7 @@ class Phone:
         while time.monotonic() < deadline:
             el = self.find_text(target, fuzzy_ratio=fuzzy_ratio)
             if el is not None:
+                self._last_selection_source = "ocr"
                 if self.recorder is not None:
                     self.recorder.verdict(f"expect_text({target!r})", passed=True)
                 return el
@@ -1293,6 +1298,7 @@ class Phone:
         # VLM is disabled, so default behavior is unchanged.
         grounded = self._vlm_reground_selection(target, fuzzy_ratio=fuzzy_ratio)
         if grounded is not None:
+            self._last_selection_source = "vlm"
             if self.recorder is not None:
                 self.recorder.verdict(f"expect_text({target!r})", passed=True, message="vlm_grounded")
             return grounded
@@ -1542,10 +1548,11 @@ class Phone:
         via: str,
         target: str,
         actuation_options: dict | None = None,
+        selection_source: str | None = None,
     ) -> tuple[str, ActuationPlan, dict]:
         control_bucket = control_bucket_for_element(element, viewport_size=self._viewport_size())
         if self._preferred_actuation_method(control_bucket) == "keyboard_focus_activate":
-            plan, metadata = self._target_keyboard_focus_plan(
+            op, (plan, metadata) = "key", self._target_keyboard_focus_plan(
                 element=element,
                 intent=intent,
                 via=f"{via}:keyboard_focus_activate",
@@ -1554,15 +1561,20 @@ class Phone:
                 keycode=_KEY_RETURN,
                 actuation_options=actuation_options,
             )
-            return "key", plan, metadata
-        plan, metadata = self._target_tap_plan(
-            element=element,
-            intent=intent,
-            via=via,
-            target=target,
-            actuation_options=actuation_options,
-        )
-        return "tap", plan, metadata
+        else:
+            op, (plan, metadata) = "tap", self._target_tap_plan(
+                element=element,
+                intent=intent,
+                via=via,
+                target=target,
+                actuation_options=actuation_options,
+            )
+        # CUQ-2.9: record how the target was resolved at selection time, so the
+        # success-rate harness reads the real source instead of inferring it
+        # post-hoc from "was the scene VLM-described".
+        if selection_source:
+            metadata = {**metadata, "selection_source": selection_source}
+        return op, plan, metadata
 
     def _actuation_offset(self, control_bucket: dict[str, str]):
         profile = getattr(self.action_orchestrator, "actuation_profile", None)
@@ -1641,6 +1653,7 @@ class Phone:
             via="tap_text",
             target=target,
             actuation_options=actuation_options,
+            selection_source=self._last_selection_source,
         )
         return self._execute_action(
             op,
@@ -1779,6 +1792,7 @@ class Phone:
             via="tap_intent",
             target=intent,
             actuation_options=actuation_options,
+            selection_source="vlm",  # CUQ-2.9: matched a VLM-derived intent label
         )
         return self._execute_action(
             op,

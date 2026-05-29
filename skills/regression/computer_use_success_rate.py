@@ -258,6 +258,12 @@ def _verification_source(run_dir: Path, action: Mapping[str, Any]) -> str:
 
 def _selection_source(run_dir: Path, action: Mapping[str, Any]) -> str:
     metadata = _action_metadata(action)
+    # CUQ-2.9: prefer the source stamped at selection time (ocr/vlm/...) over the
+    # post-hoc "was the before-scene VLM-described" inference, which conflates
+    # selection-time VLM with verification-time VLM.
+    stamped = metadata.get("selection_source")
+    if isinstance(stamped, str) and stamped in SOURCE_VALUES:
+        return stamped
     if metadata.get("target_identity") or metadata.get("target") or metadata.get("label"):
         return _source_from_scene(run_dir, action.get("before_command") or action.get("before_requested"))
     if str(action.get("op") or "") in {"home", "back", "recents", "control_center", "notification_center"}:

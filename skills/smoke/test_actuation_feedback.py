@@ -357,6 +357,28 @@ def test_one_stubborn_control_does_not_poison_shared_bucket(tmp_path):
 
 
 @pytest.mark.smoke
+def test_tap_text_records_ocr_selection_source(tmp_path):
+    """CUQ-2.9: a normal OCR-resolved tap stamps selection_source='ocr' into the
+    recorded command, so the harness reads the real source."""
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store)
+    phone = Phone(
+        source=_ImageSource([_frame()] * 8),
+        ocr=_TargetOCR(),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+        perceive_cache_diff=0.0,
+    )
+
+    phone.tap_text("Go")
+    orchestrator.close()
+
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[0]["command"]["selection_source"] == "ocr"
+
+
+@pytest.mark.smoke
 def test_record_correction_pair_rejects_outlier_delta():
     """CUQ-3.8: a small candidate-point correction is learned; an implausibly
     large missed->landed delta (a mis-pairing) is rejected, not learned, so one

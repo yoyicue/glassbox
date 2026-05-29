@@ -394,9 +394,14 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   core `find_text`/`text_match` still match clock noise. *medium*
 - [ ] **CUQ-2.8** `find_text` substring tier runs before fuzzy and matches short
   needles inside long rows. *medium* (subsumed by CUQ-1.5)
-- [ ] **CUQ-2.9** `selection_source` is inferred post-hoc ("was the scene
+- [x] **CUQ-2.9** `selection_source` is inferred post-hoc ("was the scene
   VLM-described") rather than recorded at selection time — the headline diagnostic
-  is unreliable. *medium*
+  is unreliable. *medium* — DONE: `_target_actuation_plan` stamps a
+  `selection_source` into the recorded command; `tap_text` stamps `expect_text`'s
+  real source (`"ocr"`, or `"vlm"` when CUQ-0.4 grounding resolved it),
+  `tap_intent` stamps `"vlm"`; the harness `_selection_source` now prefers a
+  stamped value over inference. Tests cover both. (`tap_button`/`tap_element`/
+  `tap_xy` still infer — the harness handles the mix.)
 - [ ] **CUQ-2.10** `whitebox_hint` (asset_match / accessibility_id / deep_link) is
   audit-only metadata and never influences selection or tap point. *medium*
 

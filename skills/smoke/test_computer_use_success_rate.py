@@ -382,6 +382,16 @@ def test_semantic_verdict_keeps_scene_progress_in_stable_unknown_bucket():
     assert semantic_verdict("failed", {"verifier": "scene_progressed", "confidence": 0.7}) == "failed"
 
 
+def test_selection_source_prefers_stamped_value(tmp_path):
+    """CUQ-2.9: a selection_source stamped at selection time is used as-is,
+    rather than inferred post-hoc from whether the scene was VLM-described."""
+    stamped = {"command": {"type": "tap", "target": "蓝牙", "selection_source": "vlm"}}
+    assert success_rate._selection_source(tmp_path, stamped) == "vlm"
+    # No stamp -> falls back to inference (no before-scene here -> "none").
+    unstamped = {"command": {"type": "tap", "target": "蓝牙"}, "before_command": None}
+    assert success_rate._selection_source(tmp_path, unstamped) in {"ocr", "none"}
+
+
 def test_coverage_warnings_flag_dead_p1_p2_signals(tmp_path):
     """CUQ-3.2: a benchmark whose task actions never carried expected_state / VLM
     calls warns that the P1/P2 stages were not exercised on this run, instead of
