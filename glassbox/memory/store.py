@@ -121,12 +121,17 @@ def wrap_with_memory_if_enabled(
     app_version: str | None = None,
     enabled: bool | None = None,
     memory_dir: str | Path | None = None,
+    autosave_every: int = 0,
 ) -> ScreenMemory | None:
     """A ScreenMemory over the app's stored UTG when memory is enabled.
 
     `enabled=None` keeps the legacy env-gated behavior. Runtime assembly should
     pass AgentConfig fields explicitly so tests and scripts do not depend on
     process-global environment reads.
+
+    When ``autosave_every > 0`` the returned memory persists its UTG every N
+    observations (CUQ-3.22), so a mid-run crash keeps the learned graph instead
+    of losing everything since the last (close-only) save.
     """
     if enabled is None:
         enabled = (os.environ.get("GLASSBOX_ENABLE_MEMORY") or "").strip().lower() in _TRUE_ENV_VALUES
@@ -134,4 +139,9 @@ def wrap_with_memory_if_enabled(
         return None
     memory_dir = memory_dir or os.environ.get("GLASSBOX_MEMORY_DIR")
     utg = load_utg(bundle_id, app_version=app_version, memory_dir=memory_dir)
-    return ScreenMemory(utg)
+    autosave = (
+        (lambda graph: save_utg(graph, memory_dir=memory_dir))
+        if autosave_every and autosave_every > 0
+        else None
+    )
+    return ScreenMemory(utg, autosave=autosave, autosave_every=autosave_every or 0)

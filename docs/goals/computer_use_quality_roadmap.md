@@ -556,8 +556,13 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   never validates that an action landed where the edge predicted. *medium*
 - [ ] **CUQ-3.21** `locate()`/`expected_elements()` position priors have no runtime
   consumer; OCR-ROI narrowing and candidate-scoring priors are dead. *medium*
-- [ ] **CUQ-3.22** UTG is persisted only on `runtime.close()`; a mid-run crash
-  loses the whole session's learned graph. *quick-win*
+- [x] **CUQ-3.22** UTG is persisted only on `runtime.close()`; a mid-run crash
+  loses the whole session's learned graph. *quick-win* — DONE: `ScreenMemory`
+  takes an injectable `autosave` callback + `autosave_every` and persists the
+  UTG every N observations (best-effort; IO stays out of the graph module).
+  `wrap_with_memory_if_enabled` wires it to `save_utg` for runtime-owned memory;
+  new `cfg.memory_autosave_every` (default 12). Externally-provided memory
+  (tests) stays close-only. Tests in `test_memory_observe.py`.
 - [ ] **CUQ-3.23** BFS path is not reliability-weighted (low-success edges aren't
   avoided). *low* (fold into CUQ-0.5)
 

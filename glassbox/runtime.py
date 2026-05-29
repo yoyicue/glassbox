@@ -509,6 +509,7 @@ def build_phone(
             app_version=app_version,
             enabled=cfg.enable_memory,
             memory_dir=cfg.memory_dir,
+            autosave_every=cfg.memory_autosave_every,
         )
 
     vlm_backend = select_vlm_backend(cfg)

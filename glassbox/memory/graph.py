@@ -7,8 +7,10 @@ See docs/design/screen_memory.md §5/§6.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from collections import deque
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from glassbox.cognition.text_match import norm_text
@@ -32,7 +34,14 @@ Action = ActionRecord | tuple[str, dict]
 class ScreenMemory:
     """A live UTG. `observe()` grows it; `recognize/locate/path` query it."""
 
-    def __init__(self, utg: UTG, *, match_threshold: float = SIGNATURE_MATCH_THRESHOLD):
+    def __init__(
+        self,
+        utg: UTG,
+        *,
+        match_threshold: float = SIGNATURE_MATCH_THRESHOLD,
+        autosave: Callable[[UTG], None] | None = None,
+        autosave_every: int = 0,
+    ):
         self.utg = utg
         self.match_threshold = match_threshold
         self._last_node_id: str | None = None
@@ -41,6 +50,13 @@ class ScreenMemory:
             (int(n[4:]) for n in utg.nodes if n.startswith("scr_") and n[4:].isdigit()),
             default=0,
         )
+        # CUQ-3.22: persist the growing UTG periodically so a mid-run crash/kill
+        # does not lose the whole session's learned graph (it was previously
+        # saved only on runtime.close()). The callback does the IO so this module
+        # stays IO-free; default off for externally-owned memory.
+        self._autosave = autosave
+        self._autosave_every = max(0, int(autosave_every))
+        self._observes_since_save = 0
 
     # ─── write ───────────────────────────────────────────────────────
     def observe(
@@ -64,7 +80,19 @@ class ScreenMemory:
             if self._action_is_learnable(action):
                 self._bump_edge(self._last_node_id, node.screen_id, action)
         self._last_node_id = node.screen_id
+        self._maybe_autosave()
         return node
+
+    def _maybe_autosave(self) -> None:
+        """Best-effort periodic persistence (CUQ-3.22). Never let a save error
+        break the observation path."""
+        if self._autosave is None or self._autosave_every <= 0:
+            return
+        self._observes_since_save += 1
+        if self._observes_since_save >= self._autosave_every:
+            self._observes_since_save = 0
+            with contextlib.suppress(Exception):
+                self._autosave(self.utg)
 
     def merge_scene_metadata(
         self,

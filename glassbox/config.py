@@ -255,6 +255,11 @@ class AgentConfig(BaseSettings):
     memory_dir: str | None = None
     """UTG store directory (defaults to <repo_root>/memory/utg/ when memory is enabled)."""
 
+    memory_autosave_every: int = 12
+    """Persist the UTG every N observations (CUQ-3.22) so a mid-run crash/kill
+    keeps the session's learned graph instead of losing everything since the
+    last close-only save. 0 disables incremental saves (close-only)."""
+
     actuation_profile_dir: str | None = None
     """ActuationProfile store directory (defaults to <repo_root>/memory/actuation/)."""
 

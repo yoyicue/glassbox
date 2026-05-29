@@ -531,3 +531,41 @@ def test_key_actions_use_modifier_and_keycode_identity():
 
     assert len(mem.utg.edges) == 2
     assert {edge.action_identity for edge in mem.utg.edges} == {"key:8:47", "key:8:40"}
+
+
+@pytest.mark.smoke
+def test_autosave_persists_every_n_observations():
+    """CUQ-3.22: incremental persistence fires every N observations so a mid-run
+    crash keeps the learned graph (not only on close)."""
+    saved: list[int] = []
+    mem = ScreenMemory(
+        UTG(bundle_id="com.x"),
+        autosave=lambda utg: saved.append(len(utg.nodes)),
+        autosave_every=2,
+    )
+
+    mem.observe(_scene("登录", "密码"))
+    assert saved == []  # below threshold
+    mem.observe(_scene("设置", "隐私", "关于"),
+                last_action=("tap", {"via": "tap_text", "target": "设置"}))
+    assert len(saved) == 1  # fired at the 2nd observation
+    mem.observe(_scene("通用", "辅助功能"))
+    assert len(saved) == 1  # counter reset; below threshold again
+    mem.observe(_scene("电池", "隐私与安全性"))
+    assert len(saved) == 2
+
+
+@pytest.mark.smoke
+def test_autosave_off_by_default_and_tolerates_save_errors():
+    # Default (no autosave): never persists mid-run.
+    mem = ScreenMemory(UTG(bundle_id="com.x"))
+    for _ in range(5):
+        mem.observe(_scene("登录", "密码"))  # must not raise
+
+    # A failing autosave callback must not break observe().
+    def boom(_utg):
+        raise OSError("disk full")
+
+    noisy = ScreenMemory(UTG(bundle_id="com.x"), autosave=boom, autosave_every=1)
+    node = noisy.observe(_scene("设置"))
+    assert node is not None
