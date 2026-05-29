@@ -10,6 +10,7 @@ from skills.regression.computer_use_success_rate import (
     aggregate_benchmark,
     aggregate_benchmark_manifest,
     compare_benchmarks,
+    coverage_warnings,
     main,
     normalize_status,
     semantic_verdict,
@@ -379,6 +380,43 @@ def test_semantic_verdict_keeps_scene_progress_in_stable_unknown_bucket():
     assert semantic_verdict("unknown", {"verifier": "scene_progressed", "confidence": 0.7}) == "unknown"
     assert semantic_verdict("unknown", {"verifier": "scene_progressed", "confidence": 0.2}) == "unknown"
     assert semantic_verdict("failed", {"verifier": "scene_progressed", "confidence": 0.7}) == "failed"
+
+
+def test_coverage_warnings_flag_dead_p1_p2_signals(tmp_path):
+    """CUQ-3.2: a benchmark whose task actions never carried expected_state / VLM
+    calls warns that the P1/P2 stages were not exercised on this run, instead of
+    silently reporting zero."""
+    run_dir = tmp_path / "run"
+    _write_json(run_dir / "manifest.json", {"run_id": "run", "device": {"model": "iphone_test"}})
+    _write_json(run_dir / "scenes" / "before.json", {"page_id": "settings/root", "vlm_status": "error"})
+    _write_json(run_dir / "scenes" / "after.json", {"page_id": "settings/wifi", "vlm_status": "error", "elements": []})
+    tap = {
+        "attempt_id": "act_000000", "attempt_group_id": "grp_000000", "actor": "agent",
+        "op": "tap", "intent": {"name": "tap"},
+        "before_command": {"scene": "scenes/before.json"},
+        "after": {"scene": "scenes/after.json", "scene_id": "scn0"},
+        "command": {"type": "tap", "target": "无线局域网"},  # no expected_state, no vlm_calls
+        "semantic": {"status": "succeeded", "verifier": "scene_progressed", "confidence": 0.7},
+        "observation": {"duration_ms": 10},
+    }
+    groups = [{"attempt_group_id": "grp_000000", "op": "tap", "actor": "agent",
+               "attempt_ids": ["act_000000"], "group_status": "succeeded", "retry_count": 0}]
+    _append_jsonl(run_dir / "actions.jsonl", tap)
+    _append_jsonl(run_dir / "attempt_groups.jsonl", *groups)
+    _append_jsonl(run_dir / "audit.jsonl")
+
+    payload = aggregate_benchmark([run_dir])
+    assert payload["metrics"]["expected_state_coverage"] == 0.0
+    assert payload["metrics"]["vlm_action_coverage"] == 0.0
+    warnings = coverage_warnings(payload)
+    assert any("expected_state_coverage=0" in w for w in warnings)
+    assert any("vlm_action_coverage=0" in w for w in warnings)
+    assert validate_benchmark(payload) == []
+
+    # The default fixture DOES carry expected_state -> coverage > 0, no warning.
+    full = aggregate_benchmark([_run_dir(tmp_path / "full")])
+    assert full["metrics"]["expected_state_coverage"] > 0.0
+    assert not any("expected_state_coverage=0" in w for w in coverage_warnings(full))
 
 
 def test_scroll_fillers_excluded_from_action_success_rate(tmp_path):

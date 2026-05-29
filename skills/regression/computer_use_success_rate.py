@@ -628,6 +628,19 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     succeeded = sum(1 for action in task_actions if action.get("verdict") == "succeeded")
     unknown = sum(1 for action in task_actions if action.get("verdict") == "unknown")
     scroll_succeeded = sum(1 for action in scroll_actions if action.get("verdict") == "succeeded")
+    # CUQ-3.2: how much of the run actually exercised the P1/P2 stages. These are
+    # ~0 when the strategy ladder / expected-state verification are dead on the
+    # path under test, so a real success-rate delta cannot be attributed to them
+    # — surface that instead of silently reporting zero (see coverage_warnings).
+    expected_state_covered = sum(
+        1
+        for action in task_actions
+        if isinstance(action.get("expected_state"), Mapping)
+        and str(action["expected_state"].get("kind") or "unknown") != "unknown"
+    )
+    vlm_action_covered = sum(
+        1 for action in task_actions if _metric_int(action, "vlm_calls") > 0
+    )
     task_count = len(tasks)
     task_success = sum(1 for task in tasks if task.get("outcome") == "succeeded")
     recoveries = sum(_task_recovery_count(task) for task in tasks)
@@ -660,6 +673,8 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         "scroll_success_rate": (
             scroll_succeeded / len(scroll_actions) if scroll_actions else 0.0
         ),
+        "expected_state_coverage": expected_state_covered / denominator if denominator else 0.0,
+        "vlm_action_coverage": vlm_action_covered / denominator if denominator else 0.0,
         "root_pages_coverage": root_pages_coverage,
         "recoveries": recoveries,
         "strategy_switches": sum(
@@ -680,6 +695,32 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             else 0.0
         ),
     }
+
+
+def coverage_warnings(payload: Mapping[str, Any]) -> list[str]:
+    """CUQ-3.2: flag stages a benchmark did not actually exercise, so a
+    success-rate delta is not silently attributed to a dead P1/P2 path. Empty
+    when there are no task-meaningful actions to judge."""
+    metrics = payload.get("metrics")
+    if not isinstance(metrics, Mapping):
+        return []
+    task_actions = _metric_int(metrics, "task_action_count")
+    if task_actions <= 0:
+        return []
+    warnings: list[str] = []
+    if float(metrics.get("expected_state_coverage", 0.0) or 0.0) == 0.0:
+        warnings.append(
+            f"expected_state_coverage=0 over {task_actions} task actions — P2 "
+            "expected-state verification did not run on this task; success/unknown "
+            "rates reflect the generic scene_progressed path only."
+        )
+    if float(metrics.get("vlm_action_coverage", 0.0) or 0.0) == 0.0:
+        warnings.append(
+            f"vlm_action_coverage=0 over {task_actions} task actions — the P1 VLM "
+            "gate did not fire; a success-rate delta cannot be attributed to VLM "
+            "grounding."
+        )
+    return warnings
 
 
 def _task_recovery_count(task: Mapping[str, Any]) -> int:
@@ -1118,6 +1159,8 @@ def compare_benchmarks(
         "task_action_count",
         "scroll_action_count",
         "scroll_success_rate",
+        "expected_state_coverage",
+        "vlm_action_coverage",
         "root_pages_coverage",
         "recoveries",
         "strategy_switches",
@@ -1234,6 +1277,8 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
         for error in errors:
             print(f"ERROR: {error}")
         return 1
+    for warning in coverage_warnings(payload):
+        print(f"WARNING: {warning}")
     _write_json(args.out.expanduser().resolve(), payload)
     print(args.out.expanduser().resolve())
     return 0
@@ -1303,6 +1348,8 @@ def main(argv: list[str] | None = None) -> int:
             for error in errors:
                 print(f"ERROR: {error}")
             return 1
+        for warning in coverage_warnings(payload):
+            print(f"WARNING: {warning}")
         _write_json(args.out.expanduser().resolve(), payload)
         print(args.out.expanduser().resolve())
         return 0

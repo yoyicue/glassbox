@@ -420,7 +420,15 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   183-190 accordingly.
 
 ### CUQ-3.2 — Harness's P1/P2 telemetry columns are structurally zero on every real run
-- [ ] **high · effort large (coupled to Tier 0)**
+- [~] **high · effort large (coupled to Tier 0)** — VISIBILITY DONE: the harness now
+  reports `expected_state_coverage` + `vlm_action_coverage` and `coverage_warnings`
+  prints a loud `WARNING:` when a benchmark with task actions has zero coverage —
+  turning the silent dead-signal condition into a visible one (the small-first
+  fix the audit recommended). Wired into both `run`/`run-ios-settings` CLI paths
+  and the `compare` delta display. Tests in `test_computer_use_success_rate.py`.
+  **Remaining:** the larger work of routing the walkthrough through
+  `default_semantic_action_plan` / `expected_state` (CUQ-0.1/0.3) so coverage is
+  non-zero on real runs — that's the Tier-0 rollout, needs the rig.
 - Gap: `vlm_calls`, `vlm_cache_*`, `expected_state`, `vlm_triggers`, semantic
   `strategy` are emitted only by `_execute_semantic_plan` (no production caller),
   so they aggregate to ~0 — the benchmark cannot attribute a success-rate delta
