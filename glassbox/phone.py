@@ -2009,6 +2009,10 @@ class Phone:
         }
         if primitive_name is not None:
             metadata["assistive_touch_primitive"] = primitive_name
+        # CUQ-3.12: AssistiveTouch menu taps verified on a possibly-stale frame.
+        # Reopen for a fresh frame on PicoKVM (no-op on other backends) so the
+        # post-tap verdict is read off live pixels.
+        metadata.update(self._picokvm_fresh_verify_kwargs("tap"))
         result = self._execute_action(
             "tap",
             lambda: self.effector.tap(px, py),
@@ -2171,6 +2175,11 @@ class Phone:
             expect_visible=expect_visible,
             expect_page=expect_page,
         )
+        # CUQ-3.12: default the swipe verification to a fresh-frame reopen on
+        # PicoKVM (no-op on other backends), without overriding any settle/fresh
+        # option the caller set explicitly.
+        for key, value in self._picokvm_fresh_verify_kwargs("swipe").items():
+            action_kwargs.setdefault(key, value)
         return self._execute_action(
             "swipe",
             lambda: self.effector.swipe(

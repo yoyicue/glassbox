@@ -533,8 +533,13 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
 ### Capture medium companions
 - [ ] **CUQ-3.11** No absolute staleness-by-age check: a buffered frame older than
   the action is never rejected by age. *medium*
-- [ ] **CUQ-3.12** AssistiveTouch menu taps and the `swipe_xy` fallback omit the
-  PicoKVM fresh-verify reopen, verifying on possibly-stale frames. *quick-win*
+- [x] **CUQ-3.12** AssistiveTouch menu taps and the `swipe_xy` fallback omit the
+  PicoKVM fresh-verify reopen, verifying on possibly-stale frames. *quick-win* —
+  DONE: `_assistive_touch_tap_visible_item` and `swipe_xy` now thread
+  `_picokvm_fresh_verify_kwargs` (reopen + stream-until-match), so their post-action
+  verdict reads off a fresh frame on PicoKVM; no-op on other backends and
+  `swipe_xy` respects a caller-set settle strategy (`setdefault`). Test in
+  `test_effector_integration.py`.
 - [ ] **CUQ-3.13** No H.264 liveness/garble detection or bounded reconnect loop
   (one read-failure path is two attempts then raise). *medium*
 - [ ] **CUQ-3.14** Per-frame letterbox auto-refresh can silently re-fit the crop to

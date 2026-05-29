@@ -9,7 +9,35 @@ import numpy as np
 import pytest
 
 from glassbox.cognition import Box, UIElement
+from glassbox.effector import ActionResult
 from glassbox.perception.source import Frame
+
+
+@pytest.mark.smoke
+def test_swipe_xy_threads_picokvm_fresh_verify(mock_phone, monkeypatch):
+    """CUQ-3.12: swipe_xy defaults to the PicoKVM fresh-frame verify reopen
+    (no-op off-PicoKVM), without overriding a caller-set settle strategy."""
+    captured: dict = {}
+
+    def fake_execute(op, call, **kwargs):
+        captured.clear()
+        captured.update(kwargs)
+        return ActionResult(ok=True, backend="mock", connected=True)
+
+    monkeypatch.setattr(mock_phone, "_execute_action", fake_execute)
+    monkeypatch.setattr(
+        mock_phone,
+        "_picokvm_fresh_verify_kwargs",
+        lambda action: {"settle_strategy": "stream_until_match", "fresh_source_reopen": True},
+    )
+
+    mock_phone.swipe_xy(10, 20, 10, 200)
+    assert captured["settle_strategy"] == "stream_until_match"
+    assert captured["fresh_source_reopen"] is True
+
+    # A caller-set settle strategy is respected (not overridden by the default).
+    mock_phone.swipe_xy(10, 20, 10, 200, settle_strategy="fixed_delay_after")
+    assert captured["settle_strategy"] == "fixed_delay_after"
 
 
 # ─── Phone.tap_text → MockEffector.tap end-to-end ────────────────────
