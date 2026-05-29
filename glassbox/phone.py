@@ -175,6 +175,7 @@ class Phone:
         require_home_icon_grid: bool = False,
         reverify_fresh_frame: bool = False,
         coldstart_promote_controls: bool = False,
+        vlm_set_of_mark: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -215,6 +216,10 @@ class Phone:
         # and aim the tap at the row's right-margin control. Flag-gated (default
         # off); only reachable when cold-start annotation is enabled.
         self._coldstart_promote_controls = bool(coldstart_promote_controls)
+        # CUQ-2.5: enable Set-of-Mark grounding on describe() escalations — the
+        # VLM correlates elements to numbered marks it can see. Flag-gated
+        # (default off); only matters when a VLM client is wired.
+        self._vlm_set_of_mark = bool(vlm_set_of_mark)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.
@@ -1166,12 +1171,17 @@ class Phone:
         self._needs_stable_frame = False
         return scene
 
-    def describe(self, *, scene_hint: str | None = None) -> Scene:
+    def describe(self, *, scene_hint: str | None = None, set_of_mark: bool | None = None) -> Scene:
         """Run Kimi Layer 3 to populate _last_scene with intent_label / scene_type.
 
         Slow (~6-15s) and billed, so only call it explicitly at key
         decision points.
         Kimi not wired up → just return the last scene (non-blocking).
+
+        CUQ-2.5: ``set_of_mark`` draws numbered marks on the frame so the VLM
+        correlates each element to its region by a mark it can see (better
+        grounding on dense/ambiguous scenes). None defers to the
+        ``vlm_set_of_mark`` flag; an explicit bool overrides it.
         """
         if self._last_scene is None:
             self.perceive()
@@ -1185,11 +1195,13 @@ class Phone:
         if hasattr(self.kimi, "last_hit"):
             self.kimi.last_hit = False
         t0 = time.monotonic()
+        use_som = self._vlm_set_of_mark if set_of_mark is None else bool(set_of_mark)
         enrich_scene(
             self._last_scene,
             self._last_frame,
             self.kimi,
             scene_hint=scene_hint,
+            set_of_mark=use_som,
         )
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         vlm_ok = self._last_scene.vlm_status == "ok"

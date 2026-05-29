@@ -591,6 +591,7 @@ def enrich_scene(
     client: _DescribeSceneMixin,
     *,
     scene_hint: str | None = None,
+    set_of_mark: bool = False,
 ) -> Scene:
     """Run Kimi describe_scene, populate intent_label onto scene.elements and
     scene_type onto scene.scene_type. Modifies and returns the scene in place.
@@ -623,6 +624,11 @@ def enrich_scene(
         return scene
 
     try:
+        # Only forward set_of_mark when enabled: legacy/stub describe_scene
+        # signatures may not accept the kwarg, so a False default must keep the
+        # call byte-identical (the VLMRequest path is always safe — the field
+        # defaults False on the request object).
+        som_kwargs = {"set_of_mark": True} if set_of_mark else {}
         if isinstance(frame_image, Frame):
             try:
                 resp = client.describe_scene(
@@ -631,6 +637,7 @@ def enrich_scene(
                         elements=request_elements,
                         scene_hint=scene_hint,
                         system_prompt=SYSTEM_DESCRIBE,
+                        set_of_mark=set_of_mark,
                     )
                 )
             except TypeError:
@@ -638,12 +645,14 @@ def enrich_scene(
                     frame_image=_frame_png_bytes(frame_image),
                     elements=payload,
                     scene_hint=scene_hint,
+                    **som_kwargs,
                 )
         else:
             resp = client.describe_scene(
                 frame_image=frame_image,
                 elements=payload,
                 scene_hint=scene_hint,
+                **som_kwargs,
             )
     except Exception as e:
         _mark_vlm(scene, "error", scene_hint=scene_hint, client=client, error=str(e))

@@ -179,6 +179,38 @@ def test_enrich_scene_fills_intent_and_scene_type():
 
 
 @pytest.mark.smoke
+def test_enrich_scene_forwards_set_of_mark_when_enabled():
+    """CUQ-2.5: enrich_scene plumbs set_of_mark to describe_scene so the gate's
+    grounding escalation can ask for numbered marks. Default off keeps the call
+    byte-identical (covered by every other enrich test using a fake with no
+    set_of_mark param)."""
+
+    @dataclass
+    class SoMKimi:
+        last_set_of_mark: bool | None = None
+
+        def describe_scene(self, *, frame_image, elements, scene_hint=None, set_of_mark=False):
+            del frame_image, elements, scene_hint
+            self.last_set_of_mark = set_of_mark
+            return KimiResponse(
+                raw_content="(fake)",
+                parsed={"scene_type": "settings_detail", "elements": []},
+                usage={"prompt_tokens": 0, "completion_tokens": 0},
+                model="fake",
+                elapsed_ms=1,
+            )
+
+    scene = _scene_with(_ocr_el(0, "蓝牙"))
+    on = SoMKimi()
+    enrich_scene(scene, b"<png>", on, set_of_mark=True)
+    assert on.last_set_of_mark is True
+
+    off = SoMKimi()
+    enrich_scene(_scene_with(_ocr_el(0, "蓝牙")), b"<png>", off)
+    assert off.last_set_of_mark is False  # default path never asks for marks
+
+
+@pytest.mark.smoke
 def test_enrich_scene_passes_hint_to_kimi():
     scene = _scene_with(_ocr_el(0, "继续"))
     kimi = FakeKimi(parsed_payload={"scene_type": "paywall", "elements": []})

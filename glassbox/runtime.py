@@ -697,6 +697,7 @@ def build_phone(
         require_home_icon_grid=cfg.require_home_icon_grid,
         reverify_fresh_frame=cfg.reverify_fresh_frame,
         coldstart_promote_controls=cfg.coldstart_promote_controls,
+        vlm_set_of_mark=cfg.vlm_set_of_mark,
     )
     return PhoneRuntime(
         phone=phone,

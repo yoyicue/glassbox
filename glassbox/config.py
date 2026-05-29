@@ -266,6 +266,14 @@ class AgentConfig(BaseSettings):
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 
+    vlm_set_of_mark: bool = False
+    """CUQ-2.5: enable Set-of-Mark grounding on VLM `describe()` escalations —
+    numbered red boxes are drawn on the frame so the VLM correlates each element
+    to a mark it can see, instead of mentally aligning text coordinates (better
+    grounding on dense/ambiguous scenes, at the cost of more tokens + sensitivity
+    to box accuracy). Env GLASSBOX_VLM_SET_OF_MARK. Requires a VLM client;
+    default off (measured at parity on the sparse eval set — opt in per app)."""
+
     coldstart_promote_controls: bool = False
     """CUQ-2.3: when a cold-start VLM annotation labels an element `toggle` or
     `slider`, promote it to the declared `switch`/`slider` element type and set

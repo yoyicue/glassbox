@@ -480,8 +480,20 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `_maybe_vlm_verify_expected_state` feeds it into the gate so trigger #3
   (classifier_conflict) actually fires. New `Scene.classifier_conflict` field;
   tests in `test_architecture_boundaries.py`.
-- [ ] **CUQ-2.5** Set-of-Mark grounding is implemented but never enabled by the
-  gate's `describe()` escalation. *medium* (pairs with CUQ-0.4)
+- [x] **CUQ-2.5** Set-of-Mark grounding is implemented but never enabled by the
+  gate's `describe()` escalation. *medium* (pairs with CUQ-0.4) — DONE
+  (flag-gated, default-off): the SoM renderer (`render_set_of_mark`) and the
+  `describe_scene(set_of_mark=...)` consumption (per-`id` mapping in
+  `enrich_scene`) already existed; the gap was that `enrich_scene` never
+  forwarded the flag and `describe()` never requested it. `enrich_scene` now
+  takes `set_of_mark` and forwards it (via `VLMRequest`, and only-when-True for
+  the legacy kwargs paths so non-SoM stubs stay byte-identical); `Phone.describe`
+  takes `set_of_mark` defaulting to the `vlm_set_of_mark` flag
+  (`cfg.vlm_set_of_mark`, env `GLASSBOX_VLM_SET_OF_MARK`), so every grounding /
+  verification `describe()` escalation (incl. CUQ-0.4's `_vlm_reground_selection`)
+  gets numbered marks when enabled. Default off → byte-identical. Test in
+  `test_vlm_kimi.py`. **Remaining:** on-rig A/B of SoM vs text-only grounding
+  accuracy on dense/ambiguous scenes before default-on.
 - [ ] **CUQ-2.6** `settings_detail` false-positives on third-party app screens via
   locale-generic body markers. *medium*
 - [x] **CUQ-2.7** Status-bar clock filtering lives only in the Settings policy;
