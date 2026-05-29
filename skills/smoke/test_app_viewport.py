@@ -51,6 +51,17 @@ class ShapeOCR:
 
 
 @pytest.mark.smoke
+def test_ipad_mini_6_shares_ipad_mini_7_geometry():
+    # iPad mini 6 and 7 ship the identical 8.3" panel and both use USB-C; the mini 6
+    # profile must resolve to the same pixel + point geometry so
+    # GLASSBOX_PHONE_MODEL=ipad_mini_6 works (same screen, different SoC only).
+    from glassbox.perception import device
+
+    assert device.get("ipad_mini_6") == device.get("ipad_mini_7") == (1488, 2266)
+    assert device.get_points("ipad_mini_6") == device.get_points("ipad_mini_7") == (744, 1133)
+
+
+@pytest.mark.smoke
 def test_app_scope_snapshot_crops_inner_viewport_and_records_projection_chain():
     img = np.arange(80 * 100 * 3, dtype=np.uint8).reshape((80, 100, 3))
     crop = LetterboxCrop(crop_bbox=(10, 5, 50, 40), frame_size=(100, 80), phone_size=(500, 400))

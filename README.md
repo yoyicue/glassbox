@@ -1,23 +1,34 @@
 # glassbox
 
-glassbox is an iOS-first computer-use runtime for driving a real device from
-screen observations. It wires frame capture, OCR/VLM perception, action
-execution, verification, recording, and screen memory behind pluggable seams.
+glassbox is a computer-use runtime for driving a real iPhone (**iOS**) or iPad
+(**iPadOS**) from screen observations. It wires frame capture, OCR/VLM
+perception, action execution, verification, recording, and screen memory behind
+pluggable seams.
+
+iOS and iPadOS are distinct Apple operating systems with a different input model,
+and glassbox drives each accordingly: the **iPhone/iOS** path is the original
+bring-up and rides the **AssistiveTouch** pointer; the **iPad/iPadOS** path — on
+the USB-C **iPad mini 6 / 7** (same 8.3″ display; bring-up validated on the mini
+7) — uses iPadOS's **native USB pointer and precise wheel scrolling** instead.
+They share one provider (`glassbox/ios`) with iPad-specific handling layered on
+top (`glassbox/ipados`).
 
 ## Why this approach: minimal intrusiveness
 
 glassbox is **out-of-band** — it observes via HDMI and acts via USB HID, with no
-code on the phone — so it changes the target device less than typical iOS
+code on the device — so it changes the target less than typical iOS/iPadOS
 automation:
 
 - **No app or test runner.** No WebDriverAgent / Appium / XCUITest, no companion
   app, no sideloading.
-- **No jailbreak, profile, or developer account.** Stock retail device, stock iOS.
+- **No jailbreak, profile, or developer account.** Stock retail device, stock
+  iOS / iPadOS.
 - **No code injection or instrumentation.** The app runs unmodified; glassbox
   sees the rendered screen (HDMI) and acts as a physical pointer/keyboard (HID).
-- **Built-in settings only.** Control rides on AssistiveTouch + system keyboard
-  shortcuts, so a few stock toggles must be set first (see
-  [iOS prerequisites](#ios-prerequisites-controlled-iphone)) — nothing is installed.
+- **Built-in settings only.** Control rides on the system pointer (AssistiveTouch
+  on iPhone, the native USB pointer on iPad) + system keyboard shortcuts, so a few
+  stock toggles must be set first (see
+  [device prerequisites](#ios-prerequisites-controlled-iphone)) — nothing is installed.
 - **Controller off-device.** All logic runs on macOS; the phone only mirrors
   video out and accepts HID in.
 
@@ -143,7 +154,7 @@ Each stage maps to a package:
 | Verification | `glassbox/verification` | Confirm the *semantic* effect of an action (scene/text diff, golden, verifiers) instead of trusting a transport ACK or raw pixel delta. |
 | Screen memory | `glassbox/memory` | A UTG-style graph of screens, elements, and transitions, persisted across runs. |
 | Observability | `glassbox/obs` | Recorder, artifacts, replay, and VLM/OCR caches. |
-| iOS platform | `glassbox/ios` | Scene classification, SpringBoard map, AssistiveTouch primitives, safe-area/recovery — the iOS provider behind the Platform seam. |
+| iOS / iPadOS platform | `glassbox/ios`, `glassbox/ipados` | Scene classification, SpringBoard map, AssistiveTouch primitives, safe-area/recovery — the iOS provider behind the Platform seam; `glassbox/ipados` adds iPad split-view (sidebar + detail) handling. |
 
 ### Pluggable seams
 
@@ -208,8 +219,11 @@ Full design and the phased migration plan live in
 ## Hardware setup
 
 The reference setup drives a real iPhone with a Luckfox PicoKVM sitting between
-the phone and the controller host. glassbox never touches the iPhone directly —
-it only talks to the PicoKVM over the network. A single USB-C Digital AV
+the device and the controller host. glassbox never touches the device directly —
+it only talks to the PicoKVM over the network. A USB-C **iPad mini 6 / 7
+(iPadOS)** uses the identical wiring; only the on-device setup and input model
+(native pointer + wheel) differ — see
+[device prerequisites](#ios-prerequisites-controlled-iphone). A single USB-C Digital AV
 Multiport Adapter on the iPhone carries both directions (HDMI video out + a
 USB-A host port for HID input) and also distributes power, while glassbox
 reaches the PicoKVM over plain HTTP:
@@ -271,19 +285,34 @@ as the PicoKVM calibration below (iPhone 17 Pro Max); a different phone or
 different slider positions can shift where the pointer lands and require
 re-calibration.
 
+#### iPad (iPadOS) — a different input model
+
+iPadOS supports a **native USB pointer and hardware keyboard**, so the iPad path
+does **not** use AssistiveTouch: the PicoKVM HID mouse drives the system pointer
+directly, scrolling uses the **precise HID wheel** (not swipe-flings), and the
+absolute-pointer fit is **auto-derived from the detected letterbox crop** instead
+of hand-measured. Native multi-touch HID (two-finger gestures) is **not**
+available — iPadOS gates it behind an MFi / USBDriverKit handshake — so the iPad
+still drives a single pointer + wheel, like the iPhone. Select it with
+`GLASSBOX_PHONE_MODEL=ipad_mini_6` or `ipad_mini_7` (they share one 8.3″ display,
+so one geometry fits both); the iPad setup, the wheel-scroll path, and the
+trackpad constraint are documented in `docs/design/ipad_mini_migration.md` and
+`docs/reference/picokvm_ipad_wheel.md`.
+
 ### Device support and calibration
 
-Two layers decide which iPhone this works on, and they are calibrated
-differently:
+Two layers decide which device (iPhone or iPad) this works on, and they are
+calibrated differently:
 
 - **Geometry (parameterized).** `glassbox/perception/device.py` ships a `DEVICES`
-  table covering the iPhone 15 / 16 / 17 families (standard / Pro / Pro Max),
-  with both native pixel sizes and UIKit point sizes. The model is selected with
-  `GLASSBOX_PHONE_MODEL` (default `iphone_17_pro_max`) and drives the letterbox
-  coordinate transform — so this layer is not hard-coded to one phone.
-- **PicoKVM calibration (single-device).** The end-to-end PicoKVM path was only
-  brought up and calibrated on an **iPhone 17 Pro Max** (the bring-up rig, dated
-  2026-05-21). The device-specific values live in `PicoKVMEffectorConfig`:
+  table covering the iPhone 15 / 16 / 17 families (standard / Pro / Pro Max) **and
+  the iPad mini 6 / 7** (which share one 8.3″ panel), with both native pixel sizes
+  and UIKit point sizes. The model is selected with `GLASSBOX_PHONE_MODEL`
+  (default `iphone_17_pro_max`) and drives the letterbox coordinate transform — so
+  this layer is not hard-coded to one device.
+- **PicoKVM calibration (per-device).** The **iPhone** end-to-end path was
+  brought up and hand-calibrated on an **iPhone 17 Pro Max** (the bring-up rig,
+  dated 2026-05-21). The device-specific values live in `PicoKVMEffectorConfig`:
   - the logical-to-frame linear fit (`abs_to_phone_scale_x/y`,
     `abs_origin_offset_x/y`), and
   - the hard-coded logical gesture coordinates
@@ -295,9 +324,15 @@ differently:
   is overridable via `GLASSBOX_PICOKVM_*` environment variables. Moving to
   another iPhone means re-measuring the linear fit and gesture anchors and
   exporting the new values, not changing the source.
+- **iPad fit auto-derives from the crop.** The **iPad (mini 6 / 7)** path skips
+  the hand-measurement step: the absolute-pointer fit is derived from the detected
+  letterbox crop bbox, so it adapts to the rig automatically (explicit
+  `GLASSBOX_PICOKVM_ABS_*` overrides still win). Bring-up validated on the iPad
+  mini 7; the mini 6 shares its display, so the same profile applies.
 
-In short: the geometry table is multi-model, but the validated PicoKVM rig is
-iPhone 17 Pro Max only.
+In short: the geometry table is multi-model, and the validated PicoKVM rigs are
+**iPhone 17 Pro Max** (hand-measured fit) and the **iPad mini 6 / 7**
+(crop-derived fit; bring-up validated on the mini 7).
 
 ## Backends
 
@@ -307,10 +342,10 @@ These are the concrete implementations that ship for the seams in
 | Surface | Built in | Notes |
 | --- | --- | --- |
 | Frame source | AVFoundation, static PNG directory, PicoKVM H.264 stream | macOS is the primary controller platform. |
-| Effector | noop, PicoKVM | PicoKVM uses USB HID mouse/keyboard semantics with iOS AssistiveTouch/external pointer enabled. |
+| Effector | noop, PicoKVM | PicoKVM uses USB HID mouse/keyboard semantics — via AssistiveTouch on iPhone (iOS), the native pointer + precise wheel on iPad (iPadOS). |
 | OCR | Apple Vision, ocrmac | PaddleOCR is optional through the `ocr` extra. |
 | VLM | Moonshot-compatible and SiliconFlow-compatible clients | VLM is opt-in: set `GLASSBOX_ENABLE_VLM=1`, choose `GLASSBOX_VLM=moonshot` or `siliconflow`, and provide the matching API key. |
-| Platform | iOS | Other platforms are extension seams, not built-in finished ports. |
+| Platform | iOS, iPadOS | iPadOS shares the iOS provider (`glassbox/ios`) plus iPad split-view handling (`glassbox/ipados`); other platforms are extension seams, not built-in finished ports. |
 
 The default open-source tree includes the PicoKVM, noop, and static-frame paths
 above. It does not include any third-party target app, private profiles, or

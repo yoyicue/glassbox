@@ -1,4 +1,4 @@
-"""glassbox/perception/device.py — screen resolutions for known iOS devices
+"""glassbox/perception/device.py — screen resolutions for known iOS/iPadOS devices
 
 Two coordinate sizes matter:
   - pixel_size: native rendered pixels used by HDMI mirror and frame-space actions.
@@ -23,6 +23,10 @@ IPHONE_15_PRO: tuple[int, int] = (1179, 2556)
 IPHONE_15: tuple[int, int] = (1179, 2556)
 
 IPAD_MINI_7: tuple[int, int] = (1488, 2266)
+# iPad mini 6 and 7 ship the identical 8.3" panel (2266x1488 px, 1133x744 pt) and
+# both use USB-C; they differ only in SoC, which glassbox does not depend on, so
+# they share one geometry/fit.
+IPAD_MINI_6: tuple[int, int] = IPAD_MINI_7
 
 
 DEVICES: dict[str, tuple[int, int]] = {
@@ -35,6 +39,7 @@ DEVICES: dict[str, tuple[int, int]] = {
     "iphone_15_pro_max": IPHONE_15_PRO_MAX,
     "iphone_15_pro":     IPHONE_15_PRO,
     "iphone_15":         IPHONE_15,
+    "ipad_mini_6":        IPAD_MINI_6,
     "ipad_mini_7":        IPAD_MINI_7,
 }
 
@@ -48,6 +53,7 @@ DEVICE_POINTS: dict[str, tuple[int, int]] = {
     "iphone_15_pro_max": (430, 932),
     "iphone_15_pro":     (393, 852),
     "iphone_15":         (393, 852),
+    "ipad_mini_6":        (744, 1133),
     "ipad_mini_7":        (744, 1133),
 }
 
