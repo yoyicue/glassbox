@@ -113,6 +113,19 @@ class FakePhone:
         self.action_kwargs.append(dict(_kw))
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
+    # CUQ-3.15: wheel scroll (used only when supports('scroll_wheel') and the
+    # AIPhone wheel-preference flag are both set).
+    def supports(self, action):
+        return action in getattr(self, "_supported", set())
+
+    def wheel_scroll_down(self, *, ticks=None):
+        self.actions.append(("wheel_scroll_down", None))
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+    def wheel_scroll_up(self, *, ticks=None):
+        self.actions.append(("wheel_scroll_up", None))
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
     def expect_text(self, target, **_kw):
         scene = self.perceive()
         if target not in [e.text for e in scene.elements]:
@@ -252,6 +265,38 @@ def test_ai_scroll_without_target_uses_transient_window(tmp_path):
     kwargs = phone._phone.action_kwargs[-1]
     assert kwargs["settle_strategy"] == "transient_window"
     assert kwargs["window_duration_ms"] >= 1
+
+
+@pytest.mark.smoke
+def test_ai_scroll_prefers_wheel_when_enabled_and_supported(tmp_path):
+    """CUQ-3.15: with the wheel preference on AND the backend supporting it (the
+    iPad rig), the generic scroll verb uses the precise wheel instead of swipe."""
+    phone = _ai_phone(tmp_path, [_scene("Top"), _scene("Bottom")])
+    phone._phone._supported = {"scroll_wheel"}
+    phone._phone._ai_scroll_prefer_wheel = True
+
+    phone.scroll(direction="down")
+    phone.scroll(direction="up")
+
+    ops = [op for op, _ in phone._phone.actions]
+    assert "wheel_scroll_down" in ops
+    assert "wheel_scroll_up" in ops
+    assert "swipe_up" not in ops and "swipe_down" not in ops
+
+
+@pytest.mark.smoke
+def test_ai_scroll_falls_back_to_swipe_without_wheel_support(tmp_path):
+    """CUQ-3.15 default-safe: with the flag off (or no wheel support) the scroll
+    verb stays on swipe-fling — byte-identical to before."""
+    phone = _ai_phone(tmp_path, [_scene("Top"), _scene("Bottom")])
+    phone._phone._ai_scroll_prefer_wheel = True  # flag on, but...
+    # ...backend does NOT support scroll_wheel -> must fall back to swipe.
+
+    phone.scroll(direction="down")
+
+    ops = [op for op, _ in phone._phone.actions]
+    assert "swipe_up" in ops
+    assert "wheel_scroll_down" not in ops
 
 
 @pytest.mark.smoke

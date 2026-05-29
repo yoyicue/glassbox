@@ -179,6 +179,7 @@ class Phone:
         vlm_set_of_mark: bool = False,
         memory_locate_priors: bool = False,
         strict_settings_detail: bool = False,
+        ai_scroll_prefer_wheel: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -237,6 +238,10 @@ class Phone:
         # body-marker heuristic classifies a screen as settings_detail (closes a
         # third-party-app false-positive). Flag-gated (default off).
         self._strict_settings_detail = bool(strict_settings_detail)
+        # CUQ-3.15: route generic AI scroll to the precise wheel when the backend
+        # supports it (the iPad rig, where the wheel is validated). Flag-gated
+        # (default off → swipe-fling), read by AIPhone via getattr.
+        self._ai_scroll_prefer_wheel = bool(ai_scroll_prefer_wheel)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.

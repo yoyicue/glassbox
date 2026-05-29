@@ -701,6 +701,7 @@ def build_phone(
         vlm_set_of_mark=cfg.vlm_set_of_mark,
         memory_locate_priors=cfg.memory_locate_priors,
         strict_settings_detail=cfg.strict_settings_detail,
+        ai_scroll_prefer_wheel=cfg.ai_scroll_prefer_wheel,
     )
     return PhoneRuntime(
         phone=phone,

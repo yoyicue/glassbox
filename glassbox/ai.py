@@ -490,6 +490,23 @@ class AIPhone:
             )
         return self._action_outcome("close_app", None, close_app())
 
+    def _phone_scroll(self, normalized: str, **swipe_kwargs):
+        """CUQ-3.15: route a generic scroll to the precise wheel when the backend
+        supports it and the operator opted in (e.g. the iPad rig, where the wheel
+        is validated/authoritative), else the swipe-fling fallback. ``down`` means
+        reveal-content-below (swipe_up / wheel_scroll_down)."""
+        if getattr(self._phone, "_ai_scroll_prefer_wheel", False) and self._phone.supports("scroll_wheel"):
+            return (
+                self._phone.wheel_scroll_down()
+                if normalized == "down"
+                else self._phone.wheel_scroll_up()
+            )
+        return (
+            self._phone.swipe_up(**swipe_kwargs)
+            if normalized == "down"
+            else self._phone.swipe_down(**swipe_kwargs)
+        )
+
     def scroll(
         self,
         direction: str = "down",
@@ -526,11 +543,7 @@ class AIPhone:
             )
             # AI: scroll completion is judged by the observation below, not by
             # the action outcome or the first post-command screenshot.
-            result = (
-                self._phone.swipe_up(**action_kwargs)
-                if normalized == "down"
-                else self._phone.swipe_down(**action_kwargs)
-            )
+            result = self._phone_scroll(normalized, **action_kwargs)
             self._action_outcome("scroll", ", ".join(targets) if targets else None, result)
             if targets:
                 obs = self._wait_for_targets(
@@ -603,7 +616,7 @@ class AIPhone:
                 steps.append(f"{idx + 1}. {candidate.action} {candidate.label}")
                 matched_path.append(f"{candidate.action}:{candidate.label}")
             else:
-                result = self._phone.swipe_up()
+                result = self._phone_scroll("down")
                 self._action_outcome("explore.scroll", needle, result)
                 steps.append(f"{idx + 1}. scroll down")
             obs = self.observe()
@@ -936,9 +949,9 @@ class AIPhone:
         if action == "tap":
             return self._phone.tap_text(candidate.label)
         if action in {"scroll", "scroll_down", "swipe_up"}:
-            return self._phone.swipe_up()
+            return self._phone_scroll("down")
         if action in {"scroll_up", "swipe_down"}:
-            return self._phone.swipe_down()
+            return self._phone_scroll("up")
         raise ValueError(f"unsupported policy action: {action}")
 
     def _safe_observe(self) -> ObservationSummary | None:

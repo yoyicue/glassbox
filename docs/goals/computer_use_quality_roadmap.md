@@ -703,7 +703,20 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
 ### Input fidelity
 
 ### CUQ-3.15 — Generic AI scroll always uses swipe-fling, never the wheel (even on iPad)
-- [ ] **high (iPad-scoped) · effort medium · design-gap**
+- [x] **high (iPad-scoped) · effort medium · design-gap** (flag-gated, default-off)
+  — DONE: a `_phone_scroll(direction)` helper now routes the generic scroll verb
+  to the precise wheel (`wheel_scroll_down/up`) when the backend
+  `supports('scroll_wheel')` AND `cfg.ai_scroll_prefer_wheel` is set, else the
+  swipe-fling fallback. Wired at all three sites the roadmap named —
+  `AIPhone.scroll`, `explore`'s scroll step, and `_execute_candidate`'s
+  scroll/swipe actions. Flag (env `GLASSBOX_AI_SCROLL_PREFER_WHEEL`) →
+  `Phone._ai_scroll_prefer_wheel`; default off → swipe everywhere
+  (byte-identical). Intended for the iPad rig where the wheel is
+  validated/authoritative ([[picokvm-ipad-wheel-rpc-works]]); iPhone wheel is
+  intermittent so it stays off there. Tests in `test_ai_native_interface.py`
+  (wheel when enabled+supported; swipe fallback otherwise). **Remaining:** lift
+  the `scrolling.py` closed-loop overshoot corrective-rescroll into the generic
+  verb; on-rig confirm coverage gains on the iPad.
 - Gap: `AIPhone.scroll()/explore()/_execute_candidate()` call `swipe_up/down`
   unconditionally; only the Settings crawler prefers the wheel. So every generic
   task pays the swipe-fling overshoot tax even on the iPad rig where the wheel is

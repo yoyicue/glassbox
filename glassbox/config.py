@@ -266,6 +266,14 @@ class AgentConfig(BaseSettings):
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 
+    ai_scroll_prefer_wheel: bool = False
+    """CUQ-3.15: route the generic AI scroll verb (AIPhone.scroll / explore /
+    candidate execution) to the precise scroll wheel when the backend supports
+    it, instead of always using swipe-fling (which overshoots). Intended for the
+    iPad rig, where wheel scrolling is validated/authoritative; iPhone wheel is
+    intermittent so this stays off there. Env GLASSBOX_AI_SCROLL_PREFER_WHEEL.
+    Default off → swipe-fling everywhere (byte-identical)."""
+
     strict_settings_detail: bool = False
     """CUQ-2.6: require a Settings-distinguishing signal (a system noun like
     Wi-Fi/Bluetooth/Face ID, or a Learn-More footnote) before the generic
