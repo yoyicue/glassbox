@@ -331,3 +331,53 @@ def test_expect_text_escalates_to_vlm_when_ocr_misses(mock_phone):
     mock_phone.kimi = FakeKimi()
     el = mock_phone.expect_text("通用", timeout=0.2, poll_interval=0.1)
     assert el.element_id == 0
+
+
+def test_expect_text_uses_memory_position_prior_when_ocr_misses(mock_phone):
+    """CUQ-3.21: when OCR can't find the target, the UTG position memory supplies
+    a tap-point prior (tried before the billed VLM). Volatile positions are
+    skipped; flag-gated so a VLM-less default run still hard-fails."""
+    mock_phone.ocr.elements = [
+        UIElement(type="text", box=Box(x=80, y=600, w=120, h=30),
+                  text="zzz", confidence=0.4, element_id=0),
+    ]
+    mock_phone.kimi = None  # isolate: any resolution must come from memory
+
+    class _Remembered:
+        def __init__(self, text, box, *, volatile=False):
+            self.text = text
+            self.box = box
+            self.type = "text"
+            self.volatile = volatile
+
+    class _Node:
+        screen_id = "scr_1"
+
+    class _FakeMemory:
+        def observe(self, scene, last_action=None, *, frame_img=None):
+            return _Node()  # perceive() folds each scene into memory
+
+        def recognize(self, scene, frame_img=None):
+            return _Node()
+
+        def expected_elements(self, screen_id):
+            return [
+                _Remembered("通用", Box(x=40, y=320, w=200, h=44)),
+                _Remembered("音量", Box(x=40, y=900, w=200, h=44), volatile=True),
+            ]
+
+    mock_phone.memory = _FakeMemory()
+
+    # Flag OFF -> memory is not consulted; default hard-fail preserved.
+    with pytest.raises(AssertionError):
+        mock_phone.expect_text("通用", timeout=0.2, poll_interval=0.1)
+
+    # Flag ON -> resolves from the remembered (non-volatile) position.
+    mock_phone._memory_locate_priors = True
+    el = mock_phone.expect_text("通用", timeout=0.2, poll_interval=0.1)
+    assert (el.box.x, el.box.y) == (40, 320)
+    assert mock_phone._last_selection_source == "memory"
+
+    # A volatile remembered position is skipped (unreliable) -> still hard-fails.
+    with pytest.raises(AssertionError):
+        mock_phone.expect_text("音量", timeout=0.2, poll_interval=0.1)

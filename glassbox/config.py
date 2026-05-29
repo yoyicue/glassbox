@@ -266,6 +266,14 @@ class AgentConfig(BaseSettings):
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 
+    memory_locate_priors: bool = False
+    """CUQ-3.21: when OCR cannot find a selection target, use the UTG position
+    memory as a tap-point prior (recognize the screen → a remembered element
+    whose text matches → its last-known box), tried before the billed VLM
+    reground. Volatile (list-row) positions are skipped and a stale prior that
+    mis-taps is caught by post-action verification. Env
+    GLASSBOX_MEMORY_LOCATE_PRIORS. Requires a populated UTG graph; default off."""
+
     vlm_set_of_mark: bool = False
     """CUQ-2.5: enable Set-of-Mark grounding on VLM `describe()` escalations —
     numbered red boxes are drawn on the frame so the VLM correlates each element

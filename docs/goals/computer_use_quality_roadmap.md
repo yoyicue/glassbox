@@ -709,8 +709,23 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `(from_node, action)` predicted (`_detect_transition_mismatch`). Additive +
   queryable; safe. **Remaining (integration):** have the orchestrator/verifier
   consume `last_transition_mismatch` as a strong failure signal (feeds recovery).
-- [ ] **CUQ-3.21** `locate()`/`expected_elements()` position priors have no runtime
-  consumer; OCR-ROI narrowing and candidate-scoring priors are dead. *medium*
+- [x] **CUQ-3.21** `locate()`/`expected_elements()` position priors have no runtime
+  consumer; OCR-ROI narrowing and candidate-scoring priors are dead. *medium* —
+  DONE (flag-gated, default-off): `expect_text` now consults the UTG position
+  memory as a selection prior on an OCR miss, **before** the billed VLM reground
+  (`_memory_locate_selection`): recognize the current screen →
+  `expected_elements(screen_id)` → reuse `find_text` over the remembered
+  (text, box) elements → return the last-known box as the tap target
+  (`_last_selection_source="memory"`). Volatile (list-row) positions are skipped
+  (unreliable), and a stale prior that mis-taps is caught by the orchestrator's
+  post-action verification. `cfg.memory_locate_priors` (env
+  `GLASSBOX_MEMORY_LOCATE_PRIORS`) → `Phone._memory_locate_priors`; default off →
+  byte-identical (and a no-op without a populated graph). Gives the graph a
+  generic selection consumer alongside CUQ-0.5's recovery consumer. Tests in
+  `test_tap_intent.py` (resolves-from-memory / volatile-skipped / flag-off
+  hard-fails). **Remaining:** OCR-ROI narrowing + candidate-scoring priors
+  (rank live candidates by proximity to the remembered box) and on-rig
+  hit-rate validation.
 - [x] **CUQ-3.22** UTG is persisted only on `runtime.close()`; a mid-run crash
   loses the whole session's learned graph. *quick-win* — DONE: `ScreenMemory`
   takes an injectable `autosave` callback + `autosave_every` and persists the

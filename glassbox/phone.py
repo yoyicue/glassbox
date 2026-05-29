@@ -176,6 +176,7 @@ class Phone:
         reverify_fresh_frame: bool = False,
         coldstart_promote_controls: bool = False,
         vlm_set_of_mark: bool = False,
+        memory_locate_priors: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -220,6 +221,10 @@ class Phone:
         # VLM correlates elements to numbered marks it can see. Flag-gated
         # (default off); only matters when a VLM client is wired.
         self._vlm_set_of_mark = bool(vlm_set_of_mark)
+        # CUQ-3.21: use the UTG position memory as a selection prior when OCR
+        # misses (before the billed VLM reground). Flag-gated (default off);
+        # only matters when memory is wired + populated.
+        self._memory_locate_priors = bool(memory_locate_priors)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.
@@ -1288,6 +1293,45 @@ class Phone:
             )
         return hit
 
+    def _memory_locate_selection(self, target: str, *, fuzzy_ratio: float) -> UIElement | None:
+        """CUQ-3.21: use the UTG position memory as a selection prior.
+
+        When OCR cannot find the target on the current frame, recognize the
+        current screen and look up a remembered element whose text matches — its
+        last-known box becomes a tap-point prior (cheaper than the VLM, which is
+        tried next). The position is a prior, not truth: volatile (list-row)
+        positions are skipped, and a stale prior that mis-taps is caught by the
+        orchestrator's post-action verification. Flag-gated (default off).
+        """
+        if not self._memory_locate_priors:
+            return None
+        memory = self.memory
+        if memory is None or self._last_scene is None:
+            return None
+        recognize = getattr(memory, "recognize", None)
+        expected_elements = getattr(memory, "expected_elements", None)
+        if not callable(recognize) or not callable(expected_elements):
+            return None
+        frame_img = self._last_frame.img if self._last_frame is not None else None
+        try:
+            node = recognize(self._last_scene, frame_img)
+            if node is None:
+                return None
+            remembered = expected_elements(node.screen_id)
+        except Exception:
+            return None
+        candidates = [
+            UIElement(type=r.type, box=r.box, text=r.text, confidence=0.0, element_id=i)
+            for i, r in enumerate(remembered)
+            if getattr(r, "text", None) and not getattr(r, "volatile", False)
+        ]
+        if not candidates:
+            return None
+        return find_text(
+            candidates, target, fuzzy_ratio=fuzzy_ratio,
+            ambiguity_guard=self._strict_target_matching,
+        )
+
     def _rows_before_nav_title(self, elements: list[UIElement]) -> list[UIElement]:
         """Reorder elements so likely nav-bar titles come last (deprioritized).
 
@@ -1329,9 +1373,17 @@ class Phone:
             if self._last_scene:
                 last_seen_texts = [e.text for e in self._last_scene.elements if e.text]
             time.sleep(poll_interval)
-        # CUQ-0.4: OCR could not locate the target; before hard-failing, give the
-        # VLM a single gated chance to ground it (find-by-description). No-op when
-        # VLM is disabled, so default behavior is unchanged.
+        # CUQ-3.21: OCR could not locate the target; try the (free) UTG position
+        # memory as a prior before spending a VLM call. Flag-gated, default off.
+        from_memory = self._memory_locate_selection(target, fuzzy_ratio=fuzzy_ratio)
+        if from_memory is not None:
+            self._last_selection_source = "memory"
+            if self.recorder is not None:
+                self.recorder.verdict(f"expect_text({target!r})", passed=True, message="memory_prior")
+            return from_memory
+        # CUQ-0.4: still missing; before hard-failing, give the VLM a single gated
+        # chance to ground it (find-by-description). No-op when VLM is disabled, so
+        # default behavior is unchanged.
         grounded = self._vlm_reground_selection(target, fuzzy_ratio=fuzzy_ratio)
         if grounded is not None:
             self._last_selection_source = "vlm"
