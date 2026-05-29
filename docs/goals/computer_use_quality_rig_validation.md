@@ -193,10 +193,28 @@ clean).
   a verified-failed `nav_back_tap` actually switches to `keyboard_back` →
   `edge_back_gesture` on the rig (the whole point — strategy laddering). Then add
   `home`, then `scroll`, etc., one op per pass.
+- **One-command A/B:** `make ab-semantic-plan` runs the canonical primitives twice
+  on the rig — flags-off baseline vs `GLASSBOX_SEMANTIC_PLAN_OPS=back,scroll,tap`
+  candidate — and gates with `compare` (rc 0 = no regression → safe to default-on;
+  rc 1 = keep off). Override the op set with `AB_OPS=…` and rounds with `ROUNDS=…`.
 - **Gate:** for each op, the ladder must recover a case the legacy single-shot path
   gave up on, with no regression on the cases it already handled.
-- **Then:** once all ops validate, set `GLASSBOX_SEMANTIC_PLAN_OPS=home,back,scroll,tap,launch_app`
-  and consider flipping the default.
+- **Then:** once the A/B passes, flip the default in `config.py`
+  (`semantic_plan_ops = "back,scroll,tap"`) and **re-aggregate the committed floor**
+  `skills/regression/fixtures/reliability_baseline.json` from the validated run so
+  the nightly gate ratchets up (see `skills/regression/fixtures/README.md`).
+
+> **DONE (2026-05-29, iPad mini 7 en/HK):** `make ab-semantic-plan ROUNDS=1`
+> (canonical primitives, flags-off vs `back,scroll,tap`) passed decisively —
+> task_completion 0.0→0.5, action_success 0.50→0.75, scroll_success 0.70→1.0,
+> unknown 0.50→0.25, **strategy_switches 0→4** (the ladder switched primitives
+> on the rig), VLM never fired, `compare` rc 0 (no regression). A full default-on
+> iPad-en Settings drill-down corroborates (action_success 0.955,
+> strategy_switches=5 in production; the committed regression floor). Default
+> flipped to `back,scroll,tap` in `config.py`. NB: an earlier A/B was run under an
+> iPhone-config-on-iPad mismatch (the make target defaults to zh-iPhone while the
+> rig is the en iPad) — this iPad-en pass is the authoritative one. Single round —
+> re-run with higher `ROUNDS` / on iPhone before widening the set.
 
 This is the highest-leverage remaining item: it is the difference between "one
 strategy, give up on failure" and "try the next reliable primitive."

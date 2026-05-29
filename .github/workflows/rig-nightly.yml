@@ -1,0 +1,93 @@
+name: Rig nightly (success-rate time series)
+
+# The on-rig companion to the offline `make check` gate (ci.yml). It produces the
+# cross-commit, multi-device success-rate time series that the offline gate
+# cannot: it drives a REAL iPhone / iPad over the PicoKVM rig, aggregates a
+# Step-0 benchmark, and fails on any regression below the committed floor
+# (skills/regression/fixtures/reliability_baseline.json).
+#
+# Runs only on a self-hosted runner physically attached to a rig (label
+# `picokvm`); it never runs on PRs, so it cannot block merges — it is a nightly
+# health signal + the on-rig validation lane referenced by
+# docs/goals/computer_use_quality_rig_validation.md. Trigger manually
+# (workflow_dispatch) to run an A/B after flipping a reliability flag.
+
+on:
+  schedule:
+    - cron: "0 9 * * *"   # 09:00 UTC nightly
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "Rounds per task"
+        default: "3"
+      semantic_plan_ops:
+        description: "GLASSBOX_SEMANTIC_PLAN_OPS for an A/B candidate run (blank = default-off baseline)"
+        default: ""
+      tolerance:
+        description: "Allowed success-rate drop vs the committed floor before failing"
+        default: "0.0"
+
+concurrency:
+  group: rig-nightly-${{ github.ref }}
+  cancel-in-progress: false   # never interrupt a run that is driving real hardware
+
+jobs:
+  rig:
+    runs-on: [self-hosted, picokvm]
+    strategy:
+      fail-fast: false        # one device failing must not cancel the others
+      matrix:
+        device:
+          - { name: iphone, model: iphone_17_pro_max, language: zh-Hans, region: CN }
+          - { name: ipad,   model: ipad_mini_7,       language: en,      region: HK }
+    env:
+      GLASSBOX_PICOKVM: "1"
+      # PicoKVM base URL + credentials come from the self-hosted runner's
+      # environment / repo secrets; the rig is not reachable from hosted runners.
+      GLASSBOX_PICOKVM_BASE_URL: ${{ secrets.GLASSBOX_PICOKVM_BASE_URL }}
+      GLASSBOX_PHONE_MODEL: ${{ matrix.device.model }}
+      GLASSBOX_LANGUAGE: ${{ matrix.device.language }}
+      GLASSBOX_REGION: ${{ matrix.device.region }}
+      GLASSBOX_SEMANTIC_PLAN_OPS: ${{ github.event.inputs.semantic_plan_ops }}
+      ROUNDS: ${{ github.event.inputs.rounds || '3' }}
+      TOLERANCE: ${{ github.event.inputs.tolerance || '0.0' }}
+      ARTIFACT_ROOT: artifacts/ci/${{ matrix.device.name }}/runs
+      CANDIDATE: artifacts/ci/${{ matrix.device.name }}/settings_benchmark.json
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Preflight (rig reachable + one decoded frame)
+        run: uv run python -m skills.regression.ios_settings.diagnose --json
+
+      - name: Canonical primitives (go-home / launch-app / back / scroll)
+        run: |
+          uv run python -m skills.regression.computer_use_success_rate run-canonical-primitives \
+            --rounds "$ROUNDS" \
+            --out "artifacts/ci/${{ matrix.device.name }}/canonical_benchmark.json" \
+            --artifact-root "$ARTIFACT_ROOT"
+
+      - name: iOS Settings drill-down benchmark
+        run: |
+          uv run python -m skills.regression.computer_use_success_rate run-ios-settings \
+            --rounds "$ROUNDS" \
+            --drill-down \
+            --out "$CANDIDATE" \
+            --artifact-root "$ARTIFACT_ROOT" \
+            --report-dir "artifacts/ci/${{ matrix.device.name }}/reports"
+
+      - name: Regression gate vs committed floor
+        run: make regression-compare CANDIDATE="$CANDIDATE" TOLERANCE="$TOLERANCE"
+
+      - name: Archive benchmarks (cross-commit time series)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: success-rate-${{ matrix.device.name }}-${{ github.sha }}
+          path: artifacts/ci/${{ matrix.device.name }}/*_benchmark.json
+          retention-days: 90

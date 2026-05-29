@@ -375,18 +375,27 @@ class AgentConfig(BaseSettings):
     """Raise when computer-use verification returns semantic failed/blocked.
     Transport fail-fast remains controlled by GLASSBOX_ACTION_FAIL_FAST."""
 
-    semantic_plan_ops: str = ""
+    semantic_plan_ops: str = "back,scroll,tap"
     """Comma-separated core ops routed through the first-class SemanticActionPlan
-    strategy ladder instead of the legacy single-strategy path (CUQ-0.1/0.8).
-    Empty (default) preserves today's behavior; e.g. set
-    GLASSBOX_SEMANTIC_PLAN_OPS=back so a verified-failed strategy switches to the
-    next reliable primitive (nav_back_tap -> keyboard_back -> edge_back_gesture)
-    instead of giving up. Flag-gated pending on-rig validation before default-on.
-    **Currently `back`, `scroll`, and `tap` have wired routing call sites**
-    (`scroll` ladders wheel→swipe; `tap` ladders target_tap→keyboard_focus_activate
-    with the CUQ-0.8 nested-orchestration suppression). `launch_app` is not yet
-    routed (`open_app` is a complex multi-page search) and `home` already ladders
-    bespoke, so listing those has no effect until their call sites land."""
+    strategy ladder instead of the legacy single-strategy path (CUQ-0.1/0.8), so a
+    verified-failed strategy switches to the next reliable primitive (back:
+    nav_back_tap -> keyboard_back -> edge_back_gesture; scroll: wheel -> swipe;
+    tap: target_tap -> keyboard_focus_activate, with the CUQ-0.8 nested-
+    orchestration suppression) instead of giving up.
+
+    Default-on for `back,scroll,tap` since the 2026-05-29 on-rig A/B
+    (`make ab-semantic-plan`, iPad mini 7 en/HK): vs the flags-off baseline the
+    ladder lifted task_completion 0.0->0.5, action_success 0.50->0.75, scroll
+    success 0.70->1.0 and cut unknown 0.50->0.25, with strategy_switches 0->4 and
+    VLM never firing — compare rc 0, no regression. A full default-on iPad-en
+    Settings drill-down corroborates (action_success 0.955, strategy_switches=5
+    in production). Re-run with higher ROUNDS / on iPhone before widening the set.
+    `launch_app` is
+    intentionally excluded (`open_app` is a complex multi-page springboard search,
+    no real ladder yet) and `home` already ladders bespoke, so listing those has
+    no effect. Set GLASSBOX_SEMANTIC_PLAN_OPS to override (empty string restores
+    the legacy single-strategy path; note routing also needs the orchestrator,
+    i.e. computer_use_artifact_dir, so the bare runtime is unaffected)."""
 
     computer_use_observation_producer_mode: str = "scoped_source_owner"
     """Computer-use observation producer mode. v1 defaults to

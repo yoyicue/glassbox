@@ -101,6 +101,30 @@ def test_invalid_ocr_config_is_rejected():
 
 
 @pytest.mark.smoke
+def test_semantic_plan_ops_default_on_validated(monkeypatch):
+    """The P1/P2 strategy ladder is ON by default for back/scroll/tap after the
+    2026-05-29 on-rig A/B (`make ab-semantic-plan`, iPhone 17 Pro Max) showed no
+    regression and a clear win (see config.py / the rig-validation runbook).
+    Widening the op set requires re-running that A/B."""
+    monkeypatch.delenv("GLASSBOX_SEMANTIC_PLAN_OPS", raising=False)
+    assert AgentConfig(_env_file=None).semantic_plan_ops == "back,scroll,tap"
+
+
+@pytest.mark.smoke
+def test_semantic_plan_ops_env_override(monkeypatch):
+    """An explicit env value overrides the validated default (e.g. narrow to one
+    op, or empty-string back to the legacy single-strategy path)."""
+    monkeypatch.setenv("GLASSBOX_SEMANTIC_PLAN_OPS", "back")
+    cfg = AgentConfig(_env_file=None)
+    assert cfg.semantic_plan_ops == "back"
+    # The runtime parses this raw string into the per-op routing set (the same
+    # split build_phone() applies); routing-when-flagged itself is covered by
+    # test_computer_use_runtime.py.
+    ops = {op.strip() for op in cfg.semantic_plan_ops.split(",") if op.strip()}
+    assert ops == {"back"}
+
+
+@pytest.mark.smoke
 def test_profile_bundle_default_none(monkeypatch):
     monkeypatch.delenv("GLASSBOX_PROFILE_BUNDLE", raising=False)
     assert AgentConfig(_env_file=None).profile_bundle is None
