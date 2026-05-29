@@ -338,8 +338,13 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   landing signal and a falsey progress check instead of a confident
   landed/progress. `FrameDiff` fields are now nullable. Test in
   `test_computer_use_verifiers.py`.
-- [ ] **CUQ-1.8** Graph scene-kind override silently no-ops on `recognize`
-  failure, masking node-identity drift. *medium*
+- [x] **CUQ-1.8** Graph scene-kind override silently no-ops on `recognize`
+  failure, masking node-identity drift. *medium* — DONE (signal): `recognize()`
+  now records `last_recognize_score` + `last_recognize_node_id`, so a near-miss
+  (`0 < score < match_threshold` against a known node) — i.e. node-identity
+  drift — is distinguishable from a genuinely-new screen (both return `None`).
+  Additive + queryable; test in `test_memory_observe.py`. (Consumer that acts on
+  drift is a follow-up.)
 
 ---
 

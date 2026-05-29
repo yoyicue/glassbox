@@ -596,3 +596,21 @@ def test_observe_flags_transition_mismatch_against_learned_edge():
     mem._last_node_id = n.screen_id
     mem.observe(_scene("蓝牙", "可被发现", "其他设备"), last_action=action_b)
     assert mem.last_transition_mismatch is None
+
+
+@pytest.mark.smoke
+def test_recognize_exposes_nearest_score_for_drift_detection():
+    """CUQ-1.8: recognize() records the nearest-node similarity so a near-miss
+    (node-identity drift) is distinguishable from a genuinely-new screen, which
+    both otherwise return None."""
+    mem = ScreenMemory(UTG(bundle_id="com.x"))
+    node = mem.observe(_scene("设置", "无线局域网", "蓝牙", "通用"))
+
+    hit = mem.recognize(_scene("设置", "无线局域网", "蓝牙", "通用"))
+    assert hit is not None and hit.screen_id == node.screen_id
+    assert mem.last_recognize_score >= mem.match_threshold
+    assert mem.last_recognize_node_id == node.screen_id
+
+    miss = mem.recognize(_scene("相机", "照片", "录屏", "实况文本", "保留正常曝光"))
+    assert miss is None
+    assert mem.last_recognize_score < mem.match_threshold

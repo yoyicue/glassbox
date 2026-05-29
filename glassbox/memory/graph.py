@@ -62,6 +62,13 @@ class ScreenMemory:
         # failure / node-identity-drift signal. None when the last transition
         # matched (or there was no prior edge to compare against).
         self.last_transition_mismatch: dict[str, object] | None = None
+        # CUQ-1.8: the nearest-node similarity from the last recognize() call,
+        # and that node's id. A miss with a high-ish score (0 < score <
+        # match_threshold) is node-identity drift, not a genuinely-new screen —
+        # callers can surface that instead of silently treating the override as
+        # a no-op.
+        self.last_recognize_score: float = 0.0
+        self.last_recognize_node_id: str | None = None
 
     # ─── write ───────────────────────────────────────────────────────
     def observe(
@@ -156,6 +163,11 @@ class ScreenMemory:
         """Which node this scene shows — WITHOUT mutating the graph. None if unseen."""
         sig = compute_signature(scene, phash=dhash(frame_img) if frame_img is not None else "")
         node, score = self._nearest_signature_node(sig, scene)
+        # CUQ-1.8: expose the near-miss so a drifted-but-known screen is
+        # distinguishable from a genuinely new one (recognize alone returns None
+        # for both).
+        self.last_recognize_score = score
+        self.last_recognize_node_id = node.screen_id if node is not None else None
         return node if node is not None and score >= self.match_threshold else None
 
     def locate(self, screen_id: str, element_key: str) -> Box | None:
