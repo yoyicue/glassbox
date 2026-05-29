@@ -296,3 +296,38 @@ def test_reground_tap_point_returns_none_when_target_missing(mock_phone):
     mock_phone.ocr.elements = []
     mock_phone.perceive()
     assert mock_phone._reground_tap_point(target="不存在") is None
+
+
+@pytest.mark.smoke
+def test_expect_text_escalates_to_vlm_when_ocr_misses(mock_phone):
+    """CUQ-0.4: when OCR cannot locate the target, expect_text escalates to the
+    VLM (find-by-description) and resolves via the enriched intent label instead
+    of hard-failing. A VLM-disabled run keeps the hard-fail behavior."""
+    # OCR reads a garbled label that matches the target by neither text nor fuzzy.
+    mock_phone.ocr.elements = [
+        UIElement(type="text", box=Box(x=80, y=300, w=120, h=30),
+                  text="xQz9", confidence=0.4, element_id=0),
+    ]
+
+    # VLM disabled -> hard fail (default behavior preserved).
+    mock_phone.kimi = None
+    with pytest.raises(AssertionError):
+        mock_phone.expect_text("通用", timeout=0.2, poll_interval=0.1)
+
+    class FakeKimi:
+        def describe_scene(self, *, frame_image, elements, scene_hint=None):
+            return KimiResponse(
+                raw_content="(fake)",
+                parsed={
+                    "scene_type": "settings_detail",
+                    "elements": [{"id": 0, "intent_label": "通用", "confidence": 0.95}],
+                },
+                usage={"prompt_tokens": 0, "completion_tokens": 0},
+                model="fake",
+                elapsed_ms=1,
+            )
+
+    # VLM enabled -> the gated grounding pass resolves the target by intent.
+    mock_phone.kimi = FakeKimi()
+    el = mock_phone.expect_text("通用", timeout=0.2, poll_interval=0.1)
+    assert el.element_id == 0

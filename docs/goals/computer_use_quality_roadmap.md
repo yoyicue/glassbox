@@ -123,7 +123,7 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `semantic_verifier == 'expected_state'` (not `scene_progressed`) for entry taps.
 
 ### CUQ-0.4 — Add a selection-time VLM escalation (gate today only fires post-action)
-- [ ] **critical→high · effort medium · design-gap**
+- [~] **critical→high · effort medium · design-gap** — DONE (entry point; VLM-gated): `expect_text` (which feeds `tap_text`/`tap_button`) now escalates on an OCR miss via `Phone._vlm_reground_selection` — a gated, single-call `VLMEscalationGate(target_found=False)` pass that runs `describe()` and re-resolves the target, trying raw text then the VLM-enriched **intent label** (`find_by_intent`) before raising. This implements trigger #2 (find-by-description) on the default selection path, where it previously hard-failed. Gated on a VLM client being wired, so VLM-disabled runs are unchanged. Test in `test_tap_intent.py`. **Remaining:** route `_reground_tap_point` and `tap_intent`'s existing `describe()` escapes through the same gate so all selection-time VLM obeys one budget + is recorded; emit `classifier_conflict` (trigger #3); cold-start/SoM grounding for true OCR-can't-read-it cases (needs VLM+rig to validate efficacy).
 - Gap: the `VLMEscalationGate` is consulted in exactly one place —
   `_maybe_vlm_verify_expected_state`, on the *after* scene. The pre-action
   SELECTION path (`find_text`→`tap_text`) does pure text matching and raises

@@ -1174,6 +1174,36 @@ class Phone:
         return find_text(self._rows_before_nav_title(scene.elements),
                          target, fuzzy_ratio=fuzzy_ratio)
 
+    def _vlm_reground_selection(self, target: str, *, fuzzy_ratio: float) -> UIElement | None:
+        """CUQ-0.4: selection-time VLM escalation (P1 trigger #2 — target not
+        found by OCR → find-by-description).
+
+        When OCR cannot locate the target, escalate to the VLM through the
+        gate and retry the lookup before failing, instead of hard-failing the
+        step. Gated on a VLM client being wired (so VLM-disabled runs are
+        unchanged) and budgeted to a single grounding call per selection.
+        Returns the grounded element, or None when VLM is unavailable / the
+        budget is spent / the target still cannot be resolved.
+        """
+        if self.kimi is None:
+            return None
+        from glassbox.cognition.vlm_gate import VLMEscalationGate, VLMGateInput
+
+        gate = VLMEscalationGate(enabled=True, max_calls_per_action=1, max_calls_per_attempt=1)
+        gate_input = VLMGateInput(ocr_confidence=None, target_found=False)
+        described = gate.escalate(gate_input, lambda: self.describe(scene_hint=f"find:{target}"))
+        if described is None:
+            return None
+        elements = self._rows_before_nav_title(described.elements)
+        # Try raw text first, then the VLM-enriched intent labels: describe()
+        # adds intent_label/scene semantics (it does not re-OCR raw text, see
+        # CUQ-1.3), so find_by_intent is what rescues a target OCR mis-read or
+        # could not surface as plain text.
+        hit = find_text(elements, target, fuzzy_ratio=fuzzy_ratio)
+        if hit is None:
+            hit = find_by_intent(elements, target, fuzzy_ratio=fuzzy_ratio)
+        return hit
+
     def _rows_before_nav_title(self, elements: list[UIElement]) -> list[UIElement]:
         """Reorder elements so likely nav-bar titles come last (deprioritized).
 
@@ -1214,6 +1244,14 @@ class Phone:
             if self._last_scene:
                 last_seen_texts = [e.text for e in self._last_scene.elements if e.text]
             time.sleep(poll_interval)
+        # CUQ-0.4: OCR could not locate the target; before hard-failing, give the
+        # VLM a single gated chance to ground it (find-by-description). No-op when
+        # VLM is disabled, so default behavior is unchanged.
+        grounded = self._vlm_reground_selection(target, fuzzy_ratio=fuzzy_ratio)
+        if grounded is not None:
+            if self.recorder is not None:
+                self.recorder.verdict(f"expect_text({target!r})", passed=True, message="vlm_grounded")
+            return grounded
         if self.recorder is not None:
             self.recorder.verdict(
                 f"expect_text({target!r})",
