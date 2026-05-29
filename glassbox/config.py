@@ -231,6 +231,18 @@ class AgentConfig(BaseSettings):
     settings row is tapped as an app icon). Default off (tightens a core
     recognizer); validate on-rig before enabling."""
 
+    reverify_fresh_frame: bool = False
+    """CUQ-1.3: before a VLM verification escalation, re-perceive a fresh frame
+    (perceive(fresh=True)) and re-check the expected_state on it. The OCR verify
+    and a subsequent describe() both read the same post-action frame, so for
+    text-based expectations (visible_text / element_appears / element_gone) the
+    VLM re-check is otherwise guaranteed identical — pure wasted budget+latency.
+    A fresh re-read picks up text that only finished rendering after settle and,
+    when it now matches, returns succeeded WITHOUT spending the VLM call. Default
+    off (adds a capture+OCR on escalation); the fresh OCR short-circuits via the
+    perceive cache when pixels are unchanged, so it only re-OCRs a genuinely
+    changed screen. Validate on-rig before enabling."""
+
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 

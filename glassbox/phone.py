@@ -173,6 +173,7 @@ class Phone:
         detect_icons_in_perceive: bool = False,
         strict_target_matching: bool = False,
         require_home_icon_grid: bool = False,
+        reverify_fresh_frame: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -205,6 +206,10 @@ class Phone:
         # CUQ-2.2: require icon-grid corroboration before trusting a bare
         # 'springboard' classification as Home. Flag-gated (default off).
         self._require_home_icon_grid = bool(require_home_icon_grid)
+        # CUQ-1.3: re-perceive a fresh frame before a VLM verification escalation
+        # so settled-late text is re-read cheaply (and can avoid the VLM call).
+        # Flag-gated (default off) — read by the orchestrator via getattr.
+        self._reverify_fresh_frame = bool(reverify_fresh_frame)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.

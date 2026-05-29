@@ -813,6 +813,78 @@ def test_computer_use_runtime_expected_state_uses_vlm_gate_before_strategy_switc
 
 
 @pytest.mark.smoke
+def test_reverify_fresh_frame_resolves_without_spending_vlm(tmp_path):
+    """CUQ-1.3 (flag on): when an expected_state misses on the post-action OCR
+    but the text has since finished rendering, re-perceiving a fresh frame
+    resolves it via 'expected_state_refresh' WITHOUT spending a VLM call (a
+    describe() call would only re-read the same stale frame)."""
+    phone, orchestrator, _store = _make_phone(
+        tmp_path,
+        [
+            ["loading"],  # after_scene: "Done" has not rendered yet
+            ["Done"],     # fresh re-perceive: "Done" is now on screen
+        ],
+    )
+    phone.perceive_cache_diff = 0  # isolate the re-OCR from the frame-diff cache
+    phone._reverify_fresh_frame = True
+    phone.kimi = object()
+    calls = {"n": 0}
+
+    def describe(scene_hint=None):
+        calls["n"] += 1
+        return phone._last_scene
+
+    phone.describe = describe
+    expected = ExpectedState("visible_text", {"any_of": ["Done"]})
+    metadata = {"expected_state": expected.to_dict(), "max_vlm_calls_per_action": 1}
+    base = SemanticOutcome(status="unknown", verifier="scene_progressed", reason="no progress")
+    after_scene = phone.perceive()  # consumes ["loading"]
+
+    result = orchestrator._semantic_after_expected_state(phone, base, metadata, after_scene)
+    orchestrator.close()
+
+    assert result.status == "succeeded"
+    assert result.verifier == "expected_state_refresh"
+    assert calls["n"] == 0  # the VLM budget was never touched
+    assert metadata.get("vlm_calls", 0) == 0
+
+
+@pytest.mark.smoke
+def test_reverify_fresh_frame_off_keeps_vlm_escalation(tmp_path):
+    """CUQ-1.3 (flag off, default): the fresh re-perceive is skipped, so an
+    OCR-missed expectation still escalates to the VLM as before."""
+    phone, orchestrator, _store = _make_phone(
+        tmp_path,
+        [
+            ["loading"],
+            ["Done"],  # present, but the flag-off path must NOT consume it
+        ],
+    )
+    phone.perceive_cache_diff = 0
+    phone.kimi = object()
+    calls = {"n": 0}
+
+    def describe(scene_hint=None):
+        calls["n"] += 1
+        phone._last_scene.elements[0].text = "Done"  # the VLM resolves it
+        phone._last_scene.vlm_status = "ok"
+        return phone._last_scene
+
+    phone.describe = describe
+    expected = ExpectedState("visible_text", {"any_of": ["Done"]})
+    metadata = {"expected_state": expected.to_dict(), "max_vlm_calls_per_action": 1}
+    base = SemanticOutcome(status="unknown", verifier="scene_progressed", reason="no progress")
+    after_scene = phone.perceive()  # consumes ["loading"]
+
+    result = orchestrator._semantic_after_expected_state(phone, base, metadata, after_scene)
+    orchestrator.close()
+
+    assert result.status == "succeeded"
+    assert result.verifier == "expected_state_vlm"
+    assert calls["n"] == 1  # escalated to the VLM, not the fresh-frame fast path
+
+
+@pytest.mark.smoke
 def test_legacy_path_enforces_per_action_vlm_budget_across_attempts(tmp_path):
     """CUQ-0.7: the per-action VLM budget must hold across retries. The legacy
     execute() loop now carries vlm_* counters forward in the shared metadata

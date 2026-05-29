@@ -278,7 +278,20 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   false-miss feed.
 
 ### CUQ-1.3 — VLM verification "escalation" re-checks identical stale OCR
-- [ ] **medium · effort medium**
+- [x] **medium · effort medium** (flag-gated, default-off) — DONE: confirmed the
+  gap in code (`describe()` enriches `_last_scene` in place from the same
+  `_last_frame` — no re-capture, no re-OCR), so for text expectations the VLM
+  re-check was guaranteed identical. `cfg.reverify_fresh_frame` (env
+  `GLASSBOX_REVERIFY_FRESH_FRAME`) now makes `_maybe_vlm_verify_expected_state`
+  re-perceive a fresh frame (`perceive(fresh=True)`) and re-verify BEFORE the
+  gate: if the now-settled text matches it returns `expected_state_refresh`
+  succeeded **without** spending a VLM call; otherwise the fresher scene becomes
+  the escalation basis (so even the VLM no longer reads the stale frame). The
+  fresh OCR short-circuits via the perceive cache when pixels are unchanged, so
+  an unchanged screen stays cheap and still escalates. Default off (adds a
+  capture+OCR on escalation); both branches tested in `test_computer_use_runtime`.
+  **Remaining:** on-rig validation of the fresh-read hit rate before default-on;
+  optionally a direct "is X visible?" VLM question for true-unreadable cases.
 - Gap: on `unknown`/`failed` verification the orchestrator calls `describe()` then
   re-runs `verify_expected_state` — but `describe()` enriches the *same*
   already-captured scene in place (fills `intent_label`/`page_id`); it does not

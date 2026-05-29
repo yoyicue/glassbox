@@ -1647,6 +1647,28 @@ class ActionOrchestrator:
         metadata: dict[str, Any],
         after_scene: Any,
     ) -> SemanticOutcome | None:
+        # CUQ-1.3: the OCR verify above and a subsequent describe() both read the
+        # same post-action frame (describe() enriches it in place — no re-capture,
+        # no re-OCR), so for text-based expectations the VLM re-check is guaranteed
+        # to read identical text. Re-perceive a fresh frame first so text that only
+        # finished rendering after settle is re-read cheaply: if it now matches we
+        # return succeeded WITHOUT spending the VLM call, and otherwise the fresher
+        # scene becomes the basis for the VLM escalation. perceive(fresh=True)
+        # short-circuits via the perceive cache when pixels are unchanged, so this
+        # only re-OCRs a genuinely changed screen. Flag-gated (default off).
+        if getattr(phone, "_reverify_fresh_frame", False):
+            fresh_scene = self._reperceive_fresh(phone)
+            if fresh_scene is not None:
+                fresh_semantic = verify_expected_state(expected, fresh_scene)
+                if fresh_semantic.status == "succeeded":
+                    return replace(
+                        fresh_semantic,
+                        verifier="expected_state_refresh",
+                        reason=f"{fresh_semantic.reason} after fresh re-perceive",
+                    )
+                # Escalate to the VLM against the fresher read, not the stale one.
+                after_scene = fresh_scene
+                expected_semantic = fresh_semantic
         max_calls_per_action = self._int_metadata(metadata, "max_vlm_calls_per_action", 1)
         used_action_calls = self._int_metadata(metadata, "vlm_calls", 0)
         remaining_action_calls = max(0, max_calls_per_action - used_action_calls)
@@ -1688,6 +1710,30 @@ class ActionOrchestrator:
             verifier="expected_state_vlm",
             reason=f"{vlm_semantic.reason} after VLM escalation",
         )
+
+    @staticmethod
+    def _reperceive_fresh(phone) -> Any | None:
+        """CUQ-1.3: force a fresh capture+OCR for re-verification.
+
+        Returns the freshly perceived scene, or None when the phone cannot
+        re-perceive (no such method, or it raised) — callers then fall back to
+        the existing post-action scene. perceive(fresh=True) bypasses the stale
+        post-action frame; the perceive cache still short-circuits OCR when the
+        new frame is pixel-identical, so an unchanged screen stays cheap.
+        """
+        perceive = getattr(phone, "perceive", None)
+        if not callable(perceive):
+            return None
+        try:
+            return perceive(fresh=True)
+        except TypeError:
+            # A phone/stub whose perceive() does not accept `fresh`.
+            try:
+                return perceive()
+            except Exception:
+                return None
+        except Exception:
+            return None
 
     @staticmethod
     def _int_metadata(metadata: dict[str, Any], key: str, default: int) -> int:
