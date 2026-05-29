@@ -15,6 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from glassbox.cognition.text_match import looks_like_status_bar_clock
+
 # Layer-2 element types worth a tap when exploring. `text` is included because
 # iOS list rows frequently survive heuristic typing as plain text; status bar /
 # images / back buttons / modal chrome are not forward-navigation candidates.
@@ -39,6 +41,10 @@ def ocr_tap_candidates(scene: Any) -> list[TapCandidate]:
             continue
         label = (el.text or "").strip()
         if not label:
+            continue
+        # CUQ-2.7: a status-bar clock (often OCR'd as plain 'text') is never a
+        # navigation target; skip it so it cannot be picked as a tap candidate.
+        if looks_like_status_bar_clock(label):
             continue
         out.append(TapCandidate(label=label, center=el.box.center, source="ocr"))
     return out

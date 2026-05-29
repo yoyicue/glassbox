@@ -141,6 +141,24 @@ def fuzzy_ratio(a: str | None, b: str | None) -> float:
     return difflib.SequenceMatcher(None, norm_text(a), norm_text(b)).ratio()
 
 
+# CUQ-2.7: a status-bar clock (with a few trailing OCR-noise glyphs, e.g.
+# "2:03 C", "12:09 €") is never a navigation target. A core (locale-neutral)
+# detector so candidate selection / matching can skip it outside the Settings
+# crawler, which already had its own filter.
+_CLOCK_CORE_RE = re.compile(r"^\d{1,2}[:：]\d{2}$")
+_CLOCK_NOISE_RE = re.compile(r"^\d{1,2}[:：]\d{2}\s*\S{0,3}$")
+
+
+def looks_like_status_bar_clock(text: str | None) -> bool:
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    compact = re.sub(r"\s+", "", raw)
+    if len(compact) > 8:
+        return False
+    return bool(_CLOCK_CORE_RE.match(compact) or _CLOCK_NOISE_RE.match(raw))
+
+
 def canonical_label(
     text: str | None,
     labels: Iterable[str],

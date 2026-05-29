@@ -395,8 +395,13 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   gate's `describe()` escalation. *medium* (pairs with CUQ-0.4)
 - [ ] **CUQ-2.6** `settings_detail` false-positives on third-party app screens via
   locale-generic body markers. *medium*
-- [ ] **CUQ-2.7** Status-bar clock filtering lives only in the Settings policy;
-  core `find_text`/`text_match` still match clock noise. *medium*
+- [x] **CUQ-2.7** Status-bar clock filtering lives only in the Settings policy;
+  core `find_text`/`text_match` still match clock noise. *medium* — DONE: added a
+  core, locale-neutral `looks_like_status_bar_clock` to `text_match` (handles
+  trailing OCR-noise glyphs like `"2:03 C"`, `"12:09 €"`), and `ocr_tap_candidates`
+  now skips clock-noise labels (a clock OCR'd as plain `text` previously survived
+  as a tap candidate on the generic, non-Settings path). Tests in
+  `test_text_match.py` + `test_candidates.py`.
 - [ ] **CUQ-2.8** `find_text` substring tier runs before fuzzy and matches short
   needles inside long rows. *medium* (subsumed by CUQ-1.5)
 - [x] **CUQ-2.9** `selection_source` is inferred post-hoc ("was the scene

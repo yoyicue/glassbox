@@ -6,6 +6,7 @@ import pytest
 from glassbox.cognition.text_match import (
     canonical_label,
     confusion_compact,
+    looks_like_status_bar_clock,
     match_known_label,
     vote_ocr_texts,
 )
@@ -124,3 +125,16 @@ def test_vote_ocr_texts_default_preserves_generic_app_text():
 def test_vote_ocr_texts_empty():
     assert vote_ocr_texts([]) == ""
     assert vote_ocr_texts([None, "", "  "]) == ""
+
+
+@pytest.mark.smoke
+def test_looks_like_status_bar_clock():
+    """CUQ-2.7: detect a status-bar clock (with trailing OCR noise) but not
+    legitimate labels."""
+    assert looks_like_status_bar_clock("9:41")
+    assert looks_like_status_bar_clock("12:09 €")
+    assert looks_like_status_bar_clock("2:03 C")
+    assert not looks_like_status_bar_clock("无线局域网")
+    assert not looks_like_status_bar_clock("Settings")
+    assert not looks_like_status_bar_clock("1:1")  # ratio, not HH:MM
+    assert not looks_like_status_bar_clock("")
