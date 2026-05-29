@@ -433,7 +433,8 @@ def test_picokvm_warns_when_iphone_wheel_not_validated():
 @pytest.mark.smoke
 def test_picokvm_warns_when_ipad_left_on_static_iphone_fit():
     """CUQ-3.9: an iPad model with no crop to derive from and no explicit ABS_*
-    override is on the static iPhone fit — surface that inconsistency."""
+    override is on the static iPhone fit — surface that inconsistency. The check
+    runs at connect() (see the next test); here we exercise the logic directly."""
     ipad = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
     iphone = SimpleNamespace(model="iphone_17", phone_size=(1179, 2556), phone_points=(393, 852))
     crop = SimpleNamespace(crop_bbox=(640, 48, 642, 984))
@@ -442,12 +443,15 @@ def test_picokvm_warns_when_ipad_left_on_static_iphone_fit():
     warned = PicoKVMEffector(
         config=PicoKVMEffectorConfig(_env_file=None), rpc=FakeRpc(), device_geometry=ipad
     )
+    assert warned.fit_calibration_warning is None  # not evaluated at construction
+    warned._warn_on_inconsistent_fit()
     assert warned.fit_calibration_warning is not None
 
     # iPad WITH a crop -> fit is derived -> no warning.
     derived = PicoKVMEffector(
         config=PicoKVMEffectorConfig(_env_file=None), rpc=FakeRpc(), device_geometry=ipad, crop=crop
     )
+    derived._warn_on_inconsistent_fit()
     assert derived.fit_calibration_warning is None
 
     # iPad with an explicit ABS_* override -> intentional -> no warning.
@@ -456,13 +460,35 @@ def test_picokvm_warns_when_ipad_left_on_static_iphone_fit():
         rpc=FakeRpc(),
         device_geometry=ipad,
     )
+    overridden._warn_on_inconsistent_fit()
     assert overridden.fit_calibration_warning is None
 
     # iPhone on the static iPhone fit is consistent -> no warning.
     iphone_eff = PicoKVMEffector(
         config=PicoKVMEffectorConfig(_env_file=None), rpc=FakeRpc(), device_geometry=iphone
     )
+    iphone_eff._warn_on_inconsistent_fit()
     assert iphone_eff.fit_calibration_warning is None
+
+
+@pytest.mark.smoke
+def test_picokvm_fit_warning_is_evaluated_at_connect_not_construction():
+    """CUQ-3.9 fires at connect(), not __init__. build_phone first builds a
+    transient crop-less probe effector (just to read capabilities) and then
+    rebuilds the real effector WITH the detected letterbox crop; evaluating in
+    __init__ cried wolf from that discarded probe even though the live effector
+    ends up crop-calibrated. Only the connected effector that drives taps warns."""
+    ipad = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    eff = PicoKVMEffector(
+        # ipad_wheel_activation="off" so connect() does not attempt real wheel
+        # activation (SSH to the rig) — we are isolating the fit-warning trigger.
+        config=PicoKVMEffectorConfig(_env_file=None, ipad_wheel_activation="off"),
+        rpc=FakeRpc(),
+        device_geometry=ipad,
+    )
+    assert eff.fit_calibration_warning is None  # construction is silent
+    eff.connect()
+    assert eff.fit_calibration_warning is not None  # connect() evaluates the fit
 
 
 @pytest.mark.smoke

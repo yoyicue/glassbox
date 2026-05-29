@@ -76,8 +76,13 @@ class PicoKVMEffector:
         self._abs_to_phone_scale_x = float(self.config.abs_to_phone_scale_x)
         self._abs_to_phone_scale_y = float(self.config.abs_to_phone_scale_y)
         self._apply_crop_calibration(crop)
+        # CUQ-3.9 fit-consistency check runs at connect() (next to the wheel
+        # validation warning), not here. build_phone first builds a transient
+        # crop-less probe effector only to read capabilities, then rebuilds the
+        # real effector WITH the detected letterbox crop — so warning in __init__
+        # cried wolf from that discarded probe even though the live effector ends
+        # up crop-calibrated. Only the connected effector drives taps.
         self.fit_calibration_warning: str | None = None
-        self._warn_on_inconsistent_fit()
         self._connected = False
         self._wheel_activation_status: str | None = None
         self.wheel_validation_warning: str | None = None
@@ -119,6 +124,7 @@ class PicoKVMEffector:
         self.rpc.ping()
         self._ensure_wheel_activation()
         self._warn_on_unvalidated_wheel()
+        self._warn_on_inconsistent_fit()
         self._connected = True
 
     def _warn_on_unvalidated_wheel(self) -> None:
