@@ -842,9 +842,20 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `'primed'` via `wheel_validation_warning` + a loguru warning, so the operator
   knows wheel scrolling is unvalidated and the run leans on swipe fallback.
   Disabled-wheel / primed cases stay silent. Test covers all three.
-- [ ] **CUQ-3.17** `ipad_mini_migration.md` self-contradicts: §5 says wheel
+- [x] **CUQ-3.17** `ipad_mini_migration.md` self-contradicts: §5 says wheel
   "superseded/authoritative" while the same doc records every `scroll_wheel` as
-  no-progress. Reconcile against `picokvm_ipad_wheel.md`. *medium*
+  no-progress. Reconcile against `picokvm_ipad_wheel.md`. *medium* — DONE
+  (reconciled in the working tree; **not committed** — the file is one of the 3
+  pre-existing WIP docs this campaign must not commit, so the user commits it with
+  their edits). The doc already had a §5 "superseded by picokvm_ipad_wheel.md"
+  note + top-note; the four EARLIER spots that still read the no-wheel finding as
+  current now carry an additive **Superseded (2026-05-27)** caveat pointing to §5 /
+  `picokvm_ipad_wheel.md` (where iPad wheel via `kvm_app.wheelReport` is
+  validated): the §"Hardware corrections" `wheelReport`-no-scroll finding, the
+  "wheel scrolling is not authoritative" coverage line, the "should not treat
+  iPadOS wheel as usable yet (3/3 no-progress)" line, and the "report-ID-2 wheel
+  ACK is not enough: 0/n" descriptor note. Additive (historical findings kept for
+  context); no factual claim removed.
 - [~] **CUQ-3.18** `close_foreground_app` home-indicator drag and `keyboard_focus`
   point are iPhone-shaped logical constants applied to iPad too. *medium* —
   RE-SCOPED (code-verified): both `close_app_drag_*` and `keyboard_focus_x/y` are
