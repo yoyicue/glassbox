@@ -269,6 +269,32 @@ def test_crawl_app_reports_gauntlet_block_on_login_wall():
 
 
 @pytest.mark.smoke
+def test_crawl_app_clears_english_gauntlet_then_explores():
+    """End-to-end breadth proof: an English-language app whose cold start throws
+    a permission interstitial is cleared (deny), then the real home is crawled —
+    the same chain that until now only worked on a zh-Hans device."""
+    app = _FakeApp(
+        {
+            "permission": [
+                ("“Acme” Would Like to Send You Notifications", None),
+                ("Don't Allow", "home"),
+                ("Allow", None),
+            ],
+            "home": [("Profile", "profile"), ("Settings", "settings")],
+            "profile": [],
+            "settings": [],
+        },
+        start="permission",
+    )
+    report = crawl_app(app, foreground=app.foreground, annotator=_SceneAnnotator(),
+                       max_depth=1, tap_settle_s=0.0)
+    assert report.status == "ok"
+    assert report.gauntlet_steps == [("permission", "Don't Allow")]
+    assert {e.label for e in report.entries} >= {"Profile", "Settings"}
+    assert report.navigations == 2          # explored both real-home rows after the gauntlet
+
+
+@pytest.mark.smoke
 def test_crawl_app_rejects_semantic_failed_tap_without_trusting_screen_change():
     class SemanticRejectingApp(_FakeApp):
         def tap_xy(self, x: int, y: int):

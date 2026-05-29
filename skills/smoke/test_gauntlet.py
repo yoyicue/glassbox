@@ -113,6 +113,89 @@ def test_classify_promo_modal_is_dismissed():
     assert intr.label == "以后再说"
 
 
+# —— English (en) gauntlet — same conservative semantics in the other UI language ——
+@pytest.mark.smoke
+def test_classify_english_permission_picks_deny():
+    scene = _scene(
+        ("“Maps” Would Like to Use Your Location", 400),
+        ("Your location is used to show nearby places.", 440),
+        ("Don't Allow", 560),
+        ("Allow Once", 560),
+        ("Allow While Using App", 600),
+    )
+    intr = classify_interstitial(scene)
+    assert intr is not None
+    assert intr.kind == "permission"
+    assert intr.action == "deny"             # permission → deny, never an "Allow*" button
+    assert intr.label == "Don't Allow"
+
+
+@pytest.mark.smoke
+def test_classify_english_tracking_prompt_asks_not_to_track():
+    scene = _scene(
+        ("Allow “Acme” to track your activity across other companies' apps?", 360),
+        ("Ask App Not to Track", 520),
+        ("Allow", 520),
+    )
+    intr = classify_interstitial(scene)
+    assert intr is not None
+    assert intr.kind == "permission"
+    assert intr.action == "deny"
+    assert intr.label == "Ask App Not to Track"
+
+
+@pytest.mark.smoke
+def test_classify_english_onboarding_picks_advance():
+    scene = _scene(
+        ("Welcome to Clock", 280),
+        ("Tap to learn more, or continue to get started.", 340),
+        ("Continue", 840),
+    )
+    intr = classify_interstitial(scene)
+    assert intr is not None
+    assert intr.kind == "onboarding"
+    assert intr.action == "advance"
+    assert intr.label == "Continue"
+
+
+@pytest.mark.smoke
+def test_classify_english_normal_screen_returns_none():
+    """A normal app screen with a "Continue" button but no marker → not a gauntlet."""
+    scene = _scene(("World Clock", 140), ("Cupertino", 220), ("Continue", 600))
+    assert classify_interstitial(scene) is None
+
+
+@pytest.mark.smoke
+def test_classify_english_login_wall_is_blocked():
+    """English marker present but only sign-in buttons → blocked, cannot pass safely."""
+    scene = _scene(
+        ("Welcome to Acme", 300),
+        ("Sign in to continue", 340),
+        ("Sign In", 500),
+        ("Sign Up", 560),
+    )
+    intr = classify_interstitial(scene)
+    assert intr is not None
+    assert intr.kind == "blocked"
+    assert intr.button is None
+    assert intr.label == "Sign In"
+
+
+@pytest.mark.smoke
+def test_classify_english_notification_prompt_dismissed_when_no_deny():
+    """A "Send Notifications" promo with only Not Now / Allow → dismiss, not Allow."""
+    scene = _scene(
+        ("“Acme” Would Like to Send You Notifications", 360),
+        ("Not Now", 520),
+        ("Allow", 520),
+    )
+    intr = classify_interstitial(scene)
+    assert intr is not None
+    assert intr.kind == "permission"
+    assert intr.action == "dismiss"          # Not Now beats Allow; permission never advances
+    assert intr.label == "Not Now"
+
+
 # —— loop tests with a scripted fake phone ——
 class _FakePhone:
     """Returns a scripted sequence of scenes; records taps."""
@@ -165,3 +248,17 @@ def test_clear_gauntlet_reports_stuck_when_interstitial_will_not_clear():
     result = clear_cold_start_gauntlet(phone, settle_s=0.0)
     assert result.status == "stuck"
     assert len(phone.taps) <= 3        # 连点 3 次同一关卡就判定卡死
+
+
+@pytest.mark.smoke
+def test_clear_english_gauntlet_walks_to_stable_screen():
+    """An English permission → onboarding chain clears to a stable screen."""
+    phone = _FakePhone([
+        _scene(("“X” Would Like to Access Your Photos", 400), ("Don't Allow", 560)),
+        _scene(("Welcome to X", 280), ("Get Started", 840)),
+        _scene(("Home", 140), ("Me", 900)),          # stable
+    ])
+    result = clear_cold_start_gauntlet(phone, settle_s=0.0)
+    assert result.status == "stable"
+    assert result.handled == [("permission", "Don't Allow"), ("onboarding", "Get Started")]
+    assert len(phone.taps) == 2

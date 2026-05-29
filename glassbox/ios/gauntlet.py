@@ -24,8 +24,13 @@ from typing import Any
 
 # An interstitial is recognized by a context marker in the on-screen text AND a
 # safe button. Requiring the marker keeps a real app screen that merely has a
-# "继续"/"完成" button from being mistaken for the gauntlet.
+# "继续"/"完成"/"Continue" button from being mistaken for the gauntlet.
+#
+# Both the zh-Hans and the en (English / region HK/US) marker sets live here so
+# the same cold-start crawl clears a device in either UI language; English
+# patterns are case-insensitive (re.I) since iOS title-cases dialog text.
 _MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    # —— Chinese (zh-Hans) ——
     ("permission", re.compile(r"想(访问|使用|向你|查找|发送|连接)")),
     ("permission", re.compile(r"(访问|使用|读取)你的")),
     ("permission", re.compile(r"App\s*跟踪|跟踪你在|允许.{0,6}跟踪")),
@@ -33,13 +38,37 @@ _MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("permission", re.compile(r"(发送|接收).{0,4}通知")),
     ("onboarding", re.compile(r"欢迎使用|新功能|全新.{0,6}(体验|设计|功能|导览)")),
     ("consent", re.compile(r"服务条款|用户协议|隐私政策|继续即表示|隐私(声明|说明)")),
+    # —— English (en) ——
+    ("permission", re.compile(r"would like to (access|use|send|find|connect|add)", re.I)),
+    ("permission", re.compile(r"\baccess your \w+", re.I)),
+    ("permission", re.compile(r"track your activity|allow .{0,24}\bto track\b|tracking transparency", re.I)),
+    ("permission", re.compile(r"(send|receive|enable|turn on)\b.{0,16}notifications?", re.I)),
+    ("permission", re.compile(r"allow .{0,24}\bto (use|access)\b", re.I)),
+    ("onboarding", re.compile(r"\bwelcome to\b|what'?s new|\bget started\b|new (features?|design|experience)", re.I)),
+    ("consent", re.compile(r"terms (of service|of use|& conditions|and conditions)|privacy policy|privacy (notice|statement)|by (continuing|tapping)|user agreement", re.I)),
 )
 
 # Button-label taxonomy, scanned in this intent priority: a permission dialog is
-# declined, a promo is dismissed, onboarding is advanced.
-_DENY = ("不允许", "暂不允许", "不允许访问", "拒绝", "拒绝访问")
-_DISMISS = ("以后再说", "暂不", "跳过", "取消", "关闭", "知道了", "我知道了", "稍后", "暂时不用")
-_ADVANCE = ("继续", "下一步", "开始使用", "接受并继续", "同意并继续", "同意", "完成", "好")
+# declined, a promo is dismissed, onboarding is advanced. Labels are matched by
+# exact (stripped) equality, so each surface form must be listed; combined
+# phrases ("Agree and Continue") precede their shorter forms ("Continue") so the
+# most specific safe button wins. iOS renders the apostrophe as U+2019 (’) but
+# OCR may emit a straight ', so both are listed for the en denials.
+_DENY = (
+    "不允许", "暂不允许", "不允许访问", "拒绝", "拒绝访问",
+    "Don't Allow", "Don’t Allow", "Don't Allow Access", "Don’t Allow Access",
+    "Ask App Not to Track", "Deny", "Block",
+)
+_DISMISS = (
+    "以后再说", "暂不", "跳过", "取消", "关闭", "知道了", "我知道了", "稍后", "暂时不用",
+    "Not Now", "Maybe Later", "No Thanks", "No, Thanks", "Skip", "Cancel",
+    "Close", "Dismiss", "Later",
+)
+_ADVANCE = (
+    "接受并继续", "同意并继续", "继续", "下一步", "开始使用", "同意", "完成", "好",
+    "Agree and Continue", "Agree & Continue", "Accept and Continue", "Accept & Continue",
+    "Continue", "Next", "Get Started", "Agree", "Accept", "Done", "Got It", "OK",
+)
 _INTENT_ORDER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("deny", _DENY),
     ("dismiss", _DISMISS),
@@ -51,6 +80,9 @@ _INTENT_ORDER: tuple[tuple[str, tuple[str, ...]], ...] = (
 _BLOCKING = (
     "登录", "注册", "立即登录", "立即注册", "创建账户", "创建 Apple 账户",
     "使用 Apple 账户登录", "用 Apple 登录", "立即购买", "订阅", "升级", "续费",
+    "Sign In", "Log In", "Login", "Sign Up", "Register", "Create Account",
+    "Continue with Apple", "Sign in with Apple", "Subscribe", "Upgrade",
+    "Buy Now", "Purchase", "Start Free Trial", "Restore Purchase",
 )
 
 
