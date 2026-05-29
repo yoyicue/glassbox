@@ -1,7 +1,7 @@
 {
   "case_id": "ios_control_center_opened_power_off_001",
   "action": "control_center",
-  "expected_status": "failed",
+  "expected_status": "blocked",
   "before_texts": ["主屏幕"],
   "after_texts": ["滑动来关机", "SOS"],
   "metadata": {},

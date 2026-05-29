@@ -1846,6 +1846,7 @@ class ActionOrchestrator:
             method=payload.get("method"),
             landing_signal=payload.get("landing_signal"),
             label=payload.get("label"),
+            target_identity=metadata.get("target_identity"),
         )
         return payload
 

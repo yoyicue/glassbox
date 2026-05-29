@@ -35,6 +35,20 @@ class CalibratedOffset:
         }
 
 
+_NEGATIVE_LABELS = ("missed", "landed_noop")
+
+
+def _identity_key(identity: Any) -> str | None:
+    """Stable key for a target identity (CUQ-1.2 distinct-control tracking)."""
+    if not isinstance(identity, dict):
+        return None
+    for field_name in ("intent", "text", "element_id", "role", "type"):
+        value = identity.get(field_name)
+        if value:
+            return f"{field_name}:{value}"
+    return None
+
+
 @dataclass
 class MethodStats:
     command_tries: int = 0
@@ -45,13 +59,28 @@ class MethodStats:
     last_outcome: str = "unknown"
     updated_at: str = ""
     source: str = "learned"
+    # CUQ-1.2: distinct target identities that produced a negative (missed /
+    # landed_noop). The unactuatable verdict requires negatives from several
+    # *different* controls so one stubborn target can't poison the whole coarse
+    # (role, size, zone) bucket on a few transient perception misses.
+    negative_identities: set[str] = field(default_factory=set)
 
-    def record(self, *, landing_signal: str | None, label: str) -> None:
+    def record(
+        self,
+        *,
+        landing_signal: str | None,
+        label: str,
+        target_identity: Any = None,
+    ) -> None:
         self.command_tries += 1
         if landing_signal == "landed":
             self.landed_attempts += 1
         if label == "landed_ok":
             self.semantic_ok += 1
+        if label in _NEGATIVE_LABELS:
+            identity = _identity_key(target_identity)
+            if identity is not None:
+                self.negative_identities.add(identity)
         self.by_label[label] = self.by_label.get(label, 0) + 1
         self.last_outcome = label
         self.updated_at = datetime.now().astimezone().isoformat()
@@ -66,6 +95,7 @@ class MethodStats:
             "last_outcome": self.last_outcome,
             "updated_at": self.updated_at,
             "source": self.source,
+            "negative_identities": sorted(self.negative_identities),
         }
 
 
@@ -107,13 +137,14 @@ class ActuationProfile:
         method: str | None,
         landing_signal: str | None,
         label: str | None,
+        target_identity: Any = None,
     ) -> None:
         if not control_bucket or method not in {"mouse_tap", "keyboard_focus_activate"} or not label:
             return
         key = self._key(control_bucket)
         entry = self.entries.setdefault(key, ControlClassEntry())
         stats = entry.methods.setdefault(method, MethodStats())  # type: ignore[arg-type]
-        stats.record(landing_signal=landing_signal, label=label)
+        stats.record(landing_signal=landing_signal, label=label, target_identity=target_identity)
         self._refresh_actuability(entry, method=method)
 
     def record_correction_pair(
@@ -305,6 +336,9 @@ class ActuationProfile:
                     last_outcome=str(stats_payload.get("last_outcome") or "unknown"),
                     updated_at=str(stats_payload.get("updated_at") or ""),
                     source=str(stats_payload.get("source") or "learned"),
+                    negative_identities={
+                        str(item) for item in (stats_payload.get("negative_identities") or [])
+                    },
                 )
             profile.entries[key] = entry
         return profile
@@ -411,11 +445,28 @@ def _updated_offset(
     )
 
 
+# CUQ-1.2: a coarse (role, size, zone) bucket is shared across many unrelated
+# controls, and a "missed" is a low-threshold ROI pixel diff on a possibly-stale
+# frame. Require more evidence before disabling a whole control class: at least
+# this many all-negative tries, AND (when identity is known) negatives from at
+# least this many DISTINCT controls, so transient perception misses on one
+# stubborn target cannot silently poison the class.
+_MIN_UNACTUATABLE_TRIES = 5
+_MIN_DISTINCT_NEGATIVES = 2
+
+
 def _method_is_unactuatable(stats: MethodStats) -> bool:
-    if stats.command_tries < 3 or stats.semantic_ok > 0:
+    if stats.command_tries < _MIN_UNACTUATABLE_TRIES or stats.semantic_ok > 0:
         return False
     negative = stats.by_label.get("missed", 0) + stats.by_label.get("landed_noop", 0)
-    return negative >= stats.command_tries
+    if negative < stats.command_tries:
+        return False
+    # When identity info is available, require negatives from multiple distinct
+    # controls; fall back to the count-only gate when identities were not
+    # recorded (older artifacts / paths that omit target_identity).
+    if stats.negative_identities:
+        return len(stats.negative_identities) >= _MIN_DISTINCT_NEGATIVES
+    return True
 
 
 def _method_score(stats: MethodStats) -> tuple[float, float, int]:

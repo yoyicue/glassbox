@@ -1,7 +1,7 @@
 {
   "case_id": "foreground_app_matches_crash_001",
   "action": "open_app",
-  "expected_status": "failed",
+  "expected_status": "blocked",
   "before_texts": ["主屏幕"],
   "after_texts": ["应用程序意外退出", "重新打开"],
   "metadata": {"app": "Settings", "aliases": ["设置"]},

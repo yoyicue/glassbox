@@ -1159,14 +1159,14 @@ def test_computer_use_runtime_semantic_plan_stops_on_blocked_state(tmp_path):
     result = phone._execute_action("tap", plan)
     orchestrator.close()
 
-    assert result.semantic_status == "failed"
+    assert result.semantic_status == "blocked"  # CUQ-3.19: safety stop terminates
     assert recoveries == []
     actions = _read_jsonl(store.run_dir / "actions.jsonl")
     assert len(actions) == 1
     assert actions[0]["semantic"]["disqualifying_state"] == "ios_power_off_screen"
     assert actions[0]["semantic"]["retry_allowed"] is False
     groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
-    assert groups[-1]["group_status"] == "failed"
+    assert groups[-1]["group_status"] == "blocked"
     audit = _read_jsonl(store.run_dir / "audit.jsonl")
     assert not any(event["type"] == "semantic_plan.strategy_failed" for event in audit)
     assert not any(event["type"] == "semantic_plan.recovery.started" for event in audit)
@@ -1426,7 +1426,7 @@ def test_computer_use_runtime_disqualifying_state_suppresses_retry(tmp_path):
     orchestrator.close()
 
     assert result.ok is True
-    assert result.semantic_status == "failed"
+    assert result.semantic_status == "blocked"  # CUQ-3.19: power-off is a safety stop
     actions = _read_jsonl(store.run_dir / "actions.jsonl")
     assert actions[0]["semantic"]["disqualifying_state"] == "ios_power_off_screen"
     assert actions[0]["semantic"]["retry_allowed"] is False
@@ -1929,7 +1929,7 @@ def test_computer_use_runtime_stream_until_match_stops_on_disqualifying_state(tm
     orchestrator.close()
 
     assert result.ok is True
-    assert result.semantic_status == "failed"
+    assert result.semantic_status == "blocked"  # CUQ-3.19: power-off is a safety stop
     action = _read_jsonl(store.run_dir / "actions.jsonl")[0]
     assert action["semantic"]["disqualifying_state"] == "ios_power_off_screen"
     assert action["semantic"]["retry_allowed"] is False

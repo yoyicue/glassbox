@@ -254,12 +254,15 @@ def test_profile_offset_is_consumed_for_next_target_tap(tmp_path):
 def test_unactuatable_bucket_skips_without_effector_call(tmp_path):
     profile = ActuationProfile()
     bucket = {"control_role": "text", "size_bucket": "small", "region_zone": "center"}
-    for _ in range(3):
+    # CUQ-1.2: needs >= 5 all-negative tries from >= 2 distinct controls before
+    # the shared bucket is judged unactuatable.
+    for i in range(5):
         profile.record_attempt(
             control_bucket=bucket,
             method="mouse_tap",
             landing_signal="missed",
             label="missed",
+            target_identity={"intent": f"row_{i % 3}"},
         )
     store = ArtifactStore(tmp_path, run_id="run")
     orchestrator = ActionOrchestrator(store, actuation_profile=profile)
@@ -288,12 +291,15 @@ def test_unactuatable_bucket_skips_without_effector_call(tmp_path):
 def test_ignore_actuation_profile_skip_still_executes_unactuatable_bucket(tmp_path):
     profile = ActuationProfile()
     bucket = {"control_role": "text", "size_bucket": "small", "region_zone": "center"}
-    for _ in range(3):
+    # CUQ-1.2: needs >= 5 all-negative tries from >= 2 distinct controls before
+    # the shared bucket is judged unactuatable.
+    for i in range(5):
         profile.record_attempt(
             control_bucket=bucket,
             method="mouse_tap",
             landing_signal="missed",
             label="missed",
+            target_identity={"intent": f"row_{i % 3}"},
         )
     store = ArtifactStore(tmp_path, run_id="run")
     orchestrator = ActionOrchestrator(store, actuation_profile=profile)
@@ -314,6 +320,40 @@ def test_ignore_actuation_profile_skip_still_executes_unactuatable_bucket(tmp_pa
     assert effector.actions
     audit = _read_jsonl(store.run_dir / "audit.jsonl")
     assert not [event for event in audit if event["type"] == "actuation.skipped"]
+
+
+@pytest.mark.smoke
+def test_one_stubborn_control_does_not_poison_shared_bucket(tmp_path):
+    """CUQ-1.2: repeated negatives from a SINGLE control must not flag the whole
+    shared (role,size,zone) bucket unactuatable and skip unrelated taps."""
+    profile = ActuationProfile()
+    bucket = {"control_role": "text", "size_bucket": "small", "region_zone": "center"}
+    for _ in range(6):  # same control re-tried, NOT distinct controls
+        profile.record_attempt(
+            control_bucket=bucket,
+            method="mouse_tap",
+            landing_signal="missed",
+            label="missed",
+            target_identity={"intent": "Go"},
+        )
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store, actuation_profile=profile)
+    effector = MockEffector()
+    phone = Phone(
+        source=_ImageSource([_frame()] * 8),
+        ocr=_TargetOCR(),
+        effector=effector,
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+        perceive_cache_diff=0.0,
+    )
+
+    result = phone.tap_text("Go")
+    orchestrator.close()
+
+    # Not poisoned: the tap actually executed instead of being skipped.
+    assert result.semantic_reason != "unactuatable"
+    assert effector.actions
 
 
 @pytest.mark.smoke

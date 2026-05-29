@@ -138,18 +138,24 @@ class DisqualifyingState:
     retry_allowed: bool = False
 
 
+# CUQ-3.19: device-safety disqualifying states (power-off, locked, app crashed)
+# map to the terminal `blocked` bucket, not `failed`. The execution state
+# machine terminates on either (via the disqualifying_state flag), but `blocked`
+# is the documented safety bucket — it records these as a deliberate safety stop
+# to surface, not as a task-action failure, and keeps "send no more input on a
+# safety state" explicit at the status level too (invariant #4 exception).
 DISQUALIFYING_STATES = (
     DisqualifyingState(
         state="ios_power_off_screen",
         markers=POWER_OFF_MARKERS,
-        status="failed",
+        status="blocked",
         confidence=0.95,
         deterministic=True,
     ),
     DisqualifyingState(
         state="ios_lock_screen",
         markers=LOCK_MARKERS,
-        status="failed",
+        status="blocked",
         confidence=0.9,
         deterministic=False,
     ),
@@ -163,7 +169,7 @@ DISQUALIFYING_STATES = (
     DisqualifyingState(
         state="app_crashed_or_terminated",
         markers=APP_CRASH_MARKERS,
-        status="failed",
+        status="blocked",
         confidence=0.9,
         deterministic=False,
     ),

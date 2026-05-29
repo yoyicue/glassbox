@@ -1,7 +1,7 @@
 {
   "case_id": "ios_app_switcher_opened_power_off_001",
   "action": "recents",
-  "expected_status": "failed",
+  "expected_status": "blocked",
   "before_texts": ["主屏幕"],
   "after_texts": ["滑动来关机", "SOS"],
   "metadata": {},

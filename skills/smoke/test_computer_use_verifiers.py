@@ -136,7 +136,7 @@ def test_control_center_verifier_golden_disqualifying_state():
 
     outcome = verifier.verify(_input("control_center", _scene("滑动来关机", "SOS")))
 
-    assert outcome.status == "failed"
+    assert outcome.status == "blocked"  # CUQ-3.19: safety stop, not a task failure
     assert outcome.disqualifying_state == "ios_power_off_screen"
     assert outcome.retry_allowed is False
     assert outcome.observation_match == {
@@ -438,7 +438,7 @@ def test_scene_progressed_verifier_disqualifying_state_overrides_change():
 
     outcome = verifier.verify(_input("tap", _scene("滑动来关机", "SOS")))
 
-    assert outcome.status == "failed"
+    assert outcome.status == "blocked"  # CUQ-3.19: safety stop, not a task failure
     assert outcome.disqualifying_state == "ios_power_off_screen"
     assert outcome.retry_allowed is False
 
@@ -546,7 +546,7 @@ def test_app_crash_disqualifying_state_forbids_retry():
 
     outcome = verifier.verify(_input("open_app", _scene("应用程序意外退出", "重新打开")))
 
-    assert outcome.status == "failed"
+    assert outcome.status == "blocked"  # CUQ-3.19: safety stop, not a task failure
     assert outcome.disqualifying_state == "app_crashed_or_terminated"
     assert outcome.retry_allowed is False
 

@@ -260,7 +260,7 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `keyboard_focus_activate`; keep `retry_allowed=True` so a later strategy fires.
 
 ### CUQ-1.2 — Unactuatable-bucket poisoning silently disables a whole control class
-- [ ] **high · effort medium**
+- [x] **high · effort medium** — DONE: `MethodStats` now tracks distinct `negative_identities`; `_method_is_unactuatable` requires `>= 5` all-negative tries AND (when identity is known) negatives from `>= 2` distinct controls, so transient misses on one stubborn target can't poison the shared (role,size,zone) bucket. `target_identity` is threaded through `record_attempt`. Decay already works via `_refresh_actuability` (any `semantic_ok` → actuatable) and CUQ-0.6 cuts the false-miss feed. Tests: distinct-controls still flags unactuatable; one stubborn control does not. (Cross-session persistence of the verdict is moot until CUQ-3.6 enables profile persistence.)
 - Gap: `_method_is_unactuatable` flags a bucket after only 3 missed/`landed_noop`
   tries; the bucket key is coarse (`control_role, size_bucket, region_zone`),
   shared across many targets; "missed" is a low-threshold (0.001) ROI diff on a
@@ -541,9 +541,15 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   point are iPhone-shaped logical constants applied to iPad too. *medium*
 
 ### Safety
-- [ ] **CUQ-3.19** Power-off / lock / app-crash disqualifying states map to
+- [x] **CUQ-3.19** Power-off / lock / app-crash disqualifying states map to
   `status=failed`, not a terminal `blocked` safety bucket (invariant #4
-  exception). *medium*
+  exception). *medium* — DONE: the three device-safety states (`ios_power_off_screen`,
+  `ios_lock_screen`, `app_crashed_or_terminated`) now return `status="blocked"`
+  so they bucket as a deliberate safety stop rather than a task failure
+  (`semantic_transition_edge` already terminated via the disqualifying-state
+  flag; this aligns the status with the documented state machine).
+  `ios_home_unexpected` (navigation anomaly) stays `failed`; permission stays
+  `approval_required`. Updated verifier/runtime tests + golden fixtures.
 
 ### Screen-memory medium companions
 - [ ] **CUQ-3.20** "Transition mismatch = failure" is unimplemented; the graph
