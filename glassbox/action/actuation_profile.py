@@ -170,6 +170,13 @@ class ActuationProfile:
         if space not in {"frame_px", "roi_normalized"}:
             space = "frame_px"
         delta = (landed_x - missed_x, landed_y - missed_y)
+        # CUQ-3.8: reject an implausibly large correction. The candidate-point
+        # retry only nudges the tap a small amount, so a large missed->landed
+        # delta means the "landed" tap was a different element (a mis-pairing),
+        # not a calibration offset — and a single such pair would otherwise bias
+        # the whole shared bucket.
+        if _correction_is_outlier(delta, space):
+            return None
         key = self._key(control_bucket)
         entry = self.entries.setdefault(key, ControlClassEntry())
         stats = entry.methods.setdefault("mouse_tap", MethodStats())
@@ -453,6 +460,18 @@ def _updated_offset(
 # stubborn target cannot silently poison the class.
 _MIN_UNACTUATABLE_TRIES = 5
 _MIN_DISTINCT_NEGATIVES = 2
+
+
+# CUQ-3.8: a legitimate tap-landing correction is small (candidate-point nudge);
+# a correction beyond these bounds is a mis-pairing, not calibration signal.
+_MAX_CORRECTION_FRAME_PX = 150.0
+_MAX_CORRECTION_ROI_NORM = 0.5
+
+
+def _correction_is_outlier(delta: tuple[float, float], space: str) -> bool:
+    magnitude = (delta[0] ** 2 + delta[1] ** 2) ** 0.5
+    limit = _MAX_CORRECTION_ROI_NORM if space == "roi_normalized" else _MAX_CORRECTION_FRAME_PX
+    return magnitude > limit
 
 
 def _method_is_unactuatable(stats: MethodStats) -> bool:

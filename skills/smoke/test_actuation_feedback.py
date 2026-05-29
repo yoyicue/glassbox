@@ -357,6 +357,35 @@ def test_one_stubborn_control_does_not_poison_shared_bucket(tmp_path):
 
 
 @pytest.mark.smoke
+def test_record_correction_pair_rejects_outlier_delta():
+    """CUQ-3.8: a small candidate-point correction is learned; an implausibly
+    large missed->landed delta (a mis-pairing) is rejected, not learned, so one
+    noisy pair cannot bias the shared bucket's offset."""
+    profile = ActuationProfile()
+    bucket = {"control_role": "text", "size_bucket": "small", "region_zone": "center"}
+
+    small = profile.record_correction_pair(
+        control_bucket=bucket,
+        method="mouse_tap",
+        missed_point={"x": 100, "y": 100, "space": "frame_px"},
+        landed_point={"x": 98, "y": 101, "space": "frame_px"},
+    )
+    assert small is not None
+    offset = profile.entry_for_bucket(bucket).methods["mouse_tap"].offset
+    assert offset is not None and offset.n == 1
+
+    outlier = profile.record_correction_pair(
+        control_bucket=bucket,
+        method="mouse_tap",
+        missed_point={"x": 10, "y": 10, "space": "frame_px"},
+        landed_point={"x": 400, "y": 400, "space": "frame_px"},  # ~551px delta
+    )
+    assert outlier is None
+    # The outlier did not update (bias) the learned offset.
+    assert profile.entry_for_bucket(bucket).methods["mouse_tap"].offset.n == 1
+
+
+@pytest.mark.smoke
 def test_keyboard_focus_activate_emits_focus_landing_and_profile_stats(tmp_path):
     frames = [
         _frame(),  # target lookup

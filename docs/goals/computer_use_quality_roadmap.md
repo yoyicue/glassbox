@@ -491,8 +491,12 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
 ### Calibration medium companions
 - [ ] **CUQ-3.7** No per-session auto-calibration probe; relies on mid-run
   opportunistic correction only. *large*
-- [ ] **CUQ-3.8** A single noisy correction pair immediately biases a whole control
-  bucket; no magnitude clamp / variance gate. *medium*
+- [x] **CUQ-3.8** A single noisy correction pair immediately biases a whole control
+  bucket; no magnitude clamp / variance gate. *medium* — DONE: `record_correction_pair`
+  now rejects an implausibly large missed→landed delta (`_correction_is_outlier`:
+  >150px frame / >0.5 roi-normalized) as a mis-pairing rather than a calibration
+  offset, so one noisy pair can't bias the shared bucket. Call site already
+  tolerated a `None` return. Test in `test_actuation_feedback.py`.
 - [x] **CUQ-3.9** `phone_model` and the linear-fit constants are independent config
   with no consistency check. *quick-win* — DONE: `PicoKVMEffector._warn_on_inconsistent_fit`
   surfaces (via `fit_calibration_warning` + a loguru warning) the case where an
