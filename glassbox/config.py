@@ -274,6 +274,15 @@ class AgentConfig(BaseSettings):
     intermittent so this stays off there. Env GLASSBOX_AI_SCROLL_PREFER_WHEEL.
     Default off → swipe-fling everywhere (byte-identical)."""
 
+    idempotent_retry_budget: int = 0
+    """CUQ-0.11: semantic retry budget for ops declared idempotent (home /
+    scroll_wheel / control_center / notification_center / recents — safe to
+    re-do). 0 (default) leaves retry_budget at 0 so the `unknown → retry` policy
+    is a no-op (byte-identical); >0 lets an `unknown` verdict on a safe op retry
+    instead of giving up. Env GLASSBOX_IDEMPOTENT_RETRY_BUDGET. Non-idempotent
+    ops (tap/back/...) always stay at 0. Validate on-rig (e.g. that a retried
+    scroll does not over-scroll) before raising."""
+
     whitebox_hint_selection: bool = False
     """CUQ-2.10: when OCR cannot find a selection target, resolve it by an
     element's whitebox identity (accessibility_id / asset_match / deep_link /

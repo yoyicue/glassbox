@@ -287,9 +287,19 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   non-idempotent op, unlike a semantic failure). Budget threaded into the
   attempt-group audit. Tests in `test_computer_use_runtime.py` (retries a
   non-idempotent transport failure with budget; no retry at the default budget 0).
-- [ ] **CUQ-0.11** Default retry/unknown policies are effective no-ops: most ops
+- [x] **CUQ-0.11** Default retry/unknown policies are effective no-ops: most ops
   are non-idempotent so `retry_budget` is forced to 0 and `unknown_policy=retry`
-  never fires. Decide per-op idempotency explicitly. *medium*
+  never fires. Decide per-op idempotency explicitly. *medium* — DONE (flag-gated,
+  default-off): per-op idempotency is already declared (`_default_idempotent`:
+  home / scroll_wheel / control_center / notification_center / recents), but even
+  those had `retry_budget=0`. `cfg.idempotent_retry_budget` (env
+  `GLASSBOX_IDEMPOTENT_RETRY_BUDGET`) now gives the **idempotent** ops that budget
+  in `_action_metadata`, so an `unknown` verdict on a safe-to-re-do op actually
+  retries (and `unknown_policy` auto-becomes `retry`) instead of the policy being
+  a dead no-op; non-idempotent ops (tap/back/...) always stay at 0. Default 0 →
+  byte-identical. Test in `test_computer_use_runtime.py` (home gets the budget +
+  retry policy; tap stays 0/continue; default 0 → no-op). **Remaining:** on-rig
+  confirm a retried scroll/home on `unknown` helps and doesn't over-scroll.
 - [ ] **CUQ-0.12** Stuck/loop recovery runs only after a group finalizes and
   cannot alter the current action's outcome (`stuck.py:62 observe_and_recover` is
   dead; orchestrator uses `observe()` directly). *medium*

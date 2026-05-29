@@ -2447,3 +2447,33 @@ def test_computer_use_runtime_action_can_raise_trace_level(tmp_path):
     assert action["after"]["screenshot"].startswith("frames/")
     scene_payload = json.loads((store.run_dir / action["after"]["scene"]).read_text())
     assert "elements" in scene_payload
+
+
+@pytest.mark.smoke
+def test_idempotent_retry_budget_enables_unknown_retry_only_for_safe_ops(tmp_path):
+    """CUQ-0.11: with an opt-in idempotent_retry_budget, an op declared idempotent
+    (home / scroll_wheel / ...) gets a semantic retry budget so an `unknown`
+    verdict actually retries; non-idempotent ops (tap) stay at 0. Default budget 0
+    keeps the unknown->retry policy a no-op (byte-identical)."""
+    store = ArtifactStore(tmp_path, run_id="run")
+
+    # Budget enabled.
+    orch = ActionOrchestrator(store, idempotent_retry_budget=2)
+    home_md = orch._action_metadata("home", {})
+    assert home_md["idempotent"] is True
+    assert home_md["retry_budget"] == 2
+    assert home_md["unknown_policy"] == "retry"
+
+    tap_md = orch._action_metadata("tap", {})
+    assert tap_md["idempotent"] is False
+    assert tap_md["retry_budget"] == 0
+    assert tap_md["unknown_policy"] == "continue"
+    orch.close()
+
+    # Default (budget 0): even an idempotent op gets no retry -> policy no-op.
+    orch0 = ActionOrchestrator(ArtifactStore(tmp_path / "d0", run_id="run"))
+    home0 = orch0._action_metadata("home", {})
+    assert home0["idempotent"] is True
+    assert home0["retry_budget"] == 0
+    assert home0["unknown_policy"] == "continue"
+    orch0.close()

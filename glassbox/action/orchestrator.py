@@ -150,6 +150,7 @@ class ActionOrchestrator:
         recovery_seed: dict[str, Any] | None = None,
         stuck_detector: StuckLoopDetector | None = None,
         max_stuck_recoveries: int = 3,
+        idempotent_retry_budget: int = 0,
     ):
         if observation_producer_mode not in OBSERVATION_PRODUCER_MODES:
             expected = ", ".join(sorted(OBSERVATION_PRODUCER_MODES))
@@ -165,6 +166,10 @@ class ActionOrchestrator:
         self.stuck_detector = stuck_detector or StuckLoopDetector()
         self.max_stuck_recoveries = max(0, int(max_stuck_recoveries))
         self._stuck_recovery_failures = 0
+        # CUQ-0.11: opt-in semantic retry budget for ops declared idempotent
+        # (_default_idempotent). 0 (default) keeps retry_budget at 0 so the
+        # unknown->retry policy stays a no-op — byte-identical to before.
+        self._idempotent_retry_budget = max(0, int(idempotent_retry_budget))
         self.semantic_fail_fast = semantic_fail_fast
         self.observation_producer_mode = observation_producer_mode
         self._group_seq = 0
@@ -2409,7 +2414,14 @@ class ActionOrchestrator:
         metadata = dict(kwargs)
         metadata.setdefault("idempotent", self._default_idempotent(op))
         metadata.setdefault("settle_strategy", self._settle_strategy(op, metadata))
-        metadata.setdefault("retry_budget", 0)
+        # CUQ-0.11: an idempotent op (safe to re-do) gets the opt-in semantic
+        # retry budget, so an `unknown` verdict actually retries instead of the
+        # policy being a dead no-op. Non-idempotent ops stay at 0 (a retry could
+        # double-apply). Default budget 0 → byte-identical.
+        metadata.setdefault(
+            "retry_budget",
+            self._idempotent_retry_budget if metadata.get("idempotent") else 0,
+        )
         if metadata.get("actuation_method") == "mouse_tap" and self._landing_observation_enabled(metadata):
             metadata.setdefault("landing_retry_budget", 2)
             # CUQ-0.6: a landing retry only fires on a "missed" tap (ROI

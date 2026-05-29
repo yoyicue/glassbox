@@ -622,6 +622,7 @@ def build_phone(
                 ),
                 max_attempts=2,
             ),
+            idempotent_retry_budget=cfg.idempotent_retry_budget,
         )
 
     platform = DEFAULT_PLATFORM_REGISTRY.create(
