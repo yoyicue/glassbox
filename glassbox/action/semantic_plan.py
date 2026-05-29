@@ -595,7 +595,7 @@ def _default_strategy_params(op: str, strategy_name: str, params: Mapping[str, A
     if op == "scroll":
         return {
             key: params[key]
-            for key in ("ticks", "horizontal", "x1", "y1", "x2", "y2")
+            for key in ("ticks", "horizontal", "x1", "y1", "x2", "y2", "direction")
             if key in params
         }
     return {}
@@ -634,12 +634,20 @@ def _bind_phone_strategy(
         if name == "keyboard_focus_activate":
             return lambda: phone.effector.key(0, 0x28)
     if op == "scroll":
+        # CUQ-0.1: a directional scroll (down = reveal content below). The ladder
+        # is wheel -> swipe: the wheel sign follows the direction, and the swipe
+        # fallback uses the backend's preset gesture (raw-coord drag only when
+        # explicit x1..y2 are supplied) so it matches the existing swipe path.
+        direction = str(params.get("direction") or "down")
         if name == "wheel":
             ticks = int(params.get("ticks", 3) or 3)
+            signed = ticks if direction == "down" else -ticks
             horizontal = int(params.get("horizontal", 0) or 0)
-            return lambda: phone.effector.scroll_wheel(ticks, horizontal=horizontal)
+            return lambda: phone.effector.scroll_wheel(signed, horizontal=horizontal)
         if name == "drag":
-            return lambda: _phone_drag(phone, params)
+            if all(params.get(k) is not None for k in ("x1", "y1", "x2", "y2")):
+                return lambda: _phone_drag(phone, params)
+            return lambda: (phone.swipe_up() if direction == "down" else phone.swipe_down())
     return lambda: _unsupported(phone, op, name)
 
 

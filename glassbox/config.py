@@ -350,10 +350,11 @@ class AgentConfig(BaseSettings):
     GLASSBOX_SEMANTIC_PLAN_OPS=back so a verified-failed strategy switches to the
     next reliable primitive (nav_back_tap -> keyboard_back -> edge_back_gesture)
     instead of giving up. Flag-gated pending on-rig validation before default-on.
-    **Currently only `back` has a wired routing call site**; `home`/`scroll`/`tap`/
-    `launch_app` plans exist but are not yet routed (CUQ-0.1 remaining work —
-    they are device-specific / need nested-orchestration suppression), so listing
-    them here has no effect until those call sites land."""
+    **Currently `back` and `scroll` have wired routing call sites** (`scroll`
+    ladders wheel → swipe via AIPhone, CUQ-0.1); `home`/`tap`/`launch_app` plans
+    exist but are not yet routed (CUQ-0.1 remaining work — `home` already ladders
+    bespoke, `tap`/`launch_app` need nested-orchestration suppression), so listing
+    those has no effect until their call sites land."""
 
     computer_use_observation_producer_mode: str = "scoped_source_owner"
     """Computer-use observation producer mode. v1 defaults to

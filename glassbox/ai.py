@@ -506,20 +506,36 @@ class AIPhone:
         return self._action_outcome("close_app", None, close_app())
 
     def _phone_scroll(self, normalized: str, **swipe_kwargs):
-        """CUQ-3.15: route a generic scroll to the precise wheel when the backend
-        supports it and the operator opted in (e.g. the iPad rig, where the wheel
-        is validated/authoritative), else the swipe-fling fallback. ``down`` means
-        reveal-content-below (swipe_up / wheel_scroll_down)."""
-        if getattr(self._phone, "_ai_scroll_prefer_wheel", False) and self._phone.supports("scroll_wheel"):
+        """Route a generic scroll. ``down`` means reveal-content-below
+        (swipe_up / wheel_scroll_down).
+
+        CUQ-0.1: when ``scroll`` is in the semantic-plan ops, run the first-class
+        strategy ladder (wheel -> swipe) with verified-failure switching, so a
+        wheel scroll that does not move the screen falls back to the swipe
+        instead of silently failing. CUQ-3.15: otherwise prefer the precise wheel
+        when the backend supports it and the operator opted in, else swipe-fling.
+        """
+        phone = self._phone
+        uses_plan = getattr(phone, "_uses_semantic_plan", None)
+        if callable(uses_plan) and uses_plan("scroll"):
+            fresh = phone._picokvm_fresh_verify_kwargs("scroll") if hasattr(phone, "_picokvm_fresh_verify_kwargs") else {}
+            return phone._run_semantic_plan(
+                "scroll",
+                params={"direction": normalized},
+                via="scroll",
+                policy_action="scroll",
+                **fresh,
+            )
+        if getattr(phone, "_ai_scroll_prefer_wheel", False) and phone.supports("scroll_wheel"):
             return (
-                self._phone.wheel_scroll_down()
+                phone.wheel_scroll_down()
                 if normalized == "down"
-                else self._phone.wheel_scroll_up()
+                else phone.wheel_scroll_up()
             )
         return (
-            self._phone.swipe_up(**swipe_kwargs)
+            phone.swipe_up(**swipe_kwargs)
             if normalized == "down"
-            else self._phone.swipe_down(**swipe_kwargs)
+            else phone.swipe_down(**swipe_kwargs)
         )
 
     def scroll(

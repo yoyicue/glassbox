@@ -127,6 +127,20 @@ class FakePhone:
         self.actions.append(("wheel_scroll_up", None))
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
+    # CUQ-0.1: semantic-plan routing hooks (default off -> existing scroll tests
+    # stay on the swipe/wheel path).
+    def _uses_semantic_plan(self, op):
+        return op in getattr(self, "_plan_ops", set())
+
+    def _picokvm_fresh_verify_kwargs(self, op):
+        del op
+        return {}
+
+    def _run_semantic_plan(self, op, *, params=None, **kw):
+        self.actions.append(("semantic_plan", op))
+        self.action_kwargs.append({"params": params, **kw})
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
     def expect_text(self, target, **_kw):
         scene = self.perceive()
         if target not in [e.text for e in scene.elements]:
@@ -321,6 +335,24 @@ def test_ai_scroll_falls_back_to_swipe_without_wheel_support(tmp_path):
     ops = [op for op, _ in phone._phone.actions]
     assert "swipe_up" in ops
     assert "wheel_scroll_down" not in ops
+
+
+@pytest.mark.smoke
+def test_ai_scroll_routes_through_semantic_plan_when_flagged(tmp_path):
+    """CUQ-0.1: with `scroll` in the semantic-plan ops, the generic scroll verb
+    runs the strategy ladder (wheel -> swipe, verified-failure switching) instead
+    of the static swipe/wheel choice. The direction is threaded into the plan."""
+    phone = _ai_phone(tmp_path, [_scene("Top"), _scene("Bottom")])
+    phone._phone._plan_ops = {"scroll"}
+
+    phone.scroll(direction="down")
+
+    ops = [op for op, _ in phone._phone.actions]
+    assert "semantic_plan" in ops
+    assert "swipe_up" not in ops and "wheel_scroll_down" not in ops
+    plan_kwargs = next(k for k in phone._phone.action_kwargs if k.get("params"))
+    assert plan_kwargs["params"] == {"direction": "down"}
+    assert plan_kwargs.get("policy_action") == "scroll"
 
 
 @pytest.mark.smoke

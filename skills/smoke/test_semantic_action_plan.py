@@ -138,6 +138,47 @@ def test_default_semantic_action_plan_binds_core_phone_entrypoints():
         assert calls == [expected_call]
 
 
+@pytest.mark.smoke
+def test_scroll_plan_ladder_is_direction_aware_wheel_then_swipe():
+    """CUQ-0.1: the scroll plan ladders wheel -> swipe. The wheel sign follows the
+    direction, and the swipe fallback uses the backend's preset gesture (down =
+    reveal-content-below = swipe_up / +ticks)."""
+    calls: list[tuple] = []
+
+    class Effector:
+        def scroll_wheel(self, ticks, *, horizontal=0):
+            calls.append(("scroll_wheel", ticks, horizontal))
+            return _ok()
+
+    class PhoneLike:
+        effector = Effector()
+
+        def swipe_up(self):
+            calls.append(("swipe_up",))
+            return _ok()
+
+        def swipe_down(self):
+            calls.append(("swipe_down",))
+            return _ok()
+
+    phone = PhoneLike()
+    expected = ExpectedState("visible_text", {"any_of": ["Done"]})
+
+    # direction=down -> wheel positive ticks; swipe fallback = swipe_up
+    calls.clear()
+    down = default_semantic_action_plan(phone, "scroll", expected, direction="down", ticks=5)
+    assert down.bound[0].call().ok  # wheel strategy
+    assert down.bound[1].call().ok  # drag/swipe fallback strategy
+    assert calls == [("scroll_wheel", 5, 0), ("swipe_up",)]
+
+    # direction=up -> wheel negative ticks; swipe fallback = swipe_down
+    calls.clear()
+    up = default_semantic_action_plan(phone, "scroll", expected, direction="up", ticks=5)
+    up.bound[0].call()
+    up.bound[1].call()
+    assert calls == [("scroll_wheel", -5, 0), ("swipe_down",)]
+
+
 def test_default_semantic_action_plan_serializes_runtime_strategy_params():
     class Effector:
         def tap(self, _x, _y):
