@@ -569,3 +569,30 @@ def test_autosave_off_by_default_and_tolerates_save_errors():
     noisy = ScreenMemory(UTG(bundle_id="com.x"), autosave=boom, autosave_every=1)
     node = noisy.observe(_scene("设置"))
     assert node is not None
+
+
+@pytest.mark.smoke
+def test_observe_flags_transition_mismatch_against_learned_edge():
+    """CUQ-3.20: when an action lands on a different node than a learned
+    high-success edge predicted, observe() records a transition mismatch."""
+    mem = ScreenMemory(UTG(bundle_id="com.x"))
+    n = mem.observe(_scene("登录", "密码"))
+    action = ("tap", {"via": "tap_text", "target": "设置"})
+    m = mem.observe(_scene("设置", "隐私", "关于", "帮助"), last_action=action)
+    assert mem.last_transition_mismatch is None  # first time: no prior edge
+
+    # Same action from N, but it lands on a DIFFERENT node -> mismatch.
+    mem._last_node_id = n.screen_id
+    p = mem.observe(_scene("相机", "照片", "录屏", "实况文本"), last_action=action)
+    assert mem.last_transition_mismatch is not None
+    assert mem.last_transition_mismatch["predicted_to_id"] == m.screen_id
+    assert mem.last_transition_mismatch["observed_to_id"] == p.screen_id
+
+    # A distinct action that only ever leads to one node is never a mismatch.
+    action_b = ("tap", {"via": "tap_text", "target": "蓝牙"})
+    mem._last_node_id = n.screen_id
+    mem.observe(_scene("蓝牙", "可被发现", "其他设备"), last_action=action_b)
+    assert mem.last_transition_mismatch is None
+    mem._last_node_id = n.screen_id
+    mem.observe(_scene("蓝牙", "可被发现", "其他设备"), last_action=action_b)
+    assert mem.last_transition_mismatch is None

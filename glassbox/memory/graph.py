@@ -57,6 +57,11 @@ class ScreenMemory:
         self._autosave = autosave
         self._autosave_every = max(0, int(autosave_every))
         self._observes_since_save = 0
+        # CUQ-3.20: set by the last observe() when an action landed on a
+        # different node than a learned high-success edge predicted — a strong
+        # failure / node-identity-drift signal. None when the last transition
+        # matched (or there was no prior edge to compare against).
+        self.last_transition_mismatch: dict[str, object] | None = None
 
     # ─── write ───────────────────────────────────────────────────────
     def observe(
@@ -75,13 +80,40 @@ class ScreenMemory:
         node.visit_count += 1
         node.last_seen = time.time()
 
+        self.last_transition_mismatch = None
         if self._last_node_id is not None and last_action is not None:
             action = self._coerce_action(last_action)
             if self._action_is_learnable(action):
+                self.last_transition_mismatch = self._detect_transition_mismatch(
+                    self._last_node_id, node.screen_id, action
+                )
                 self._bump_edge(self._last_node_id, node.screen_id, action)
         self._last_node_id = node.screen_id
         self._maybe_autosave()
         return node
+
+    def _detect_transition_mismatch(
+        self, from_id: str, to_id: str, action: ActionRecord
+    ) -> dict[str, object] | None:
+        """CUQ-3.20: did this action land somewhere other than a learned
+        high-success edge predicted? Same (from_node, action) previously
+        succeeding to a *different* node is a strong failure / node-drift
+        signal. Returns the mismatch details, or None when it matched (or there
+        is no successful prior edge for this action)."""
+        identity = self._action_identity(action)
+        for e in self.utg.edges:
+            existing_identity = e.action_identity or self._legacy_edge_identity(e)
+            if e.from_id != from_id or e.action_op != action.op or existing_identity != identity:
+                continue
+            if e.to_id != to_id and e.success_count > 0:
+                return {
+                    "from_id": from_id,
+                    "action_identity": identity,
+                    "predicted_to_id": e.to_id,
+                    "observed_to_id": to_id,
+                    "predicted_success_count": e.success_count,
+                }
+        return None
 
     def _maybe_autosave(self) -> None:
         """Best-effort periodic persistence (CUQ-3.22). Never let a save error

@@ -556,8 +556,13 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `approval_required`. Updated verifier/runtime tests + golden fixtures.
 
 ### Screen-memory medium companions
-- [ ] **CUQ-3.20** "Transition mismatch = failure" is unimplemented; the graph
-  never validates that an action landed where the edge predicted. *medium*
+- [~] **CUQ-3.20** "Transition mismatch = failure" is unimplemented; the graph
+  never validates that an action landed where the edge predicted. *medium* —
+  SIGNAL DONE: `ScreenMemory.observe` now sets `last_transition_mismatch` when an
+  action lands on a different node than a learned high-success edge for the same
+  `(from_node, action)` predicted (`_detect_transition_mismatch`). Additive +
+  queryable; safe. **Remaining (integration):** have the orchestrator/verifier
+  consume `last_transition_mismatch` as a strong failure signal (feeds recovery).
 - [ ] **CUQ-3.21** `locate()`/`expected_elements()` position priors have no runtime
   consumer; OCR-ROI narrowing and candidate-scoring priors are dead. *medium*
 - [x] **CUQ-3.22** UTG is persisted only on `runtime.close()`; a mid-run crash
