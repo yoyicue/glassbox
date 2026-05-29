@@ -1290,6 +1290,55 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_canonical_primitives(args: argparse.Namespace) -> int:
+    """CUQ-3.4: run each canonical primitive (go-home / launch-app / back /
+    scroll-to-bottom) N rounds on the rig and aggregate into one benchmark, so a
+    regression in the fragile HID primitives shows up in the success number."""
+    from skills.regression.canonical_primitives import (
+        CANONICAL_PRIMITIVE_TASKS,
+        build_canonical_manifest,
+    )
+
+    artifact_root = args.artifact_root.expanduser().resolve()
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    run_dirs_by_task: dict[str, list[Path]] = {}
+    repo_root = Path(__file__).resolve().parents[2]
+    for task in CANONICAL_PRIMITIVE_TASKS:
+        run_dirs_by_task[task.name] = []
+        for index in range(args.rounds):
+            before = {path for path in artifact_root.iterdir() if path.is_dir()}
+            cmd = [sys.executable, "-m", "skills.regression.canonical_primitives", "--task", task.name]
+            env = dict(os.environ)
+            env["GLASSBOX_COMPUTER_USE_ARTIFACT_DIR"] = str(artifact_root)
+            # A primitive may legitimately fail (that is what the benchmark
+            # measures); only a missing artifact run is a harness error.
+            subprocess.run(cmd, cwd=repo_root, env=env)
+            new_dirs = _find_new_run_dirs(artifact_root, before)
+            if not new_dirs:
+                print(f"ERROR: {task.name} round {index} wrote no computer-use artifact run")
+                return 1
+            run_dirs_by_task[task.name].append(new_dirs[-1])
+
+    manifest = build_canonical_manifest(run_dirs_by_task, rounds=args.rounds)
+    manifest_path = artifact_root / "canonical_primitives_manifest.json"
+    _write_json(manifest_path, manifest)
+    try:
+        payload = aggregate_benchmark_manifest(manifest_path)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+    errors = validate_benchmark(payload)
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}")
+        return 1
+    for warning in coverage_warnings(payload):
+        print(f"WARNING: {warning}")
+    _write_json(args.out.expanduser().resolve(), payload)
+    print(args.out.expanduser().resolve())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Computer-use success-rate benchmark tools")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1323,6 +1372,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Open each root section's detail page and screenshot it (real entry, "
         "not root-row visibility).",
     )
+
+    run_canonical = sub.add_parser(
+        "run-canonical-primitives",
+        help="Run the canonical primitives (go-home/launch-app/back/scroll-to-bottom) N rounds and aggregate",
+    )
+    run_canonical.add_argument("--rounds", type=int, default=1)
+    run_canonical.add_argument("--out", type=Path, required=True)
+    run_canonical.add_argument("--artifact-root", type=Path, required=True)
 
     args = parser.parse_args(argv)
     if args.cmd == "aggregate":
@@ -1381,6 +1438,11 @@ def main(argv: list[str] | None = None) -> int:
             print("ERROR: --rounds must be positive")
             return 1
         return _run_ios_settings(args)
+    if args.cmd == "run-canonical-primitives":
+        if args.rounds <= 0:
+            print("ERROR: --rounds must be positive")
+            return 1
+        return _run_canonical_primitives(args)
     raise AssertionError(args.cmd)
 
 

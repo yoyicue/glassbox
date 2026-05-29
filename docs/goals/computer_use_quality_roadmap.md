@@ -646,7 +646,20 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   manual non-blocking step but require PR authors to paste before/after deltas.
 
 ### CUQ-3.4 — Canonical-primitive tasks (go-home / launch-app / back / scroll-to-bottom) are not benchmarked
-- [ ] **high · effort large · design-gap**
+- [x] **high · effort large · design-gap** — DONE (authored; rig-executed): new
+  `skills/regression/canonical_primitives.py` defines the four primitives as
+  one-action tasks (each an AIPhone-driving callable + a per-task
+  `terminal_expected_state`), a `run_canonical_suite`, and a `build_canonical_manifest`
+  that shapes per-task run dirs for the existing `aggregate_benchmark_manifest`.
+  A `run-canonical-primitives` CLI sub-command (in `computer_use_success_rate.py`)
+  runs each primitive N rounds (Settings is the universal anchor for
+  launch/back/scroll) and aggregates into one benchmark. The task definitions,
+  sequencing, manifest assembly, and terminal-state validity are **unit-tested
+  with a mock phone** (`test_canonical_primitives.py`); only the suite's actual
+  execution needs the rig (`main` → `open_phone`, which has no offline path).
+  **Remaining:** run it on the rig and fold the result into the gated baseline;
+  tune the `back`/`scroll_to_bottom` terminals (permissive today — success is the
+  action's own verdict) against real Settings pages.
 - Gap: only `settings_readonly_walkthrough` runs; the primitives most central to
   recovery/navigation reliability are never benchmarked, so regressions in the
   fragile HID primitives are invisible to the success number.
