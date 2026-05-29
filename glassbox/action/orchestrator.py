@@ -259,7 +259,12 @@ class ActionOrchestrator:
         landing_retry_budget = int(metadata.get("landing_retry_budget", 0) or 0)
         if not self._landing_retry_allowed(metadata):
             landing_retry_budget = 0
-        max_attempts = 1 + retry_budget + landing_retry_budget
+        # CUQ-0.10: transport failures are retryable independent of idempotency
+        # (the action did not land), so they get their own budget on the legacy
+        # path too — previously only the semantic-plan path retried transport.
+        # Default 0 → byte-identical.
+        transport_retry_budget = int(metadata.get("transport_retry_budget", 0) or 0)
+        max_attempts = 1 + retry_budget + landing_retry_budget + transport_retry_budget
 
         self.store.audit.append(
             "attempt_group.started",
@@ -269,6 +274,7 @@ class ActionOrchestrator:
                 "op": op,
                 "retry_budget": retry_budget,
                 "landing_retry_budget": landing_retry_budget,
+                "transport_retry_budget": transport_retry_budget,
                 "actor": actor,
             },
         )
@@ -277,6 +283,7 @@ class ActionOrchestrator:
             "actor": actor,
             "retry_budget": retry_budget,
             "landing_retry_budget": landing_retry_budget,
+            "transport_retry_budget": transport_retry_budget,
             "attempt_ids": [],
             "started_at": time.monotonic(),
         }
@@ -284,6 +291,7 @@ class ActionOrchestrator:
         attempts: list[AttemptExecution] = []
         semantic_retries_used = 0
         landing_retries_used = 0
+        transport_retries_used = 0
         try:
             for attempt_index in range(max_attempts):
                 attempt_id = self._next_attempt_id()
@@ -332,11 +340,15 @@ class ActionOrchestrator:
                     retry_budget=retry_budget,
                     landing_retries_used=landing_retries_used,
                     landing_retry_budget=landing_retry_budget,
+                    transport_retries_used=transport_retries_used,
+                    transport_retry_budget=transport_retry_budget,
                 )
                 if retry_kind is None:
                     break
                 if retry_kind == "landing":
                     landing_retries_used += 1
+                elif retry_kind == "transport":
+                    transport_retries_used += 1
                 else:
                     semantic_retries_used += 1
                 self.store.audit.append(
@@ -2462,9 +2474,19 @@ class ActionOrchestrator:
         retry_budget: int,
         landing_retries_used: int,
         landing_retry_budget: int,
+        transport_retries_used: int = 0,
+        transport_retry_budget: int = 0,
     ) -> str | None:
         if attempt.command_exception is not None:
             return None
+        # CUQ-0.10: a transport failure (the effector call returned not-ok before
+        # any GUI verification) means the action did NOT land, so retrying is safe
+        # even for a non-idempotent op — unlike a semantic failure where the tap
+        # may have partially taken effect. Retry up to the opt-in transport budget
+        # (default 0 → byte-identical). Checked before the not-ok guard because a
+        # transport failure carries result.ok == False.
+        if attempt.semantic.status == "transport_failed":
+            return "transport" if transport_retries_used < transport_retry_budget else None
         if not attempt.result.ok:
             return None
         if not attempt.semantic.retry_allowed:

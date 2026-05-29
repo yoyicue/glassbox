@@ -810,6 +810,56 @@ def test_computer_use_runtime_semantic_plan_retries_same_strategy_on_transport_f
 
 
 @pytest.mark.smoke
+def test_legacy_path_retries_transport_failure_independent_of_idempotency(tmp_path):
+    """CUQ-0.10: a transport failure (the effector call returned not-ok before any
+    GUI verification → the action did not land) is now retried on the LEGACY
+    (non-plan) path up to transport_retry_budget, even for a non-idempotent op —
+    previously only the (dead) semantic-plan path retried transport."""
+    phone, orchestrator, store = _make_phone(tmp_path, [["主屏幕"]] * 6)
+    calls = []
+
+    def flaky_call():
+        calls.append("x")
+        if len(calls) == 1:
+            return ActionResult.failed(backend="test", connected=False, error="transport down")
+        return ActionResult(ok=True, backend="test", connected=True)
+
+    result = phone._execute_action(
+        "tap",
+        flaky_call,
+        idempotent=False,  # non-idempotent: retry_budget is forced to 0...
+        transport_retry_budget=1,  # ...but a transport failure still retries.
+        expected_state=ExpectedState("visible_text", {"any_of": ["主屏幕"]}).to_dict(),
+    )
+    orchestrator.close()
+
+    assert calls == ["x", "x"]  # retried once despite non-idempotent
+    assert result.semantic_status == "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [a["semantic"]["status"] for a in actions] == ["transport_failed", "succeeded"]
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    retry = next(e for e in audit if e["type"] == "action.retry_scheduled")
+    assert retry["payload"]["kind"] == "transport"
+
+
+@pytest.mark.smoke
+def test_legacy_path_does_not_retry_transport_failure_without_budget(tmp_path):
+    """CUQ-0.10 default-safety: with no transport_retry_budget (the default), a
+    transport failure is NOT retried — byte-identical to before."""
+    phone, orchestrator, _store = _make_phone(tmp_path / "no_budget", [["主屏幕"]] * 3)
+    calls = []
+
+    def always_fail():
+        calls.append("x")
+        return ActionResult.failed(backend="test", connected=False, error="transport down")
+
+    phone._execute_action("tap", always_fail, idempotent=False)
+    orchestrator.close()
+
+    assert calls == ["x"]  # no retry on the default path
+
+
+@pytest.mark.smoke
 def test_computer_use_runtime_semantic_plan_does_not_retry_non_idempotent_transport_failure(tmp_path):
     phone, orchestrator, store = _make_phone(
         tmp_path,

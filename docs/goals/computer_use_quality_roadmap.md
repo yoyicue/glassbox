@@ -277,8 +277,16 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   a second fire then a surfaced terminal status, not an infinite loop.
 
 ### Tier-0 medium companions
-- [ ] **CUQ-0.10** `transport_failed` is never retried on the legacy path (the
-  `transport_retry_budget` lives only in the dead semantic-plan path). *medium*
+- [x] **CUQ-0.10** `transport_failed` is never retried on the legacy path (the
+  `transport_retry_budget` lives only in the dead semantic-plan path). *medium* —
+  DONE: the legacy `execute()` loop now reads `transport_retry_budget` (default 0
+  → byte-identical), adds it to `max_attempts`, and `_retry_kind` returns a new
+  `"transport"` kind for a `transport_failed` attempt — checked **before** the
+  not-ok guard and **independent of idempotency**, because a transport failure
+  means the effector call did not land (so retrying is safe even for a
+  non-idempotent op, unlike a semantic failure). Budget threaded into the
+  attempt-group audit. Tests in `test_computer_use_runtime.py` (retries a
+  non-idempotent transport failure with budget; no retry at the default budget 0).
 - [ ] **CUQ-0.11** Default retry/unknown policies are effective no-ops: most ops
   are non-idempotent so `retry_budget` is forced to 0 and `unknown_policy=retry`
   never fires. Decide per-op idempotency explicitly. *medium*
