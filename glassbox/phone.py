@@ -59,6 +59,7 @@ from glassbox.cognition import (
     UIElement,
     find_button,
     find_by_intent,
+    find_by_whitebox_hint,
     find_text,
 )
 from glassbox.cognition.coldstart import apply_annotation_to_scene
@@ -198,6 +199,7 @@ class Phone:
         strict_settings_detail: bool = False,
         ai_scroll_prefer_wheel: bool = False,
         vlm_reground_selection: bool = False,
+        whitebox_hint_selection: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -264,6 +266,10 @@ class Phone:
         # off) so the default expect_text path is byte-identical — no billed
         # describe() on a miss — even when a VLM client is wired.
         self._vlm_reground_selection_enabled = bool(vlm_reground_selection)
+        # CUQ-2.10: let an element's whitebox identity (accessibility_id /
+        # asset_match / deep_link) resolve a target when OCR misses. Flag-gated
+        # (default off); only matters with a Tier-1+ app profile populating hints.
+        self._whitebox_hint_selection = bool(whitebox_hint_selection)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.
@@ -1441,6 +1447,19 @@ class Phone:
                 if self.recorder is not None:
                     self.recorder.verdict(f"expect_text({target!r})", passed=True)
                 return el
+            # CUQ-2.10: OCR missed; if a Tier-1+ profile tagged elements with a
+            # whitebox identity (accessibility_id / asset_match / deep_link), use
+            # it — more reliable than fuzzy OCR — when the caller's target names
+            # that identity. Reuses find_text's just-perceived scene. Flag-gated.
+            if self._whitebox_hint_selection and self._last_scene is not None:
+                wb = find_by_whitebox_hint(self._last_scene.elements, target)
+                if wb is not None:
+                    self._last_selection_source = "whitebox"
+                    if self.recorder is not None:
+                        self.recorder.verdict(
+                            f"expect_text({target!r})", passed=True, message="whitebox_hint"
+                        )
+                    return wb
             if self._last_scene:
                 last_seen_texts = [e.text for e in self._last_scene.elements if e.text]
             time.sleep(poll_interval)

@@ -274,6 +274,13 @@ class AgentConfig(BaseSettings):
     intermittent so this stays off there. Env GLASSBOX_AI_SCROLL_PREFER_WHEEL.
     Default off → swipe-fling everywhere (byte-identical)."""
 
+    whitebox_hint_selection: bool = False
+    """CUQ-2.10: when OCR cannot find a selection target, resolve it by an
+    element's whitebox identity (accessibility_id / asset_match / deep_link /
+    swift_class) — a Tier-1+ app-profile signal more reliable than fuzzy OCR.
+    Env GLASSBOX_WHITEBOX_HINT_SELECTION. Default off; only effective when a
+    whitebox profile populates hints and the caller's target names that identity."""
+
     vlm_reground_selection: bool = False
     """CUQ-0.4: when OCR cannot find a selection target (expect_text / tap_text),
     escalate ONCE to the VLM (describe → find-by-description / intent) before

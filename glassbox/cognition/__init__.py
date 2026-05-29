@@ -38,6 +38,7 @@ from glassbox.cognition.heuristic import (
     find_button,
     find_by_intent,
     find_by_type,
+    find_by_whitebox_hint,
 )
 from glassbox.cognition.icon_contract import IconDetectFunctionAdapter
 from glassbox.cognition.ocr import AppleVisionOCR, find_text
@@ -120,6 +121,7 @@ __all__ = [
     "find_button",
     "find_by_intent",
     "find_by_type",
+    "find_by_whitebox_hint",
     "find_text",
     "make_kimi_client",
     "make_vlm_client",

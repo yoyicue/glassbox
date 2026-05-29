@@ -703,6 +703,7 @@ def build_phone(
         strict_settings_detail=cfg.strict_settings_detail,
         ai_scroll_prefer_wheel=cfg.ai_scroll_prefer_wheel,
         vlm_reground_selection=cfg.vlm_reground_selection,
+        whitebox_hint_selection=cfg.whitebox_hint_selection,
     )
     return PhoneRuntime(
         phone=phone,

@@ -482,3 +482,37 @@ def find_by_intent(
     if ambiguity_guard and best is not None and (best_r - second_r) < ambiguity_margin:
         return None
     return best
+
+
+def find_by_whitebox_hint(elements: list[UIElement], target: str) -> UIElement | None:
+    """CUQ-2.10: resolve a target by an element's whitebox identity
+    (accessibility_id / asset_match / deep_link / swift_class) — a Tier-1+ app
+    profile signal that is more reliable than fuzzy OCR text. Returns the first
+    element whose hint matches the target (normalized exact, then substring), or
+    None when no element carries a matching hint (Tier-0 / non-profiled runs).
+    """
+    from glassbox.cognition.text_match import text_contains, texts_match
+
+    def _hint_ids(el: UIElement) -> list[str]:
+        hint = getattr(el, "whitebox_hint", None)
+        if hint is None:
+            return []
+        return [
+            v for v in (
+                getattr(hint, "accessibility_id", None),
+                getattr(hint, "asset_match", None),
+                getattr(hint, "deep_link", None),
+                getattr(hint, "swift_class", None),
+            ) if v
+        ]
+
+    candidates = [(el, ids) for el, ids in ((e, _hint_ids(e)) for e in elements) if ids]
+    if not candidates:
+        return None
+    for el, ids in candidates:  # exact
+        if any(texts_match(v, target) for v in ids):
+            return el
+    for el, ids in candidates:  # substring either direction
+        if any(text_contains(v, target) or text_contains(target, v) for v in ids):
+            return el
+    return None

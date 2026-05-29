@@ -555,8 +555,13 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   now skips clock-noise labels (a clock OCR'd as plain `text` previously survived
   as a tap candidate on the generic, non-Settings path). Tests in
   `test_text_match.py` + `test_candidates.py`.
-- [ ] **CUQ-2.8** `find_text` substring tier runs before fuzzy and matches short
-  needles inside long rows. *medium* (subsumed by CUQ-1.5)
+- [x] **CUQ-2.8** `find_text` substring tier runs before fuzzy and matches short
+  needles inside long rows. *medium* — SUBSUMED by CUQ-1.5: the `ambiguity_guard`
+  mode (flag `strict_target_matching`) makes the substring tier prefer the
+  closest-length containing row instead of the first match, which is exactly this
+  short-needle-in-a-long-row defect. No separate change ships — closing the
+  default-path substring order unconditionally is the risky part CUQ-1.5
+  deliberately flag-gated (validate on-rig before default-on).
 - [x] **CUQ-2.9** `selection_source` is inferred post-hoc ("was the scene
   VLM-described") rather than recorded at selection time — the headline diagnostic
   is unreliable. *medium* — DONE: `_target_actuation_plan` stamps a
@@ -565,8 +570,19 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `tap_intent` stamps `"vlm"`; the harness `_selection_source` now prefers a
   stamped value over inference. Tests cover both. (`tap_button`/`tap_element`/
   `tap_xy` still infer — the harness handles the mix.)
-- [ ] **CUQ-2.10** `whitebox_hint` (asset_match / accessibility_id / deep_link) is
-  audit-only metadata and never influences selection or tap point. *medium*
+- [x] **CUQ-2.10** `whitebox_hint` (asset_match / accessibility_id / deep_link) is
+  audit-only metadata and never influences selection or tap point. *medium* — DONE
+  (flag-gated, default-off): `find_by_whitebox_hint` resolves a target by an
+  element's whitebox identity (accessibility_id / asset_match / deep_link /
+  swift_class) — a Tier-1+ profile signal more reliable than fuzzy OCR — and
+  `expect_text` uses it as a fallback when OCR misses (reusing the just-perceived
+  scene), under `cfg.whitebox_hint_selection` (env
+  `GLASSBOX_WHITEBOX_HINT_SELECTION`). `selection_source="whitebox"` is stamped.
+  Default off → byte-identical; only effective with a whitebox profile populating
+  hints. Tests: matcher (identity-not-text) + `expect_text` resolves-by-hint /
+  flag-off-hard-fails. **Remaining:** influence the tap POINT (the hint carries no
+  geometry today) and candidate-scoring priors — needs a whitebox asset workspace
+  on-rig.
 
 ---
 
@@ -698,8 +714,15 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   degenerate-variance frames.
 
 ### Capture medium companions
-- [ ] **CUQ-3.11** No absolute staleness-by-age check: a buffered frame older than
-  the action is never rejected by age. *medium*
+- [x] **CUQ-3.11** No absolute staleness-by-age check: a buffered frame older than
+  the action is never rejected by age. *medium* — NOT APPLICABLE (code-verified):
+  `Frame.ts` is stamped `time.monotonic()` at **decode** time
+  (`picokvm_source.snapshot`), so it is always ≈now — an absolute decode-age check
+  would be a no-op. The real concern (OpenCV handing back a buffered frame whose
+  *content* predates the action) cannot be detected from `ts`; it is instead
+  addressed by `fresh_snapshot`'s reopen + keyframe warmup (CUQ-3.10), the H.264
+  garble/reconnect path (CUQ-3.13), and the dhash/diff freshness checks. No
+  meaningful age-based code to add.
 - [x] **CUQ-3.12** AssistiveTouch menu taps and the `swipe_xy` fallback omit the
   PicoKVM fresh-verify reopen, verifying on possibly-stale frames. *quick-win* —
   DONE: `_assistive_touch_tap_visible_item` and `swipe_xy` now thread
@@ -776,8 +799,17 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
 - [ ] **CUQ-3.17** `ipad_mini_migration.md` self-contradicts: §5 says wheel
   "superseded/authoritative" while the same doc records every `scroll_wheel` as
   no-progress. Reconcile against `picokvm_ipad_wheel.md`. *medium*
-- [ ] **CUQ-3.18** `close_foreground_app` home-indicator drag and `keyboard_focus`
-  point are iPhone-shaped logical constants applied to iPad too. *medium*
+- [~] **CUQ-3.18** `close_foreground_app` home-indicator drag and `keyboard_focus`
+  point are iPhone-shaped logical constants applied to iPad too. *medium* —
+  RE-SCOPED (code-verified): both `close_app_drag_*` and `keyboard_focus_x/y` are
+  expressed in **logical** coordinates of the fixed `abs_logical_max` (32767), i.e.
+  fractions of the screen (drag ≈ bottom-center→top-center; focus ≈ (0.44, 0.36)).
+  They therefore **scale proportionally across aspect ratios** — they are not an
+  iPhone-px constant that breaks on iPad. The open question is whether the
+  proportional *location* is semantically correct on iPad (e.g. is (0.44,0.36) a
+  neutral focus area there) — content-dependent and **rig-validated**, not an
+  offline-fixable geometry bug. Any iPad-specific override would be a blind guess
+  without the rig.
 
 ### Safety
 - [x] **CUQ-3.19** Power-off / lock / app-crash disqualifying states map to

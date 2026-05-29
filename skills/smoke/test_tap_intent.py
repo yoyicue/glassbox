@@ -346,6 +346,30 @@ def test_expect_text_escalates_to_vlm_when_ocr_misses(mock_phone):
     assert calls["n"] == 1
 
 
+def test_expect_text_resolves_by_whitebox_hint_when_ocr_misses(mock_phone):
+    """CUQ-2.10: when OCR misses (the target names an accessibility_id, not the
+    visible text), the whitebox identity resolves it — flag-gated; default off
+    keeps the hard-fail."""
+    from glassbox.cognition.base import WhiteboxHint
+
+    mock_phone.ocr.elements = [
+        UIElement(type="button", box=Box(x=80, y=300, w=120, h=30),
+                  text="继续", confidence=0.9, element_id=7,
+                  whitebox_hint=WhiteboxHint(accessibility_id="nextBtn")),
+    ]
+    mock_phone.kimi = None  # isolate from VLM reground
+
+    # Flag OFF (default): OCR can't match "nextBtn" -> hard fail.
+    with pytest.raises(AssertionError):
+        mock_phone.expect_text("nextBtn", timeout=0.2, poll_interval=0.1)
+
+    # Flag ON: resolved via the whitebox identity.
+    mock_phone._whitebox_hint_selection = True
+    el = mock_phone.expect_text("nextBtn", timeout=0.2, poll_interval=0.1)
+    assert el.element_id == 7
+    assert mock_phone._last_selection_source == "whitebox"
+
+
 def test_strict_target_matching_flag_drives_find_text(mock_phone):
     """CUQ-1.5 wiring (audit fix): the Phone flag _strict_target_matching actually
     drives find_text's ambiguity_guard. Locks the config->Phone->find_text leg

@@ -353,3 +353,28 @@ def test_find_button_and_intent_ambiguity_guard():
     ]
     assert find_by_intent(intents, "abcdefgh") is not None  # default: guesses one
     assert find_by_intent(intents, "abcdefgh", ambiguity_guard=True) is None  # near-tie -> escalate
+
+
+@pytest.mark.smoke
+def test_find_by_whitebox_hint_matches_identity_not_text():
+    """CUQ-2.10: an element is resolvable by its whitebox identity
+    (accessibility_id / asset_match / deep_link), independent of its OCR text;
+    elements without a matching hint return None."""
+    from glassbox.cognition import find_by_whitebox_hint
+    from glassbox.cognition.base import WhiteboxHint
+
+    els = [
+        UIElement(type="button", box=Box(x=0, y=0, w=80, h=20), text="继续",
+                  confidence=0.9, element_id=0,
+                  whitebox_hint=WhiteboxHint(accessibility_id="nextBtn")),
+        UIElement(type="text", box=Box(x=0, y=40, w=80, h=20), text="取消",
+                  confidence=0.9, element_id=1),  # no hint
+    ]
+    # Target names the accessibility_id (not the visible text) -> matched by hint.
+    assert find_by_whitebox_hint(els, "nextBtn").element_id == 0
+    # asset_match also matches.
+    els[1].whitebox_hint = WhiteboxHint(asset_match="cancel_icon")
+    assert find_by_whitebox_hint(els, "cancel_icon").element_id == 1
+    # Unknown target / no hints -> None.
+    assert find_by_whitebox_hint(els, "doesNotExist") is None
+    assert find_by_whitebox_hint([_text_el(0, 0, 80, 20, "继续")], "nextBtn") is None
