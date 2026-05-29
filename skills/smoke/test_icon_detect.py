@@ -234,3 +234,34 @@ def test_detect_icons_falls_back_to_classical_for_unknown_backend():
     from glassbox.cognition.icon_detect import detect_icons
     out = detect_icons(np.zeros((40, 40, 3), dtype=np.uint8), backend="nope_not_real")
     assert isinstance(out, list)
+
+
+@pytest.mark.smoke
+def test_perceive_injects_icon_elements_only_when_flag_on(mock_phone, monkeypatch):
+    """CUQ-2.1: with the flag on, perceive() injects detected no-text icon
+    regions as tappable image elements (default off injects none). Scene
+    classification is unaffected — icons are added after the classifiers."""
+    from glassbox.cognition.icon_detect import IconRegion
+
+    mock_phone.ocr.elements = [
+        UIElement(type="text", box=Box(x=10, y=10, w=60, h=20),
+                  text="标题", confidence=0.9, element_id=0),
+    ]
+    monkeypatch.setattr(
+        "glassbox.cognition.icon_detect.detect_icons",
+        lambda frame_img, *, text_boxes=(), **kw: [IconRegion(box=(120, 40, 30, 30))],
+    )
+
+    # Default (flag off): no injected icon elements.
+    scene_off = mock_phone.perceive()
+    assert all(e.type != "image" for e in scene_off.elements)
+
+    # Flag on: the detected region is injected as a tappable image element.
+    mock_phone._detect_icons_in_perceive = True
+    mock_phone.invalidate_perceive_cache()  # force a cache-miss so detection runs
+    scene_on = mock_phone.perceive()
+    icons = [e for e in scene_on.elements if e.type == "image"]
+    assert len(icons) == 1
+    assert icons[0].text is None
+    assert icons[0].box.center == (135, 55)
+    assert icons[0].element_id == 1  # past the OCR element's id

@@ -52,6 +52,7 @@ from glassbox.boundaries import SceneClassifier as PlatformSceneClassifier
 from glassbox.cognition import (
     DEFAULT_SCENE_CLASSIFICATION_PROJECTOR,
     AppleVisionOCR,
+    Box,
     HeuristicTyper,
     Scene,
     SceneClassification,
@@ -169,6 +170,7 @@ class Phone:
         default_observation_scope: str = "device",
         auto_refresh_letterbox_crop: bool = False,
         semantic_plan_ops: frozenset[str] | None = None,
+        detect_icons_in_perceive: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -192,6 +194,9 @@ class Phone:
         # strategy ladder (verified-failure -> switch to next primitive) instead
         # of the legacy single-strategy path. Empty by default; flag-gated.
         self._semantic_plan_ops = frozenset(semantic_plan_ops or ())
+        # CUQ-2.1: inject no-text icon regions into perceive() so icon-only
+        # controls become tap candidates. Flag-gated (default off).
+        self._detect_icons_in_perceive = bool(detect_icons_in_perceive)
         # CJK type() routes through the clipboard; the A-dance foregrounds apps
         # via HID (opening from the Home screen), needing the controlled app's
         # Home-screen name(s) and a springboard icon map.
@@ -1012,6 +1017,7 @@ class Phone:
             self.typer.upgrade(scene, frame_img=frame.img)
         self._apply_profile(scene, frame.img)
         self._apply_scene_classifiers(scene, frame.img)
+        self._maybe_detect_icons(scene, frame.img)
         self.perceive_cache_stats["misses"] += 1
         self._observe_memory(scene, frame.img)
         self._cache_frame = frame
@@ -1027,6 +1033,44 @@ class Phone:
         if getattr(self.ocr, "contract", None) == "TextRegionOCR":
             return ocr_results_to_elements(self.ocr.recognize(frame))
         return ocr_results_to_elements(self.ocr.recognize(frame.img))
+
+    def _maybe_detect_icons(self, scene: Scene, frame_img) -> None:
+        """CUQ-2.1 (flag-gated): inject no-text icon regions as tappable image
+        elements so icon-only controls (+, share, gear, back-chevron, trash)
+        become tap candidates instead of being invisible to the OCR-text-only
+        set. Runs after the scene classifiers so classification is unaffected;
+        best-effort (never breaks perceive)."""
+        if not self._detect_icons_in_perceive or frame_img is None:
+            return
+        try:
+            from glassbox.cognition.icon_detect import detect_icons
+
+            text_boxes = tuple(
+                (el.box.x, el.box.y, el.box.w, el.box.h)
+                for el in scene.elements
+                if getattr(el, "text", None)
+            )
+            regions = detect_icons(frame_img, text_boxes=text_boxes)
+        except Exception:
+            return
+        if not regions:
+            return
+        next_id = max(
+            (el.element_id for el in scene.elements if el.element_id is not None),
+            default=-1,
+        ) + 1
+        for region in regions:
+            x, y, w, h = region.box
+            scene.elements.append(
+                UIElement(
+                    type="image",
+                    box=Box(x=int(x), y=int(y), w=int(w), h=int(h)),
+                    text=None,
+                    confidence=0.3,
+                    element_id=next_id,
+                )
+            )
+            next_id += 1
 
     def perceive_voted(self, n: int = 2, *, text_normalizer=None, scope: str | None = None) -> Scene:
         """Perceive a STABLE screen `n` times and vote per-row text (D).

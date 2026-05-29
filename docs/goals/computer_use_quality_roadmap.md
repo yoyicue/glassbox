@@ -346,7 +346,7 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
 ## Tier 2 — Perception & grounding gaps (enlarge the actionable space)
 
 ### CUQ-2.1 — `detect_icons` never runs in the default `perceive()` path
-- [ ] **high · effort medium · design-gap**
+- [x] **high · effort medium · design-gap** (flag-gated, default-off) — DONE: `Phone._maybe_detect_icons` runs the no-text icon detector inside `perceive()` (masking OCR text boxes) and injects surviving regions as tappable `type="image"` elements, so icon-only controls (`+`/share/gear/back-chevron/trash) become tap candidates instead of being invisible to the OCR-text-only set. Runs **after** the scene classifiers (classification unaffected) and best-effort (never breaks perceive). Behind `cfg.detect_icons_in_perceive` (env `GLASSBOX_DETECT_ICONS_IN_PERCEIVE`), default off — adds CV cost per perceive and changes the candidate set, so validate on-rig before enabling. Test in `test_icon_detect.py`.
 - Gap: the well-built no-text icon detector is wired only into the Home
   springboard map and the (default-off) cold-start annotator. On an ordinary app
   page the default `perceive()` yields **zero** icon elements, so a `+`/share/

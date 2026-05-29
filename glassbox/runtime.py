@@ -661,6 +661,7 @@ def build_phone(
         semantic_plan_ops=frozenset(
             op.strip() for op in (cfg.semantic_plan_ops or "").split(",") if op.strip()
         ),
+        detect_icons_in_perceive=cfg.detect_icons_in_perceive,
     )
     return PhoneRuntime(
         phone=phone,

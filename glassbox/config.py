@@ -208,6 +208,14 @@ class AgentConfig(BaseSettings):
     VLM annotation, fused onto OCR boxes (slow + billed, off by default).
     Needs a VLM client — pairs with enable_kimi / a key in .env."""
 
+    detect_icons_in_perceive: bool = False
+    """CUQ-2.1: run the no-text icon detector inside perceive() and inject the
+    surviving regions as tappable image elements, so icon-only controls (+,
+    share, gear, back-chevron, trash) become tap candidates instead of being
+    invisible to the OCR-text-only candidate set. Default off (adds CV cost per
+    perceive and changes the candidate set); validate on-rig before enabling.
+    Scene classification is unaffected (icons are injected after classifiers)."""
+
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 
