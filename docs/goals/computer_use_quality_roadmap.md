@@ -535,9 +535,13 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `scrolling.py` into the generic verb.
 
 ### Input-fidelity medium companions
-- [ ] **CUQ-3.16** iPhone wheel activation state (primed/bounced/ack_only,
+- [x] **CUQ-3.16** iPhone wheel activation state (primed/bounced/ack_only,
   `scroll_strategy_validated`, `wheel_diagnostic`) is computed in detail but
-  consumed nowhere. *quick-win*
+  consumed nowhere. *quick-win* — DONE: `PicoKVMEffector._warn_on_unvalidated_wheel`
+  (run from `connect()`) surfaces an opt-in iPhone wheel that did not reach
+  `'primed'` via `wheel_validation_warning` + a loguru warning, so the operator
+  knows wheel scrolling is unvalidated and the run leans on swipe fallback.
+  Disabled-wheel / primed cases stay silent. Test covers all three.
 - [ ] **CUQ-3.17** `ipad_mini_migration.md` self-contradicts: §5 says wheel
   "superseded/authoritative" while the same doc records every `scroll_wheel` as
   no-progress. Reconcile against `picokvm_ipad_wheel.md`. *medium*

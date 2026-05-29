@@ -401,6 +401,36 @@ def test_picokvm_ipad_crop_calibration_does_not_leak_through_shared_config():
 
 
 @pytest.mark.smoke
+def test_picokvm_warns_when_iphone_wheel_not_validated():
+    """CUQ-3.16: surface the iPhone wheel-activation validation state — an opt-in
+    wheel that did not reach 'primed' is flagged; a primed one / disabled wheel
+    is silent."""
+    iphone = SimpleNamespace(model="iphone_17", phone_size=(1179, 2556), phone_points=(393, 852))
+
+    eff = PicoKVMEffector(
+        config=PicoKVMEffectorConfig(_env_file=None, wheel_enabled=True),
+        rpc=FakeRpc(),
+        device_geometry=iphone,
+    )
+
+    eff._wheel_activation_status = "bounced"  # activated but not primed
+    eff._warn_on_unvalidated_wheel()
+    assert eff.wheel_validation_warning is not None
+
+    eff._wheel_activation_status = "primed"
+    eff._warn_on_unvalidated_wheel()
+    assert eff.wheel_validation_warning is None
+
+    # Wheel disabled (default): never warns regardless of status.
+    off = PicoKVMEffector(
+        config=PicoKVMEffectorConfig(_env_file=None), rpc=FakeRpc(), device_geometry=iphone
+    )
+    off._wheel_activation_status = "failed"
+    off._warn_on_unvalidated_wheel()
+    assert off.wheel_validation_warning is None
+
+
+@pytest.mark.smoke
 def test_picokvm_warns_when_ipad_left_on_static_iphone_fit():
     """CUQ-3.9: an iPad model with no crop to derive from and no explicit ABS_*
     override is on the static iPhone fit — surface that inconsistency."""

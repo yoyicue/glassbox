@@ -80,6 +80,7 @@ class PicoKVMEffector:
         self._warn_on_inconsistent_fit()
         self._connected = False
         self._wheel_activation_status: str | None = None
+        self.wheel_validation_warning: str | None = None
 
     def _warn_on_inconsistent_fit(self) -> None:
         """CUQ-3.9: phone_model and the absolute-pointer fit are independent
@@ -117,7 +118,27 @@ class PicoKVMEffector:
     def connect(self) -> None:
         self.rpc.ping()
         self._ensure_wheel_activation()
+        self._warn_on_unvalidated_wheel()
         self._connected = True
+
+    def _warn_on_unvalidated_wheel(self) -> None:
+        """CUQ-3.16: iPhone wheel activation computes a validation state
+        (primed / bounced / already / failed) that was otherwise only reflected
+        in `capabilities()` and never acted on. When the opt-in wheel did not
+        reach 'primed', surface it (via `wheel_validation_warning` + a loguru
+        warning) so the operator knows wheel scrolling is unvalidated and the
+        run will lean on swipe fallback."""
+        self.wheel_validation_warning = None
+        if not (self._is_iphone_target() and self.config.wheel_enabled):
+            return
+        if self._wheel_activation_status != "primed":
+            self.wheel_validation_warning = (
+                "PicoKVM iPhone wheel is enabled but activation status="
+                f"{self._wheel_activation_status!r} (not 'primed') — wheel scrolling "
+                "is unvalidated and may be unreliable; expect swipe fallback. "
+                "See docs/reference/picokvm_ipad_wheel.md."
+            )
+            logger.warning(self.wheel_validation_warning)
 
     def close(self) -> None:
         self.rpc.close()
