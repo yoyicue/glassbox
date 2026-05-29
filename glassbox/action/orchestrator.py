@@ -1658,7 +1658,10 @@ class ActionOrchestrator:
         gate_input = VLMGateInput(
             ocr_confidence=self._scene_confidence(after_scene),
             target_found=expected_semantic.status == "succeeded",
-            classifier_conflict=bool(metadata.get("classifier_conflict", False)),
+            # CUQ-2.4: trigger #3 — honor a classifier conflict recorded on the
+            # scene by the projector, not just an explicit metadata flag.
+            classifier_conflict=bool(metadata.get("classifier_conflict", False))
+            or bool(getattr(after_scene, "classifier_conflict", False)),
             verification_status=(
                 "unknown"
                 if semantic.status == "unknown" or expected_semantic.status in {"unknown", "no_after_scene"}

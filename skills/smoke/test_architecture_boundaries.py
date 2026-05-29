@@ -168,6 +168,33 @@ def test_scene_classification_projector_is_scene_classification_writer():
     assert scene.classification_source == "vlm"
 
 
+def test_scene_classification_projector_flags_classifier_conflict():
+    """CUQ-2.4: disagreeing platform scene kinds set classifier_conflict (the
+    projector otherwise silently lets the last one win), feeding the VLM gate's
+    trigger #3."""
+    projector = SceneClassificationProjector()
+
+    conflicted = Scene(frame_id=1, timestamp=0.0)
+    projector.project(
+        conflicted,
+        [
+            SceneClassification(platform_scene_kind="springboard", source="platform", confidence=0.6),
+            SceneClassification(platform_scene_kind="settings_detail", source="app", confidence=0.8),
+        ],
+    )
+    assert conflicted.classifier_conflict is True
+
+    agreed = Scene(frame_id=1, timestamp=0.0)
+    projector.project(
+        agreed,
+        [
+            SceneClassification(platform_scene_kind="settings_detail", source="platform", confidence=0.6),
+            SceneClassification(platform_scene_kind="settings_detail", source="app", confidence=0.8),
+        ],
+    )
+    assert agreed.classifier_conflict is False
+
+
 def test_scene_classification_projector_preserves_existing_scene_type_without_overwrite():
     scene = Scene(frame_id=1, timestamp=0.0, scene_type="vlm_settings")
     projector = SceneClassificationProjector()

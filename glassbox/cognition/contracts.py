@@ -115,6 +115,13 @@ class SceneClassificationProjector:
             return scene
 
         by_source = {item.source: item for item in classifications}
+        # CUQ-2.4: surface a classifier conflict (the projector below silently
+        # lets the last non-empty kind win) so the VLM gate's trigger #3 fires.
+        distinct_kinds = {
+            item.platform_scene_kind for item in classifications if item.platform_scene_kind
+        }
+        if len(distinct_kinds) > 1:
+            scene.classifier_conflict = True
         for item in classifications:
             if item.platform_scene_kind:
                 scene.platform_scene_kind = item.platform_scene_kind

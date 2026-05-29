@@ -384,8 +384,13 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   tap point to the control, not the label box.
 
 ### Tier-2 medium companions
-- [ ] **CUQ-2.4** VLM verifier is not "opt-in for conflicts only" as documented —
-  classifier conflicts are never escalated. *medium*
+- [x] **CUQ-2.4** VLM verifier is not "opt-in for conflicts only" as documented —
+  classifier conflicts are never escalated. *medium* — DONE: the projector sets
+  `scene.classifier_conflict` when scene classifiers disagree on the platform
+  scene kind (it otherwise silently let the last one win), and
+  `_maybe_vlm_verify_expected_state` feeds it into the gate so trigger #3
+  (classifier_conflict) actually fires. New `Scene.classifier_conflict` field;
+  tests in `test_architecture_boundaries.py`.
 - [ ] **CUQ-2.5** Set-of-Mark grounding is implemented but never enabled by the
   gate's `describe()` escalation. *medium* (pairs with CUQ-0.4)
 - [ ] **CUQ-2.6** `settings_detail` false-positives on third-party app screens via

@@ -157,6 +157,10 @@ class Scene(BaseModel):
     classification_source: str | None = None
     classification_confidence: float | None = None
     classification_evidence: list[str] = Field(default_factory=list)
+    # CUQ-2.4: True when scene classifiers disagreed on the platform scene kind
+    # (the projector otherwise silently lets the last one win). Feeds the VLM
+    # escalation gate's classifier_conflict trigger.
+    classifier_conflict: bool = False
 
     # populated by Layer 3: business state key→value (open convention, see vlm_kimi prompt comments for keys)
     #   subscription:  "subscribed" / "free" / "trial" / "expired" / "unknown"
