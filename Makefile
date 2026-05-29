@@ -1,4 +1,15 @@
-.PHONY: computer-use-success-rate-ios-settings
+.PHONY: lint test check computer-use-success-rate-ios-settings
+
+# CUQ-3.3: the reliability merge gate. `make check` is device-independent (no
+# PicoKVM/HDMI rig needed) and is what CI runs on every PR so a reliability
+# regression cannot merge silently. Keep it green before pushing.
+lint:
+	uv run ruff check glassbox skills
+
+test:
+	uv run pytest skills/smoke -q
+
+check: lint test
 
 ROUNDS ?= 1
 OUT ?= artifacts/computer_use_success_rate/benchmark.json

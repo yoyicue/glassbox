@@ -1,0 +1,627 @@
+# Goal — Raise end-to-end computer-use quality (wire the reliability machinery)
+
+Status: **audit complete (2026-05-29), not yet actioned.** A 13-dimension,
+adversarially-verified code review (70 confirmed findings) found that the
+biggest computer-use quality lever is **wiring the already-built reliability
+machinery into the production path**, not building more. This doc is the
+trackable gap-list and sequencing plan. It is the operational companion to
+[`docs/design/computer_use_success_rate.md`](../design/computer_use_success_rate.md):
+that doc says *what to build* (Step 0 / P1 / P2 / P3); this doc records *what is
+built but not wired*, plus the independent correctness leaks found alongside.
+
+## Headline
+
+> glassbox's reliability engine is built but not plugged in. The design doc's own
+> 2026 root-cause — *"the strongest capabilities are not on the default path"* —
+> **still holds.** P1 (VLM gated escalation), P2 (strategy ladder +
+> expected-state verification), and P3 (stuck → recover-to-anchor) exist as
+> unit-tested foundations with **no production caller**. Several design-doc
+> "implemented + orchestrator integration" claims are therefore overstated; they
+> mean *"foundation present, not wired on the live path"* (see
+> [Doc-honesty corrections](#doc-honesty-corrections)).
+
+The foundations are healthy — the audit explicitly rejected the over-pessimistic
+reads (stable-frame IS on by default via the AI facade; the VLM gate IS
+constructible; the letterbox crop is NOT a one-shot startup measurement; see
+[Verified NOT-issues](#verified-not-issues--do-not-re-litigate)). The work is
+wiring + a batch of independent quick-win correctness fixes.
+
+## Method & provenance
+
+- 13 parallel subsystem readers (capture, OCR, scene-classification, VLM gate,
+  candidate selection, orchestrator, actuation, verification, recovery, input
+  fidelity, screen-memory, calibration, measurement), each comparing design-doc
+  intent vs actual code.
+- Every significant finding was independently re-read by an adversarial verifier;
+  9 of 95 raw findings were rejected as wrong/already-handled and are recorded
+  below so they are not re-litigated.
+- Grounding run data (latest iPhone v3 drill-down): nav-success-proxy 95.7%, but
+  9 `unknown` semantic outcomes + 6 no-progress in one walkthrough, `limits_hit`
+  = `max_depth` — consistent with "verification leaks unknown" and "scroll
+  dominates the action mix".
+
+## Subsystem grades
+
+| Grade | Subsystems |
+| --- | --- |
+| 🔴 leaky | VLM gating, orchestrator/strategy-ladder (P2), recovery/stuck (P3), success-rate measurement |
+| 🟠 fragile | frame capture/freshness, candidate selection, actuation primitives, verification, HID input fidelity, screen-memory graph, calibration |
+| 🟡 adequate | OCR/text-matching, scene classification |
+
+## How to read item IDs
+
+`CUQ-<tier>.<n>`. Each item: status checkbox, severity, effort, the gap, file
+evidence, fix, and acceptance. Severity is the **adversarially-corrected** value.
+Tiers are leverage-ordered: **Tier 0 (wiring) is worth more than Tiers 1–3
+combined** because the machinery already exists and is tested.
+
+---
+
+## Tier 0 — Wire the existing machinery into the production path (highest leverage)
+
+All of these are facets of one root cause, confirmed independently ~10×. Gate
+every change on the Step-0 harness; ship behind a flag, then default-on.
+
+### CUQ-0.1 — Route core ops through `default_semantic_action_plan` (the strategy ladder is dead code)
+- [ ] **critical→high · effort large · design-gap**
+- Gap: `SemanticActionPlan` / `default_semantic_action_plan` have **zero
+  non-test callers**. Every real action takes the legacy `_execute_action`
+  branch, whose only multi-attempt behavior is re-tapping the *same* coordinate
+  in the *same* ROI. There is no strategy **switch** on verified failure (a
+  failed tap never escalates to `keyboard_focus_activate`; a failed back never
+  tries `keyboard_back`→`edge_back_gesture`; a failed launch never tries
+  search/`vlm_icon_map`). This is exactly leak #3 the doc says P2 fixes.
+- Evidence: `glassbox/action/semantic_plan.py:488-566` (specs + builder exist),
+  `glassbox/phone.py:371-375` (always passes plain callable/`ActuationPlan`),
+  `glassbox/action/orchestrator.py:226,243` (semantic branch only on
+  `SemanticActionPlan`), `glassbox/ai.py:362,395,423`.
+- Fix: route at least `back`/`scroll`/`tap` through `default_semantic_action_plan`
+  (start with `back` — current single-shot if/elif at `phone.py:2374-2440`),
+  migrate `home()`/`open_app()` onto it to unify (see CUQ-0.8). Wire
+  `StrategySpec.capability` to `phone.supports(...)` so PicoKVM vs non-PicoKVM
+  splits in `home()`'s pointer fallback are preserved.
+- Acceptance: real runs emit `semantic_plan.strategy_failed` audit events and
+  non-zero `strategy_switches`; Step-0 harness shows `unknown_rate` ↓ /
+  `action_success_rate` ↑ for `back`/`scroll`/`tap` vs today.
+
+### CUQ-0.2 — Install a real recovery hook (every `recover()` is currently a no-op)
+- [x] **critical→high · effort medium · design-gap** — DONE: added `recover_to_home_then_renavigate` (in `action/recovery.py`, duck-typed, re-entrancy-guarded, optional `memory.path_to_page` replay when payload names a `target_page`) and wired it into the runtime orchestrator as `RuntimeRecoveryPolicy(hook=..., max_attempts=2)` (`runtime.py`). All three `recover()` call sites (stuck, semantic-plan exhaustion, preflight) now drive a real recovery instead of a no-op. Tests: hook unit tests + end-to-end stuck recovery (`test_computer_use_runtime.py`) + wiring assertion (`test_build_phone_wires_recovery_hook_into_orchestrator`).
+- Gap: `runtime.py:572` constructs the orchestrator with no `recovery_policy=`,
+  so it defaults to `RuntimeRecoveryPolicy(hook=None)`; `recover()` returns
+  `recovered=False` without doing anything. The stuck detector fires, audits
+  `stuck_detector.recovery.finished{recovered:false}`, and returns. invariant #4
+  ("always recover to a known anchor and re-navigate") is unmet on every path —
+  even Settings runs its own out-of-band recovery, so **no skill** benefits from
+  the orchestrator hook.
+- Evidence: `glassbox/runtime.py:572-581`, `glassbox/action/recovery.py:42-48`,
+  `glassbox/action/orchestrator.py:159,522,656,801`.
+- Fix: pass `recovery_policy=RuntimeRecoveryPolicy(hook=_default_recover,
+  max_attempts=2)` and `stuck_detector=...`. `_default_recover(phone, reason,
+  payload)` does `phone.home()` to the springboard anchor, then (if payload
+  carries an in-progress target page) replays `memory.path_to_page()` (see
+  CUQ-0.5); return `True` only after a fresh-frame verifier confirms the anchor.
+  Map the `decision.recovery` name string (`recover_to_home_then_renavigate`,
+  `stuck.py:23`) to the concrete callable instead of leaving it descriptive-only.
+- Acceptance: a runtime smoke test asserts the live-built orchestrator's
+  `recovery_policy.hook is not None` and `max_attempts > 0`; an injected dead-end
+  fixture fires recovery and reaches `recovered=True` (P3 acceptance criterion).
+
+### CUQ-0.3 — Attach `expected_state` on the production walkthrough/crawler
+- [ ] **critical→high · effort large · design-gap**
+- Gap: expected-state verification only runs when a caller puts a dict in
+  `metadata['expected_state']`; the only non-test caller is the `ai.py` facade.
+  The canonical end-to-end check (the Settings walkthrough/crawler) never sets
+  it, so every tap/scroll/back there is scored by generic `scene_progressed` and
+  its `unknown` downgrade. The headline P2 lever ("cuts unknown, catches silent
+  no-ops") does not protect the very task used to measure success.
+- Evidence: `glassbox/action/orchestrator.py:1551-1569,2280-2294`,
+  `glassbox/ai.py:1295-1305`; grep: no `glassbox/ios/*`,`/crawl/*` sets it.
+- Fix: have the walkthrough attach an `ExpectedState` (`page_id` or
+  `visible_text` of the target detail page) per semantic step, or route its
+  primitives through CUQ-0.1.
+- Acceptance: a smoke test asserts the live Settings drill-down produces
+  `semantic_verifier == 'expected_state'` (not `scene_progressed`) for entry taps.
+
+### CUQ-0.4 — Add a selection-time VLM escalation (gate today only fires post-action)
+- [ ] **critical→high · effort medium · design-gap**
+- Gap: the `VLMEscalationGate` is consulted in exactly one place —
+  `_maybe_vlm_verify_expected_state`, on the *after* scene. The pre-action
+  SELECTION path (`find_text`→`tap_text`) does pure text matching and raises
+  `AssertionError` on an OCR miss; trigger #2 ("target not found by OCR →
+  find-by-description") and trigger #3 (classifier conflict) are never produced
+  on the default path. This is the unmitigated form of the doc's **#1 leak**.
+  Note: `_reground_tap_point` (`phone.py:1319-1343`) already does a partial
+  version (VLM `describe()` when OCR misses entirely) but only on retry
+  (`attempt_index>0`) and **ungated/unbudgeted**.
+- Evidence: `glassbox/phone.py:1135-1146,1194-1197,1524-1538,1643-1657`,
+  `glassbox/action/orchestrator.py:1607-1641`, `glassbox/cognition/vlm_gate.py:67`.
+- Fix: in `expect_text`/`tap_text`/`tap_button`/`tap_intent`, on first-look OCR
+  miss **or** low-confidence/fuzzy-only match, build
+  `VLMGateInput(ocr_confidence=matched.confidence, target_found=...)` through a
+  shared `VLMEscalationGate`; on escalate, run `describe()` / find-by-description
+  (set-of-marks for dense scenes, CUQ-2.x) within the per-action budget, re-resolve,
+  set `selection_source=vlm`, and only raise after exhaustion. Route
+  `_reground_tap_point`'s and `tap_intent`'s `describe()` through the same gate so
+  selection-time VLM calls obey the budget and are recorded.
+- Acceptance: a unit test proves trigger #2 forces a gated VLM call on selection;
+  selection-time VLM calls appear in `vlm_calls`/`vlm_triggers` and obey
+  `max_vlm_calls_per_action`.
+
+### CUQ-0.5 — Install a generic `try_memory_path` recovery hook (UTG graph has no generic consumer)
+- [ ] **high · effort medium · design-gap**
+- Gap: `path()`/`path_to_page()`/`recognize()`/`locate()`/`expected_elements()`
+  are implemented + unit-tested but the only non-test callers live in the
+  Settings skill. The orchestrator imports only `compute_signature` from memory —
+  it never queries the graph for navigation or recovery. Leak #7 confirmed: the
+  "explore once, reuse the path" benefit is dormant for every app but Settings.
+- Evidence: `glassbox/action/orchestrator.py:29,608-671`,
+  `glassbox/runtime.py:572-581`, `skills/regression/ios_settings/core.py:447-478`.
+- Fix: the recovery `RecoveryHook(phone, reason, payload)` seam already exists —
+  install a generic `try_memory_path` default hook (parameterized by target
+  `page_id` + `allowed_actions` + `min_success_rate`, all supported by
+  `path_to_page`) that queries `phone.memory.path_to_page(recognized, anchor)`
+  and replays the edge chain. No orchestrator change needed. Folds into CUQ-0.2.
+- Acceptance: a non-Settings fixture recovers via a replayed memory path; BFS is
+  reliability-weighted (see CUQ-3 medium list) so low-success edges are avoided.
+
+### CUQ-0.6 — Default-on candidate-point landing retry for the agent tap path
+- [x] **high · effort quick-win** — DONE: `_action_metadata` now `setdefault`s `landing_retry_allowed=True` for mouse_tap with landing observation (re-tap after a no-op is safe by construction); `forbid_landing_retry` stays the destructive-control opt-out. A first-attempt `missed` on the default agent tap path now re-grounds instead of failing. Regression in `test_actuation_feedback.py`.
+- Gap: `_action_metadata` sets `landing_retry_budget=2` for `mouse_tap`, but a
+  landing retry only runs when `landing_retry_allowed` is explicitly set — true
+  only in regression nav + a smoke test, never on the agent's `tap_text` path.
+  So a tap whose ROI did not change (`landing_signal=='missed'`, i.e. "tapped but
+  nothing happened" from drift/off-center) is converted straight to `failed`
+  after one attempt; the documented reground-on-drift remedy is dead on the live
+  path.
+- Evidence: `glassbox/action/orchestrator.py:2285-2288,2329-2332,1435-1441`,
+  `glassbox/phone.py:1524-1538`, `glassbox/ai.py:347,464,937`.
+- Fix: default `landing_retry_allowed=True` for idempotent taps inside
+  `_target_tap_plan`/`tap_text` (keep `forbid_landing_retry` as the
+  destructive-control opt-out), or at minimum expose the flag on `tap_text` and
+  have the agent layer pass it. This also directly mitigates CUQ-1.2.
+- Acceptance: a regression asserts a first-attempt `missed` on the default path
+  triggers a candidate-point retry / reground before `failed`.
+
+### CUQ-0.7 — Enforce the per-action VLM budget across retries on the legacy path
+- [x] **high→medium · effort quick-win** — DONE: the legacy `execute()` loop now copies `vlm_calls`/`vlm_triggers`/`vlm_budget_exhausted`/cache counters from the per-attempt metadata back into the shared outer `metadata` after every attempt (mirroring the semantic-plan path at orchestrator.py:451-460), so the per-action VLM budget is enforced across retries instead of resetting to 0 each attempt. Regression `test_legacy_path_enforces_per_action_vlm_budget_across_attempts`.
+- Gap: `max_vlm_calls_per_action` is enforced only on the (dead) semantic-plan
+  path, which merges `vlm_calls` back into outer metadata. The legacy loop does
+  not, so a flaky verified action can spend `per_attempt × max_attempts` calls;
+  `unknown → VLM → unknown` can loop and burn budget without bound.
+- Evidence: `glassbox/action/orchestrator.py:451-460,1604-1606`.
+- Fix: thread the per-action VLM counter through the legacy retry loop and stop
+  escalating on exhaustion (fall to strategy switch / recovery instead).
+- Acceptance: a unit test proves `unknown→VLM→unknown` cannot exceed the
+  per-action budget on the default path.
+
+### CUQ-0.8 — Migrate `home()` onto the plan runner as the 1:1 ladder template
+- [ ] **high · effort medium · design-gap**
+- Gap: P2 acceptance forbids new bespoke fallback code, yet `home()` /
+  `_picokvm_home_pointer_fallback` / `_verified_pointer_home` are exactly that —
+  a hand-coded fallback ladder plus a verify wrapper that deliberately bypasses
+  the orchestrator (so AT sub-taps aren't double-recorded), and they emit none of
+  the attempt/group artifacts the harness needs. A canonical `home` `StrategySpec`
+  ladder already exists in `semantic_plan.py:498-502` but is unused.
+- Evidence: `glassbox/phone.py:2442-2539`,
+  `docs/design/computer_use_success_rate.md:354-363`.
+- Fix: migrate `home()` onto `default_semantic_action_plan`, encapsulating the
+  AssistiveTouch nested-tap suppression inside the `assistive_touch_home` strategy
+  callable so outer attempt/group + `semantic_plan.*` artifacts emit uniformly.
+  This is the cleanest 1:1 migration and validates strategy-switch + recovery +
+  shared-budget in one op; then forbid new bespoke fallbacks in review.
+- Acceptance: `home` strategy switches are visible in the harness; no behavior
+  regression on PicoKVM vs non-PicoKVM rigs.
+
+### CUQ-0.9 — Make stuck recovery outcome-aware (one no-op currently → infinite loop)
+- [x] **high · effort medium** — DONE: `_maybe_recover_stuck` now inspects `recovery.recovered`: success clears the failure counter; a failed/no-op recovery calls the new `StuckLoopDetector.rearm()` (un-fires the anchor + resets the run counter) so a persistent dead-end can fire again after `threshold` more samples instead of disarming forever. A bounded `max_stuck_recoveries` budget (default 3) caps total attempts and emits a terminal `stuck_detector.unrecoverable` audit marker on exhaustion. `observe_and_recover` now also honors the recover-bool. Tests: detector re-arm + end-to-end budget/unrecoverable.
+- Gap: `_maybe_recover_stuck` never inspects `recovery.recovered`; meanwhile
+  `StuckLoopDetector` adds the key to `_fired_keys` the first time it crosses
+  threshold and only clears on a `succeeded` reset. So if recovery fails/no-ops
+  (guaranteed today, see CUQ-0.2), `should_recover` stays `False` forever and the
+  agent loops the same failed action indefinitely with no escalation, no
+  termination.
+- Evidence: `glassbox/action/orchestrator.py:617,656-671`,
+  `glassbox/action/stuck.py:50-52,72-75`.
+- Fix: only add to `_fired_keys` when `recovered=True`; otherwise re-arm so the
+  detector can fire again after K more identical samples; add a bounded global
+  recovery budget that surfaces a terminal `stuck-unrecoverable` status (never a
+  silent loop) on exhaustion. Pass the recovery verdict back to the detector.
+- Acceptance: a test drives a dead-end where the first recovery fails and asserts
+  a second fire then a surfaced terminal status, not an infinite loop.
+
+### Tier-0 medium companions
+- [ ] **CUQ-0.10** `transport_failed` is never retried on the legacy path (the
+  `transport_retry_budget` lives only in the dead semantic-plan path). *medium*
+- [ ] **CUQ-0.11** Default retry/unknown policies are effective no-ops: most ops
+  are non-idempotent so `retry_budget` is forced to 0 and `unknown_policy=retry`
+  never fires. Decide per-op idempotency explicitly. *medium*
+- [ ] **CUQ-0.12** Stuck/loop recovery runs only after a group finalizes and
+  cannot alter the current action's outcome (`stuck.py:62 observe_and_recover` is
+  dead; orchestrator uses `observe()` directly). *medium*
+
+---
+
+## Tier 1 — Independent correctness leaks (hurt success rate regardless of wiring)
+
+### CUQ-1.1 — Pixel-diff "landed" upgrades `unknown`→`succeeded` and locks retry
+- [x] **high · effort quick-win→medium** — DONE: `_semantic_after_landing` no longer promotes a mouse-tap `unknown`→`succeeded` on a raw ROI pixel delta (the focus-change upgrade is now restricted to `keyboard_focus_activate`, the one method where focus change is the intended evidence); a mouse tap stays `unknown` + `retry_allowed=True` so a later strategy/re-observation can fire. Real navigations still succeed via scene progress. Leak regression `test_mouse_tap_pixel_change_without_scene_progress_is_not_false_success`.
+- Gap: a tap with `unknown` semantic verdict is promoted to `succeeded` whenever
+  the landing observation reports `landed` — which means only that the ROI/frame
+  changed by >0.001 (a ripple, keyboard, spinner, ad refresh, or row highlight
+  all qualify) — and the promotion sets `retry_allowed=False`. This **bypasses**
+  `SceneProgressedVerifier`'s own carousel/same-page guard
+  (`verifiers.py:717-729` returns `unknown` for exactly this "frame changed but
+  page identity didn't" case). Strong false-success leak. The upgrade is also
+  unconditional w.r.t. `landing_retry_allowed`.
+- Evidence: `glassbox/action/orchestrator.py:1709-1717,1435-1441,1500-1526`.
+- Fix: gate the upgrade on a semantic delta (page_id/scene_type changed or
+  expected_state met), not raw ROI pixels; reuse
+  `_looks_like_transient_carousel_change`; restrict pure-pixel/focus upgrade to
+  `keyboard_focus_activate`; keep `retry_allowed=True` so a later strategy fires.
+
+### CUQ-1.2 — Unactuatable-bucket poisoning silently disables a whole control class
+- [ ] **high · effort medium**
+- Gap: `_method_is_unactuatable` flags a bucket after only 3 missed/`landed_noop`
+  tries; the bucket key is coarse (`control_role, size_bucket, region_zone`),
+  shared across many targets; "missed" is a low-threshold (0.001) ROI diff on a
+  possibly-animating fresh frame. Three transient perception misses on different
+  switches can flip the shared bucket, and `_skip_decision` then returns a
+  synthetic `skipped`/`failed` for every future tap in that class **without
+  sending a command**.
+- Evidence: `glassbox/action/actuation_profile.py:414-418`,
+  `glassbox/action/orchestrator.py:595-606,719-732,1435-1441`,
+  `glassbox/action/actuation.py:147-163`.
+- Fix: raise min-tries (≥5) from **distinct** `target_identity` values; require a
+  corroborating semantic `failed` (not just a pixel miss); clear the verdict on
+  any later `landed_ok`; do not persist `unactuatable` across sessions; let the
+  default path bypass the skip ≥once per distinct target. CUQ-0.6 reduces the
+  false-miss feed.
+
+### CUQ-1.3 — VLM verification "escalation" re-checks identical stale OCR
+- [ ] **medium · effort medium**
+- Gap: on `unknown`/`failed` verification the orchestrator calls `describe()` then
+  re-runs `verify_expected_state` — but `describe()` enriches the *same*
+  already-captured scene in place (fills `intent_label`/`page_id`); it does not
+  re-capture, re-OCR, or add text. For `visible_text`/`element_appears`/
+  `element_gone` (the common case), the second pass reads identical texts, so a
+  missed OCR stays missed while burning budget+latency.
+- Evidence: `glassbox/action/orchestrator.py:1623-1641`,
+  `glassbox/phone.py:1079-1096`, `glassbox/action/semantic_plan.py:407-446`.
+- Fix: on escalation, capture a fresh frame and re-run perception, or have the
+  VLM answer the expectation directly ("is text X visible? / what page is this?").
+
+### CUQ-1.4 — Candidate executor discards the resolved center and re-resolves the bare label
+- [ ] **medium · effort medium**
+- Gap: `ai.py:937 _execute_candidate` calls `tap_text(candidate.label)` even
+  though the candidate already carries a precise resolved center
+  (`candidates.py:29`). The label is re-resolved through `find_text`'s first-match
+  substring/fuzzy ladder, so the tap can land on a *different* element sharing the
+  label (nav title vs row).
+- Fix: tap the already-selected element/center via `tap_element` (or pass the
+  candidate center as the actuation target). Highest-precision fix for the
+  "wrong target even when OCR is correct" class.
+
+### CUQ-1.5 — `find_text`/`find_button`/`find_by_intent` have no ambiguity guard
+- [ ] **medium · effort medium**
+- Gap: all three return the **first** exact→substring→fuzzy match, with no
+  closest-length / best-vs-second margin check. `match_known_label`
+  (`text_match.py:237-278`) already implements the right margin rule but the
+  selection functions don't use it.
+- Evidence: `glassbox/cognition/ocr.py:155-172`,
+  `glassbox/cognition/heuristic.py:393-408,430-445`.
+- Fix: prefer closest-length/highest-ratio in substring tier; adopt the margin
+  rule in fuzzy tier (ambiguous → None/escalate to VLM, CUQ-0.4); apply
+  nav-title deprioritization (`_rows_before_nav_title`) uniformly.
+
+### CUQ-1.6 — Stuck signature uses exact string equality → OCR jitter never reaches threshold
+- [x] **high · effort medium · design-gap** — DONE: `StuckLoopDetector` now matches each sample against the run's *anchor* via structural `similarity() >= SIGNATURE_MATCH_THRESHOLD` (+ exact failure_reason), falling back to exact equality for opaque/plain strings; the anchor is held fixed so drift can't accumulate. `_screen_signature` now feeds `dhash(frame)` as the phash so the perceptual-hash term in `similarity()` contributes. Regressions: jitter-tolerance + genuine-reset tests in `test_stuck_loop_detector.py`. (Re-fire/outcome-awareness is CUQ-0.9.)
+- Gap: the detector keys on a JSON-stringified `ScreenSignature` compared with
+  `==`. A single OCR jitter (one extra/missing token, a spinner counted as an
+  element, a per-type histogram change) makes `key != last_key`, resets the count
+  to 1, and the threshold of 3 is never reached — so the detector **under-fires on
+  exactly the noisy screens it exists to catch**. `signature.py` already defines
+  `SIGNATURE_MATCH_THRESHOLD` (Jaccard + histogram tolerance) but it's unused here;
+  `phash` is always `""` on this path, so the `dhash` term is dead.
+- Evidence: `glassbox/action/stuck.py:44-49`,
+  `glassbox/action/orchestrator.py:1796-1802`,
+  `glassbox/memory/signature.py:23,49-65`, `glassbox/memory/element_key.py:23-29`.
+- Fix: keep the last `ScreenSignature` object and accumulate when
+  `similarity(prev,cur) >= SIGNATURE_MATCH_THRESHOLD` AND failure_reason matches;
+  feed a `dhash` into `_screen_signature`. Test with N slightly-jittered
+  signatures and assert recovery still fires.
+
+### Tier-1 medium companions
+- [x] **CUQ-1.7** Shape-mismatched (garbled/partial) frames are scored as max
+  diff = "everything changed" instead of being rejected. *quick-win* — DONE:
+  `compute_frame_diff` now returns `diff_ratio=None`/`changed=None` on a shape
+  mismatch (indeterminate), so a garbled decode maps to an "indeterminate"
+  landing signal and a falsey progress check instead of a confident
+  landed/progress. `FrameDiff` fields are now nullable. Test in
+  `test_computer_use_verifiers.py`.
+- [ ] **CUQ-1.8** Graph scene-kind override silently no-ops on `recognize`
+  failure, masking node-identity drift. *medium*
+
+---
+
+## Tier 2 — Perception & grounding gaps (enlarge the actionable space)
+
+### CUQ-2.1 — `detect_icons` never runs in the default `perceive()` path
+- [ ] **high · effort medium · design-gap**
+- Gap: the well-built no-text icon detector is wired only into the Home
+  springboard map and the (default-off) cold-start annotator. On an ordinary app
+  page the default `perceive()` yields **zero** icon elements, so a `+`/share/
+  gear/back-chevron/trash icon button with no text cannot be a tap candidate.
+- Evidence: `glassbox/phone.py:970-995`, `glassbox/cognition/coldstart.py:299-325`,
+  `glassbox/config.py:206`, `glassbox/cognition/heuristic.py:299-341`.
+- Fix: run `detect_icons` (or `detect_icons_voted` on stable frames) inside
+  `perceive()` after OCR, masking OCR text boxes, injecting survivors as
+  `type='image'/'unknown'` elements with box-center tap points. Gate cheaply
+  (only when a requested target wasn't OCR-matched, or on icon-heavy scenes).
+
+### CUQ-2.2 — Graph-authoritative scene kind never reaches `perceive()` / `is_ios_home_screen`
+- [ ] **high · effort large (min-fix medium) · design-gap**
+- Gap: the graph/transition override runs only inside Settings'
+  `scene_state.scene_kind()`; every `phone.perceive()` sets `platform_scene_kind`
+  from the bare single-frame `classify_ios_scene`, and the universal
+  `is_ios_home_screen` re-invokes the bare classifier with no graph/VLM
+  consultation. A detail page misread as `springboard` makes `is_ios_home_screen`
+  return `True` → SpringBoard nav can tap a Settings row as a Home icon.
+- Evidence: `glassbox/phone.py:696-708`, `glassbox/ios/springboard.py:179-202`,
+  `skills/regression/ios_settings/scene_state.py:56-86,graph_state.py:40-79`.
+- Fix (min): gate `is_ios_home_screen`'s `springboard` trust on `not
+  graph_says_detail` and/or require `_has_strong_icon_grid` corroboration.
+  Fix (full): feed the graph-derived kind into a scene classifier with a source
+  slot out-ranking bare platform/app (note projector priority is
+  `("vlm","app","platform")`, `contracts.py:103`). Downgrade the FSM doc's
+  "authority/implemented" claim to "crawl-scoped".
+
+### CUQ-2.3 — `switch`/`slider` element types are never produced (toggles tap the label)
+- [ ] **medium · effort medium**
+- Gap: switch/slider types are declared and "tappable", but no heuristic ever
+  emits them; toggles stay `type='text'` and a tap lands on the label, not the
+  control.
+- Fix: add a structural detector for trailing toggle/slider affordances; set the
+  tap point to the control, not the label box.
+
+### Tier-2 medium companions
+- [ ] **CUQ-2.4** VLM verifier is not "opt-in for conflicts only" as documented —
+  classifier conflicts are never escalated. *medium*
+- [ ] **CUQ-2.5** Set-of-Mark grounding is implemented but never enabled by the
+  gate's `describe()` escalation. *medium* (pairs with CUQ-0.4)
+- [ ] **CUQ-2.6** `settings_detail` false-positives on third-party app screens via
+  locale-generic body markers. *medium*
+- [ ] **CUQ-2.7** Status-bar clock filtering lives only in the Settings policy;
+  core `find_text`/`text_match` still match clock noise. *medium*
+- [ ] **CUQ-2.8** `find_text` substring tier runs before fuzzy and matches short
+  needles inside long rows. *medium* (subsumed by CUQ-1.5)
+- [ ] **CUQ-2.9** `selection_source` is inferred post-hoc ("was the scene
+  VLM-described") rather than recorded at selection time — the headline diagnostic
+  is unreliable. *medium*
+- [ ] **CUQ-2.10** `whitebox_hint` (asset_match / accessibility_id / deep_link) is
+  audit-only metadata and never influences selection or tap point. *medium*
+
+---
+
+## Tier 3 — Measurement, calibration, capture robustness (make "did it improve?" answerable)
+
+### Measurement — without these, Tier 0/1/2 changes can't be judged
+
+### CUQ-3.1 — `action_success_rate` denominator is dominated by scroll/drag fillers
+- [x] **high · effort medium** — DONE: `_metrics` now splits primary actions into task-meaningful vs scroll/drag fillers (`_is_scroll_filler`); `action_success_rate`/`unknown_rate` count only task actions, so a tap/navigation regression is no longer masked by stable scroll success. Added `task_action_count`, `scroll_action_count`, `scroll_success_rate` (validator-safe ints/floats) and wired them into the `compare` delta display. Regression `test_scroll_fillers_excluded_from_action_success_rate`. **Remaining refinement:** orchestrator-stamped top-level `role` (vs intent-prefix heuristic) and a full per-op breakdown (needs validator to accept a dict metric).
+- Gap: in real data, 304/308 (98.7%) of counted action records are `drag` scroll
+  fillers; only 4 are task-meaningful taps. So a tap/navigation regression is
+  statistically invisible to the compare gate, and `unknown_rate` reflects scroll
+  mechanics not genuine ambiguity.
+- Evidence: `skills/regression/computer_use_success_rate.py:175,589,606`.
+- Fix: have the orchestrator stamp a real top-level `role`
+  (`orchestrator.py:1265-1284,749-757`) instead of the intent-prefix heuristic;
+  exclude/down-weight `op==scroll/drag` from the primary denominator (or a
+  separate `scroll_success`); report per-op success. Amend doc lines 116-117,
+  183-190 accordingly.
+
+### CUQ-3.2 — Harness's P1/P2 telemetry columns are structurally zero on every real run
+- [ ] **high · effort large (coupled to Tier 0)**
+- Gap: `vlm_calls`, `vlm_cache_*`, `expected_state`, `vlm_triggers`, semantic
+  `strategy` are emitted only by `_execute_semantic_plan` (no production caller),
+  so they aggregate to ~0 — the benchmark cannot attribute a success-rate delta
+  to the VLM-gate or strategy-ladder stage, which is the schema's whole point.
+- Evidence: `glassbox/action/orchestrator.py:243,431,451`,
+  `skills/regression/computer_use_success_rate.py:210,257`.
+- Fix (small, first): emit a **coverage warning** when a Settings benchmark yields
+  zero `expected_state`/`vlm` coverage, so the dead-signal condition is loud, not
+  silently zero. Then resolved by Tier 0 wiring.
+
+### CUQ-3.3 — No CI / merge gate runs the harness ("no reliability change merges without it" is unenforced)
+- [x] **high · effort medium · design-gap** — DONE (core gate): added `make lint`/`make test`/`make check` (device-independent) and `.github/workflows/ci.yml` running ruff + the smoke suite on every PR/push to main (macOS runner, because `ocrmac` is a darwin-only core dep). `make check` verified green locally (ruff clean, 1325 passed). **Remaining sub-part:** commit a frozen golden benchmark JSON and run `compare`/`validate` against it in CI to exercise the comparator path (depends on CUQ-3.2 coverage warning).
+- Gap: no `.github/workflows`, no pre-commit, no committed baseline JSON
+  (`artifacts/` is gitignored); `skills/smoke` is never auto-run. The
+  comprehensive schema/compare unit tests **exist** but nothing executes them.
+- Evidence: `Makefile:10`, `skills/regression/computer_use_success_rate.py:1076`,
+  `skills/smoke/test_computer_use_success_rate.py`.
+- Fix: (a) add a device-independent CI/`make check` that runs `uv run pytest
+  skills/smoke` on every PR; (b) commit a frozen golden benchmark JSON outside the
+  gitignore and run `compare`/`validate` on it; (c) keep live-rig numbers as a
+  manual non-blocking step but require PR authors to paste before/after deltas.
+
+### CUQ-3.4 — Canonical-primitive tasks (go-home / launch-app / back / scroll-to-bottom) are not benchmarked
+- [ ] **high · effort large · design-gap**
+- Gap: only `settings_readonly_walkthrough` runs; the primitives most central to
+  recovery/navigation reliability are never benchmarked, so regressions in the
+  fragile HID primitives are invisible to the success number.
+  `aggregate_benchmark_manifest` supports a multi-task manifest but none is wired.
+- Evidence: `skills/regression/computer_use_success_rate.py:807,1199`.
+- Fix: author + commit a `tasks.json` (with per-task `terminal_expected_state`),
+  add a Make/CLI entry to run it N rounds, include in the gated baseline.
+
+### Calibration — systematic mis-taps
+
+### CUQ-3.5 — iPhone uses a hardcoded single-rig coordinate fit (iPad already auto-derives)
+- [x] **high · effort quick-win→medium · design-gap** — DONE (opt-in): renamed `_apply_ipad_crop_calibration`→`_apply_crop_calibration`, gated on `_is_ipad_target() OR cfg.derive_fit_from_crop`. iPad still always derives from the crop; iPhone unifies onto the same path via `GLASSBOX_PICOKVM_DERIVE_FIT_FROM_CROP=1`. Kept opt-in (not a silent default flip) because it changes live tap coordinates and a drifting crop (CUQ-3.14) could regress them without an on-rig validation run — but the test proves the crop-derived fit reproduces the hand-measured static fit to ~4 sig-figs (the static fit was measured from this crop), so flipping it on after validation is low-risk. Test: `test_picokvm_iphone_opt_in_derives_calibration_from_crop`. **Default-flip pending: CUQ-3.14 (crop stability) + a live-rig validation run.**
+- Gap: the iPhone HID fit (`abs_to_phone_scale_*`, `abs_origin_offset_*`) is a
+  fixed constant from one 2026-05-21 rig; `_apply_ipad_crop_calibration`
+  re-derives from the live crop **only** when `_is_ipad_target()`. Any capture-card
+  / cabling / model / re-seated-adapter change shifts the true frame→logical map
+  and every iPhone tap is offset, with no session-start compensation.
+- Evidence: `glassbox/effectors/picokvm/config.py:42-48`,
+  `glassbox/effectors/picokvm/effector.py:72-76,299-307,392-398`.
+- Fix: drop the `not self._is_ipad_target()` clause at `effector.py:307` so the
+  existing crop-derivation also runs for iPhone (keep static constants only as the
+  crop-is-None fallback and the `GLASSBOX_PICOKVM_ABS_*` escape hatch).
+
+### CUQ-3.6 — Actuation profile is never persisted across sessions (default config)
+- [ ] **high · effort medium**
+- Gap: `cfg.actuation_profile_dir` defaults to `None`, so learned per-bucket tap
+  offsets, best-method selection, and unactuatable verdicts are discarded each
+  run; `os_version` is hardwired to `'unknown'`. Every session cold-starts and
+  re-pays the mis-tap cost.
+- Evidence: `glassbox/config.py:249`, `glassbox/runtime.py:547-551,578-579`,
+  `glassbox/action/orchestrator.py:212-219`.
+- Fix: default `actuation_profile_dir` to the per-device memory path; populate
+  `os_version` from device geometry/manifest. (Pair with CUQ-1.2 so a poisoned
+  `unactuatable` verdict is never persisted.)
+
+### Calibration medium companions
+- [ ] **CUQ-3.7** No per-session auto-calibration probe; relies on mid-run
+  opportunistic correction only. *large*
+- [ ] **CUQ-3.8** A single noisy correction pair immediately biases a whole control
+  bucket; no magnitude clamp / variance gate. *medium*
+- [ ] **CUQ-3.9** `phone_model` and the linear-fit constants are independent config
+  with no consistency check. *quick-win*
+
+### Capture robustness
+
+### CUQ-3.10 — PicoKVM source returns the first post-reopen frame with no keyframe warmup
+- [x] **high · effort quick-win · design-gap** — DONE: `fresh_snapshot()` discards `fresh_warmup_frames` (default 2) post-reopen frames, returns the first frame passing `_frame_looks_decoded` (std > 1.0, rejects flat/partial decodes), falls back to `snapshot()` on settle-budget exhaustion. Tests in `test_picokvm_frame_source.py`.
+- Gap: `fresh_snapshot()` does close→open→read-first-frame with no discard; the
+  AVF source deliberately discards 3 warmup frames. On H.264 the first decode
+  after reopen is often a P-frame/partial that decodes as a smear — and
+  `fresh_snapshot` is the freshness boundary right after every PicoKVM action, so
+  a garbled frame directly corrupts the verification verdict.
+- Evidence: `glassbox/perception/picokvm_source.py:57-82`,
+  `glassbox/perception/source.py:264-266`.
+- Fix: after `open()` read-and-discard 2-3 frames; for `fresh_snapshot`
+  specifically, read until two consecutive frames have identical shape and
+  `frame_diff_ratio` settles below epsilon, rejecting near-zero-mean /
+  degenerate-variance frames.
+
+### Capture medium companions
+- [ ] **CUQ-3.11** No absolute staleness-by-age check: a buffered frame older than
+  the action is never rejected by age. *medium*
+- [ ] **CUQ-3.12** AssistiveTouch menu taps and the `swipe_xy` fallback omit the
+  PicoKVM fresh-verify reopen, verifying on possibly-stale frames. *quick-win*
+- [ ] **CUQ-3.13** No H.264 liveness/garble detection or bounded reconnect loop
+  (one read-failure path is two attempts then raise). *medium*
+- [ ] **CUQ-3.14** Per-frame letterbox auto-refresh can silently re-fit the crop to
+  transient content and drift coordinates. *medium*
+
+### Input fidelity
+
+### CUQ-3.15 — Generic AI scroll always uses swipe-fling, never the wheel (even on iPad)
+- [ ] **high (iPad-scoped) · effort medium · design-gap**
+- Gap: `AIPhone.scroll()/explore()/_execute_candidate()` call `swipe_up/down`
+  unconditionally; only the Settings crawler prefers the wheel. So every generic
+  task pays the swipe-fling overshoot tax even on the iPad rig where the wheel is
+  validated/authoritative. The closed-loop overshoot probe already exists — but
+  only inside `scrolling.py`.
+- Evidence: `glassbox/ai.py:529-533,606,938-941`, `glassbox/phone.py:2215-2252`,
+  `skills/regression/ios_settings/scrolling.py:67-75`.
+- Fix: in `AIPhone.scroll()` (and `explore`/`_execute_candidate`), route to
+  `wheel_scroll_down/up()` when `supports('scroll_wheel')`, fall back to swipe
+  otherwise; lift the `scroll_outcome` corrective-rescroll logic from
+  `scrolling.py` into the generic verb.
+
+### Input-fidelity medium companions
+- [ ] **CUQ-3.16** iPhone wheel activation state (primed/bounced/ack_only,
+  `scroll_strategy_validated`, `wheel_diagnostic`) is computed in detail but
+  consumed nowhere. *quick-win*
+- [ ] **CUQ-3.17** `ipad_mini_migration.md` self-contradicts: §5 says wheel
+  "superseded/authoritative" while the same doc records every `scroll_wheel` as
+  no-progress. Reconcile against `picokvm_ipad_wheel.md`. *medium*
+- [ ] **CUQ-3.18** `close_foreground_app` home-indicator drag and `keyboard_focus`
+  point are iPhone-shaped logical constants applied to iPad too. *medium*
+
+### Safety
+- [ ] **CUQ-3.19** Power-off / lock / app-crash disqualifying states map to
+  `status=failed`, not a terminal `blocked` safety bucket (invariant #4
+  exception). *medium*
+
+### Screen-memory medium companions
+- [ ] **CUQ-3.20** "Transition mismatch = failure" is unimplemented; the graph
+  never validates that an action landed where the edge predicted. *medium*
+- [ ] **CUQ-3.21** `locate()`/`expected_elements()` position priors have no runtime
+  consumer; OCR-ROI narrowing and candidate-scoring priors are dead. *medium*
+- [ ] **CUQ-3.22** UTG is persisted only on `runtime.close()`; a mid-run crash
+  loses the whole session's learned graph. *quick-win*
+- [ ] **CUQ-3.23** BFS path is not reliability-weighted (low-success edges aren't
+  avoided). *low* (fold into CUQ-0.5)
+
+---
+
+## Recommended sequencing
+
+If only three things ship, ship these (lowest risk, highest leverage):
+
+1. **Stop the bleeding (quick-win, local):** CUQ-0.2 (recovery hook) +
+   CUQ-0.6 (default-on landing retry) + CUQ-0.7 (VLM budget) + CUQ-1.1
+   (pixel-diff false-success) + CUQ-3.10 (keyframe warmup).
+2. **Prove the ladder (template migration):** CUQ-0.8 (`home()` → semantic plan),
+   then CUQ-0.1 expands to `back`/`scroll`/`tap`. Validate strategy-switch +
+   recovery + shared budget end-to-end on the Step-0 harness.
+3. **Make improvement measurable:** CUQ-3.1 (denominator) + CUQ-3.3 (CI gate) +
+   CUQ-3.2 (coverage warning) — otherwise every later step is unmeasurable.
+
+Full ordering: Tier 0 → Tier 1 → Tier 3-measurement → Tier 2 → Tier
+3-calibration/capture/fidelity. Each item gates on the Step-0 harness with a
+committed baseline; ship behind a flag, then default-on after a non-regression.
+
+## Doc-honesty corrections
+
+The audit found these `computer_use_success_rate.md` / `screen_state_fsm.md`
+status claims overstated. Until the wiring lands, downgrade them so the docs stop
+misleading planning:
+
+- P1 "implemented foundation + expected-state runtime integration" → **gate runs
+  on verification only; selection-time triggers (#2/#3) unimplemented on the
+  default path** (CUQ-0.4).
+- P2 "implemented foundation + orchestrator integration" → **`SemanticActionPlan`
+  has no production caller; expected-state verification is off the default path**
+  (CUQ-0.1, CUQ-0.3).
+- P3 "implemented minimal runtime hook … invokes the configured recovery policy"
+  → **no recovery hook is installed in production; every `recover()` is a no-op**
+  (CUQ-0.2, CUQ-0.9).
+- FSM "the UTG is the authority for ambiguous scene kind" → **crawl-scoped
+  (Settings only); the universal `perceive()`/`is_ios_home_screen` path is not
+  graph-corrected** (CUQ-2.2).
+
+## Verified NOT-issues (do not re-litigate)
+
+Adversarial verification rejected these as wrong or already-handled:
+
+- **Stable-frame is NOT off by default.** `open_phone()`→`_ai_config()` sets
+  `stable_after_action=True`; the tap target IS grounded on a stable frame via
+  `_needs_stable_frame`. (Residual: the base-config default diverges from the AI
+  facade — flipping `config.py:131`/`stable.py:21` to `True` would harden
+  non-facade entrypoints; low priority.)
+- **The VLM gate is NOT unconstructible / off.** It's built when a VLM is enabled;
+  the real gap is *where* it's consulted (CUQ-0.4), not whether it exists.
+- **`unknown` is NOT silently treated as success by default** — the
+  consumer-chain claim was factually wrong (the false-success path is the
+  specific pixel-diff upgrade in CUQ-1.1, not a blanket policy).
+- **The letterbox crop is NOT a one-shot startup measurement** that a single dark
+  frame can wreck; it can refresh per-frame (the real concern is drift, CUQ-3.14).
+- **`page_id` verifier is not near-dead**, and `expect_page` is not dropped when
+  `visible_text` is given (those micro-claims didn't hold).
+- **Scroll/swipe/drag do have a movement check**; the "no-op silently reports
+  success" claim didn't hold for those ops (the real false-success is CUQ-1.1).
+- **The default terminal `page_id` does match** in normal runs (the
+  "never-matches" claim was wrong).
+
+## Acceptance for this roadmap
+
+- Each `CUQ-*` item lands behind a flag, gated on the Step-0 harness with a
+  committed baseline (CUQ-3.3), and flips default-on only after a non-regression.
+- The four doc-honesty corrections are applied (or the wiring lands and the
+  claims become true).
+- Tier-0 completion is provable: real Settings runs emit non-zero
+  `strategy_switches`/`recoveries`/`expected_state` coverage, and an injected
+  dead-end fixture reaches `recovered=True`.

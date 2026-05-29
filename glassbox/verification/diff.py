@@ -14,9 +14,9 @@ from glassbox.perception.stable import frame_diff_ratio
 
 @dataclass(frozen=True)
 class FrameDiff:
-    diff_ratio: float
+    diff_ratio: float | None
     changed_bbox: tuple[int, int, int, int] | None
-    changed: bool
+    changed: bool | None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -73,6 +73,15 @@ def _changed_bbox(a: np.ndarray, b: np.ndarray, *, threshold: int = 12) -> tuple
 def compute_frame_diff(before: np.ndarray | None, after: np.ndarray | None) -> FrameDiff | None:
     if before is None or after is None:
         return None
+    if getattr(before, "shape", None) != getattr(after, "shape", None):
+        # CUQ-1.7: a shape mismatch is a garbled / partial decode (or a mid-run
+        # crop change), not reliable evidence that the screen "fully changed".
+        # Returning ratio=1.0 here would score a garbled frame as a confident
+        # landed/progress signal. Mark it indeterminate (None) instead so the
+        # landing/verification path treats it as "can't tell" rather than
+        # "everything changed" (a None diff_ratio maps to an indeterminate
+        # landing signal, and changed=None is falsey for progress checks).
+        return FrameDiff(diff_ratio=None, changed_bbox=_changed_bbox(before, after), changed=None)
     ratio = frame_diff_ratio(before, after)
     bbox = _changed_bbox(before, after)
     return FrameDiff(diff_ratio=ratio, changed_bbox=bbox, changed=ratio > 0.001)

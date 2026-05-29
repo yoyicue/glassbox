@@ -46,6 +46,17 @@ class PicoKVMEffectorConfig(BaseSettings):
     abs_origin_offset_x: float = 736.4
     abs_origin_offset_y: float = 53.8
 
+    derive_fit_from_crop: bool = False
+    """Derive the absolute-pointer fit from the detected crop bbox (CUQ-3.5).
+
+    iPad always derives the fit from its crop (a 3:2 mirror pillarboxed inside a
+    16:9 HDMI frame). iPhone keeps the hand-measured 2026-05-21 static fit by
+    default because changing it shifts every live tap and needs an on-rig
+    validation run; set GLASSBOX_PICOKVM_DERIVE_FIT_FROM_CROP=1 to unify iPhone
+    onto the same crop-derived path (auto-adapts to a different capture
+    card / re-seated adapter). Explicit GLASSBOX_PICOKVM_ABS_* values always win.
+    """
+
     wheel_enabled: bool = False
     """Opt-in wheel for iPhone/AssistiveTouch targets.
 

@@ -401,6 +401,43 @@ def test_picokvm_ipad_crop_calibration_does_not_leak_through_shared_config():
 
 
 @pytest.mark.smoke
+def test_picokvm_iphone_opt_in_derives_calibration_from_crop():
+    """CUQ-3.5: iPhone can unify onto crop-derivation via the opt-in flag. The
+    crop-derived fit reproduces the hand-measured static fit (the static fit was
+    originally measured from this crop) and auto-adapts if the rig crop shifts;
+    it stays opt-in so a drifting crop can't silently regress live taps."""
+    iphone_geometry = SimpleNamespace(
+        model="iphone_17", phone_size=(1179, 2556), phone_points=(393, 852)
+    )
+    crop = SimpleNamespace(crop_bbox=(736, 54, 448, 972))
+
+    # Default (flag off): iPhone keeps the validated static fit even with a crop.
+    eff_off = PicoKVMEffector(
+        config=PicoKVMEffectorConfig(_env_file=None),
+        rpc=FakeRpc(),
+        device_geometry=iphone_geometry,
+        crop=crop,
+    )
+    assert eff_off._abs_origin_offset_x == 736.4
+    assert eff_off._abs_to_phone_scale_x == pytest.approx(0.01363)
+
+    # Opt-in: iPhone derives the fit from the crop bbox.
+    eff_on = PicoKVMEffector(
+        config=PicoKVMEffectorConfig(_env_file=None, derive_fit_from_crop=True),
+        rpc=FakeRpc(),
+        device_geometry=iphone_geometry,
+        crop=crop,
+    )
+    assert eff_on._abs_origin_offset_x == 736.0
+    assert eff_on._abs_origin_offset_y == 54.0
+    assert eff_on._abs_to_phone_scale_x == pytest.approx(448 / 32767)
+    assert eff_on._abs_to_phone_scale_y == pytest.approx(972 / 32767)
+    # Crop-derived ≈ hand-measured static fit (within rounding): low-risk to flip.
+    assert eff_on._abs_to_phone_scale_x == pytest.approx(0.01363, abs=1e-4)
+    assert eff_on._abs_to_phone_scale_y == pytest.approx(0.02968, abs=1e-4)
+
+
+@pytest.mark.smoke
 def test_picokvm_tap_uses_absolute_mouse_down_up_sequence():
     eff, rpc = make_eff()
 

@@ -73,7 +73,7 @@ class PicoKVMEffector:
         self._abs_origin_offset_y = float(self.config.abs_origin_offset_y)
         self._abs_to_phone_scale_x = float(self.config.abs_to_phone_scale_x)
         self._abs_to_phone_scale_y = float(self.config.abs_to_phone_scale_y)
-        self._apply_ipad_crop_calibration(crop)
+        self._apply_crop_calibration(crop)
         self._connected = False
         self._wheel_activation_status: str | None = None
 
@@ -296,15 +296,18 @@ class PicoKVMEffector:
             raise RuntimeError(detail)
         return "bounced" in (proc.stdout or "")
 
-    def _apply_ipad_crop_calibration(self, crop) -> None:
-        """Derive a PicoKVM absolute-pointer fit from the detected iPad crop.
+    def _apply_crop_calibration(self, crop) -> None:
+        """Derive a PicoKVM absolute-pointer fit from the detected crop bbox.
 
-        iPhone keeps the historical static fit. For iPad, the USB-C mirror is a
-        3:2 pillarboxed region inside a 16:9 HDMI frame, so the least surprising
-        default is the current crop bbox. Explicit GLASSBOX_PICOKVM_ABS_* values
-        still win for hand-measured calibration.
+        The mirror is a region inside the HDMI frame, so the crop bbox is the
+        least-surprising default fit. iPad always uses this (CUQ-3.5 unifies the
+        platforms onto one path); iPhone opts in via
+        GLASSBOX_PICOKVM_DERIVE_FIT_FROM_CROP because changing its hand-measured
+        static fit shifts every live tap and needs an on-rig validation run.
+        Explicit GLASSBOX_PICOKVM_ABS_* values still win.
         """
-        if not self._is_ipad_target() or self.coordinate_space != "frame_px" or crop is None:
+        derive = self._is_ipad_target() or bool(self.config.derive_fit_from_crop)
+        if not derive or self.coordinate_space != "frame_px" or crop is None:
             return
         fields_set = set(getattr(self.config, "model_fields_set", set()) or ())
         calibration_fields = {

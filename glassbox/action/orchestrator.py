@@ -26,7 +26,7 @@ from glassbox.action.semantic_plan import (
 from glassbox.action.stuck import StuckLoopDetector, StuckSample
 from glassbox.cognition.vlm_gate import VLMEscalationGate, VLMGateInput
 from glassbox.effector import ActionResult
-from glassbox.memory.signature import compute_signature
+from glassbox.memory.signature import compute_signature, dhash
 from glassbox.obs.artifacts import ArtifactStore, StoredFrame, StoredScene
 from glassbox.obs.stream import ObservationBuffer
 from glassbox.verification import (
@@ -149,6 +149,7 @@ class ActionOrchestrator:
         actuation_profile_dir: str | None = None,
         recovery_seed: dict[str, Any] | None = None,
         stuck_detector: StuckLoopDetector | None = None,
+        max_stuck_recoveries: int = 3,
     ):
         if observation_producer_mode not in OBSERVATION_PRODUCER_MODES:
             expected = ", ".join(sorted(OBSERVATION_PRODUCER_MODES))
@@ -162,6 +163,8 @@ class ActionOrchestrator:
         self.actuation_profile_dir = actuation_profile_dir
         self.recovery_seed = recovery_seed or DEFAULT_RECOVERY_SEED
         self.stuck_detector = stuck_detector or StuckLoopDetector()
+        self.max_stuck_recoveries = max(0, int(max_stuck_recoveries))
+        self._stuck_recovery_failures = 0
         self.semantic_fail_fast = semantic_fail_fast
         self.observation_producer_mode = observation_producer_mode
         self._group_seq = 0
@@ -293,18 +296,34 @@ class ActionOrchestrator:
                     attempt_kwargs.update(command.kwargs)
                 else:
                     attempt_call = call
+                attempt_metadata = {**metadata, **attempt_kwargs, "attempt_index": attempt_index}
                 attempt = self._run_attempt(
                     phone,
                     op=op,
                     call=attempt_call,
                     kwargs=attempt_kwargs,
-                    metadata={**metadata, **attempt_kwargs, "attempt_index": attempt_index},
+                    metadata=attempt_metadata,
                     group_id=group_id,
                     attempt_id=attempt_id,
                     attempt_index=attempt_index,
                     actor=actor,
                     landing_retry_available=landing_retries_used < landing_retry_budget,
                 )
+                # CUQ-0.7: carry the per-action VLM budget + audit counters
+                # forward across retries (mirrors the semantic-plan path) so an
+                # unknown->VLM->unknown loop cannot re-spend the per-action cap
+                # on every attempt; without this the per-attempt metadata copy
+                # is discarded and each retry sees vlm_calls=0.
+                for key in (
+                    "vlm_calls",
+                    "vlm_triggers",
+                    "last_vlm_trigger",
+                    "vlm_budget_exhausted",
+                    "vlm_cache_hits",
+                    "vlm_cache_misses",
+                ):
+                    if key in attempt_metadata:
+                        metadata[key] = attempt_metadata[key]
                 attempts.append(attempt)
                 retry_kind = self._retry_kind(
                     attempt,
@@ -669,6 +688,29 @@ class ActionOrchestrator:
             attempt_group_id=group_id,
             payload=recovery.to_dict(),
         )
+        # CUQ-0.9: make re-firing outcome-aware. A recovery that actually
+        # recovered clears the failure budget; one that did not must NOT leave
+        # the anchor permanently disarmed (which would loop the failed action
+        # forever after a single no-op recovery). Re-arm so the dead-end can
+        # fire again after `threshold` more samples, up to a bounded budget;
+        # on exhaustion surface a terminal marker instead of retrying forever.
+        if recovery.recovered:
+            self._stuck_recovery_failures = 0
+            return
+        self._stuck_recovery_failures += 1
+        if self._stuck_recovery_failures >= self.max_stuck_recoveries:
+            self.store.audit.append(
+                "stuck_detector.unrecoverable",
+                attempt_id=final.attempt_id,
+                attempt_group_id=group_id,
+                payload={
+                    "failure_reason": str(reason),
+                    "screen_signature": signature,
+                    "recovery_failures": self._stuck_recovery_failures,
+                },
+            )
+            return
+        self.stuck_detector.rearm()
 
     def _skipped_result(
         self,
@@ -1246,7 +1288,7 @@ class ActionOrchestrator:
             actor=actor,
         )
         after_mode = self._after_mode(str(metadata.get("settle_strategy"))) if after else "none"
-        screen_signature = self._screen_signature(after[-1][3]) if after else None
+        screen_signature = self._screen_signature(after[-1][3], after[-1][2]) if after else None
         observation_payload = {
             "settle_strategy": metadata.get("settle_strategy"),
             "after_mode": after_mode,
@@ -1706,16 +1748,31 @@ class ActionOrchestrator:
     ) -> SemanticOutcome:
         if landing_observation is None:
             return semantic
-        if landing_observation.get("landing_signal") == "landed" and semantic.status == "unknown":
-            return replace(
-                semantic,
-                status="succeeded",
-                reason="target landing observed after action",
-                confidence=max(semantic.confidence, 0.75),
-                retry_allowed=False,
-                observation_match=semantic.observation_match,
-            )
-        if landing_observation.get("landing_signal") != "missed":
+        signal = landing_observation.get("landing_signal")
+        method = metadata.get("actuation_method", "mouse_tap")
+        if signal == "landed" and semantic.status == "unknown":
+            if method == "keyboard_focus_activate":
+                # A focus change IS the intended success evidence for a keyboard
+                # focus activation, so the landing observation legitimately
+                # resolves an unknown verification.
+                return replace(
+                    semantic,
+                    status="succeeded",
+                    reason="focus change observed after action",
+                    confidence=max(semantic.confidence, 0.75),
+                    retry_allowed=False,
+                    observation_match=semantic.observation_match,
+                )
+            # CUQ-1.1: for a mouse tap, a raw ROI pixel delta (ripple, row
+            # highlight, spinner, keyboard appearing, same-page reflow) is NOT
+            # semantic proof of success. Verification already had the chance to
+            # confirm a real navigation via scene progress and returned unknown,
+            # so promoting on pixels alone double-counts evidence the verifier
+            # already rejected and silently scores no-op taps as success. Keep
+            # it unknown but retryable so a later strategy / re-observation can
+            # still fire instead of locking the ladder with a false success.
+            return replace(semantic, retry_allowed=True)
+        if signal != "missed":
             return semantic
         if semantic.disqualifying_state or semantic.status in {
             "succeeded",
@@ -1793,11 +1850,16 @@ class ActionOrchestrator:
         return payload
 
     @staticmethod
-    def _screen_signature(scene: Any) -> str | None:
+    def _screen_signature(scene: Any, frame: Any = None) -> str | None:
         if scene is None:
             return None
         with contextlib.suppress(Exception):
-            sig = compute_signature(scene)
+            # Feed a dhash so the perceptual-hash term in similarity() actually
+            # contributes (CUQ-1.6); tolerate a missing/odd frame (phash="").
+            phash = ""
+            with contextlib.suppress(Exception):
+                phash = dhash(getattr(frame, "img", None))
+            sig = compute_signature(scene, phash=phash)
             return json.dumps(sig.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
         return None
 
@@ -2284,6 +2346,12 @@ class ActionOrchestrator:
         metadata.setdefault("retry_budget", 0)
         if metadata.get("actuation_method") == "mouse_tap" and self._landing_observation_enabled(metadata):
             metadata.setdefault("landing_retry_budget", 2)
+            # CUQ-0.6: a landing retry only fires on a "missed" tap (ROI
+            # unchanged), so re-tapping after a no-op is safe by construction.
+            # Default it on for the agent tap path so a drift/off-center first
+            # tap re-grounds instead of failing after a single shot. Destructive
+            # controls opt out via forbid_landing_retry.
+            metadata.setdefault("landing_retry_allowed", True)
         else:
             metadata.setdefault("landing_retry_budget", 0)
         metadata.setdefault(

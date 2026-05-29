@@ -45,6 +45,36 @@ class _TargetOCR:
         ]
 
 
+class _NavTargetOCR:
+    """OCR that returns the "Go" row until a tap actually lands (the changed_roi
+    marker appears), then a different page — i.e. a tap that lands really
+    navigates, so success comes from scene progress, not a raw pixel delta."""
+
+    contract = None
+
+    def recognize(self, image):
+        navigated = bool(image[9:19, 9:19].any())
+        if navigated:
+            return [
+                UIElement(
+                    type="text",
+                    box=Box(x=2, y=2, w=10, h=6),
+                    text="Detail",
+                    confidence=0.95,
+                    element_id=9,
+                )
+            ]
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=8, y=8, w=12, h=12),
+                text="Go",
+                confidence=0.95,
+                element_id=7,
+            )
+        ]
+
+
 def _read_jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
@@ -91,7 +121,7 @@ def test_target_tap_landing_miss_retries_with_next_candidate_and_emits_events(tm
     effector = MockEffector()
     phone = Phone(
         source=_ImageSource(frames),
-        ocr=_TargetOCR(),
+        ocr=_NavTargetOCR(),
         effector=effector,
         action_orchestrator=orchestrator,
         action_fail_fast=False,
@@ -109,9 +139,12 @@ def test_target_tap_landing_miss_retries_with_next_candidate_and_emits_events(tm
     ]
 
     actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    # First attempt missed (no ROI change); the re-tap landed AND really
+    # navigated, so success comes from scene progress (CUQ-1.1: a mouse tap is
+    # not scored succeeded on a raw pixel delta alone).
     assert [action["semantic"]["reason"] for action in actions] == [
         "landing_missed",
-        "target landing observed after action",
+        "scene changed after action",
     ]
     assert actions[0]["semantic"]["retry_allowed"] is True
     assert actions[0]["actuation"]["landing_observation"]["landing_signal"] == "missed"
@@ -153,6 +186,41 @@ def test_target_tap_landing_miss_retries_with_next_candidate_and_emits_events(tm
     report = json.loads((store.run_dir / "actuation_report.json").read_text(encoding="utf-8"))
     assert report["attempt_labels"] == {"landed_ok": 1, "missed": 1}
     assert report["landing_signals"] == {"landed": 1, "missed": 1}
+
+
+@pytest.mark.smoke
+def test_mouse_tap_pixel_change_without_scene_progress_is_not_false_success(tmp_path):
+    """CUQ-1.1: a mouse tap whose ROI changes (ripple/highlight/reflow) but
+    whose page identity does NOT change must stay unknown+retryable, not be
+    promoted to a confident success on the raw pixel delta."""
+    frames = [
+        _frame(),  # target lookup
+        _frame(),  # preflight
+        _frame(),  # before_requested
+        _frame(),  # before_command
+        _frame(changed_roi=True),  # landing window: ROI pixels changed -> "landed"
+        _frame(changed_roi=True),  # stable after: same OCR -> no scene progress
+    ]
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store)
+    effector = MockEffector()
+    phone = Phone(
+        source=_ImageSource(frames),
+        ocr=_TargetOCR(),  # always "Go" -> scene/page identity unchanged
+        effector=effector,
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+        perceive_cache_diff=0.0,
+    )
+
+    result = phone.tap_text("Go")
+    orchestrator.close()
+
+    assert result.semantic_status == "unknown"
+    assert result.semantic_status != "succeeded"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert actions[-1]["actuation"]["landing_observation"]["landing_signal"] == "landed"
+    assert actions[-1]["semantic"]["retry_allowed"] is True
 
 
 @pytest.mark.smoke

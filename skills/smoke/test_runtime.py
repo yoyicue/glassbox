@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from glassbox.action import recover_to_home_then_renavigate
 from glassbox.backend_registry import (
     DEFAULT_EFFECTOR_REGISTRY,
     DEFAULT_FRAME_SOURCE_REGISTRY,
@@ -188,6 +189,26 @@ def test_build_phone_uses_neutral_vlm_cache_config(monkeypatch, tmp_path):
 
     assert runtime.phone.kimi is client
     assert calls == {"client": client, "cache_dir": str(tmp_path / "vlm-cache")}
+
+
+@pytest.mark.smoke
+def test_build_phone_wires_recovery_hook_into_orchestrator(tmp_path):
+    """CUQ-0.2: the production runtime must install a real recovery hook so the
+    orchestrator's stuck/loop and strategy-exhaustion recovery are not no-ops."""
+    source = FakeSource()
+    effector = FakeEffector()
+    cfg = AgentConfig(
+        _env_file=None,
+        computer_use_artifact_dir=str(tmp_path / "cu"),
+    )
+
+    runtime = build_phone(source=source, cfg=cfg, ocr=FakeOCR(), effector=effector)
+    orchestrator = runtime.phone.action_orchestrator
+    runtime.close()
+
+    assert orchestrator is not None
+    assert orchestrator.recovery_policy.hook is recover_to_home_then_renavigate
+    assert orchestrator.recovery_policy.max_attempts >= 1
 
 
 @pytest.mark.smoke

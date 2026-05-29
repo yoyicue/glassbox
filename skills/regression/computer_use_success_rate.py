@@ -183,6 +183,17 @@ def _action_role(action: Mapping[str, Any], group: Mapping[str, Any] | None = No
     return "primary"
 
 
+# CUQ-3.1: mechanical scroll/drag fillers (a single drilldown emits hundreds of
+# them, ~99% of the action mix). Counting them in the headline action rate lets
+# stable scroll success mask a real tap/navigation regression, so they are
+# scored under a separate scroll_success_rate instead.
+_SCROLL_FILLER_OPS = {"scroll", "scroll_wheel", "swipe", "swipe_up", "swipe_down", "drag", "wheel"}
+
+
+def _is_scroll_filler(action: Mapping[str, Any]) -> bool:
+    return str(action.get("op") or "") in _SCROLL_FILLER_OPS
+
+
 def _chosen_strategy(action: Mapping[str, Any]) -> str:
     metadata = _action_metadata(action)
     for key in ("strategy", "actuation_method", "via", "policy_action"):
@@ -608,9 +619,15 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         for action in all_actions
         if action.get("role") == "primary"
     ]
-    denominator = len(primary_actions)
-    succeeded = sum(1 for action in primary_actions if action.get("verdict") == "succeeded")
-    unknown = sum(1 for action in primary_actions if action.get("verdict") == "unknown")
+    # CUQ-3.1: split task-meaningful primary actions from mechanical scroll/drag
+    # fillers so the headline success/unknown rates reflect taps/navigation, not
+    # scroll mechanics that dominate the count and hide tap regressions.
+    task_actions = [action for action in primary_actions if not _is_scroll_filler(action)]
+    scroll_actions = [action for action in primary_actions if _is_scroll_filler(action)]
+    denominator = len(task_actions)
+    succeeded = sum(1 for action in task_actions if action.get("verdict") == "succeeded")
+    unknown = sum(1 for action in task_actions if action.get("verdict") == "unknown")
+    scroll_succeeded = sum(1 for action in scroll_actions if action.get("verdict") == "succeeded")
     task_count = len(tasks)
     task_success = sum(1 for task in tasks if task.get("outcome") == "succeeded")
     recoveries = sum(_task_recovery_count(task) for task in tasks)
@@ -638,6 +655,11 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         "task_completion_rate": task_success / task_count if task_count else 0.0,
         "action_success_rate": succeeded / denominator if denominator else 0.0,
         "unknown_rate": unknown / denominator if denominator else 0.0,
+        "task_action_count": len(task_actions),
+        "scroll_action_count": len(scroll_actions),
+        "scroll_success_rate": (
+            scroll_succeeded / len(scroll_actions) if scroll_actions else 0.0
+        ),
         "root_pages_coverage": root_pages_coverage,
         "recoveries": recoveries,
         "strategy_switches": sum(
@@ -1093,6 +1115,9 @@ def compare_benchmarks(
         "task_completion_rate",
         "action_success_rate",
         "unknown_rate",
+        "task_action_count",
+        "scroll_action_count",
+        "scroll_success_rate",
         "root_pages_coverage",
         "recoveries",
         "strategy_switches",

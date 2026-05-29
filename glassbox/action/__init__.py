@@ -4,7 +4,11 @@ from glassbox.action.actuation import ActuationCommand, ActuationPlan, Candidate
 from glassbox.action.actuation_profile import ActuationProfile, MethodStats
 from glassbox.action.orchestrator import ActionOrchestrator
 from glassbox.action.policy import RiskDecision, RiskPolicy
-from glassbox.action.recovery import RecoveryResult, RuntimeRecoveryPolicy
+from glassbox.action.recovery import (
+    RecoveryResult,
+    RuntimeRecoveryPolicy,
+    recover_to_home_then_renavigate,
+)
 from glassbox.action.semantic_plan import (
     BoundStrategy,
     ExpectedState,
@@ -46,5 +50,6 @@ __all__ = [
     "action_verdict",
     "default_semantic_action_plan",
     "default_semantic_action_spec",
+    "recover_to_home_then_renavigate",
     "verify_expected_state",
 ]

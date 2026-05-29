@@ -381,6 +381,45 @@ def test_semantic_verdict_keeps_scene_progress_in_stable_unknown_bucket():
     assert semantic_verdict("failed", {"verifier": "scene_progressed", "confidence": 0.7}) == "failed"
 
 
+def test_scroll_fillers_excluded_from_action_success_rate(tmp_path):
+    """CUQ-3.1: a failed tap must not be masked by a succeeded scroll filler in
+    the headline action_success_rate; scroll mechanics are scored separately."""
+    run_dir = tmp_path / "run"
+    _write_json(run_dir / "manifest.json", {"run_id": "run", "device": {"model": "iphone_test"}})
+    _write_json(run_dir / "scenes" / "before.json", {"page_id": "settings/root", "vlm_status": "error"})
+    _write_json(run_dir / "scenes" / "after_tap.json", {"page_id": "settings/root", "vlm_status": "error", "elements": []})
+    _write_json(run_dir / "scenes" / "after_scroll.json", {"page_id": "settings/root", "vlm_status": "error", "elements": []})
+    tap = _action(
+        "act_000000", "grp_000000", status="failed", strategy="target_tap",
+        scene_file="scenes/after_tap.json", op="tap", intent_name="tap", target="蓝牙",
+    )
+    scroll = _action(
+        "act_000001", "grp_000001", status="succeeded", strategy="raw_hid_logical_drag",
+        scene_file="scenes/after_scroll.json", op="drag", intent_name="scroll", target="",
+    )
+    groups = [
+        {"attempt_group_id": "grp_000000", "op": "tap", "actor": "agent",
+         "attempt_ids": ["act_000000"], "group_status": "failed", "retry_count": 0},
+        {"attempt_group_id": "grp_000001", "op": "drag", "actor": "agent",
+         "attempt_ids": ["act_000001"], "group_status": "succeeded", "retry_count": 0},
+    ]
+    _append_jsonl(run_dir / "actions.jsonl", tap, scroll)
+    _append_jsonl(run_dir / "attempt_groups.jsonl", *groups)
+    _append_jsonl(run_dir / "audit.jsonl")
+
+    payload = aggregate_benchmark([run_dir])
+    metrics = payload["metrics"]
+
+    assert metrics["task_action_count"] == 1
+    assert metrics["scroll_action_count"] == 1
+    # The one task-meaningful action (the tap) failed -> 0.0, NOT 0.5 diluted by
+    # the succeeded scroll.
+    assert metrics["action_success_rate"] == 0.0
+    assert metrics["unknown_rate"] == 0.0
+    assert metrics["scroll_success_rate"] == 1.0
+    assert validate_benchmark(payload) == []
+
+
 def test_aggregate_benchmark_projects_attempt_groups_and_metrics(tmp_path):
     payload = aggregate_benchmark(
         [_run_dir(tmp_path)],

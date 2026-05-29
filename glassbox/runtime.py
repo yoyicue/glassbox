@@ -539,7 +539,12 @@ def build_phone(
     action_orchestrator = None
 
     if cfg.computer_use_artifact_dir:
-        from glassbox.action import ActionOrchestrator, RiskPolicy
+        from glassbox.action import (
+            ActionOrchestrator,
+            RiskPolicy,
+            RuntimeRecoveryPolicy,
+            recover_to_home_then_renavigate,
+        )
         from glassbox.action.actuation_profile import load_actuation_profile
         from glassbox.action.seeds import DEFAULT_RECOVERY_SEED, load_json_seed
         from glassbox.obs.artifacts import ArtifactStore
@@ -578,6 +583,13 @@ def build_phone(
             actuation_profile=actuation_profile,
             actuation_profile_dir=cfg.actuation_profile_dir,
             recovery_seed=recovery_seed,
+            # CUQ-0.2: invariant #4 / P3 universal recovery. Without a hook the
+            # orchestrator's stuck/loop and strategy-exhaustion recovery calls
+            # are guaranteed no-ops; install the recover-to-Home-anchor hook so
+            # dead-ends are actually broken instead of only audited.
+            recovery_policy=RuntimeRecoveryPolicy(
+                hook=recover_to_home_then_renavigate, max_attempts=2
+            ),
         )
 
     platform = DEFAULT_PLATFORM_REGISTRY.create(

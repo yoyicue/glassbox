@@ -11,6 +11,11 @@ import cv2
 from glassbox.effectors.picokvm.config import PicoKVMEffectorConfig
 from glassbox.perception.source import Frame
 
+# A fully-decoded iOS screen always has real spatial variance (status bar, text,
+# chrome). A near-flat frame (std ~0) coming straight off the H.264 stream is a
+# partial / pre-keyframe decode or an empty buffer, not a usable screen.
+_MIN_DECODED_STD = 1.0
+
 
 class PicoKVMFrameSource:
     """Decode PicoKVM's HTTP stream.
@@ -29,12 +34,21 @@ class PicoKVMFrameSource:
         config: PicoKVMEffectorConfig | None = None,
         capture: Any = None,
         capture_factory: Any = None,
+        fresh_warmup_frames: int = 2,
+        fresh_settle_reads: int = 4,
     ):
         self.config = config or PicoKVMEffectorConfig()
         self.stream_url = f"{self.config.base_url}{self.config.stream_path}"
         self._capture = capture
         self._capture_factory = capture_factory or cv2.VideoCapture
         self._owns_capture = capture is None
+        # After a reopen the first decoded frame(s) of the long-lived H.264
+        # stream are frequently pre-keyframe / partial decodes (smeared or
+        # near-empty). Discard a few, then return the first frame that looks
+        # fully decoded. Latency is paid only on the explicit freshness
+        # boundary (fresh_snapshot), which the reliability design accepts.
+        self._fresh_warmup_frames = max(0, fresh_warmup_frames)
+        self._fresh_settle_reads = max(1, fresh_settle_reads)
 
     def __enter__(self) -> PicoKVMFrameSource:
         self.open()
@@ -75,11 +89,34 @@ class PicoKVMFrameSource:
         stream after HID actions. Reopening is slower than ``snapshot()``, but it
         gives callers an explicit freshness boundary when they need visual
         evidence after an action.
+
+        The first frame(s) decoded right after a reopen are often pre-keyframe /
+        partial decodes that would corrupt OCR/verification if returned as
+        "fresh evidence". Discard the warmup frames, then return the first
+        fully-decoded frame; fall back to the normal retry path if none of the
+        settle reads produce a usable frame.
         """
         self.close()
         time.sleep(0.05)
         self.open()
+        for _ in range(self._fresh_warmup_frames):
+            ok, _img = self._capture.read()
+            if not ok:
+                break
+        for _ in range(self._fresh_settle_reads):
+            ok, img = self._capture.read()
+            if ok and self._frame_looks_decoded(img):
+                return Frame(img=img, ts=time.monotonic())
+        # No clean frame within the settle budget: defer to snapshot()'s own
+        # reopen-and-retry rather than silently returning a garbled frame.
         return self.snapshot()
+
+    @staticmethod
+    def _frame_looks_decoded(img: Any) -> bool:
+        """Reject empty / degenerate-variance frames (partial H.264 decodes)."""
+        if img is None or getattr(img, "size", 0) == 0:
+            return False
+        return float(img.std()) > _MIN_DECODED_STD
 
     def stream(self) -> Iterator[Frame]:
         while True:

@@ -1,13 +1,35 @@
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from glassbox.cognition import Box, Scene, UIElement
+from glassbox.verification.diff import compute_frame_diff
 from glassbox.verification.golden import iter_golden_cases
 from glassbox.verification.registry import VerifierRegistry
 from glassbox.verification.verifiers import VerifierInput
 
 GOLDEN_ROOT = "skills/golden/computer_use"
+
+
+@pytest.mark.smoke
+def test_compute_frame_diff_shape_mismatch_is_indeterminate_not_full_change():
+    """CUQ-1.7: a garbled/partial decode (shape mismatch) must be scored as
+    indeterminate, not as a confident 'everything changed' (ratio 1.0) that
+    would fake a landed/progress signal."""
+    a = np.zeros((40, 30, 3), dtype=np.uint8)
+    b = np.zeros((42, 31, 3), dtype=np.uint8)  # different shape == garbled decode
+
+    diff = compute_frame_diff(a, b)
+
+    assert diff is not None
+    assert diff.diff_ratio is None  # not 1.0
+    assert diff.changed is None  # falsey for progress/landing checks, not True
+    # a same-shape real change is still scored normally
+    c = np.zeros((40, 30, 3), dtype=np.uint8)
+    c[:, :] = 255
+    real = compute_frame_diff(a, c)
+    assert real is not None and real.changed is True and real.diff_ratio == pytest.approx(1.0)
 
 
 def _scene(*texts: str, page_id: str | None = None, kind: str | None = None) -> Scene:

@@ -16,6 +16,7 @@ from glassbox.action import (
     SemanticActionSpec,
     StrategySpec,
     StuckLoopDetector,
+    recover_to_home_then_renavigate,
 )
 from glassbox.cognition import Box, UIElement
 from glassbox.effector import ActionResult, MockEffector
@@ -24,6 +25,7 @@ from glassbox.obs.artifacts import ArtifactStore
 from glassbox.perception.source import Frame
 from glassbox.perception.stable import StabilityPolicy
 from glassbox.phone import Phone
+from glassbox.verification.verifiers import SemanticOutcome
 
 
 class _Source:
@@ -102,6 +104,100 @@ def _make_phone(
         springboard_provider=IOSSpringboardProvider(),
     )
     return phone, orchestrator, store
+
+
+class _RecoveryFakePhone:
+    """Minimal duck-typed phone for the recover-to-home hook."""
+
+    def __init__(self, *, home_ok: bool = True, home_status: str | None = "succeeded"):
+        self._home_ok = home_ok
+        self._home_status = home_status
+        self.home_calls = 0
+        self.memory = None
+
+    def home(self):
+        self.home_calls += 1
+        return ActionResult(
+            ok=self._home_ok,
+            backend="fake",
+            connected=True,
+            semantic_status=self._home_status,
+        )
+
+
+@pytest.mark.smoke
+def test_recover_to_home_hook_drives_home_and_reports_outcome():
+    """CUQ-0.2: the universal recovery hook returns to the Home anchor and
+    reports recovered only when Home is actually reached."""
+    reached = _RecoveryFakePhone(home_ok=True, home_status="succeeded")
+    assert recover_to_home_then_renavigate(
+        reached, "stuck", {"recovery": "recover_to_home_then_renavigate"}
+    ) is True
+    assert reached.home_calls == 1
+
+    failed = _RecoveryFakePhone(home_ok=False, home_status="failed")
+    assert recover_to_home_then_renavigate(
+        failed, "stuck", {"recovery": "recover_to_home_then_renavigate"}
+    ) is False
+
+
+@pytest.mark.smoke
+def test_recover_to_home_hook_ignores_unknown_kind_and_guards_reentrancy():
+    other = _RecoveryFakePhone()
+    assert recover_to_home_then_renavigate(other, "stuck", {"recovery": "other"}) is False
+    assert other.home_calls == 0
+
+    nested = _RecoveryFakePhone()
+    nested._in_recovery = True  # already recovering -> must not recurse into home()
+    assert recover_to_home_then_renavigate(
+        nested, "stuck", {"recovery": "recover_to_home_then_renavigate"}
+    ) is False
+    assert nested.home_calls == 0
+
+
+@pytest.mark.smoke
+def test_orchestrator_stuck_recovery_invokes_installed_hook(tmp_path):
+    """CUQ-0.2 end-to-end: with the real hook installed, a repeated identical
+    failure trips the stuck detector and actually drives recovery (recovered)."""
+    store = ArtifactStore(tmp_path, run_id="run")
+    recovered_calls = {"n": 0}
+
+    def hook(phone, reason, payload):
+        del phone, reason
+        assert payload["recovery"] == "recover_to_home_then_renavigate"
+        recovered_calls["n"] += 1
+        return True
+
+    orchestrator = ActionOrchestrator(
+        store,
+        recovery_policy=RuntimeRecoveryPolicy(hook=hook, max_attempts=2),
+        stuck_detector=StuckLoopDetector(threshold=2),
+    )
+    phone, _, _ = _make_phone(tmp_path, [["停滞"]])
+    phone.action_orchestrator = orchestrator
+
+    sample_signature = "sig-stuck"
+
+    def stuck_attempt():
+        from glassbox.action.stuck import StuckSample
+
+        decision = orchestrator.stuck_detector.observe(
+            StuckSample(sample_signature, "no progress")
+        )
+        return decision
+
+    # First identical sample: below threshold, no recovery yet.
+    assert stuck_attempt().should_recover is False
+    # Second identical sample: trips the threshold.
+    decision = stuck_attempt()
+    assert decision.should_recover is True
+    result = orchestrator.recovery_policy.recover(
+        phone, "no progress", {"recovery": decision.recovery}
+    )
+    orchestrator.close()
+    assert result.attempted is True
+    assert result.recovered is True
+    assert recovered_calls["n"] == 1
 
 
 @pytest.mark.smoke
@@ -630,6 +726,41 @@ def test_computer_use_runtime_expected_state_uses_vlm_gate_before_strategy_switc
     assert actions[0]["semantic"]["verifier"] == "expected_state_vlm"
     assert actions[0]["command"]["vlm_calls"] == 1
     assert actions[0]["command"]["vlm_triggers"] == ["target_missing", "verify_unknown"]
+
+
+@pytest.mark.smoke
+def test_legacy_path_enforces_per_action_vlm_budget_across_attempts(tmp_path):
+    """CUQ-0.7: the per-action VLM budget must hold across retries. The legacy
+    execute() loop now carries vlm_* counters forward in the shared metadata
+    dict, so a second attempt cannot re-spend the per-action cap and an
+    unknown->VLM->unknown sequence cannot loop the VLM past the budget."""
+    phone, orchestrator, _store = _make_phone(tmp_path, [["unclear"]])
+    phone.kimi = object()
+    calls = {"n": 0}
+    after_scene = phone.perceive()  # a real scene that does NOT contain "Done"
+
+    def describe(scene_hint=None):
+        calls["n"] += 1
+        return after_scene  # the VLM does not resolve the expectation either
+
+    phone.describe = describe
+    expected = ExpectedState("visible_text", {"any_of": ["Done"]})
+    metadata = {
+        "expected_state": expected.to_dict(),
+        "max_vlm_calls_per_action": 1,
+        "max_vlm_calls_per_attempt": 1,
+    }
+    base = SemanticOutcome(status="unknown", verifier="scene_progressed", reason="no progress")
+
+    # Attempt 0 escalates once and the merge bumps metadata["vlm_calls"] -> 1.
+    orchestrator._semantic_after_expected_state(phone, base, metadata, after_scene)
+    # Attempt 1 reuses the SAME carried-forward metadata: remaining budget is 0.
+    orchestrator._semantic_after_expected_state(phone, base, metadata, after_scene)
+    orchestrator.close()
+
+    assert calls["n"] == 1
+    assert metadata["vlm_calls"] == 1
+    assert metadata.get("vlm_budget_exhausted") is True
 
 
 @pytest.mark.smoke
@@ -1171,6 +1302,40 @@ def test_computer_use_runtime_stuck_detector_recovers_after_repeated_failure(tmp
     assert [event["payload"]["count"] for event in observed] == [1, 2, 3]
     assert sum(1 for event in audit if event["type"] == "stuck_detector.recovery.started") == 1
     assert sum(1 for event in audit if event["type"] == "stuck_detector.recovery.finished") == 1
+
+
+@pytest.mark.smoke
+def test_computer_use_runtime_failed_recovery_rearms_then_bounds_attempts(tmp_path):
+    """CUQ-0.9: a recovery that does not recover re-arms the detector so the
+    dead-end fires again, but only up to a bounded budget -- after which a
+    terminal 'unrecoverable' marker is emitted instead of looping forever."""
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(
+        store,
+        recovery_policy=RuntimeRecoveryPolicy(lambda *_a: False, max_attempts=1),
+        stuck_detector=StuckLoopDetector(threshold=2),
+        max_stuck_recoveries=2,
+    )
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR([["主屏幕"]] * 20),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+
+    for _ in range(8):
+        phone.control_center()
+    orchestrator.close()
+
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    started = sum(1 for e in audit if e["type"] == "stuck_detector.recovery.started")
+    unrecoverable = [e for e in audit if e["type"] == "stuck_detector.unrecoverable"]
+    # Fires at count 2; failed recovery re-arms; fires again at the 2nd budget
+    # slot; budget (2) exhausted -> unrecoverable, no further recovery attempts.
+    assert started == 2
+    assert len(unrecoverable) == 1
+    assert unrecoverable[0]["payload"]["recovery_failures"] == 2
 
 
 @pytest.mark.smoke

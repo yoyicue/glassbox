@@ -1,0 +1,32 @@
+name: CI
+
+# CUQ-3.3: the reliability merge gate. Runs the device-independent smoke suite
+# + ruff on every PR / push to main so a reliability regression cannot merge
+# silently (docs/design/computer_use_success_rate.md: "no reliability change
+# merges without it"). Uses a macOS runner because `ocrmac` (a core dependency)
+# wraps Apple Vision and only installs on darwin.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Sync dependencies
+        run: uv sync --extra dev
+      - name: Lint (ruff)
+        run: uv run ruff check glassbox skills
+      - name: Smoke suite
+        run: uv run pytest skills/smoke -q
