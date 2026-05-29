@@ -225,13 +225,37 @@ def fuse(
     )
 
 
-def apply_annotation_to_scene(scene: Any, annotation: ScreenAnnotation) -> int:
+# CUQ-2.3: VLM cold-start roles that name a trailing control whose tap target is
+# NOT the label OCR box. Promoting these to the declared `switch`/`slider`
+# element types lets the actuation layer (which already biases the tap toward the
+# control for these types) and the candidate set treat them as controls.
+_CONTROL_ROLE_TYPES = {"toggle": "switch", "switch": "switch", "slider": "slider"}
+# iOS toggle/slider controls sit at the row's right margin, to the right of the
+# label OCR box. Without the control's own box, aim the tap at this fraction of
+# the viewport width at the label's vertical center.
+_CONTROL_TAP_X_FRACTION = 0.92
+
+
+def apply_annotation_to_scene(
+    scene: Any,
+    annotation: ScreenAnnotation,
+    *,
+    promote_controls: bool = False,
+) -> int:
     """Write cold-start VLM semantics onto the OCR UIElements they anchored to.
 
     Cold-start annotations are live-only hints. They must not populate
     `intent_label`, which is reserved for concrete action labels from Layer 3
     describe_scene. Returns the number of elements updated.
+
+    CUQ-2.3: when ``promote_controls`` is set, a VLM ``toggle`` / ``slider`` role
+    promotes the anchored element to the declared ``switch`` / ``slider`` type and
+    sets ``preferred_tap_point`` to the row's right-margin control location — so a
+    tap lands on the switch instead of the label OCR box (which only highlights
+    the row). Default off: byte-identical to the evidence-tag-only behavior.
     """
+    viewport = getattr(scene, "viewport_size", None)
+    viewport_w = int(viewport[0]) if viewport else 0
     by_box: dict[tuple[int, int, int, int], Any] = {}
     for el in scene.elements:
         b = el.box
@@ -251,8 +275,23 @@ def apply_annotation_to_scene(scene: Any, annotation: ScreenAnnotation) -> int:
             el.type_evidence = evidence
             if ae.navigable and "tap" not in el.suggested_actions:
                 el.suggested_actions = [*el.suggested_actions, "tap"]
+            if promote_controls:
+                _promote_control(el, ae.role, viewport_w)
             updated += 1
     return updated
+
+
+def _promote_control(el: Any, role: str, viewport_w: int) -> None:
+    """CUQ-2.3: type a VLM-identified toggle/slider as a control + aim the tap."""
+    control_type = _CONTROL_ROLE_TYPES.get(str(role or "").strip().lower())
+    if control_type is None:
+        return
+    el.type = control_type
+    if "tap" not in el.suggested_actions:
+        el.suggested_actions = [*el.suggested_actions, "tap"]
+    if el.preferred_tap_point is None and viewport_w > 0:
+        cy = el.box.center[1]
+        el.preferred_tap_point = (int(viewport_w * _CONTROL_TAP_X_FRACTION), int(cy))
 
 
 class ColdStartAnnotator:

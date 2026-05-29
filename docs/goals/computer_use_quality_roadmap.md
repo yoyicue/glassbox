@@ -455,12 +455,22 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   "authority/implemented" claim to "crawl-scoped".
 
 ### CUQ-2.3 — `switch`/`slider` element types are never produced (toggles tap the label)
-- [ ] **medium · effort medium**
-- Gap: switch/slider types are declared and "tappable", but no heuristic ever
-  emits them; toggles stay `type='text'` and a tap lands on the label, not the
-  control.
-- Fix: add a structural detector for trailing toggle/slider affordances; set the
-  tap point to the control, not the label box.
+- [x] **medium · effort medium** (flag-gated, default-off) — DONE: found the
+  switch/slider types are declared AND `actuation.py` already biases the tap
+  toward the control for them — the only missing piece was a producer. The VLM
+  cold-start already classifies a `toggle`/`slider` role but only wrote it as a
+  `type_evidence` tag (never promoted to the element type). `apply_annotation_to_scene`
+  now takes `promote_controls`: when set, a VLM `toggle`/`slider` role promotes
+  the anchored element to the declared `switch`/`slider` type AND sets
+  `preferred_tap_point` to the row's right-margin control location
+  (`viewport_w * 0.92` at the label's y) — so the tap lands on the switch, not the
+  label OCR box (where a tap only highlights the row). Wired
+  `cfg.coldstart_promote_controls` (env `GLASSBOX_COLDSTART_PROMOTE_CONTROLS`) →
+  `Phone._coldstart_promote_controls`; only reachable when cold-start is enabled,
+  default off → byte-identical. Tests in `test_coldstart.py` (promote→switch+right
+  tap; off→stays text). **Remaining:** on-rig validate the 0.92 tap fraction
+  actually toggles the control (and an OCR-only structural detector for runs
+  without the cold-start VLM).
 
 ### Tier-2 medium companions
 - [x] **CUQ-2.4** VLM verifier is not "opt-in for conflicts only" as documented —

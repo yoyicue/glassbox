@@ -174,6 +174,7 @@ class Phone:
         strict_target_matching: bool = False,
         require_home_icon_grid: bool = False,
         reverify_fresh_frame: bool = False,
+        coldstart_promote_controls: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -210,6 +211,10 @@ class Phone:
         # so settled-late text is re-read cheaply (and can avoid the VLM call).
         # Flag-gated (default off) — read by the orchestrator via getattr.
         self._reverify_fresh_frame = bool(reverify_fresh_frame)
+        # CUQ-2.3: promote VLM toggle/slider roles to switch/slider element types
+        # and aim the tap at the row's right-margin control. Flag-gated (default
+        # off); only reachable when cold-start annotation is enabled.
+        self._coldstart_promote_controls = bool(coldstart_promote_controls)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.
@@ -736,7 +741,9 @@ class Phone:
                 logger.warning(f"cold-start annotation failed: {exc}")
             else:
                 if annotation is not None:
-                    apply_annotation_to_scene(scene, annotation)
+                    apply_annotation_to_scene(
+                        scene, annotation, promote_controls=self._coldstart_promote_controls
+                    )
 
     @staticmethod
     def _memory_action_candidate(action: ActionRecord) -> bool:

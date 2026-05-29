@@ -266,6 +266,15 @@ class AgentConfig(BaseSettings):
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 
+    coldstart_promote_controls: bool = False
+    """CUQ-2.3: when a cold-start VLM annotation labels an element `toggle` or
+    `slider`, promote it to the declared `switch`/`slider` element type and set
+    its tap point to the row's right-margin control (instead of leaving it as
+    `text`, where a tap hits the label and not the switch). Env
+    GLASSBOX_COLDSTART_PROMOTE_CONTROLS. Requires cold-start (enable_coldstart);
+    default off. Validate on-rig that the right-margin tap fraction toggles the
+    control before flipping default-on."""
+
     recording_dir: str | None = None
     """obs.Recorder recording output directory (recording happens only when this is set)."""
 

@@ -204,6 +204,55 @@ def test_apply_annotation_to_scene_writes_live_only_type_evidence():
     assert scene.elements[1].intent_label is None   # 未被标注的元素不动
 
 
+def _toggle_scene_and_annotation():
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(440, 956),
+        elements=[
+            UIElement(type="text", box=Box(x=20, y=200, w=200, h=44), text="蓝牙", confidence=1.0),
+        ],
+    )
+    annotation = fuse(
+        "scr_t",
+        _ann([
+            {"label": "蓝牙", "role": "toggle", "navigable": True, "x_frac": 0.3, "y_frac": 0.2},
+        ]),
+        scene.elements,
+        frame_size=(440, 956),
+    )
+    return scene, annotation
+
+
+@pytest.mark.smoke
+def test_promote_controls_types_toggle_as_switch_and_aims_tap_right():
+    """CUQ-2.3: with promote_controls on, a VLM `toggle` role becomes a `switch`
+    element whose tap point is the row's right-margin control (not the label box,
+    where a tap only highlights the row)."""
+    scene, annotation = _toggle_scene_and_annotation()
+    apply_annotation_to_scene(scene, annotation, promote_controls=True)
+    el = scene.elements[0]
+    assert el.type == "switch"
+    assert el.preferred_tap_point is not None
+    tap_x, tap_y = el.preferred_tap_point
+    assert tap_x > el.box.x + el.box.w   # to the RIGHT of the label box
+    assert tap_x == int(440 * 0.92)
+    assert tap_y == el.box.center[1]
+    assert "tap" in el.suggested_actions
+
+
+@pytest.mark.smoke
+def test_promote_controls_off_keeps_toggle_as_text():
+    """CUQ-2.3 (default): without the flag the toggle stays `text` (only the
+    evidence tag is written), so the default cold-start path is unchanged."""
+    scene, annotation = _toggle_scene_and_annotation()
+    apply_annotation_to_scene(scene, annotation)
+    el = scene.elements[0]
+    assert el.type == "text"
+    assert el.preferred_tap_point is None
+    assert "coldstart_role:toggle" in el.type_evidence
+
+
 @pytest.mark.smoke
 def test_phone_observe_memory_runs_coldstart_on_new_node():
     """Phone._observe_memory 接住 memory.observe 的节点 → 新节点驱动冷启动标注 → 写回 Scene。"""
