@@ -334,7 +334,7 @@ class ActuationProfile:
                     continue
                 offset_payload = stats_payload.get("offset")
                 offset = _offset_from_dict(offset_payload) if isinstance(offset_payload, dict) else None
-                entry.methods[method] = MethodStats(  # type: ignore[literal-required]
+                stats = MethodStats(  # type: ignore[literal-required]
                     command_tries=int(stats_payload.get("command_tries", 0) or 0),
                     landed_attempts=int(stats_payload.get("landed_attempts", 0) or 0),
                     semantic_ok=int(stats_payload.get("semantic_ok", 0) or 0),
@@ -347,6 +347,21 @@ class ActuationProfile:
                         str(item) for item in (stats_payload.get("negative_identities") or [])
                     },
                 )
+                # CUQ-3.6: persist the learned calibration offset across sessions,
+                # but do NOT carry a stale "unactuatable" verdict — a transient
+                # rig hiccup that disabled a control class last run must not
+                # silently disable it again on load. Reset only the
+                # unactuatable-driving evidence for would-be-unactuatable buckets;
+                # actuatable buckets keep their full stats.
+                if _method_is_unactuatable(stats):
+                    stats.command_tries = 0
+                    stats.landed_attempts = 0
+                    stats.by_label = {}
+                    stats.negative_identities = set()
+                    stats.last_outcome = "unknown"
+                    if entry.actuability == "unactuatable":
+                        entry.actuability = "unknown"  # type: ignore[assignment]
+                entry.methods[method] = stats
             profile.entries[key] = entry
         return profile
 

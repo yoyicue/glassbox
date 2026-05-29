@@ -516,7 +516,16 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   crop-is-None fallback and the `GLASSBOX_PICOKVM_ABS_*` escape hatch).
 
 ### CUQ-3.6 — Actuation profile is never persisted across sessions (default config)
-- [ ] **high · effort medium**
+- [~] **high · effort medium** — SAFETY ENABLER DONE: `load_actuation_profile`
+  now resets the unactuatable-driving evidence (command_tries / negatives /
+  negative_identities) for any would-be-unactuatable bucket on load while
+  **keeping the learned calibration offset**, so persisting a profile across
+  sessions carries the useful calibration but never a stale "unactuatable"
+  verdict that would silently disable a control class (the CUQ-1.2 coupling).
+  Actuatable buckets are untouched (round-trip preserved). Test in
+  `test_actuation_feedback.py`. **Remaining (risky default-flip):** default
+  `actuation_profile_dir` to the per-device memory path + populate `os_version`
+  — needs on-rig validation that loaded offsets help rather than mis-correct.
 - Gap: `cfg.actuation_profile_dir` defaults to `None`, so learned per-bucket tap
   offsets, best-method selection, and unactuatable verdicts are discarded each
   run; `os_version` is hardwired to `'unknown'`. Every session cold-starts and

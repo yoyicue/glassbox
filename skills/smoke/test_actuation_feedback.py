@@ -516,6 +516,39 @@ def test_actuation_profile_persists_by_platform_device_bucket(tmp_path):
 
 
 @pytest.mark.smoke
+def test_loaded_profile_drops_unactuatable_verdict_but_keeps_offset(tmp_path):
+    """CUQ-3.6: a persisted calibration offset survives a reload, but a stale
+    'unactuatable' verdict (and its evidence) does NOT — a transient hiccup that
+    disabled a control class last run must not silently disable it on load."""
+    from glassbox.action.actuation_profile import _method_is_unactuatable
+
+    profile = ActuationProfile(platform="ios", os_version="unknown", device_model="iphone_test")
+    bucket = {"control_role": "switch", "size_bucket": "small", "region_zone": "center"}
+    profile.record_correction_pair(
+        control_bucket=bucket, method="mouse_tap",
+        missed_point={"x": 100, "y": 100, "space": "frame_px"},
+        landed_point={"x": 98, "y": 101, "space": "frame_px"},
+    )
+    for i in range(5):  # drive the bucket unactuatable (5 negatives, distinct controls)
+        profile.record_attempt(
+            control_bucket=bucket, method="mouse_tap",
+            landing_signal="missed", label="missed", target_identity={"intent": f"row_{i % 3}"},
+        )
+    pre = profile.entry_for_bucket(bucket).methods["mouse_tap"]
+    assert _method_is_unactuatable(pre) and pre.offset is not None
+
+    save_actuation_profile(profile, profile_dir=tmp_path)
+    loaded = load_actuation_profile(platform="ios", device_model="iphone_test", profile_dir=tmp_path)
+
+    lstats = loaded.entry_for_bucket(bucket).methods["mouse_tap"]
+    assert not _method_is_unactuatable(lstats)          # verdict not carried
+    assert lstats.command_tries == 0
+    assert lstats.negative_identities == set()
+    assert lstats.offset is not None                    # calibration offset preserved
+    assert loaded.entry_for_bucket(bucket).actuability != "unactuatable"
+
+
+@pytest.mark.smoke
 def test_static_actuation_seed_and_recovery_seed_stay_separate():
     profile = ActuationProfile()
     profile.apply_seed({
