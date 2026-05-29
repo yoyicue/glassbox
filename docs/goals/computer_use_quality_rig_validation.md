@@ -103,6 +103,51 @@ collateral regressions.
 - **Watch for:** spurious icon boxes adding noise to the candidate set / raising
   `unknown_rate`.
 
+### `GLASSBOX_MEMORY_LOCATE_PRIORS=1` — CUQ-3.21
+- **Enables:** on an OCR miss, use the UTG position memory (a remembered element's
+  last-known box) as the tap target before spending a VLM call.
+- **Validate:** on a populated graph, revisit a known screen where OCR drops a
+  label; confirm the tap lands via `selection_source="memory"` and succeeds. The
+  prior is verified post-tap, so a stale one just retries.
+- **Watch for:** repeated memory-prior taps that fail verification → the remembered
+  positions are stale (layout changed); the volatile-skip should already exclude
+  list rows.
+
+### `GLASSBOX_STRICT_SETTINGS_DETAIL=1` — CUQ-2.6
+- **Enables:** a screen needs a Settings-distinguishing signal (a system noun, or a
+  Learn-More footnote) before the generic body/semantic-guess heuristics call it
+  `settings_detail` — closes the third-party-app false-positive.
+- **Validate:** on a mixed frame set, confirm third-party screens with generic body
+  words are no longer mislabeled `settings_detail`, AND real (incl. scrolled)
+  Settings detail pages still classify correctly (no recall loss).
+- **Watch for:** a real scrolled Settings page with neither a noun nor a Learn-More
+  footnote visible now falling through → relax the distinguishing-signal set.
+
+### `GLASSBOX_AI_SCROLL_PREFER_WHEEL=1` — CUQ-3.15 (iPad)
+- **Enables:** the generic AI scroll verb uses the precise wheel instead of
+  swipe-fling when the backend supports it.
+- **Validate (iPad):** confirm scrolls use `wheel_scroll_*`, overshoot drops, and
+  scroll-to-target coverage rises vs swipe. Leave **off** on iPhone (wheel
+  intermittent).
+
+### `GLASSBOX_COLDSTART_PROMOTE_CONTROLS=1` — CUQ-2.3 (needs cold-start)
+- **Enables:** a VLM `toggle`/`slider` role becomes a `switch`/`slider` element
+  with its tap point at the row's right-margin control.
+- **Validate:** confirm a tap on a toggle row flips the switch (lands at
+  `viewport_w*0.92`), not the label. Tune the fraction if it misses.
+
+### `GLASSBOX_VLM_SET_OF_MARK=1` — CUQ-2.5 (needs VLM)
+- **Enables:** numbered marks on the frame during `describe()` grounding so the VLM
+  correlates elements to marks it can see.
+- **Validate:** A/B grounding accuracy on dense/ambiguous scenes vs the text-only
+  path; weigh the extra tokens. Parity-or-better → keep.
+
+### `GLASSBOX_PICOKVM_ROBUST_CAPTURE=1` — CUQ-3.13
+- **Enables:** `snapshot()` rejects garbled/partial H.264 decodes and reconnects up
+  to the budget instead of returning corruption / raising after two tries.
+- **Validate:** confirm no spurious raises on a healthy stream, and recovery on a
+  deliberately-glitched one. Tune `snapshot_reconnect_attempts` / backoff.
+
 ---
 
 ## Phase C — Strategy ladder (the big one: needs code + rig together)
@@ -133,7 +178,9 @@ strategy, give up on failure" and "try the next reliable primitive."
 
 ### `actuation_profile_dir` default-flip — CUQ-3.6
 - The safety enabler is shipped (loading a profile no longer carries a stale
-  `unactuatable` verdict, only the offset). **Remaining:** default
+  `unactuatable` verdict, only the offset). Also flip `GLASSBOX_RECOVERY_TARGET_PAGE`
+  (CUQ-0.5) once a graph is populated, so a stuck run re-navigates via a learned
+  path before the Home reset. **Remaining:** default
   `GLASSBOX_ACTUATION_PROFILE_DIR` to the per-device memory path and populate
   `os_version`.
 - **Validate:** run a session, let it learn an offset, restart, confirm the loaded
@@ -147,26 +194,33 @@ strategy, give up on failure" and "try the next reliable primitive."
 
 ---
 
-## Phase E — Remaining rig-dependent code items
+## Phase E — Remaining rig-dependent / large-rework code items
 
-These need a rig to even exercise, so they were not built offline. Priority order:
+The flag-gated reliability work is shipped (Phases A–D enumerate every flag). What
+remains genuinely needs a rig to exercise, or is a large rework whose regression
+risk can't be judged offline. Priority order:
 
-1. **CUQ-0.3 — expected_state on the production walkthrough/crawler.** Without it
+1. **CUQ-0.1 rest — wire `scroll`/`tap`/`launch_app` onto the strategy ladder.**
+   `back` is shipped; the rest are NOT a clean mechanical port — the scroll ladder
+   (`wheel→drag`) is device-specific (iPhone wheel intermittent) and its drag
+   strategy doesn't match the preset-swipe primitives, and `tap`/`launch_app` need
+   the CUQ-0.8 nested-orchestration suppression. Validate per-op on the rig.
+2. **CUQ-0.3 — expected_state on the production walkthrough/crawler.** Without it
    the P1/P2 coverage (Phase A) stays low and the ladder (Phase C) has nothing to
-   verify against. High leverage; pairs with Phase A/C.
-2. **CUQ-3.4 — canonical-primitive task benchmarks** (go-home / launch-app / back /
+   verify against. High leverage; large Settings-skill change; pairs with Phase A/C.
+3. **CUQ-3.4 — canonical-primitive task benchmarks** (go-home / launch-app / back /
    scroll-to-bottom). These give the A–B passes above a stable, meaningful
-   denominator. Build alongside the first rig session.
-3. **CUQ-0.5 — generic `try_memory_path` recovery consumer.** The UTG graph + the
-   `recover_to_home_then_renavigate` hook are wired; this adds the generic caller
-   that replays a known path to re-navigate after a stuck-loop. Validate it
-   actually recovers a deliberately-stuck run.
-4. **CUQ-3.15 — generic AI scroll uses the wheel on iPad.** iPad wheel-scroll is
-   confirmed working via RPC; route the generic scroll primitive to it on iPad
-   (precise) instead of swipe-fling (overshoot). iPad-scoped; validate coverage.
-5. **CUQ-2.6 — `settings_detail` false-positive tightening.** Safety-critical
-   classifier; needs real third-party-app frames to confirm it cuts false-positives
-   **without** losing real-Settings recall. Flag-gate, then A–B on a mixed frame set.
+   denominator. The task definitions can be authored offline, but they must *run*
+   on the rig. Build alongside the first rig session.
+4. **CUQ-3.7 — per-session auto-calibration probe** (Phase D). Probe logic is
+   buildable offline; the landing-error measurement needs the rig.
+
+Already shipped (flag-gated) since the first draft of this runbook, now validated
+via Phases A–D rather than re-implemented: CUQ-0.5 (memory-path recovery),
+CUQ-3.15 (iPad wheel scroll), CUQ-2.6 (settings_detail tightening), CUQ-2.3
+(toggle controls), CUQ-2.5 (Set-of-Mark), CUQ-3.13 (robust capture), CUQ-3.14
+(letterbox hysteresis, default-on), CUQ-3.21 (memory selection prior), CUQ-1.3
+(fresh re-verify).
 
 ---
 
