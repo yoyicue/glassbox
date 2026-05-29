@@ -663,6 +663,7 @@ def build_phone(
         ),
         detect_icons_in_perceive=cfg.detect_icons_in_perceive,
         strict_target_matching=cfg.strict_target_matching,
+        require_home_icon_grid=cfg.require_home_icon_grid,
     )
     return PhoneRuntime(
         phone=phone,

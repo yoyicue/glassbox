@@ -224,6 +224,13 @@ class AgentConfig(BaseSettings):
     wrong row. Default off (changes which element a tap resolves to); validate
     on-rig before enabling."""
 
+    require_home_icon_grid: bool = False
+    """CUQ-2.2: require icon-grid corroboration before is_ios_home_screen trusts
+    a bare 'springboard' classification as Home, closing the false-positive where
+    a Settings detail page mislabeled 'springboard' is treated as Home (and a
+    settings row is tapped as an app icon). Default off (tightens a core
+    recognizer); validate on-rig before enabling."""
+
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 

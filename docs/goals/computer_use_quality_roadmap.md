@@ -373,7 +373,17 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   (only when a requested target wasn't OCR-matched, or on icon-heavy scenes).
 
 ### CUQ-2.2 — Graph-authoritative scene kind never reaches `perceive()` / `is_ios_home_screen`
-- [ ] **high · effort large (min-fix medium) · design-gap**
+- [~] **high · effort large (min-fix medium) · design-gap** — MIN-FIX DONE
+  (flag-gated, default-off): `is_ios_home_screen` gains a `strict_springboard`
+  mode that refuses to trust a bare `springboard` classification without
+  icon-grid corroboration (or the structural spread checks), closing the
+  false-positive where a Settings detail page mislabeled `springboard` is read
+  as Home (and a settings row tapped as an app icon). Threaded through the
+  SpringBoard nav/recovery call sites + the icon-tap path via `_strict_home(phone)`,
+  behind `cfg.require_home_icon_grid`. Default path byte-identical. Test in
+  `test_ios_springboard.py`. **Remaining (large):** make the graph-derived kind
+  authoritative at the `perceive()` chokepoint (projector source slot), not just
+  in `is_ios_home_screen` — needs the projector-priority rework.
 - Gap: the graph/transition override runs only inside Settings'
   `scene_state.scene_kind()`; every `phone.perceive()` sets `platform_scene_kind`
   from the bare single-frame `classify_ios_scene`, and the universal

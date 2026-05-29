@@ -163,6 +163,7 @@ def is_ios_home_screen(
     scene: Scene,
     *,
     viewport_size: tuple[int, int] | None = None,
+    strict_springboard: bool = False,
 ) -> bool:
     """Heuristic recognizer for iOS SpringBoard Home pages.
 
@@ -170,6 +171,13 @@ def is_ios_home_screen(
     app labels spread across multiple columns, often with the bottom Search
     affordance. This is intentionally conservative: false is better than
     tapping a Settings row as if it were a Home icon.
+
+    ``strict_springboard`` (CUQ-2.2): when True, a bare ``springboard``
+    classification is NOT trusted on its own — it must be corroborated by a real
+    icon grid (or the structural spread checks below). This closes the
+    false-positive where a Settings detail page the single-frame classifier
+    mislabels ``springboard`` is treated as Home (so SpringBoard nav taps a
+    settings row as an app icon). Default off keeps today's behavior.
     """
     w, h = _scene_size(scene, viewport_size)
     if any(el.type == "nav_back" for el in scene.elements):
@@ -177,7 +185,9 @@ def is_ios_home_screen(
     if any(_matches(_text(el), NON_HOME_APP_MARKERS, fuzzy=0.78) for el in scene.elements):
         return False
     platform_kind = str(getattr(scene, "platform_scene_kind", "") or "")
-    if platform_kind in {"springboard", "app_library"}:
+    if platform_kind == "app_library":
+        return True
+    if platform_kind == "springboard" and not strict_springboard:
         return True
     if platform_kind.startswith("settings"):
         return False
@@ -198,7 +208,7 @@ def is_ios_home_screen(
         "system_search",
     }:
         return False
-    if classified.kind == "springboard":
+    if classified.kind == "springboard" and not strict_springboard:
         return True
 
     if len(labels) < 3:
@@ -279,6 +289,12 @@ def _viewport_size(phone) -> tuple[int, int] | None:
         return None
 
 
+def _strict_home(phone) -> bool:
+    """CUQ-2.2: whether home recognition should require icon-grid corroboration
+    for a bare 'springboard' classification (opt-in via config)."""
+    return bool(getattr(phone, "_require_home_icon_grid", False))
+
+
 def _perceive_after_settle(phone, settle_s: float) -> Scene:
     time.sleep(settle_s)
     phone.invalidate_perceive_cache()
@@ -290,7 +306,7 @@ def _current_home_scene(phone) -> Scene | None:
         scene = phone.perceive()
     except Exception:
         return None
-    return scene if is_ios_home_screen(scene, viewport_size=_viewport_size(phone)) else None
+    return scene if is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)) else None
 
 
 def _ensure_home_scene(phone, settle_s: float, *, attempts: int = 1) -> Scene:
@@ -307,7 +323,7 @@ def _ensure_home_scene(phone, settle_s: float, *, attempts: int = 1) -> Scene:
     for i in range(max(1, attempts)):
         phone.home()
         scene = _perceive_after_settle(phone, settle_s)
-        if is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
+        if is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
             if i:
                 print(f"[sb] reached Home after {i + 1} home() presses", flush=True)
             return scene
@@ -333,7 +349,7 @@ def _tap_icon_if_visible(
     print(f"[sb] ocr: tap {labels} @{icon.tap_point}", flush=True)
     phone.tap_xy(*icon.tap_point)
     scene_after_tap = _perceive_after_settle(phone, settle_s)
-    if is_ios_home_screen(scene_after_tap, viewport_size=_viewport_size(phone)):
+    if is_ios_home_screen(scene_after_tap, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
         print("[sb] ocr: tap stayed on Home", flush=True)
         return False
     opened = _opened_expected_app_or_recover(phone, scene_after_tap, labels, settle_s=settle_s)
@@ -413,7 +429,7 @@ def _tap_icon_via_map_if_visible(
     print(f"[sb] vlm-map: tap {entry.app!r} @{entry.center}", flush=True)
     phone.tap_xy(*entry.center)
     after = _perceive_after_settle(phone, settle_s)
-    if is_ios_home_screen(after, viewport_size=_viewport_size(phone)):
+    if is_ios_home_screen(after, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
         print("[sb] vlm-map: tap stayed on Home (invalidate)", flush=True)
         icon_map.invalidate(regions)        # tap stayed on Home → map drifted
         return False
@@ -576,7 +592,7 @@ def _tap_spotlight_result_if_visible(
     scene_after_tap = _perceive_after_settle(phone, settle_s)
     classified = classify_ios_scene(scene_after_tap, viewport_size=_viewport_size(phone))
     return (
-        not is_ios_home_screen(scene_after_tap, viewport_size=_viewport_size(phone))
+        not is_ios_home_screen(scene_after_tap, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone))
         and not _looks_like_spotlight_results(scene_after_tap)
         and classified.kind != "system_search"
         and _scene_has_target_label(scene_after_tap, labels)
@@ -601,10 +617,10 @@ def wait_for_ios_home_screen(phone, *, timeout: float = 5.0) -> Scene | None:
     last: Scene | None = None
     while time.monotonic() < deadline:
         last = phone.perceive()
-        if is_ios_home_screen(last, viewport_size=_viewport_size(phone)):
+        if is_ios_home_screen(last, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
             return last
         time.sleep(0.35)
-    return last if last is not None and is_ios_home_screen(last, viewport_size=_viewport_size(phone)) else None
+    return last if last is not None and is_ios_home_screen(last, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)) else None
 
 
 def _keyboard_query(labels: Iterable[str]) -> str | None:
@@ -632,7 +648,7 @@ def open_app_via_spotlight(
         return False
 
     scene = _ensure_home_scene(phone, settle_s)
-    if is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
+    if is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
         opened_search = _tap_home_search_if_visible(phone, scene)
     else:
         opened_search = False
@@ -651,7 +667,7 @@ def open_app_via_spotlight(
         return True
     phone.key(0, _KEY_RETURN)
     scene = _perceive_after_settle(phone, settle_s)
-    if is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
+    if is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
         return False
     return _scene_has_target_label(scene, app_labels)
 
@@ -719,7 +735,7 @@ def _climb_out_to_target(
         if getattr(result, "ok", False) is not True:
             return False
         scene = _perceive_after_settle(phone, settle_s)
-        if is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
+        if is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
             return False  # climbed past the app to Home — it was the wrong app
         classified = classify_ios_scene(scene, viewport_size=_viewport_size(phone))
         if classified.kind.startswith("settings_") or _scene_has_target_label(scene, labels):
@@ -805,7 +821,7 @@ def open_app_from_springboard(
     # retry home() while it makes progress. The Spotlight path keeps the default
     # single press (it works from any surface).
     scene = _ensure_home_scene(phone, settle_s, attempts=3)
-    if not is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
+    if not is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
         waited = wait_for_ios_home_screen(phone, timeout=2.0)
         if waited is None:
             print("[sb] could not reach Home → spotlight fallback", flush=True)

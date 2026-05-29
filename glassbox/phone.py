@@ -172,6 +172,7 @@ class Phone:
         semantic_plan_ops: frozenset[str] | None = None,
         detect_icons_in_perceive: bool = False,
         strict_target_matching: bool = False,
+        require_home_icon_grid: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -201,6 +202,9 @@ class Phone:
         # CUQ-1.5: ambiguity-aware find_text (closest-length substring + fuzzy
         # margin). Flag-gated (default off) — changes which element a tap hits.
         self._strict_target_matching = bool(strict_target_matching)
+        # CUQ-2.2: require icon-grid corroboration before trusting a bare
+        # 'springboard' classification as Home. Flag-gated (default off).
+        self._require_home_icon_grid = bool(require_home_icon_grid)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.
@@ -1362,7 +1366,11 @@ class Phone:
         try:
             from glassbox.ios.springboard import find_springboard_icon, is_ios_home_screen
 
-            if not is_ios_home_screen(self._last_scene, viewport_size=viewport_size):
+            if not is_ios_home_screen(
+                self._last_scene,
+                viewport_size=viewport_size,
+                strict_springboard=self._require_home_icon_grid,
+            ):
                 return None
             icon = find_springboard_icon(self._last_scene, (el.text,), viewport_size=viewport_size)
         except Exception:

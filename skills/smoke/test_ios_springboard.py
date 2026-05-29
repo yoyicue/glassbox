@@ -24,6 +24,30 @@ def _scene(*elements: UIElement) -> Scene:
 
 
 @pytest.mark.smoke
+def test_strict_springboard_requires_icon_grid_corroboration():
+    """CUQ-2.2: a detail page the single-frame classifier mislabels 'springboard'
+    is trusted as Home by default but rejected in strict mode (needs an icon
+    grid); a genuine grid is Home in both modes."""
+    mislabeled = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        platform_scene_kind="springboard",  # single-frame classifier mislabel
+        elements=[_el("详情", 20, 200), _el("一行说明文本内容比较长", 20, 260, w=200)],
+    )
+    assert is_ios_home_screen(mislabeled, viewport_size=(440, 956))  # default trusts label
+    assert not is_ios_home_screen(
+        mislabeled, viewport_size=(440, 956), strict_springboard=True
+    )  # strict: no icon grid -> not Home
+
+    grid = _scene(
+        _el("文件", 42, 176), _el("预览", 154, 176), _el("DemoApp", 252, 176, w=82),
+        _el("GlassboxHelper", 42, 316, w=78), _el("搜索", 196, 892, w=48),
+    )
+    assert is_ios_home_screen(grid, viewport_size=(440, 956))
+    assert is_ios_home_screen(grid, viewport_size=(440, 956), strict_springboard=True)
+
+
+@pytest.mark.smoke
 def test_ios_home_screen_recognizes_icon_grid():
     scene = _scene(
         _el("文件", 42, 176),
