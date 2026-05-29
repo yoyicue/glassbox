@@ -593,8 +593,12 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `wrap_with_memory_if_enabled` wires it to `save_utg` for runtime-owned memory;
   new `cfg.memory_autosave_every` (default 12). Externally-provided memory
   (tests) stays close-only. Tests in `test_memory_observe.py`.
-- [ ] **CUQ-3.23** BFS path is not reliability-weighted (low-success edges aren't
-  avoided). *low* (fold into CUQ-0.5)
+- [x] **CUQ-3.23** BFS path is not reliability-weighted (low-success edges aren't
+  avoided). *low* (fold into CUQ-0.5) — DONE: `_path_to_targets` now visits each
+  node's outgoing edges most-reliable-first (`success_rate`, then
+  `success_count`), so among equal-length paths it routes via the higher-success
+  edge instead of an arbitrary low-success one (still shortest-hop BFS). Test in
+  `test_memory_path.py`.
 
 ---
 

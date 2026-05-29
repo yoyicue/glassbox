@@ -254,7 +254,16 @@ class ScreenMemory:
         q: deque[str] = deque([from_id])
         while q:
             cur = q.popleft()
-            for e in self.utg.outgoing(cur):
+            # CUQ-3.23: still shortest-hop (BFS), but visit a node's outgoing
+            # edges most-reliable-first so that among equal-length options the
+            # path is reached via the higher-success edge instead of an
+            # arbitrary low-success one.
+            outgoing = sorted(
+                self.utg.outgoing(cur),
+                key=lambda e: (e.success_rate, e.success_count),
+                reverse=True,
+            )
+            for e in outgoing:
                 if allowed_actions is not None and not self._edge_allowed(e, allowed_actions):
                     continue
                 if e.count and e.success_rate < min_success_rate:

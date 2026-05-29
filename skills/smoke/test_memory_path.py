@@ -126,3 +126,28 @@ def test_path_to_page_accepts_platform_scene_kind_and_policy_action():
     assert path is not None
     assert path[0].action_op == "key"
     assert path[0].policy_action == "back"
+
+
+@pytest.mark.smoke
+def test_path_prefers_reliable_edge_among_equal_length():
+    """CUQ-3.23: among equal-length paths, route via the higher-success edge,
+    not whichever low-success edge happens to be visited first."""
+    mem = ScreenMemory(UTG(bundle_id="com.x"))
+    a = mem.observe(_scene("a"))
+    # Build the LOW-success branch first (insertion order would otherwise win).
+    p = mem.observe(_scene("p"), last_action=("tap", {"target": "to_p"}))
+    mem._last_node_id = a.screen_id
+    m = mem.observe(_scene("m"), last_action=("tap", {"target": "to_m"}))
+    mem._last_node_id = p.screen_id
+    t = mem.observe(_scene("t"), last_action=("tap", {"target": "to_t1"}))
+    mem._last_node_id = m.screen_id
+    mem.observe(_scene("t"), last_action=("tap", {"target": "to_t2"}))
+
+    for edge in mem.utg.edges:  # demote the A->P first edge to low success
+        if edge.from_id == a.screen_id and edge.to_id == p.screen_id:
+            edge.count, edge.success_count, edge.no_progress_count = 3, 0, 3
+            edge.success_rate = 0.0
+
+    path = mem.path(a.screen_id, t.screen_id)
+    assert path is not None and len(path) == 2
+    assert path[0].to_id == m.screen_id  # routed via the reliable A->M edge
