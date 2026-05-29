@@ -294,8 +294,9 @@ absolute-pointer fit is **auto-derived from the detected letterbox crop** instea
 of hand-measured. Native multi-touch HID (two-finger gestures) is **not**
 available — iPadOS gates it behind an MFi / USBDriverKit handshake — so the iPad
 still drives a single pointer + wheel, like the iPhone. Select it with
-`GLASSBOX_PHONE_MODEL=ipad_mini_6` or `ipad_mini_7` (they share one 8.3″ display,
-so one geometry fits both); the iPad setup, the wheel-scroll path, and the
+`GLASSBOX_PHONE_MODEL=ipad_mini_6` or `ipad_mini_7` — the mini 6 (2021, A15) and
+mini 7 (2024, A17 Pro) differ only in SoC and share the same 8.3″ display and
+USB-C, so one geometry fits both; the iPad setup, the wheel-scroll path, and the
 trackpad constraint are documented in `docs/design/ipad_mini_migration.md` and
 `docs/reference/picokvm_ipad_wheel.md`.
 
