@@ -715,8 +715,21 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `unactuatable` verdict is never persisted.)
 
 ### Calibration medium companions
-- [ ] **CUQ-3.7** No per-session auto-calibration probe; relies on mid-run
-  opportunistic correction only. *large*
+- [x] **CUQ-3.7** No per-session auto-calibration probe; relies on mid-run
+  opportunistic correction only. *large* — DONE (flag-gated, default-off): new
+  `glassbox/action/calibration.py` adds `session_calibration_needed` (cold-start
+  = no learned offset on any control-class entry) + `run_session_calibration_probe`,
+  surfaced as `Phone.run_calibration_probe()` and auto-invoked once at the end of
+  `build_phone` when `cfg.calibration_probe_target` (env
+  `GLASSBOX_CALIBRATION_PROBE_TARGET`) is set. It eagerly taps the configured
+  known-safe anchor so the orchestrated tap's landing-retry/correction machinery
+  seeds the offset BEFORE the first task tap, instead of only opportunistically
+  mid-run. No-op (byte-identical) when unconfigured or already calibrated;
+  best-effort (never blocks startup). The decision + driver are unit-tested with
+  a mock phone (`test_calibration_probe.py`); only the actual tap runs on a rig.
+  The anchor is operator-supplied (no element is universally safe-to-tap).
+  **Remaining:** on-rig pick a stable session-start anchor + validate the seeded
+  offset beats cold-start.
 - [x] **CUQ-3.8** A single noisy correction pair immediately biases a whole control
   bucket; no magnitude clamp / variance gate. *medium* — DONE: `record_correction_pair`
   now rejects an implausibly large missed→landed delta (`_correction_is_outlier`:

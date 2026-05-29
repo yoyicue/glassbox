@@ -706,7 +706,13 @@ def build_phone(
         ai_scroll_prefer_wheel=cfg.ai_scroll_prefer_wheel,
         vlm_reground_selection=cfg.vlm_reground_selection,
         whitebox_hint_selection=cfg.whitebox_hint_selection,
+        calibration_probe_target=cfg.calibration_probe_target,
     )
+    # CUQ-3.7: eager session-start calibration probe (no-op unless a target is
+    # configured AND no offset is learned yet). Best-effort: never blocks startup.
+    if cfg.calibration_probe_target:
+        with contextlib.suppress(Exception):
+            phone.run_calibration_probe()
     return PhoneRuntime(
         phone=phone,
         source=source,

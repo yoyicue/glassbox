@@ -200,6 +200,7 @@ class Phone:
         ai_scroll_prefer_wheel: bool = False,
         vlm_reground_selection: bool = False,
         whitebox_hint_selection: bool = False,
+        calibration_probe_target: str = "",
     ):
         self.source = source
         self.ocr = ocr
@@ -274,6 +275,9 @@ class Phone:
         # asset_match / deep_link) resolve a target when OCR misses. Flag-gated
         # (default off); only matters with a Tier-1+ app profile populating hints.
         self._whitebox_hint_selection = bool(whitebox_hint_selection)
+        # CUQ-3.7: known-safe anchor for the session-start calibration probe.
+        # Empty (default) disables it (byte-identical).
+        self._calibration_probe_target = str(calibration_probe_target or "")
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.
@@ -501,6 +505,14 @@ class Phone:
             detail = getattr(result, "error", None) or "reported action failure"
             raise RuntimeError(f"{op} failed: {detail}")
         return result
+
+    def run_calibration_probe(self) -> bool:
+        """CUQ-3.7: eagerly tap the configured anchor at session start to seed the
+        actuation offset before the first task tap. No-op (returns False) when no
+        target is configured or calibration already exists."""
+        from glassbox.action.calibration import run_session_calibration_probe
+
+        return run_session_calibration_probe(self, self._calibration_probe_target)
 
     def _uses_semantic_plan(self, op: str) -> bool:
         """CUQ-0.1/0.8: is this op routed through the first-class strategy ladder?"""

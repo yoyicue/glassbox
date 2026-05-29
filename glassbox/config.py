@@ -274,6 +274,14 @@ class AgentConfig(BaseSettings):
     intermittent so this stays off there. Env GLASSBOX_AI_SCROLL_PREFER_WHEEL.
     Default off → swipe-fling everywhere (byte-identical)."""
 
+    calibration_probe_target: str = ""
+    """CUQ-3.7: a known-safe anchor label to eagerly tap at session start when no
+    actuation offset has been learned yet, so the offset is seeded before the
+    first task tap (instead of only opportunistically mid-run). Env
+    GLASSBOX_CALIBRATION_PROBE_TARGET. Empty (default) disables the probe
+    (byte-identical). The target must be present + safe-to-tap on the session-start
+    screen — operator-supplied, since no element is universally safe."""
+
     recover_then_retry: bool = False
     """CUQ-0.12: when stuck/loop recovery succeeds, re-attempt the failed action
     once from the recovered (clean) state, so recovery alters the CURRENT action's
