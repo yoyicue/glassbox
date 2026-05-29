@@ -494,8 +494,24 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   gets numbered marks when enabled. Default off → byte-identical. Test in
   `test_vlm_kimi.py`. **Remaining:** on-rig A/B of SoM vs text-only grounding
   accuracy on dense/ambiguous scenes before default-on.
-- [ ] **CUQ-2.6** `settings_detail` false-positives on third-party app screens via
-  locale-generic body markers. *medium*
+- [x] **CUQ-2.6** `settings_detail` false-positives on third-party app screens via
+  locale-generic body markers. *medium* — DONE (flag-gated, default-off): found
+  the FP has **two** routes — `_looks_like_settings_detail_body` (generic markers
+  允许/访问/账户/App) and `settings_detail_semantic_guess` (generic *copy* markers,
+  no noun required). `cfg.strict_settings_detail` (env
+  `GLASSBOX_STRICT_SETTINGS_DETAIL`) gates both: the body matcher additionally
+  requires a Settings-distinguishing signal (a system noun like Wi-Fi/Bluetooth/
+  Face ID, or a Learn-More footnote), and the semantic guess requires ≥1 system
+  noun (a guess resting only on generic copy markers is rejected). Threaded
+  `classify_ios_scene(strict_settings_detail=)` → the two matchers, and through
+  `IOSSceneClassifier.classify` ← `Phone._classify_platform_scene_now` (forwarded
+  only when the flag is on, so the default call stays byte-identical and stubs
+  are unaffected). The negative uses of the body matcher (search-results /
+  is-home exclusion) are intentionally left non-strict. Tests in
+  `test_ios_scene.py` (generic-body FP rejected under strict via both routes;
+  real Settings with a Learn-More signal preserved). **Remaining:** on-rig
+  confirm no scrolled-detail recall loss (a real page with neither a noun nor a
+  Learn-More footnote visible) before default-on.
 - [x] **CUQ-2.7** Status-bar clock filtering lives only in the Settings policy;
   core `find_text`/`text_match` still match clock noise. *medium* — DONE: added a
   core, locale-neutral `looks_like_status_bar_clock` to `text_match` (handles

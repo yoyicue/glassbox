@@ -147,6 +147,7 @@ def classify_ios_scene(
     scene: Scene,
     *,
     viewport_size: tuple[int, int] | None = None,
+    strict_settings_detail: bool = False,
 ) -> IOSSceneClassification:
     """Classify common iOS surfaces from OCR output.
 
@@ -219,7 +220,9 @@ def classify_ios_scene(
             evidence=(blocked,),
         )
 
-    semantic_detail = settings_detail_semantic_guess(scene, viewport_size=(w, h))
+    semantic_detail = settings_detail_semantic_guess(
+        scene, viewport_size=(w, h), strict=strict_settings_detail
+    )
     if semantic_detail is not None:
         return IOSSceneClassification(
             kind="settings_detail",
@@ -260,7 +263,7 @@ def classify_ios_scene(
             evidence=("bottom_search_chrome",),
         )
 
-    if _looks_like_settings_detail(scene, viewport_size=(w, h)):
+    if _looks_like_settings_detail(scene, viewport_size=(w, h), strict_body=strict_settings_detail):
         return IOSSceneClassification(
             kind="settings_detail",
             confidence=0.78,
@@ -536,11 +539,16 @@ def settings_detail_semantic_guess(
     scene: Scene,
     *,
     viewport_size: tuple[int, int] | None = None,
+    strict: bool = False,
 ) -> IOSSceneSemanticGuess | None:
     """Classify ambiguous iOS Settings detail pages from OCR text and geometry.
 
     This is deliberately a fallback, not a replacement for hard scene gates:
     root/search/blocked/App Library/Home evidence wins before this can return.
+
+    CUQ-2.6: when ``strict``, require at least one Settings system-noun
+    (Wi-Fi/Bluetooth/Face ID/…) — a guess resting only on locale-generic copy
+    markers (访问/管理/默认/…) is the third-party-app false-positive.
     """
     w, h = _scene_size(scene, viewport_size)
     if (
@@ -604,6 +612,11 @@ def settings_detail_semantic_guess(
     score += 1 if intro_copy_lines else 0
     score += 1 if left_rows >= 2 else 0
     score += 1 if grouped_rows >= 3 else 0
+
+    # CUQ-2.6: under strict, a settings_detail guess must rest on a real Settings
+    # system-noun, not locale-generic copy markers alone (third-party-app FP).
+    if strict and not noun_hits:
+        return None
 
     if has_back and (copy_hits or noun_hits >= 2) and score >= 6:
         return IOSSceneSemanticGuess(
@@ -732,7 +745,9 @@ def _is_home_search_pill_text(text: str) -> bool:
     )
 
 
-def _looks_like_settings_detail(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:
+def _looks_like_settings_detail(
+    scene: Scene, *, viewport_size: tuple[int, int], strict_body: bool = False
+) -> bool:
     w, h = viewport_size
     if _looks_like_app_library(scene, viewport_size=(w, h)):
         return False
@@ -750,7 +765,7 @@ def _looks_like_settings_detail(scene: Scene, *, viewport_size: tuple[int, int])
         return True
     if _looks_like_settings_health_data_detail(scene, viewport_size=(w, h)):
         return True
-    if _looks_like_settings_detail_body(scene, viewport_size=(w, h)):
+    if _looks_like_settings_detail_body(scene, viewport_size=(w, h), strict=strict_body):
         return True
     has_back = _has_back_affordance(scene)
     title = _page_title(scene, viewport_size=(w, h))
@@ -1025,8 +1040,41 @@ def _looks_like_settings_health_data_detail(scene: Scene, *, viewport_size: tupl
     return title_seen and marker_hits >= 4
 
 
-def _looks_like_settings_detail_body(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:
-    """Recognize scrolled Settings detail pages whose nav bar/title OCR is missing."""
+# CUQ-2.6: footnote phrases that, like the semantic-noun markers, are a
+# Settings-specific signal (a Settings detail section almost always carries a
+# "Learn More" / 进一步了解 footnote or a recognizable system noun) — used to
+# distinguish a real Settings detail page from a third-party app screen that
+# merely contains locale-generic body words (允许 / 访问 / App / 通知 ...).
+_SETTINGS_LEARN_MORE_MARKERS = (
+    "进一步了解", "了解更多", "更多信息", "更多详细信息",
+    "Learn More", "More Information", "More Info",
+)
+
+
+def _has_settings_distinguishing_signal(scene: Scene) -> bool:
+    """CUQ-2.6: True if the scene carries a Settings-specific marker (a system
+    noun like Wi-Fi/Bluetooth/Face ID, or a Learn-More footnote) — not just the
+    locale-generic body words that also appear on third-party app screens."""
+    for el in scene.elements:
+        text = _text(el)
+        if not text:
+            continue
+        if any(marker in text for marker in SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS):
+            return True
+        if any(marker in text for marker in _SETTINGS_LEARN_MORE_MARKERS):
+            return True
+    return False
+
+
+def _looks_like_settings_detail_body(
+    scene: Scene, *, viewport_size: tuple[int, int], strict: bool = False
+) -> bool:
+    """Recognize scrolled Settings detail pages whose nav bar/title OCR is missing.
+
+    CUQ-2.6: when ``strict``, also require a Settings-distinguishing signal so a
+    third-party app screen carrying only locale-generic body words does not
+    false-positive as ``settings_detail``.
+    """
     w, h = viewport_size
     long_copy = 0
     left_rows = 0
@@ -1049,7 +1097,9 @@ def _looks_like_settings_detail_body(scene: Scene, *, viewport_size: tuple[int, 
                 seen_markers.add(marker)
                 marker_hits += 1
 
-    return long_copy >= 1 and left_rows >= 4 and marker_hits >= 3
+    if not (long_copy >= 1 and left_rows >= 4 and marker_hits >= 3):
+        return False
+    return not (strict and not _has_settings_distinguishing_signal(scene))
 
 
 def _looks_like_app_library(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:

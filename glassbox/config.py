@@ -266,6 +266,15 @@ class AgentConfig(BaseSettings):
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 
+    strict_settings_detail: bool = False
+    """CUQ-2.6: require a Settings-distinguishing signal (a system noun like
+    Wi-Fi/Bluetooth/Face ID, or a Learn-More footnote) before the generic
+    body-marker heuristic classifies a screen as `settings_detail`, closing the
+    false-positive where a third-party app screen carrying only locale-generic
+    words (允许 / 访问 / App / 通知 …) is mistaken for Settings. Env
+    GLASSBOX_STRICT_SETTINGS_DETAIL. Default off (tightening a core recognizer
+    risks scrolled-detail recall); validate on-rig before enabling."""
+
     letterbox_refresh_consecutive: int = 2
     """CUQ-3.14: how many consecutive frames must agree on a NEW letterbox crop
     bbox before auto-refresh commits it (hysteresis). >1 stops a single

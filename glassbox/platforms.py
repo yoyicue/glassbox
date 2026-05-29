@@ -114,10 +114,15 @@ class IOSSceneClassifier:
         scene,
         *,
         viewport_size: tuple[int, int] | None = None,
+        strict_settings_detail: bool = False,
     ):
         from glassbox.ios.scene import classify_ios_scene
 
-        return classify_ios_scene(scene, viewport_size=viewport_size).to_scene_classification()
+        return classify_ios_scene(
+            scene,
+            viewport_size=viewport_size,
+            strict_settings_detail=strict_settings_detail,
+        ).to_scene_classification()
 
 
 class IPadOSSceneClassifier:
@@ -126,7 +131,11 @@ class IPadOSSceneClassifier:
         scene,
         *,
         viewport_size: tuple[int, int] | None = None,
+        strict_settings_detail: bool = False,
     ):
+        # iPadOS classifier has its own settings_detail logic; the flag is
+        # accepted for protocol parity (CUQ-2.6 targets the iOS body matcher).
+        del strict_settings_detail
         from glassbox.ipados.scene import classify_ipados_scene
 
         return classify_ipados_scene(scene, viewport_size=viewport_size).to_scene_classification()

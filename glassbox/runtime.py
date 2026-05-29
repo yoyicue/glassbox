@@ -700,6 +700,7 @@ def build_phone(
         coldstart_promote_controls=cfg.coldstart_promote_controls,
         vlm_set_of_mark=cfg.vlm_set_of_mark,
         memory_locate_priors=cfg.memory_locate_priors,
+        strict_settings_detail=cfg.strict_settings_detail,
     )
     return PhoneRuntime(
         phone=phone,

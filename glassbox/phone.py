@@ -178,6 +178,7 @@ class Phone:
         coldstart_promote_controls: bool = False,
         vlm_set_of_mark: bool = False,
         memory_locate_priors: bool = False,
+        strict_settings_detail: bool = False,
     ):
         self.source = source
         self.ocr = ocr
@@ -232,6 +233,10 @@ class Phone:
         # misses (before the billed VLM reground). Flag-gated (default off);
         # only matters when memory is wired + populated.
         self._memory_locate_priors = bool(memory_locate_priors)
+        # CUQ-2.6: require a Settings-distinguishing signal before the generic
+        # body-marker heuristic classifies a screen as settings_detail (closes a
+        # third-party-app false-positive). Flag-gated (default off).
+        self._strict_settings_detail = bool(strict_settings_detail)
         # CUQ-2.9: how the most recent target was resolved (ocr vs vlm), stamped
         # into the next tap's metadata so selection_source is recorded at
         # selection time rather than inferred post-hoc.
@@ -790,7 +795,13 @@ class Phone:
         classifier = self._platform_scene_classifier
         if classifier is None:
             return None
-        return classifier.classify(scene, viewport_size=viewport_size)
+        # CUQ-2.6: only forward the flag when enabled, so the default call stays
+        # byte-identical and platform classifiers/stubs without the kwarg are
+        # unaffected.
+        kwargs: dict[str, Any] = {"viewport_size": viewport_size}
+        if self._strict_settings_detail:
+            kwargs["strict_settings_detail"] = True
+        return classifier.classify(scene, **kwargs)
 
     # —— Profile (Tier 1+ white-box) ——
     def _apply_profile(self, scene: Scene, frame_img=None) -> None:

@@ -362,6 +362,48 @@ def test_ios_scene_classifier_settings_detail_without_back_ocr():
     assert classified.title != "编辑"
 
 
+def _generic_body_marker_scene(*, learn_more: bool = False):
+    """A screen that trips _looks_like_settings_detail_body via locale-generic
+    body words only (允许/访问/账户/App) — i.e. the third-party-app FP shape."""
+    els = [
+        _el("允许此 App 在使用期间访问你的账户以同步内容与设置项目数据", 42, 200, w=330),
+        _el("允许", 60, 260, w=80, ty="button"),
+        _el("访问", 60, 320, w=80, ty="button"),
+        _el("账户", 60, 380, w=80, ty="button"),
+        _el("管理", 60, 440, w=80, ty="button"),
+    ]
+    if learn_more:
+        els.append(_el("进一步了解", 60, 500, w=120))
+    return _scene(*els)
+
+
+@pytest.mark.smoke
+def test_strict_settings_detail_rejects_third_party_generic_body():
+    """CUQ-2.6: a screen carrying only locale-generic body words classifies as
+    settings_detail by default, but NOT under strict_settings_detail (no
+    Settings-distinguishing signal present)."""
+    scene = _generic_body_marker_scene()
+    vp = (448, 973)
+
+    # Default: the generic body matcher accepts it (the documented FP).
+    assert classify_ios_scene(scene, viewport_size=vp).kind == "settings_detail"
+    # Strict: rejected -> not a settings_detail false-positive.
+    assert classify_ios_scene(
+        scene, viewport_size=vp, strict_settings_detail=True
+    ).kind != "settings_detail"
+
+
+@pytest.mark.smoke
+def test_strict_settings_detail_keeps_real_settings_with_learn_more():
+    """CUQ-2.6: a real Settings detail page (same body words + a Learn-More
+    footnote) still classifies as settings_detail under strict — no recall loss
+    for pages carrying a Settings-distinguishing signal."""
+    scene = _generic_body_marker_scene(learn_more=True)
+    assert classify_ios_scene(
+        scene, viewport_size=(448, 973), strict_settings_detail=True
+    ).kind == "settings_detail"
+
+
 @pytest.mark.smoke
 def test_ios_scene_classifier_wifi_detail_without_nav_ocr_is_not_springboard():
     scene = _scene(
