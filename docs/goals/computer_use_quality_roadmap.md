@@ -148,7 +148,26 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   `max_vlm_calls_per_action`.
 
 ### CUQ-0.5 — Install a generic `try_memory_path` recovery hook (UTG graph has no generic consumer)
-- [ ] **high · effort medium · design-gap**
+- [x] **high · effort medium · design-gap** (default-safe; active when configured)
+  — DONE: `make_try_memory_path_hook(target_page, allowed_actions,
+  min_success_rate, fallback)` in `action/recovery.py` builds a generic recovery
+  hook that, on a stuck/exhausted recovery, `recognize()`s the current screen,
+  asks `memory.path_to_page()` for the shortest safe-enough learned path to the
+  target page (reliability-weighted BFS from CUQ-3.23, gated by `allowed_actions`
+  + `min_success_rate`), and replays the edge chain via backend-agnostic Phone
+  primitives (`home` / `back_gesture` / `swipe_up`/`down`) — re-navigating in
+  place instead of resetting to Home. An unknown-op edge, missing path, or
+  unconfirmed arrival cleanly falls back to `recover_to_home_then_renavigate`, so
+  it is never worse than the home-only recovery. Re-entrancy-guarded; replay is
+  best-effort with a final `recognize`-the-target arrival check as the gate.
+  Wired in `runtime.py` via `_build_recovery_hook`: installed ahead of the home
+  hook **only when `cfg.recovery_target_page` is set** (env
+  `GLASSBOX_RECOVERY_TARGET_PAGE`, + `_ALLOWED_ACTIONS` / `_MIN_SUCCESS_RATE`);
+  default config keeps the byte-identical home-only recovery. Closes leak #7 —
+  the UTG graph now has a generic, non-Settings consumer. Tests in
+  `test_computer_use_runtime.py` (replay-back-chain, no-path→home,
+  unconfirmed-arrival→home, default-is-home-only). **Remaining:** on-rig validate
+  that a populated graph actually recovers a deliberately-stuck non-Settings run.
 - Gap: `path()`/`path_to_page()`/`recognize()`/`locate()`/`expected_elements()`
   are implemented + unit-tested but the only non-test callers live in the
   Settings skill. The orchestrator imports only `compute_signature` from memory —

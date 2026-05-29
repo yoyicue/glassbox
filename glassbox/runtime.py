@@ -375,6 +375,28 @@ def save_memory_utg(memory: ScreenMemory, *, memory_dir: str | None) -> None:
     save_utg(memory.utg, memory_dir=memory_dir)
 
 
+def _build_recovery_hook(cfg, *, make_try_memory_path_hook, home_hook):
+    """CUQ-0.5: select the runtime recovery hook.
+
+    With a ``recovery_target_page`` configured, return the generic UTG-pathed
+    hook (which re-navigates via a learned path and falls back to ``home_hook``);
+    otherwise return ``home_hook`` unchanged so the default recovery is
+    byte-identical to before.
+    """
+    target = (cfg.recovery_target_page or "").strip()
+    if not target:
+        return home_hook
+    allowed = {
+        op.strip() for op in (cfg.recovery_allowed_actions or "").split(",") if op.strip()
+    } or None
+    return make_try_memory_path_hook(
+        target_page=target,
+        allowed_actions=allowed,
+        min_success_rate=float(cfg.recovery_min_success_rate),
+        fallback=home_hook,
+    )
+
+
 def build_phone(
     *,
     source,
@@ -544,6 +566,7 @@ def build_phone(
             ActionOrchestrator,
             RiskPolicy,
             RuntimeRecoveryPolicy,
+            make_try_memory_path_hook,
             recover_to_home_then_renavigate,
         )
         from glassbox.action.actuation_profile import load_actuation_profile
@@ -588,8 +611,16 @@ def build_phone(
             # orchestrator's stuck/loop and strategy-exhaustion recovery calls
             # are guaranteed no-ops; install the recover-to-Home-anchor hook so
             # dead-ends are actually broken instead of only audited.
+            # CUQ-0.5: when a recovery_target_page is configured, layer the
+            # generic UTG-pathed recovery ahead of the home anchor so a stuck run
+            # re-navigates via a learned path before falling back to a Home reset.
             recovery_policy=RuntimeRecoveryPolicy(
-                hook=recover_to_home_then_renavigate, max_attempts=2
+                hook=_build_recovery_hook(
+                    cfg,
+                    make_try_memory_path_hook=make_try_memory_path_hook,
+                    home_hook=recover_to_home_then_renavigate,
+                ),
+                max_attempts=2,
             ),
         )
 

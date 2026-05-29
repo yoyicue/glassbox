@@ -243,6 +243,26 @@ class AgentConfig(BaseSettings):
     perceive cache when pixels are unchanged, so it only re-OCRs a genuinely
     changed screen. Validate on-rig before enabling."""
 
+    recovery_target_page: str | None = None
+    """CUQ-0.5: when set, install the generic UTG-pathed recovery hook
+    (make_try_memory_path_hook) ahead of the home-anchor fallback. On a
+    stuck/exhausted recovery it recognizes the current screen, asks screen
+    memory for the shortest safe-enough learned path to this page_id, and
+    replays that edge chain to re-navigate in place instead of resetting to
+    Home. Env GLASSBOX_RECOVERY_TARGET_PAGE (e.g. an app root page id). Default
+    None preserves today's home-only recovery. Needs a populated UTG graph
+    (memory enabled); validate on-rig that the replayed path actually recovers."""
+
+    recovery_allowed_actions: str = "home,back"
+    """CUQ-0.5: comma-separated safety gate for the memory-path recovery — only
+    these learned-edge ops are pathed and replayed (so recovery backs out via
+    known navigation, never an improvised forward tap). Env
+    GLASSBOX_RECOVERY_ALLOWED_ACTIONS."""
+
+    recovery_min_success_rate: float = 0.5
+    """CUQ-0.5: minimum historical edge success rate for the memory-path
+    recovery to trust a learned edge. Env GLASSBOX_RECOVERY_MIN_SUCCESS_RATE."""
+
     coldstart_max_calls: int = 80
     """Per-run cap on cold-start VLM annotation calls."""
 

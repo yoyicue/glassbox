@@ -60,6 +60,165 @@ def recover_to_home_then_renavigate(phone: object, reason: str, payload: dict[st
         phone._in_recovery = False  # type: ignore[attr-defined]
 
 
+def _current_scene(phone: object) -> Any | None:
+    """Best-effort fresh scene for memory recognition; None if unavailable."""
+    perceive = getattr(phone, "perceive", None)
+    if callable(perceive):
+        try:
+            return perceive(fresh=True)
+        except TypeError:
+            with contextlib.suppress(Exception):
+                return perceive()
+        except Exception:
+            return None
+    return getattr(phone, "_last_scene", None)
+
+
+def _current_frame_img(phone: object) -> Any | None:
+    frame = getattr(phone, "_last_frame", None)
+    return getattr(frame, "img", None) if frame is not None else None
+
+
+# CUQ-0.5: navigation ops the generic memory-path recovery can replay on ANY
+# backend — each maps a learned edge to a backend-agnostic Phone primitive. An
+# edge whose op is outside this set fails the replay cleanly (the caller then
+# falls back to the home-anchor hook), so the replay never improvises an action.
+def _replay_edge(phone: object, edge: Any) -> bool:
+    op = str(getattr(edge, "action_op", "") or "")
+    if op == "home":
+        fn = getattr(phone, "home", None)
+    elif op in {"back", "back_gesture"}:
+        fn = getattr(phone, "back_gesture", None)
+    elif op in {"swipe_up", "scroll", "scroll_down"}:
+        fn = getattr(phone, "swipe_up", None)
+    elif op in {"swipe_down", "scroll_up"}:
+        fn = getattr(phone, "swipe_down", None)
+    else:
+        return False
+    if not callable(fn):
+        return False
+    try:
+        result = fn()
+    except Exception:
+        return False
+    # Lenient per-edge: a transport-failed step aborts, but a verified-unknown
+    # step may still have navigated — the final arrival check is the real gate.
+    if getattr(result, "ok", True) is False:
+        return False
+    return getattr(result, "semantic_status", None) not in {"failed", "blocked", "exception"}
+
+
+def _delegate_fallback(
+    fallback: RecoveryHook | None, phone: object, reason: str, payload: dict[str, Any]
+) -> bool:
+    if fallback is None:
+        return False
+    try:
+        return bool(fallback(phone, reason, payload))
+    except Exception:
+        return False
+
+
+def make_try_memory_path_hook(
+    *,
+    target_page: str,
+    scene_type: str | None = None,
+    allowed_actions: set[str] | None = None,
+    min_success_rate: float = 0.5,
+    fallback: RecoveryHook | None = recover_to_home_then_renavigate,
+) -> RecoveryHook:
+    """Generic UTG-pathed recovery hook (CUQ-0.5).
+
+    Closes leak #7: the UTG graph (`recognize` / `path_to_page` / reliability-
+    weighted BFS) had no caller outside the Settings skill, so "explore once,
+    reuse the path" was dormant for every other app. This factory builds a
+    default-installable hook that, on a stuck/exhausted recovery, recognizes the
+    current screen, asks screen memory for the shortest safe-enough learned path
+    to ``target_page``, and replays that edge chain to re-navigate in place —
+    rather than always resetting to the Home anchor.
+
+    Parameterized by ``target_page`` + ``allowed_actions`` (the safety gate —
+    only these ops are pathed and replayed) + ``min_success_rate`` (skip
+    low-success edges), all honored by `path_to_page`. ``allowed_actions``
+    defaults to the safe back-out set ``{"home", "back"}``.
+
+    Falls back to ``fallback`` (the home-anchor hook by default) when memory is
+    absent, the screen is unrecognized, no path exists, or a replay/arrival check
+    fails — so installing this hook never makes recovery *worse* than home-reset.
+    """
+    allowed = set(allowed_actions) if allowed_actions else {"home", "back"}
+
+    def hook(phone: object, reason: str, payload: dict[str, Any]) -> bool:
+        if getattr(phone, "_in_recovery", False):
+            return False
+        page = str(payload.get("target_page") or target_page or "")
+        memory = getattr(phone, "memory", None)
+        recognize = getattr(memory, "recognize", None) if memory is not None else None
+        path_to_page = getattr(memory, "path_to_page", None) if memory is not None else None
+        recovered = False
+        if page and callable(recognize) and callable(path_to_page):
+            phone._in_recovery = True  # type: ignore[attr-defined]
+            try:
+                recovered = _attempt_memory_path(
+                    phone,
+                    page,
+                    recognize=recognize,
+                    path_to_page=path_to_page,
+                    scene_type=scene_type,
+                    allowed=allowed,
+                    min_success_rate=min_success_rate,
+                )
+            finally:
+                phone._in_recovery = False  # type: ignore[attr-defined]
+        if recovered:
+            return True
+        # The fallback sets its own re-entrancy guard, so it must run only after
+        # this hook has cleared `_in_recovery` (above).
+        return _delegate_fallback(fallback, phone, reason, payload)
+
+    return hook
+
+
+def _attempt_memory_path(
+    phone: object,
+    page: str,
+    *,
+    recognize: Callable[..., Any],
+    path_to_page: Callable[..., Any],
+    scene_type: str | None,
+    allowed: set[str],
+    min_success_rate: float,
+) -> bool:
+    scene = _current_scene(phone)
+    if scene is None:
+        return False
+    node = recognize(scene, _current_frame_img(phone))
+    if node is None:
+        return False
+    try:
+        path = path_to_page(
+            node.screen_id,
+            page,
+            scene_type=scene_type,
+            allowed_actions=allowed,
+            min_success_rate=min_success_rate,
+        )
+    except Exception:
+        return False
+    if path is None:
+        return False
+    if not path:
+        return True  # already on the target page
+    for edge in path:
+        if not _replay_edge(phone, edge):
+            return False
+    after = _current_scene(phone)
+    if after is None:
+        return False
+    arrived = recognize(after, _current_frame_img(phone))
+    return arrived is not None and getattr(arrived, "page_id", None) == page
+
+
 @dataclass(frozen=True)
 class RecoveryResult:
     attempted: bool

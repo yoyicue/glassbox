@@ -7,6 +7,7 @@ from glassbox.action.policy import RiskDecision, RiskPolicy
 from glassbox.action.recovery import (
     RecoveryResult,
     RuntimeRecoveryPolicy,
+    make_try_memory_path_hook,
     recover_to_home_then_renavigate,
 )
 from glassbox.action.semantic_plan import (
@@ -50,6 +51,7 @@ __all__ = [
     "action_verdict",
     "default_semantic_action_plan",
     "default_semantic_action_spec",
+    "make_try_memory_path_hook",
     "recover_to_home_then_renavigate",
     "verify_expected_state",
 ]

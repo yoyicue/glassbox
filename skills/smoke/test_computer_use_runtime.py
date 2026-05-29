@@ -18,6 +18,7 @@ from glassbox.action import (
     StuckLoopDetector,
     default_semantic_action_plan,
     default_semantic_action_spec,
+    make_try_memory_path_hook,
     recover_to_home_then_renavigate,
 )
 from glassbox.cognition import Box, UIElement
@@ -155,6 +156,121 @@ def test_recover_to_home_hook_ignores_unknown_kind_and_guards_reentrancy():
         nested, "stuck", {"recovery": "recover_to_home_then_renavigate"}
     ) is False
     assert nested.home_calls == 0
+
+
+class _FakeEdge:
+    def __init__(self, action_op: str):
+        self.action_op = action_op
+
+
+class _FakeNode:
+    def __init__(self, screen_id: str, page_id: str):
+        self.screen_id = screen_id
+        self.page_id = page_id
+
+
+class _MemoryPathFakePhone:
+    """Duck-typed phone + screen-memory for the generic memory-path hook (CUQ-0.5).
+
+    `recognize` returns the start node until every edge in `path` has been
+    replayed, then the arrival node — so the hook's pre-path recognize and its
+    post-replay arrival check see the right screens.
+    """
+
+    def __init__(self, *, path, arrive_page: str, home_ok: bool = True):
+        self._path = path
+        self._n = 0 if path is None else len(path)
+        self._replayed = 0
+        self._arrive_node = _FakeNode("n_root", arrive_page)
+        self._start_node = _FakeNode("n_detail", "app/detail")
+        self._home_ok = home_ok
+        self.back_calls = 0
+        self.home_calls = 0
+        self.memory = self
+        self._last_frame = None
+
+    # --- screen-memory API ---
+    def recognize(self, scene, frame_img=None):
+        del scene, frame_img
+        if self._path is None:
+            return None
+        return self._arrive_node if self._replayed >= self._n else self._start_node
+
+    def path_to_page(self, from_id, page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.0):
+        del from_id, page_id, scene_type, allowed_actions, min_success_rate
+        return self._path
+
+    # --- phone API ---
+    def perceive(self, *, fresh=None):
+        del fresh
+        return object()
+
+    def back_gesture(self):
+        self.back_calls += 1
+        self._replayed += 1
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+    def home(self):
+        self.home_calls += 1
+        return ActionResult(
+            ok=self._home_ok,
+            backend="fake",
+            connected=True,
+            semantic_status="succeeded" if self._home_ok else "failed",
+        )
+
+
+@pytest.mark.smoke
+def test_memory_path_recovery_replays_learned_back_chain():
+    """CUQ-0.5: the generic hook recognizes the current screen, fetches a learned
+    path to the target page, and replays the edge chain to re-navigate in place
+    (no Home reset) when the arrival check confirms the target."""
+    phone = _MemoryPathFakePhone(path=[_FakeEdge("back"), _FakeEdge("back")], arrive_page="app/root")
+    hook = make_try_memory_path_hook(target_page="app/root")
+    assert hook(phone, "stuck", {"recovery": "recover_to_home_then_renavigate"}) is True
+    assert phone.back_calls == 2
+    assert phone.home_calls == 0  # recovered without falling back to Home
+
+
+@pytest.mark.smoke
+def test_memory_path_recovery_falls_back_to_home_when_no_path():
+    """CUQ-0.5: no learned path -> delegate to the home-anchor fallback (so the
+    hook is never worse than the home-only recovery)."""
+    phone = _MemoryPathFakePhone(path=None, arrive_page="app/root")
+    hook = make_try_memory_path_hook(target_page="app/root")
+    assert hook(phone, "stuck", {"recovery": "recover_to_home_then_renavigate"}) is True
+    assert phone.back_calls == 0
+    assert phone.home_calls == 1  # fell back to Home
+
+
+@pytest.mark.smoke
+def test_memory_path_recovery_falls_back_when_arrival_unconfirmed():
+    """CUQ-0.5: a replayed path that does not land on the target page is not a
+    recovery -> fall back to Home rather than reporting a false success."""
+    phone = _MemoryPathFakePhone(path=[_FakeEdge("back")], arrive_page="app/elsewhere")
+    hook = make_try_memory_path_hook(target_page="app/root")
+    assert hook(phone, "stuck", {"recovery": "recover_to_home_then_renavigate"}) is True
+    assert phone.back_calls == 1
+    assert phone.home_calls == 1
+
+
+@pytest.mark.smoke
+def test_build_recovery_hook_is_home_only_without_target():
+    """CUQ-0.5: with no recovery_target_page configured, the runtime installs the
+    plain home-anchor hook (default recovery is byte-identical)."""
+    from glassbox.runtime import _build_recovery_hook
+
+    class _Cfg:
+        recovery_target_page = None
+        recovery_allowed_actions = "home,back"
+        recovery_min_success_rate = 0.5
+
+    hook = _build_recovery_hook(
+        _Cfg(),
+        make_try_memory_path_hook=make_try_memory_path_hook,
+        home_hook=recover_to_home_then_renavigate,
+    )
+    assert hook is recover_to_home_then_renavigate
 
 
 @pytest.mark.smoke
