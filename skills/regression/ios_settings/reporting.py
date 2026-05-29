@@ -12,6 +12,7 @@ from skills.regression.ios_settings.policy import (
     DEFAULT_SETTINGS_POLICY,
     EXPECTED_ROOT_NAV_TEXT_ZH,
     FAILURE_CATEGORY_KEYS,
+    IPAD_BLOCKED_CHILD_NAVIGATION_MARKERS,
     ROOT_COVERAGE_ONLY_LABELS,
     detect_device_unavailable_root_labels,
 )
@@ -100,9 +101,14 @@ SOFT_LIMITS = frozenset({
     # off-root; coverage gathered so far is preserved, so it's soft not fatal.
     "return_to_root_failed",
 })
+# Derived from the iPad superset (which includes the base iPhone markers) so the
+# verifier whitelists iPad-only block reasons too. The iPad crawler emits these
+# when it safely skips a selector/customization/dynamic-list page (Control Centre,
+# Home Screen layout, Multitasking layout, Wallpaper, Game Center social, Apps);
+# deriving only from the base set wrongly failed those legitimate read-only skips.
 EXPECTED_BLOCKED_REASONS = frozenset(
     reason
-    for _, _, reason in BLOCKED_CHILD_NAVIGATION_MARKERS
+    for _, _, reason in IPAD_BLOCKED_CHILD_NAVIGATION_MARKERS
 )
 EXPECTED_REJECTED_REASONS = frozenset({
     "unsafe_text",
@@ -174,6 +180,27 @@ def blocked_reason_from_texts(texts: Any) -> str | None:
         if page_marker in joined and (not row_markers or any(marker in joined for marker in row_markers)):
             return reason
     return None
+
+
+def texts_support_blocked_reason(texts: Any, reason: str) -> bool:
+    """True when the texts contain evidence for THIS specific blocked reason.
+
+    Checked reason-specifically (not first-match-wins like
+    ``blocked_reason_from_texts``) so an unrelated earlier marker cannot mask a
+    different page's real reason. The iPad split view always shows the full
+    sidebar, so e.g. the Notifications row markers ("Sounds", "Alerts", …) are
+    satisfied on every page and would otherwise shadow iPad selector reasons.
+    Uses the iPad superset so iPad-only reasons resolve; base reasons still match.
+    """
+    if not isinstance(texts, list):
+        return False
+    joined = "\n".join(str(text) for text in texts)
+    for page_marker, row_markers, marker_reason in IPAD_BLOCKED_CHILD_NAVIGATION_MARKERS:
+        if marker_reason != reason:
+            continue
+        if page_marker in joined and (not row_markers or any(marker in joined for marker in row_markers)):
+            return True
+    return False
 
 
 def computed_root_coverage(visits: Sequence[Any], *, locale_code: str | None = None) -> dict[str, list[str]]:

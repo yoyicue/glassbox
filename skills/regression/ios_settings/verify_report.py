@@ -34,6 +34,7 @@ from skills.regression.ios_settings.reporting import (
     canonical_root_label_from_text,
     computed_root_coverage,
     path_has_root_label_evidence,
+    texts_support_blocked_reason,
 )
 from skills.regression.ios_settings.sections import root_section_ids_for_canonical_labels
 
@@ -336,8 +337,11 @@ def validate_report(
             errors.append(f"blocked_pages[{idx}] has invalid texts")
             texts = []
         evidence_texts = [str(text) for text in texts]
-        if blocked_reason_from_texts(evidence_texts) != reason and (
-            blocked_reason_from_texts(visit_texts_by_path.get(path_key, [])) != reason
+        # Check the recorded reason has its OWN marker evidence (reason-specific),
+        # not "what reason do these texts imply first" — the always-visible iPad
+        # sidebar otherwise lets the Notifications markers shadow selector reasons.
+        if not texts_support_blocked_reason(evidence_texts, reason) and (
+            not texts_support_blocked_reason(visit_texts_by_path.get(path_key, []), reason)
         ):
             errors.append(
                 f"blocked_pages[{idx}] reason lacks matching text evidence: "

@@ -474,6 +474,18 @@ IPAD_BLOCKED_CHILD_NAVIGATION_MARKERS = (
     ),
 )
 
+# The iPad sidebar wraps "Home Screen & App Library" onto two lines. The trailing
+# "App Library" line is the same row as the leading "Home Screen &" line, not a
+# standalone navigable root — the row is reached via the leading fragment (see the
+# "Home Screen &" entry in EXPECTED_ROOT_NAV_TEXT). Offering the tail as its own
+# sidebar candidate taps into dead space and records a spurious tap_no_navigation,
+# so drop it from sidebar candidates. Matched on the compacted form because OCR
+# reads the wrapped line as either "App Library" or "AppLibrary".
+IPAD_SIDEBAR_WRAPPED_TAIL_FRAGMENTS = frozenset({"App Library", "App 资源库"})
+_IPAD_SIDEBAR_WRAPPED_TAIL_COMPACT = frozenset(
+    compact_text(fragment).casefold() for fragment in IPAD_SIDEBAR_WRAPPED_TAIL_FRAGMENTS
+)
+
 
 def _blocked_child_navigation_reason_from_texts(
     texts: list[str] | tuple[str, ...],
@@ -1533,6 +1545,13 @@ class IPadSettingsPolicy(SettingsPolicy):
                     sidebar_right=sidebar_right,
                 )
             if not text or text in seen:
+                continue
+            if (
+                allow_sensitive_root_labels
+                and compact_text(text).casefold() in _IPAD_SIDEBAR_WRAPPED_TAIL_COMPACT
+            ):
+                # Wrapped tail of the "Home Screen & App Library" sidebar row, not a
+                # standalone navigable root; the row is reached via "Home Screen &".
                 continue
             if current_detail_title and (
                 self.title_matches_navigation_label(current_detail_title, text)

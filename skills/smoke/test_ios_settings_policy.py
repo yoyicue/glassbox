@@ -990,6 +990,80 @@ def test_ipad_sidebar_search_page_does_not_match_top_search_field():
 
 
 @pytest.mark.smoke
+def test_ipad_sidebar_drops_wrapped_app_library_tail_candidate():
+    # iPad wraps "Home Screen & App Library" onto two sidebar lines. The trailing
+    # "App Library" line is the same row as the leading "Home Screen &" line, not a
+    # standalone navigable root; offering it as its own candidate taps dead space
+    # and records a spurious tap_no_navigation. The row is reached via "Home Screen &".
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Home Screen &", 66, 360, w=118),
+            # OCR reads the wrapped tail without the space; both forms must drop.
+            _el("AppLibrary", 66, 382, w=90),
+            _el("Camera", 66, 620, w=52),
+        ],
+    )
+
+    labels = [
+        (candidate.text or "").strip()
+        for candidate in policy.safe_navigation_candidates(
+            scene,
+            allow_sensitive_root_labels=True,
+            allow_known_without_affordance=True,
+        )
+    ]
+
+    assert "Home Screen &" in labels
+    assert "Camera" in labels
+    assert "AppLibrary" not in labels
+    assert "App Library" not in labels
+
+
+@pytest.mark.smoke
+def test_expected_blocked_reasons_includes_ipad_selector_reasons():
+    # The verifier whitelist is derived from the iPad superset of blocked-child
+    # markers, so iPad-only block reasons must be accepted; otherwise a legitimate
+    # read-only skip of an iPad selector/customization/dynamic page fails verify.
+    from skills.regression.ios_settings.reporting import EXPECTED_BLOCKED_REASONS
+
+    for reason in (
+        "control centre customization/reset rows",
+        "home screen layout selector rows",
+        "multitasking layout selector rows",
+        "wallpaper customization rows",
+        "game center profile/social rows",
+        "dynamic app list rows",
+    ):
+        assert reason in EXPECTED_BLOCKED_REASONS, reason
+
+
+@pytest.mark.smoke
+def test_texts_support_blocked_reason_is_reason_specific_under_ipad_sidebar():
+    # The iPad split view always shows the full sidebar, so the Notifications row
+    # markers ("Sounds", "Alerts", …) are satisfied on every page. The blocked-page
+    # evidence check must confirm the page's OWN reason, not the first marker that
+    # happens to match the contaminating sidebar.
+    from skills.regression.ios_settings.reporting import texts_support_blocked_reason
+
+    home_screen_texts = [
+        # sidebar (always visible) — includes Notifications + Sounds + Wallpaper
+        "General", "Notifications", "Sounds", "Wallpaper", "Home Screen & App Library",
+        # detail pane: the Home Screen layout selector rows
+        "Home Screen & App Library", "Newly Downloaded Apps", "Add to Home Screen",
+        "App Library Only", "Use Large App Icons",
+    ]
+    assert texts_support_blocked_reason(home_screen_texts, "home screen layout selector rows")
+    # Sidebar-only evidence (the page name but none of its detail rows) must NOT
+    # pass — the reason needs its own row evidence, not just the sidebar label.
+    sidebar_only = ["General", "Notifications", "Sounds", "Wallpaper", "Home Screen & App Library"]
+    assert not texts_support_blocked_reason(sidebar_only, "home screen layout selector rows")
+
+
+@pytest.mark.smoke
 def test_ipad_empty_top_search_panel_is_not_root_sidebar():
     policy = IPadSettingsPolicy()
     scene = Scene(
