@@ -485,8 +485,12 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   opportunistic correction only. *large*
 - [ ] **CUQ-3.8** A single noisy correction pair immediately biases a whole control
   bucket; no magnitude clamp / variance gate. *medium*
-- [ ] **CUQ-3.9** `phone_model` and the linear-fit constants are independent config
-  with no consistency check. *quick-win*
+- [x] **CUQ-3.9** `phone_model` and the linear-fit constants are independent config
+  with no consistency check. *quick-win* — DONE: `PicoKVMEffector._warn_on_inconsistent_fit`
+  surfaces (via `fit_calibration_warning` + a loguru warning) the case where an
+  iPad target is left on the static iPhone fit with no crop to derive from and
+  no explicit `GLASSBOX_PICOKVM_ABS_*` override — taps would be systematically
+  off. Test covers iPad-no-crop (warns) vs derived/override/iPhone (silent).
 
 ### Capture robustness
 

@@ -14,6 +14,8 @@ import time
 from collections.abc import Iterable
 from urllib.parse import urlparse
 
+from loguru import logger
+
 from glassbox.effector import ActionResult, BackendCapabilities, PreflightResult
 from glassbox.effectors.picokvm.config import PicoKVMEffectorConfig
 from glassbox.effectors.picokvm.keymap import char_to_key
@@ -74,8 +76,43 @@ class PicoKVMEffector:
         self._abs_to_phone_scale_x = float(self.config.abs_to_phone_scale_x)
         self._abs_to_phone_scale_y = float(self.config.abs_to_phone_scale_y)
         self._apply_crop_calibration(crop)
+        self.fit_calibration_warning: str | None = None
+        self._warn_on_inconsistent_fit()
         self._connected = False
         self._wheel_activation_status: str | None = None
+
+    def _warn_on_inconsistent_fit(self) -> None:
+        """CUQ-3.9: phone_model and the absolute-pointer fit are independent
+        config with no consistency check. Warn (and expose) when an iPad target
+        is left on the static iPhone fit — no crop was available to derive from
+        and no explicit GLASSBOX_PICOKVM_ABS_* override was set — since taps will
+        then be systematically off."""
+        if self.coordinate_space != "frame_px" or not self._is_ipad_target():
+            return
+        on_static_iphone_fit = (
+            self._abs_origin_offset_x == float(self.config.abs_origin_offset_x)
+            and self._abs_origin_offset_y == float(self.config.abs_origin_offset_y)
+            and self._abs_to_phone_scale_x == float(self.config.abs_to_phone_scale_x)
+            and self._abs_to_phone_scale_y == float(self.config.abs_to_phone_scale_y)
+        )
+        fields_set = set(getattr(self.config, "model_fields_set", set()) or ())
+        has_explicit_override = bool(
+            fields_set
+            & {
+                "abs_to_phone_scale_x",
+                "abs_to_phone_scale_y",
+                "abs_origin_offset_x",
+                "abs_origin_offset_y",
+            }
+        )
+        if on_static_iphone_fit and not has_explicit_override:
+            self.fit_calibration_warning = (
+                f"PicoKVM device_model={self._device_model!r} is an iPad but the "
+                "absolute-pointer fit is the static iPhone calibration (no crop to "
+                "derive from, no GLASSBOX_PICOKVM_ABS_* override) — taps will likely "
+                "be off. Provide a calibrated crop or explicit ABS_* values."
+            )
+            logger.warning(self.fit_calibration_warning)
 
     def connect(self) -> None:
         self.rpc.ping()

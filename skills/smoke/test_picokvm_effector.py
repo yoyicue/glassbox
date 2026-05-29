@@ -401,6 +401,41 @@ def test_picokvm_ipad_crop_calibration_does_not_leak_through_shared_config():
 
 
 @pytest.mark.smoke
+def test_picokvm_warns_when_ipad_left_on_static_iphone_fit():
+    """CUQ-3.9: an iPad model with no crop to derive from and no explicit ABS_*
+    override is on the static iPhone fit — surface that inconsistency."""
+    ipad = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    iphone = SimpleNamespace(model="iphone_17", phone_size=(1179, 2556), phone_points=(393, 852))
+    crop = SimpleNamespace(crop_bbox=(640, 48, 642, 984))
+
+    # iPad, no crop, no override -> inconsistent (static iPhone fit).
+    warned = PicoKVMEffector(
+        config=PicoKVMEffectorConfig(_env_file=None), rpc=FakeRpc(), device_geometry=ipad
+    )
+    assert warned.fit_calibration_warning is not None
+
+    # iPad WITH a crop -> fit is derived -> no warning.
+    derived = PicoKVMEffector(
+        config=PicoKVMEffectorConfig(_env_file=None), rpc=FakeRpc(), device_geometry=ipad, crop=crop
+    )
+    assert derived.fit_calibration_warning is None
+
+    # iPad with an explicit ABS_* override -> intentional -> no warning.
+    overridden = PicoKVMEffector(
+        config=PicoKVMEffectorConfig(_env_file=None, abs_origin_offset_x=640.0),
+        rpc=FakeRpc(),
+        device_geometry=ipad,
+    )
+    assert overridden.fit_calibration_warning is None
+
+    # iPhone on the static iPhone fit is consistent -> no warning.
+    iphone_eff = PicoKVMEffector(
+        config=PicoKVMEffectorConfig(_env_file=None), rpc=FakeRpc(), device_geometry=iphone
+    )
+    assert iphone_eff.fit_calibration_warning is None
+
+
+@pytest.mark.smoke
 def test_picokvm_iphone_opt_in_derives_calibration_from_crop():
     """CUQ-3.5: iPhone can unify onto crop-derivation via the opt-in flag. The
     crop-derived fit reproduces the hand-measured static fit (the static fit was
