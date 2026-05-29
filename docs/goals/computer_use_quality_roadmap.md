@@ -304,7 +304,30 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   VLM answer the expectation directly ("is text X visible? / what page is this?").
 
 ### CUQ-1.4 — Candidate executor discards the resolved center and re-resolves the bare label
-- [ ] **medium · effort medium**
+- [~] **medium · effort medium** — RE-SCOPED AFTER CODE AUDIT: the live path is
+  better than the gap implies and the residual is non-live + rig-gated, so no
+  new code ships here.
+  - The **main tap path** (`tap_text` / `tap_element`) already actuates the
+    resolved element's `box.center` (actuation.py `preferred_point or
+    element.box.center`) — it does *not* re-resolve, so there is no bug there.
+  - The **live MCP `explore` path** uses the Settings policy
+    (`open_phone(app=...)` → `RuntimeSettingsPolicy`), whose `candidates()` is
+    built from **deduplicated `visible_texts` strings**, not resolved elements —
+    it has no single resolved center to carry, so the duplicate-label ambiguity
+    is inherent. That ambiguity is exactly what **CUQ-1.5's `strict_target_matching`
+    guard already mitigates** (the executor's `tap_text(label)` then prefers the
+    closest-length row / escalates instead of taking find_text's first match).
+    So CUQ-1.4 is effectively **subsumed by CUQ-1.5** for the live path.
+  - The "candidate carries a precise resolved center" scenario is the **generic
+    crawl `TapCandidate`** (`candidates.py` center-bearing), used only by the
+    *generic runner* policy (`crawl_policies.py`, returns dicts). Those dict
+    candidates are silently dropped by `_policy_candidates`' `isinstance(...,
+    NavigationCandidate)` filter, so that path taps nothing today.
+  - **Remaining (non-live, rig-gated):** thread the center through
+    `NavigationCandidate` + stop dropping dict candidates + tap the center — but
+    that flips the generic-runner explore from scroll-only to tapping (a real
+    behavior change) and needs on-rig validation of coordinate-space correctness
+    and the disambiguation choice. Deferred rather than shipping an inert field.
 - Gap: `ai.py:937 _execute_candidate` calls `tap_text(candidate.label)` even
   though the candidate already carries a precise resolved center
   (`candidates.py:29`). The label is re-resolved through `find_text`'s first-match
