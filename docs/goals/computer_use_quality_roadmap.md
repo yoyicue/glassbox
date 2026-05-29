@@ -655,8 +655,20 @@ every change on the Step-0 harness; ship behind a flag, then default-on.
   verdict reads off a fresh frame on PicoKVM; no-op on other backends and
   `swipe_xy` respects a caller-set settle strategy (`setdefault`). Test in
   `test_effector_integration.py`.
-- [ ] **CUQ-3.13** No H.264 liveness/garble detection or bounded reconnect loop
-  (one read-failure path is two attempts then raise). *medium*
+- [x] **CUQ-3.13** No H.264 liveness/garble detection or bounded reconnect loop
+  (one read-failure path is two attempts then raise). *medium* — DONE
+  (flag-gated, default-off): `cfg.robust_capture` (env
+  `GLASSBOX_PICOKVM_ROBUST_CAPTURE`) routes `snapshot()` through `_robust_snapshot`
+  — a bounded reconnect loop (`snapshot_reconnect_attempts`, default 4) that
+  rejects partial/garbled decodes (`_frame_looks_decoded`, the CUQ-3.10 std
+  floor) AND read failures, reopening the stream with linear backoff between
+  tries, so a transiently stalled/smeared stream recovers instead of returning a
+  corrupt frame or raising after two tries. Default off keeps the existing
+  2-attempt path byte-identical (verified: a flat frame is still returned in
+  default mode). Tests in `test_picokvm_frame_source.py` (recovers-after-garble,
+  raises-on-budget-exhaustion, default-returns-flat). **Remaining:** on-rig tune
+  the attempt budget/backoff; a frozen-stream (identical-frame) liveness signal
+  is deferred (ambiguous against a legitimately static screen).
 - [ ] **CUQ-3.14** Per-frame letterbox auto-refresh can silently re-fit the crop to
   transient content and drift coordinates. *medium*
 

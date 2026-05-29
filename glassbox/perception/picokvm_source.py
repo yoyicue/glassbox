@@ -71,6 +71,8 @@ class PicoKVMFrameSource:
     def snapshot(self) -> Frame:
         if self._capture is None:
             self.open()
+        if getattr(self.config, "robust_capture", False):
+            return self._robust_snapshot()
         last_error = None
         for attempt in range(2):
             ok, img = self._capture.read()
@@ -80,6 +82,31 @@ class PicoKVMFrameSource:
             self.close()
             time.sleep(0.15)
             self.open()
+        raise RuntimeError(f"PicoKVM video stream read failed: {self.stream_url}: {last_error}")
+
+    def _robust_snapshot(self) -> Frame:
+        """CUQ-3.13: bounded reconnect + H.264 garble detection.
+
+        Returns the first fully-decoded frame within the attempt budget,
+        reopening the stream with linear backoff after a read failure OR a
+        partial/garbled decode (so a transiently stalled or smeared stream
+        recovers instead of returning a corrupt frame or raising after two
+        tries). Raises only when the whole budget is exhausted.
+        """
+        attempts = max(1, int(getattr(self.config, "snapshot_reconnect_attempts", 4)))
+        last_error = None
+        for attempt in range(attempts):
+            ok, img = self._capture.read()
+            if ok and img is not None:
+                if self._frame_looks_decoded(img):
+                    return Frame(img=img, ts=time.monotonic())
+                last_error = f"attempt {attempt + 1} returned a garbled/partial frame"
+            else:
+                last_error = f"attempt {attempt + 1} returned no frame"
+            if attempt < attempts - 1:
+                self.close()
+                time.sleep(0.15 * (attempt + 1))
+                self.open()
         raise RuntimeError(f"PicoKVM video stream read failed: {self.stream_url}: {last_error}")
 
     def fresh_snapshot(self) -> Frame:

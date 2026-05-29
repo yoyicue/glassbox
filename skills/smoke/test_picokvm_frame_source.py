@@ -121,3 +121,56 @@ def test_fresh_snapshot_falls_back_to_snapshot_when_settle_budget_exhausted():
     # fresh_snapshot never returned a garbled frame; it deferred to snapshot(),
     # whose reopen-on-empty-read recovered a real frame.
     assert result.img is recovered
+
+
+@pytest.mark.smoke
+def test_robust_snapshot_recovers_after_garbled_frames(monkeypatch):
+    """CUQ-3.13: in robust_capture mode, snapshot() rejects garbled/partial
+    decodes and reconnects up to the budget, returning the first clean frame."""
+    monkeypatch.setattr("glassbox.perception.picokvm_source.time.sleep", lambda *_: None)
+    recovered = _decoded(7)
+    captures = [
+        FakeCapture([(True, _flat())]),    # attempt 1: garbled -> reconnect
+        FakeCapture([(False, None)]),      # attempt 2: read failed -> reconnect
+        FakeCapture([(True, recovered)]),  # attempt 3: clean
+    ]
+    cfg = PicoKVMEffectorConfig(
+        _env_file=None, base_url="http://picokvm.test",
+        robust_capture=True, snapshot_reconnect_attempts=4,
+    )
+    source = PicoKVMFrameSource(config=cfg, capture_factory=lambda _u: captures.pop(0))
+
+    result = source.snapshot()
+
+    assert result.img is recovered
+
+
+@pytest.mark.smoke
+def test_robust_snapshot_raises_when_budget_exhausted(monkeypatch):
+    """CUQ-3.13: a stream that never produces a clean frame raises after the
+    bounded reconnect budget instead of returning a corrupt frame."""
+    monkeypatch.setattr("glassbox.perception.picokvm_source.time.sleep", lambda *_: None)
+    captures = [FakeCapture([(True, _flat())]) for _ in range(3)]
+    cfg = PicoKVMEffectorConfig(
+        _env_file=None, base_url="http://picokvm.test",
+        robust_capture=True, snapshot_reconnect_attempts=3,
+    )
+    source = PicoKVMFrameSource(config=cfg, capture_factory=lambda _u: captures.pop(0))
+
+    with pytest.raises(RuntimeError, match="garbled/partial"):
+        source.snapshot()
+
+
+@pytest.mark.smoke
+def test_default_snapshot_returns_first_ok_frame_even_if_flat():
+    """CUQ-3.13 default-safe: with robust_capture off (default), snapshot()
+    returns the first ok frame WITHOUT garble rejection (byte-identical)."""
+    flat = _flat()
+    captures = [FakeCapture([(True, flat)])]
+    cfg = PicoKVMEffectorConfig(_env_file=None, base_url="http://picokvm.test")
+    assert cfg.robust_capture is False
+    source = PicoKVMFrameSource(config=cfg, capture_factory=lambda _u: captures.pop(0))
+
+    result = source.snapshot()
+
+    assert result.img is flat

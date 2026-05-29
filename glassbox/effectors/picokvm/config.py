@@ -166,6 +166,18 @@ class PicoKVMEffectorConfig(BaseSettings):
 
     stream_path: str = "/video/stream"
 
+    robust_capture: bool = False
+    """CUQ-3.13: enable a bounded reconnect loop with H.264 garble detection for
+    snapshot(). Off (default) keeps the existing 2-attempt path byte-identical.
+    On, snapshot() reads up to snapshot_reconnect_attempts times, rejecting
+    partial/garbled decodes (near-flat frames, std <= the decoded-frame floor)
+    and reopening the stream with linear backoff between tries, so a transiently
+    stalled/garbled stream recovers instead of returning a corrupt frame or
+    raising after two tries. Validate on-rig before default-on."""
+    snapshot_reconnect_attempts: int = 4
+    """CUQ-3.13: max read+reconnect attempts for snapshot() in robust_capture
+    mode (ignored when robust_capture is off)."""
+
     @field_validator("base_url")
     @classmethod
     def _strip_base_url(cls, value: str) -> str:
