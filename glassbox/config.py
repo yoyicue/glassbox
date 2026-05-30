@@ -392,6 +392,36 @@ class AgentConfig(BaseSettings):
     on-rig (iPad mini 7 en/HK) before flipping. Env
     GLASSBOX_SETTINGS_SEARCH_ROOT_FALLBACK_SIDEBAR."""
 
+    settings_search_recovery_decouple_exempt: bool = False
+    """Decouple the device-unavailable exemption from search-recovery robustness.
+    The 4 iPad-absent roots (蜂窝网络/操作按钮/待机显示/紧急SOS) are exempted ONLY
+    when search recovery searches them and logs `search_no_result`. But when
+    return_to_settings_root flakes (intermittent back-nav) mid-loop, the recovery
+    loop today early-`return`s and never searches the roots after the flake — so
+    they get no evidence and are falsely counted required-missing (false coverage
+    failure, run-to-run flap). When on, a return-to-root failure skips ONLY the
+    current root and the loop CONTINUES searching the rest (bounded by a small
+    consecutive-failure cap), so every device-unavailable root still gets its real
+    search attempt and genuine `search_no_result`. Strictly evidence-preserving:
+    a reachable root that search CAN open is still entered (not exempted), and only
+    the 4-label iPad set is ever exemptable — no blind/profile exempt. Default off
+    keeps the early-return behavior byte-identical; validate on-rig before flipping.
+    Env GLASSBOX_SETTINGS_SEARCH_RECOVERY_DECOUPLE_EXEMPT."""
+
+    settings_return_root_via_memory: bool = False
+    """Smart, app-agnostic return-to-root via the UTG screen-memory graph instead
+    of the Settings-hardcoded back-nav state machine. When on, return_to_settings_root
+    first tries the generic memory path: recognize() the current screen as a known
+    node, ask the graph for the shortest learned safe path to the root page_id
+    (memory.path_to_page, allowed_actions={back,home}), and replay those learned
+    edges — verifying arrival by node identity (robust to the iPad split-view root
+    detector oscillating). Falls back to today's hardcoded scene-kind state machine
+    when the screen is unrecognized / no path exists / replay does not land on root.
+    The mechanism is generic (the root page_id is a parameter), realizing
+    "smartly return to the app root" rather than Settings-specific rules. Default
+    off keeps the hardcoded path byte-identical; needs memory enabled (it is, per
+    run); validate on-rig before flipping. Env GLASSBOX_SETTINGS_RETURN_ROOT_VIA_MEMORY."""
+
     letterbox_refresh_consecutive: int = 2
     """CUQ-3.14: how many consecutive frames must agree on a NEW letterbox crop
     bbox before auto-refresh commits it (hysteresis). >1 stops a single

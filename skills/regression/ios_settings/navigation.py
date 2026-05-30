@@ -189,6 +189,17 @@ def _sidebar_root_fallback_enabled() -> bool:
     return bool(getattr(get_config(), "settings_search_root_fallback_sidebar", False))
 
 
+def _decouple_exemption_enabled() -> bool:
+    from glassbox.config import get_config
+
+    return bool(getattr(get_config(), "settings_search_recovery_decouple_exempt", False))
+
+
+# Cap on consecutive return-to-root failures tolerated before giving up the search
+# recovery (Part A: a flaky back-nav skips one root, not all later roots).
+_MAX_RETURN_TO_ROOT_FAILURES = 3
+
+
 def _open_root_via_sidebar_fallback(
     phone, label: str, actions: SettingsNavigationActions
 ) -> bool:
@@ -547,6 +558,7 @@ def crawl_missing_root_pages_via_search(
         limits_hit.add("settings_search_unavailable")
         return
     exempt = actions.entry_exempt_sections(visits, phone=phone)
+    return_to_root_failures = 0
     for label in actions.expected_root_labels:
         if label not in actions.root_coverage(visits, phone=phone)["missing"] or label in exempt:
             continue  # device-unavailable / coverage-only → never searchable
@@ -591,6 +603,18 @@ def crawl_missing_root_pages_via_search(
             try:
                 actions.return_to_settings_root(phone)
             except SettingsRootUnreachable:
+                # Part A (decouple): a flaky back-nav must not starve the roots
+                # AFTER this one of their search attempt — the device-unavailable
+                # roots still need a real search_no_result to be exempted. Skip
+                # only THIS root and keep searching the rest (bounded, so a truly
+                # stuck crawl still gives up). Default off → byte-identical early
+                # return.
+                return_to_root_failures += 1
+                if (
+                    _decouple_exemption_enabled()
+                    and return_to_root_failures <= _MAX_RETURN_TO_ROOT_FAILURES
+                ):
+                    continue
                 return
         if len(visits) >= actions.max_pages_visited:
             limits_hit.add("max_pages")

@@ -76,15 +76,35 @@ class SettingsRootUnreachable(RuntimeError):
     intermittent on AssistiveTouch, so a single return failure is recoverable."""
 
 
+def _return_root_via_memory_enabled() -> bool:
+    from glassbox.config import get_config
+
+    return bool(getattr(get_config(), "settings_return_root_via_memory", False))
+
+
 def return_to_settings_root(phone, actions: SettingsRecoveryActions) -> None:
     last_state: tuple[str, tuple[str, ...]] | None = None
     repeated_state_count = 0
+    via_memory = _return_root_via_memory_enabled()
 
     for retry_index in range(12):
         scene = phone.perceive()
         kind = actions.scene_kind(scene, phone=phone)
         if kind == "settings_root" or actions.scene_is_settings_root(scene):
             return
+
+        # Smart, app-agnostic return FIRST: recognize the current screen in the
+        # UTG screen-memory graph and replay the shortest learned edge toward the
+        # root page_id, before the Settings-hardcoded scene-kind heuristic. Arrival
+        # is re-checked at the top of the next iteration by node/root identity, so
+        # this is robust to the iPad split-view root detector oscillating. Falls
+        # through to the heuristic when the screen is unrecognized, no learned path
+        # exists, or the edge op is not replayable. Flag-gated (default off →
+        # the memory return stays only in the `unknown`-scene fallback below).
+        if via_memory and actions.try_memory_return_to_settings_root(phone, scene):
+            if actions.settle_settings_root_or_exit_search(phone):
+                return
+            continue
 
         state = actions.return_state_signature(scene, phone=phone)
         if state == last_state:

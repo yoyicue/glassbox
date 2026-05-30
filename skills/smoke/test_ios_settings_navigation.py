@@ -3114,3 +3114,101 @@ def test_sidebar_root_fallback_flag_gates(monkeypatch):
         assert settings_navigation._sidebar_root_fallback_enabled() is True
     finally:
         get_config.cache_clear()
+
+
+# —— Part A: decouple device-unavailable exemption from search-recovery flakes ——
+@pytest.mark.smoke
+@pytest.mark.parametrize("flag_on,expected_recorded", [(False, ["A"]), (True, ["A", "C"])])
+def test_search_recovery_decouple_keeps_searching_after_return_to_root_flake(
+    flag_on, expected_recorded, monkeypatch
+):
+    """A flaky return_to_settings_root must skip only the current root, not starve
+    the device-unavailable roots after it of their `search_no_result` evidence."""
+    from glassbox.config import get_config
+    from skills.regression.ios_settings.recovery import SettingsRootUnreachable
+
+    recorded: list[str] = []
+
+    def _open(_phone, label):  # device-unavailable A,C fail; reachable B opens
+        return label == "B"
+
+    def _record(_nf, *, path, scene, text, reason):
+        assert reason == "search_no_result"
+        recorded.append(text)
+
+    def _r2r(_phone):
+        raise SettingsRootUnreachable("flake")
+
+    actions = SimpleNamespace(
+        entry_exempt_sections=lambda visits, phone: set(),
+        expected_root_labels=["A", "B", "C"],
+        root_coverage=lambda visits, phone: {"missing": ["A", "B", "C"]},
+        open_root_label_via_search=_open,
+        record_navigation_failure=_record,
+        crawl_current_page=lambda *a, **k: None,
+        return_to_settings_root=_r2r,
+        max_pages_visited=10_000,
+    )
+    phone = SimpleNamespace(perceive=lambda: object(), _ios_settings_search_unavailable=False)
+    if flag_on:
+        monkeypatch.setenv("GLASSBOX_SETTINGS_SEARCH_RECOVERY_DECOUPLE_EXEMPT", "1")
+    else:
+        monkeypatch.delenv("GLASSBOX_SETTINGS_SEARCH_RECOVERY_DECOUPLE_EXEMPT", raising=False)
+    get_config.cache_clear()
+    try:
+        settings_navigation.crawl_missing_root_pages_via_search(
+            phone, visits=[], seen_sigs=set(), max_depth=1, limits_hit=set(),
+            blocked_pages=[], rejected_candidates=[], navigation_failures=[], actions=actions,
+        )
+    finally:
+        get_config.cache_clear()
+    assert recorded == expected_recorded
+
+
+# —— UTG-path return: try the learned memory path to root FIRST when flagged ——
+@pytest.mark.smoke
+@pytest.mark.parametrize("flag_on", [False, True])
+def test_return_to_settings_root_tries_memory_first_when_flagged(flag_on, monkeypatch):
+    from glassbox.config import get_config
+    from skills.regression.ios_settings import recovery as settings_recovery
+
+    calls = {"memory": 0, "detail": 0}
+    state = {"at_root": False}
+
+    def _memory(_phone, _scene):
+        calls["memory"] += 1
+        state["at_root"] = True  # the replayed learned edge reaches root
+        return True
+
+    def _detail(_phone, _scene):
+        calls["detail"] += 1
+        state["at_root"] = True
+        return True
+
+    actions = SimpleNamespace(
+        scene_kind=lambda scene, phone: "settings_root" if state["at_root"] else "settings_detail",
+        scene_is_settings_root=lambda scene: state["at_root"],
+        try_memory_return_to_settings_root=_memory,
+        settle_settings_root_or_exit_search=lambda _phone, **k: state["at_root"],
+        return_state_signature=lambda scene, phone: ("sig", ()),
+        action_intent=lambda *a, **k: nullcontext(),
+        is_settings_search_scene=lambda scene: False,
+        scene_looks_like_settings_detail=lambda scene: True,
+        is_safe_top_left_back_fallback_scene=lambda scene, phone: False,
+        return_from_settings_detail_state=_detail,
+        is_settings_root=lambda phone: state["at_root"],
+    )
+    phone = SimpleNamespace(perceive=lambda: object())
+    if flag_on:
+        monkeypatch.setenv("GLASSBOX_SETTINGS_RETURN_ROOT_VIA_MEMORY", "1")
+    else:
+        monkeypatch.delenv("GLASSBOX_SETTINGS_RETURN_ROOT_VIA_MEMORY", raising=False)
+    get_config.cache_clear()
+    try:
+        settings_recovery.return_to_settings_root(phone, actions)
+    finally:
+        get_config.cache_clear()
+    if flag_on:
+        assert calls["memory"] == 1 and calls["detail"] == 0  # memory path reached root first
+    else:
+        assert calls["memory"] == 0 and calls["detail"] == 1  # heuristic path (memory not tried first)
