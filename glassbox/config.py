@@ -167,6 +167,33 @@ class AgentConfig(BaseSettings):
     ocr: Literal["vision", "ocrmac"] = "vision"
     """OCR engine: vision = direct PyObjC call (default) / ocrmac = legacy fallback path."""
 
+    # CUQ — live-camera OCR hardening. A live camera preview (e.g. the 操作按钮
+    # Action-Button carousel) makes OCR emit chaotic, high-volume text; feeding
+    # that pathological set to every downstream scene/text regex is what once
+    # stalled perceive (a rare regex hang inside OCR text handling). These bound
+    # the INPUT at the OCR→element chokepoint so no real iOS screen is affected
+    # (limits are far above any genuine UI) while pathological frames are clipped.
+    max_ocr_elements: int = 800
+    """Cap on OCR text elements kept per frame (extras after this count are
+    dropped). A real iPhone/iPad screen yields well under this; only a chaotic
+    live-camera frame exceeds it, and such a frame should classify `unknown`
+    (recovery backs out) anyway. 0 disables the cap. env GLASSBOX_MAX_OCR_ELEMENTS."""
+
+    max_ocr_text_chars: int = 1024
+    """Per-element OCR text is truncated to this many characters before any
+    downstream regex/text-match runs, so a single multi-KB garbage token cannot
+    drive pathological regex cost. Real UI labels/paragraphs are far shorter.
+    0 disables truncation. env GLASSBOX_MAX_OCR_TEXT_CHARS."""
+
+    ocr_timeout: float = 0.0
+    """Watchdog: max seconds for one OCR recognize() call before perceive gives
+    up and returns an empty element set (→ `unknown` scene → recovery backs out)
+    instead of hanging. Effective because Apple Vision releases the GIL during
+    recognition (a pure-Python `re` stall cannot be interrupted this way — the
+    element/char caps above are the defense for that). Default 0 = disabled
+    (default path byte-identical; spawns no watchdog thread); enable on the live
+    rig where the camera-preview hang exists. env GLASSBOX_OCR_TIMEOUT."""
+
     icon_detector: str = "classical"
     """Icon detector backend selector."""
 
@@ -322,6 +349,22 @@ class AgentConfig(BaseSettings):
     words (允许 / 访问 / App / 通知 …) is mistaken for Settings. Env
     GLASSBOX_STRICT_SETTINGS_DETAIL. Default off (tightening a core recognizer
     risks scrolled-detail recall); validate on-rig before enabling."""
+
+    settings_locale_fuzzy_resolution: bool = True
+    """Settings root-label crediting under a non-zh locale: when on,
+    `canonical_expected_root_label` (a) sources its alias vocabulary from the
+    single-source-of-truth `SectionVocab` (locale-correct EN display + aliases)
+    and (b) matches OCR text against those alias keys with an OCR-tolerant fuzzy
+    tier (margin + short-key + prefix-truncation guards), so a 1-letter English
+    OCR garble of a physically-reached required page (Screen → Screem, Accessibility
+    → Accessibilityl) still resolves to its section instead of logging a spurious
+    `search_no_result`. zh runs keep today's exact zh resolver (no change, and the
+    en-only gate avoids the zh-vocab legacy recursion), so this only affects en/non-zh
+    locales. Default ON: rig-validated on iPad mini 7 en/HK (2026-05-30 A/B,
+    required_missing 2→1, zero regressions / zero over-crediting; the safety gate
+    `is_safe_known_navigation_label` rides on this resolver and was unchanged for
+    bare singulars). Set 0 to restore exact-only resolution.
+    Env GLASSBOX_SETTINGS_LOCALE_FUZZY_RESOLUTION."""
 
     letterbox_refresh_consecutive: int = 2
     """CUQ-3.14: how many consecutive frames must agree on a NEW letterbox crop

@@ -77,6 +77,62 @@ def test_canonical_label_credits_case_flipped_english_aliases(garbled, canonical
     assert canonical_label(garbled, labels, aliases=aliases) == canonical
 
 
+# —— fuzzy_aliases tier (Fix 1): OCR-tolerant alias-key match, default-OFF ——
+_EN_ALIASES = {
+    "Screen Time": "屏幕使用时间",
+    "Accessibility": "辅助功能",
+    "General": "通用",
+    "Bluetooth": "蓝牙",
+    "Sounds": "声音与触感",
+    "Sounds & Haptics": "声音与触感",
+    "Notifications": "通知",
+}
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("garbled,canonical", [
+    ("Screem Time", "屏幕使用时间"),   # n→m substitution
+    ("Screen/Time", "屏幕使用时间"),   # space read as '/'
+    ("Accessibilityl", "辅助功能"),    # trailing-glyph garble
+    ("Bluetootn", "蓝牙"),             # h→n substitution
+    ("Genera1", "通用"),               # l→1 substitution
+])
+def test_canonical_label_fuzzy_aliases_rescues_ocr_garble(garbled, canonical):
+    """A 1-letter English OCR garble of a reached page resolves to its section
+    when fuzzy_aliases is on (the alias key is matched fuzzily, not exact-only)."""
+    assert canonical_label(garbled, _ROOTS, aliases=_EN_ALIASES, fuzzy_aliases=True) == canonical
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("garbled", ["Screem Time", "Accessibilityl", "Bluetootn", "Genera1"])
+def test_canonical_label_fuzzy_aliases_off_is_byte_identical(garbled):
+    """Default (fuzzy_aliases=False): the garble does NOT resolve — the existing
+    exact-only alias behavior is unchanged."""
+    assert canonical_label(garbled, _ROOTS, aliases=_EN_ALIASES) is None
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("text", [
+    "Sound",          # strict prefix of alias "Sounds" → truncation, not garble
+    "Notification",   # strict prefix of "Notifications"
+    "Genera",         # strict prefix of "General"
+    "SE", "08", "9E", "Sou",  # too short to fuzzy-match safely
+    "xyz乱码",        # junk
+])
+def test_canonical_label_fuzzy_aliases_rejects_overmatch_and_junk(text):
+    """The guards (prefix-truncation reject + short-key floor + score margin)
+    stop a bare singular or short noise from over-crediting a required root."""
+    assert canonical_label(text, _ROOTS, aliases=_EN_ALIASES, fuzzy_aliases=True) is None
+
+
+@pytest.mark.smoke
+def test_canonical_label_fuzzy_aliases_keeps_exact_alias():
+    """Exact alias keys still resolve under fuzzy_aliases (the fuzzy tier only
+    runs after the exact tiers miss)."""
+    assert canonical_label("Sounds", _ROOTS, aliases=_EN_ALIASES, fuzzy_aliases=True) == "声音与触感"
+    assert canonical_label("Screen Time", _ROOTS, aliases=_EN_ALIASES, fuzzy_aliases=True) == "屏幕使用时间"
+
+
 @pytest.mark.smoke
 def test_canonical_label_confusion_fallback_respects_fuzzy_threshold():
     assert canonical_label("隐私与安全", ("隐私与安全性",), fuzzy=0.99) is None

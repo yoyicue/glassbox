@@ -696,6 +696,9 @@ def build_phone(
             op.strip() for op in (cfg.semantic_plan_ops or "").split(",") if op.strip()
         ),
         detect_icons_in_perceive=cfg.detect_icons_in_perceive,
+        max_ocr_elements=cfg.max_ocr_elements,
+        max_ocr_text_chars=cfg.max_ocr_text_chars,
+        ocr_timeout=cfg.ocr_timeout,
         strict_target_matching=cfg.strict_target_matching,
         require_home_icon_grid=cfg.require_home_icon_grid,
         reverify_fresh_frame=cfg.reverify_fresh_frame,

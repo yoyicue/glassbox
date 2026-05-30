@@ -73,3 +73,65 @@ def test_greater_china_english_is_pack_bound(text, section, _locale):
 @pytest.mark.parametrize("text,section", [*_EN_BASE.items(), *_GREATER_CHINA_EN.items()])
 def test_greater_china_en_vocab_resolves_to_section(text, section, region):
     assert section_vocab_for("en", region).resolve(text) is section
+
+
+# —— settings_locale_fuzzy_resolution flag (Fix 1+2): OCR-garble crediting ——
+@pytest.mark.smoke
+@pytest.mark.parametrize("garble,section", [
+    ("Screem Time", RootSection.SCREEN_TIME),    # the exact en-HK regression rows
+    ("Screen/Time", RootSection.SCREEN_TIME),
+    ("Accessibilityl", RootSection.ACCESSIBILITY),
+    ("Bluetootn", RootSection.BLUETOOTH),
+    ("Genera1", RootSection.GENERAL),
+])
+def test_en_ocr_garble_credits_required_page_when_flag_on(garble, section, _locale, monkeypatch):
+    monkeypatch.setenv("GLASSBOX_SETTINGS_LOCALE_FUZZY_RESOLUTION", "1")
+    _locale("en", "HK")  # _locale cache_clears after env is set
+    canon = P.canonical_expected_root_label(garble)
+    assert canon is not None and root_section_for_canonical_label(canon) is section
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("garble", ["Screem Time", "Accessibilityl", "Bluetootn", "Genera1"])
+def test_en_ocr_garble_not_credited_when_flag_off(garble, _locale, monkeypatch):
+    """Flag explicitly off restores exact-only resolution — the garble does not
+    resolve (the default is now ON, so this opts out)."""
+    monkeypatch.setenv("GLASSBOX_SETTINGS_LOCALE_FUZZY_RESOLUTION", "0")
+    _locale("en", "HK")
+    assert P.canonical_expected_root_label(garble) is None
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("text", ["Sound", "Notification", "Genera", "SE"])
+def test_en_fuzzy_does_not_overmatch_bare_singular(text, _locale, monkeypatch):
+    """A bare singular / short token must NOT be credited as a root by the fuzzy
+    tier, and — since the safety gate `is_safe_known_navigation_label` rides on
+    this resolver — the flag must not make that gate any more permissive than the
+    flag-off baseline (the prefix-truncation + short-key guards)."""
+    monkeypatch.setenv("GLASSBOX_SETTINGS_LOCALE_FUZZY_RESOLUTION", "0")
+    _locale("en", "HK")  # flag off baseline
+    safe_off = P.is_safe_known_navigation_label(text)
+    assert P.canonical_expected_root_label(text) is None
+    monkeypatch.setenv("GLASSBOX_SETTINGS_LOCALE_FUZZY_RESOLUTION", "1")
+    _locale("en", "HK")  # flag on
+    assert P.canonical_expected_root_label(text) is None  # not over-credited
+    assert P.is_safe_known_navigation_label(text) == safe_off  # no new permissiveness
+
+
+@pytest.mark.smoke
+def test_en_exact_labels_still_resolve_with_flag_on(_locale, monkeypatch):
+    monkeypatch.setenv("GLASSBOX_SETTINGS_LOCALE_FUZZY_RESOLUTION", "1")
+    _locale("en", "HK")
+    for text, section in _EN_BASE.items():
+        canon = P.canonical_expected_root_label(text)
+        assert canon is not None and root_section_for_canonical_label(canon) is section, text
+
+
+@pytest.mark.smoke
+def test_zh_resolver_unchanged_when_flag_on(_locale, monkeypatch):
+    """The en fuzzy tier is gated to non-zh locales (avoids the zh-vocab legacy
+    recursion); a zh run is unaffected and an EN garble does not resolve under zh."""
+    monkeypatch.setenv("GLASSBOX_SETTINGS_LOCALE_FUZZY_RESOLUTION", "1")
+    _locale("zh-Hans", None)
+    assert P.canonical_expected_root_label("待机見示") == "待机显示"
+    assert P.canonical_expected_root_label("Screem Time") is None

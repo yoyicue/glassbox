@@ -159,6 +159,41 @@ def looks_like_status_bar_clock(text: str | None) -> bool:
     return bool(_CLOCK_CORE_RE.match(compact) or _CLOCK_NOISE_RE.match(raw))
 
 
+# Below this compacted length an alias key is too short to fuzzy-match safely
+# (2-char OCR junk like "SE"/"08"/"9E" could otherwise score against a real key).
+_FUZZY_ALIAS_MIN_CHARS = 4
+
+
+def _fuzzy_alias_canonical(
+    stripped: str,
+    aliases: Mapping[str, str],
+    label_set: tuple[str, ...],
+    *,
+    min_score: float,
+) -> str | None:
+    """OCR-tolerant match of `stripped` to an alias KEY whose canonical is in
+    `label_set`. Guards (all required): a short-input/short-key floor, the
+    `match_known_label` score+margin (ambiguous → None), and a prefix-truncation
+    reject so a shorter input that is a strict prefix of the key (`Sound` of
+    `Sounds`, `Notification` of `Notifications`) is NOT credited — that is a
+    truncated/different row, not a garble of the full label."""
+    norm = compact_text(stripped)
+    if len(norm) < _FUZZY_ALIAS_MIN_CHARS:
+        return None
+    keys = [
+        key
+        for key, canonical in aliases.items()
+        if canonical in label_set and len(compact_text(key)) >= _FUZZY_ALIAS_MIN_CHARS
+    ]
+    best_key = match_known_label(stripped, keys, min_score=min_score, max_leading_noise=0)
+    if best_key is None:
+        return None
+    best_norm = compact_text(best_key)
+    if best_norm != norm and best_norm.startswith(norm) and len(norm) < len(best_norm):
+        return None  # input is a strict shorter prefix of the key → truncation, not garble
+    return aliases[best_key]
+
+
 def canonical_label(
     text: str | None,
     labels: Iterable[str],
@@ -166,12 +201,21 @@ def canonical_label(
     aliases: Mapping[str, str] | None = None,
     fuzzy: float = 0.82,
     max_leading_noise_chars: int = 0,
+    fuzzy_aliases: bool = False,
 ) -> str | None:
     """Return the canonical label matched by OCR text.
 
     `max_leading_noise_chars` handles a common OCR failure where a small icon
     or glyph is glued to the beginning of a row label. Keep it small; this is
     only for visual noise, not substring search.
+
+    `fuzzy_aliases` (default off, so the call is byte-identical) adds an
+    OCR-tolerant tier over the ALIAS KEYS (not just the closed `labels` set):
+    after the exact alias tiers miss, a 1-letter English OCR garble
+    (`Screen`→`Screem`, `Accessibility`→`Accessibilityl`) is matched to its
+    alias key — guarded by `match_known_label`'s score+margin, a short-key floor,
+    and a prefix-truncation reject so a bare singular (`Sound`, `Notification`)
+    does NOT over-match its plural alias.
     """
     stripped = norm_text(text)
     if not stripped:
@@ -191,6 +235,10 @@ def canonical_label(
                 or ocr_normalized_alias == ocr_compact_text(alias_text)
             ):
                 return canonical
+        if fuzzy_aliases:
+            fuzzy_hit = _fuzzy_alias_canonical(stripped, aliases, label_set, min_score=fuzzy)
+            if fuzzy_hit is not None:
+                return fuzzy_hit
     normalized = compact_text(stripped)
     label_pairs = tuple((label, compact_text(label)) for label in label_set)
     for label, candidate in label_pairs:

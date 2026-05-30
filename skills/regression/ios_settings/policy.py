@@ -396,6 +396,25 @@ def _active_section_vocab():
 
     cfg = get_config()
     return section_vocab_for(cfg.language, cfg.region)
+
+
+def _section_vocab_root_aliases() -> dict[str, str]:
+    """Active-locale display labels + aliases → today's zh canonical, sourced
+    from the single-source-of-truth `SectionVocab`. Read as STATIC terms
+    (`all_terms`, never `resolve()`) so the zh vocab's `legacy_zh` fallback
+    cannot recurse back into `canonical_expected_root_label`. Caller gates this
+    to non-zh locales, so in practice it enriches the EN vocabulary."""
+    vocab = _active_section_vocab()
+    section_to_zh = {
+        root_section_for_canonical_label(zh): zh for zh in EXPECTED_ROOT_NAV_TEXT_ZH
+    }
+    out: dict[str, str] = {}
+    for section, zh in section_to_zh.items():
+        if section is None:
+            continue
+        for term in vocab.all_terms(section):
+            out[term] = zh
+    return out
 # Whole-label-only non-nav/off-limits tokens. These are unsafe only when the
 # ENTIRE label matches: as substrings they over-match real rows ("On" inside
 # "NotificatiOns"/"ActiOnButtOn") and even Chinese ("关" inside "关于本机"/About).
@@ -935,12 +954,26 @@ class SettingsPolicy:
         return any(self.matches_label(title, alias) for alias in NAV_TITLE_ALIASES.get(label, ()))
 
     def canonical_expected_root_label(self, text: str) -> str | None:
+        from glassbox.config import get_config
+
+        cfg = get_config()
+        # Gated to (flag on AND non-zh locale): zh keeps its battle-tested exact
+        # resolver and flag-off stays byte-identical. Under en, source the alias
+        # vocab from the SectionVocab and turn on the OCR-tolerant fuzzy alias
+        # tier so a 1-letter OCR garble of a reached required page still credits.
+        en_fuzzy = bool(getattr(cfg, "settings_locale_fuzzy_resolution", False)) and not str(
+            cfg.language or ""
+        ).startswith("zh")
+        aliases = self._active_root_aliases()
+        if en_fuzzy:
+            aliases = {**_section_vocab_root_aliases(), **aliases}
         return canonical_label(
             text,
             EXPECTED_ROOT_NAV_TEXT_ZH,
-            aliases=self._active_root_aliases(),
+            aliases=aliases,
             fuzzy=0.82,
             max_leading_noise_chars=1,
+            fuzzy_aliases=en_fuzzy,
         )
 
     @staticmethod

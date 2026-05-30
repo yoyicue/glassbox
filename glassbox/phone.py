@@ -31,6 +31,7 @@ also instantiate it directly.
 from __future__ import annotations
 
 import re
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -190,6 +191,9 @@ class Phone:
         letterbox_refresh_consecutive: int = 1,
         semantic_plan_ops: frozenset[str] | None = None,
         detect_icons_in_perceive: bool = False,
+        max_ocr_elements: int = 800,
+        max_ocr_text_chars: int = 1024,
+        ocr_timeout: float = 0.0,
         strict_target_matching: bool = False,
         require_home_icon_grid: bool = False,
         reverify_fresh_frame: bool = False,
@@ -237,6 +241,12 @@ class Phone:
         # CUQ-2.1: inject no-text icon regions into perceive() so icon-only
         # controls become tap candidates. Flag-gated (default off).
         self._detect_icons_in_perceive = bool(detect_icons_in_perceive)
+        # Live-camera OCR hardening: cap OCR output volume (default-on, generous
+        # — only a chaotic camera-preview frame ever exceeds it) and an opt-in
+        # recognize() watchdog (default off; enable on the live rig).
+        self._max_ocr_elements = max(0, int(max_ocr_elements))
+        self._max_ocr_text_chars = max(0, int(max_ocr_text_chars))
+        self._ocr_timeout = max(0.0, float(ocr_timeout))
         # CUQ-1.5: ambiguity-aware find_text (closest-length substring + fuzzy
         # margin). Flag-gated (default off) — changes which element a tap hits.
         self._strict_target_matching = bool(strict_target_matching)
@@ -1165,9 +1175,69 @@ class Phone:
         return scene
 
     def _recognize_elements(self, frame: Frame) -> list[UIElement]:
-        if getattr(self.ocr, "contract", None) == "TextRegionOCR":
-            return ocr_results_to_elements(self.ocr.recognize(frame))
-        return ocr_results_to_elements(self.ocr.recognize(frame.img))
+        elements = self._run_ocr(frame)
+        return self._bound_ocr_elements(elements)
+
+    def _run_ocr(self, frame: Frame) -> list[UIElement]:
+        """OCR the frame, optionally under a wall-clock watchdog.
+
+        The watchdog (``ocr_timeout`` > 0) runs recognize() in a daemon thread
+        and, if it overruns, returns an empty element set so perceive yields an
+        `unknown` scene (recovery backs out) instead of hanging. It works only
+        because Apple Vision releases the GIL during recognition; a pure-Python
+        regex stall downstream cannot be interrupted this way — the element/char
+        caps in `_bound_ocr_elements` are the defense for that. Default off, so
+        the bare path below is byte-identical to before."""
+
+        def _recognize() -> list[UIElement]:
+            if getattr(self.ocr, "contract", None) == "TextRegionOCR":
+                return ocr_results_to_elements(self.ocr.recognize(frame))
+            return ocr_results_to_elements(self.ocr.recognize(frame.img))
+
+        if self._ocr_timeout <= 0:
+            return _recognize()
+
+        result: list[list[UIElement]] = []
+        error: list[BaseException] = []
+
+        def _worker() -> None:
+            try:
+                result.append(_recognize())
+            except BaseException as exc:  # surfaced on the calling thread below
+                error.append(exc)
+
+        worker = threading.Thread(target=_worker, name="glassbox-ocr", daemon=True)
+        worker.start()
+        worker.join(self._ocr_timeout)
+        if worker.is_alive():
+            logger.warning(
+                "OCR recognize() exceeded {}s watchdog; treating frame as empty "
+                "(scene will classify unknown → recovery)", self._ocr_timeout,
+            )
+            return []
+        if error:
+            raise error[0]
+        return result[0] if result else []
+
+    def _bound_ocr_elements(self, elements: list[UIElement]) -> list[UIElement]:
+        """Clip pathological OCR output (a live-camera preview emits chaotic,
+        high-volume text) so downstream scene/text regexes never see it. No real
+        iOS screen approaches these limits, so this is a no-op on normal frames;
+        on a chaotic frame the clipped set classifies `unknown` (recovery backs
+        out) anyway. Both caps default-on (generous); 0 disables either."""
+        cap = self._max_ocr_elements
+        if cap and len(elements) > cap:
+            logger.warning(
+                "OCR returned {} elements (> cap {}); clipping — likely a "
+                "live-camera/noise frame", len(elements), cap,
+            )
+            elements = elements[:cap]
+        max_chars = self._max_ocr_text_chars
+        if max_chars:
+            for el in elements:
+                if el.text is not None and len(el.text) > max_chars:
+                    el.text = el.text[:max_chars]
+        return elements
 
     def _maybe_detect_icons(self, scene: Scene, frame_img) -> None:
         """CUQ-2.1 (flag-gated): inject no-text icon regions as tappable image
