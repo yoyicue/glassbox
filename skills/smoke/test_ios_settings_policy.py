@@ -1354,6 +1354,69 @@ def test_ipad_settings_policy_prefers_exact_root_search_result_over_alias(monkey
         get_config.cache_clear()
 
 
+def _accessibility_search_scene():
+    """iPad deep-search for "Accessibility": a pure root row PLUS many
+    `Accessibility → Child` breadcrumbs above it (mirrors the live rig OCR)."""
+    return _scene(
+        _el("Q Accessibilityl", 54, 92, w=130),                       # search field
+        _el("Accessibility → VoiceOver", 72, 150, w=150, ty="button"),  # breadcrumb (topmost)
+        _el("Accessibility → Switch", 72, 204, w=118, ty="button"),     # breadcrumb
+        _el("Accessibility →> Keyboards", 72, 256, w=140, ty="button"), # breadcrumb (OCR `→>`)
+        _el("Accessibility", 72, 320, w=68, ty="button"),               # the real root row
+    )
+
+
+@pytest.mark.smoke
+def test_ipad_search_breadcrumb_child_wins_when_flag_off(monkeypatch):
+    """Documents the bug: with the flag OFF the breadcrumb ties the root at rank 0
+    and the higher-on-screen breadcrumb wins (selection path byte-identical)."""
+    monkeypatch.setenv("GLASSBOX_LANGUAGE", "en")
+    monkeypatch.setenv("GLASSBOX_REGION", "HK")
+    monkeypatch.delenv("GLASSBOX_SETTINGS_SEARCH_REJECT_BREADCRUMB_RESULT", raising=False)
+    get_config.cache_clear()
+    try:
+        result = IPadSettingsPolicy().find_search_result(_accessibility_search_scene(), "辅助功能")
+        assert result is not None
+        assert "→" in result.text and result.text != "Accessibility"  # a child breadcrumb won
+    finally:
+        get_config.cache_clear()
+
+
+@pytest.mark.smoke
+def test_ipad_search_rejects_breadcrumb_and_picks_root_when_flag_on(monkeypatch):
+    """Fix 3: with the flag ON the breadcrumbs are rejected and the genuine root
+    row is selected, even though it is lower on screen than the breadcrumbs."""
+    monkeypatch.setenv("GLASSBOX_LANGUAGE", "en")
+    monkeypatch.setenv("GLASSBOX_REGION", "HK")
+    monkeypatch.setenv("GLASSBOX_SETTINGS_SEARCH_REJECT_BREADCRUMB_RESULT", "1")
+    get_config.cache_clear()
+    try:
+        result = IPadSettingsPolicy().find_search_result(_accessibility_search_scene(), "辅助功能")
+        assert result is not None and result.text == "Accessibility"
+    finally:
+        get_config.cache_clear()
+
+
+@pytest.mark.smoke
+def test_ipad_search_breadcrumb_flag_keeps_normal_root_result(monkeypatch):
+    """No-regression: a normal root search (no breadcrumbs) still resolves to the
+    root with the flag ON — the guard only drops arrow-bearing crumbs."""
+    monkeypatch.setenv("GLASSBOX_LANGUAGE", "en")
+    monkeypatch.setenv("GLASSBOX_REGION", "HK")
+    monkeypatch.setenv("GLASSBOX_SETTINGS_SEARCH_REJECT_BREADCRUMB_RESULT", "1")
+    get_config.cache_clear()
+    try:
+        search = _scene(
+            _el("Sounds", 54, 92, w=64),
+            _el("Sounds", 72, 184, w=64, ty="button"),
+            _el("Sounds & Haptics", 72, 232, w=132, ty="button"),
+            _el("Background Sounds", 72, 280, w=140, ty="button"),
+        )
+        assert IPadSettingsPolicy().find_search_result(search, "声音与触感").text == "Sounds & Haptics"
+    finally:
+        get_config.cache_clear()
+
+
 @pytest.mark.smoke
 def test_ipad_settings_policy_taps_primary_line_for_compact_screen_time_result(monkeypatch):
     monkeypatch.setenv("GLASSBOX_LANGUAGE", "en")

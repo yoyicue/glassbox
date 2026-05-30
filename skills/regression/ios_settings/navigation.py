@@ -183,6 +183,44 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
     return False
 
 
+def _sidebar_root_fallback_enabled() -> bool:
+    from glassbox.config import get_config
+
+    return bool(getattr(get_config(), "settings_search_root_fallback_sidebar", False))
+
+
+def _open_root_via_sidebar_fallback(
+    phone, label: str, actions: SettingsNavigationActions
+) -> bool:
+    """Fix 3b: recover a root that Settings search cannot open via the sidebar.
+
+    The iPad deep-search for some roots (Accessibility) surfaces ONLY deep-child
+    results — every row is a `Root → Child` breadcrumb (some with the arrow
+    dropped by OCR), so there is no tappable root result. This one-shot fallback
+    returns to the root list, scrolls the sidebar to the root row, taps it, and
+    verifies the opened title. It reuses the existing wheel-scroll seek,
+    landing-retry tap, and title-check — no new primitive."""
+    with contextlib.suppress(Exception):
+        actions.return_to_settings_root(phone)
+    # Backing out of a wrongly-opened deep search child (e.g. a breadcrumb tap
+    # opened Accessibility → … → Top Button) can land directly on the target
+    # root's own detail page — its parent. On the iPad the sidebar stays visible,
+    # so `return_to_settings_root` treats that as "at root" and stops there. If we
+    # are already on the target, verify it instead of scrolling the sidebar away.
+    with contextlib.suppress(Exception):
+        phone.invalidate_perceive_cache()
+    if _scene_title_matches_requested_label(phone.perceive(), label, actions):
+        return True
+    row = open_visible_or_scroll_to_row(phone, (label,), actions)
+    if row is None:
+        return False
+    if not tap_settings_row(phone, row, actions):
+        return False
+    with contextlib.suppress(Exception):
+        phone.invalidate_perceive_cache()
+    return _scene_title_matches_requested_label(phone.perceive(), label, actions)
+
+
 def _tap_search_result(
     phone,
     label: str,
@@ -514,17 +552,22 @@ def crawl_missing_root_pages_via_search(
             continue  # device-unavailable / coverage-only → never searchable
         print(f"[ios_settings] search root page {label}", flush=True)
         if not actions.open_root_label_via_search(phone, label):
-            actions.record_navigation_failure(
-                navigation_failures,
-                path=("Settings",),
-                scene=phone.perceive(),
-                text=label,
-                reason="search_no_result",
-            )
-            if getattr(phone, "_ios_settings_search_unavailable", False):
-                limits_hit.add("settings_search_unavailable")
-                return
-            continue
+            if _sidebar_root_fallback_enabled() and _open_root_via_sidebar_fallback(
+                phone, label, actions
+            ):
+                print(f"[ios_settings] sidebar fallback opened {label}", flush=True)
+            else:
+                actions.record_navigation_failure(
+                    navigation_failures,
+                    path=("Settings",),
+                    scene=phone.perceive(),
+                    text=label,
+                    reason="search_no_result",
+                )
+                if getattr(phone, "_ios_settings_search_unavailable", False):
+                    limits_hit.add("settings_search_unavailable")
+                    return
+                continue
         try:
             actions.crawl_current_page(
                 phone,

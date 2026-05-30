@@ -3029,3 +3029,88 @@ def test_return_one_level_falls_back_when_picokvm_back_gesture_is_unsupported(mo
     assert phone.back_gestures == 1
     assert phone.keys == []
     assert phone.taps == [(24, 82)]
+
+
+# —— Fix 3b: sidebar fallback when Settings search cannot open a root ——
+def _fallback_actions():
+    # page_title returns the scene itself (each perceived "scene" IS a title str).
+    def _canon(text):
+        return {"Accessibility": "辅助功能", "辅助功能": "辅助功能"}.get((text or "").strip())
+
+    return SimpleNamespace(
+        return_to_settings_root=lambda phone: None,
+        page_title=lambda scene: scene,
+        canonical_expected_root_label=_canon,
+    )
+
+
+def _fallback_phone(titles):
+    seq = iter(titles)
+    return SimpleNamespace(perceive=lambda: next(seq), invalidate_perceive_cache=lambda: None)
+
+
+@pytest.mark.smoke
+def test_sidebar_root_fallback_succeeds_when_backout_already_on_target(monkeypatch):
+    # The pre-scroll title check: backing out of the wrong search child landed on
+    # the Accessibility detail page already → success without scrolling.
+    monkeypatch.setattr(settings_navigation, "open_visible_or_scroll_to_row",
+                        lambda *a, **k: pytest.fail("should not scroll when already on target"))
+    assert settings_navigation._open_root_via_sidebar_fallback(
+        _fallback_phone(["Accessibility"]), "辅助功能", _fallback_actions()
+    ) is True
+
+
+@pytest.mark.smoke
+def test_sidebar_root_fallback_scrolls_and_taps_when_not_yet_on_target(monkeypatch):
+    row = _el("Accessibility", 72, 300, w=68, ty="list_item")
+    monkeypatch.setattr(settings_navigation, "open_visible_or_scroll_to_row", lambda *a, **k: row)
+    monkeypatch.setattr(settings_navigation, "tap_settings_row", lambda *a, **k: True)
+    # pre-check title "Sounds" (no match) → scroll → tap → post-tap "Accessibility"
+    assert settings_navigation._open_root_via_sidebar_fallback(
+        _fallback_phone(["Sounds", "Accessibility"]), "辅助功能", _fallback_actions()
+    ) is True
+
+
+@pytest.mark.smoke
+def test_sidebar_root_fallback_returns_false_when_row_not_found(monkeypatch):
+    monkeypatch.setattr(settings_navigation, "open_visible_or_scroll_to_row", lambda *a, **k: None)
+    monkeypatch.setattr(settings_navigation, "tap_settings_row", lambda *a, **k: True)
+    assert settings_navigation._open_root_via_sidebar_fallback(
+        _fallback_phone(["Sounds"]), "辅助功能", _fallback_actions()
+    ) is False
+
+
+@pytest.mark.smoke
+def test_sidebar_root_fallback_returns_false_on_wrong_opened_title(monkeypatch):
+    row = _el("Accessibility", 72, 300, w=68, ty="list_item")
+    monkeypatch.setattr(settings_navigation, "open_visible_or_scroll_to_row", lambda *a, **k: row)
+    monkeypatch.setattr(settings_navigation, "tap_settings_row", lambda *a, **k: True)
+    # pre-check "Sounds" (no match) → scroll/tap → opened a child "Keyboards & Typing" → reject
+    assert settings_navigation._open_root_via_sidebar_fallback(
+        _fallback_phone(["Sounds", "Keyboards & Typing"]), "辅助功能", _fallback_actions()
+    ) is False
+
+
+@pytest.mark.smoke
+def test_sidebar_root_fallback_returns_false_when_tap_fails(monkeypatch):
+    row = _el("Accessibility", 72, 300, w=68, ty="list_item")
+    monkeypatch.setattr(settings_navigation, "open_visible_or_scroll_to_row", lambda *a, **k: row)
+    monkeypatch.setattr(settings_navigation, "tap_settings_row", lambda *a, **k: False)
+    assert settings_navigation._open_root_via_sidebar_fallback(
+        _fallback_phone(["Sounds"]), "辅助功能", _fallback_actions()
+    ) is False
+
+
+@pytest.mark.smoke
+def test_sidebar_root_fallback_flag_gates(monkeypatch):
+    from glassbox.config import get_config
+
+    monkeypatch.delenv("GLASSBOX_SETTINGS_SEARCH_ROOT_FALLBACK_SIDEBAR", raising=False)
+    get_config.cache_clear()
+    try:
+        assert settings_navigation._sidebar_root_fallback_enabled() is False
+        monkeypatch.setenv("GLASSBOX_SETTINGS_SEARCH_ROOT_FALLBACK_SIDEBAR", "1")
+        get_config.cache_clear()
+        assert settings_navigation._sidebar_root_fallback_enabled() is True
+    finally:
+        get_config.cache_clear()

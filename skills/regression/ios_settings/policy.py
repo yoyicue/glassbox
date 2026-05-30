@@ -32,6 +32,11 @@ _STATUS_BAR_CLOCK_NOISE_RE = re.compile(
     r"^\d{1,2}[:：.]?[\dOolBSIxX]{2,4}[A-Za-z€₺$¢()（）]*$",
 )
 
+# Fix 3: a "Root → Child" deep-search breadcrumb carries one of these arrows. The
+# class mirrors the split set in `_search_result_primary_label` plus the `→>`
+# double-glyph the live OCR emits ("Accessibility →> Keyboards").
+_SEARCH_BREADCRUMB_ARROW_RE = re.compile(r"[→>›＞❯]")
+
 UNSAFE_OR_NON_NAV_TEXT = (
     "飞行模式", "Airplane Mode",
     "VPN",
@@ -1393,8 +1398,12 @@ class IPadSettingsPolicy(SettingsPolicy):
             return None
         viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
         _w, h = viewport_size
+        from glassbox.config import get_config
         from glassbox.ipados.scene import sidebar_right_x
 
+        reject_breadcrumb = bool(
+            getattr(get_config(), "settings_search_reject_breadcrumb_result", False)
+        )
         sidebar_right = sidebar_right_x(viewport_size[0])
         matches: list[tuple[int, UIElement]] = []
         for element in scene.elements:
@@ -1405,12 +1414,27 @@ class IPadSettingsPolicy(SettingsPolicy):
             if cy < int(h * 0.12) or cy > int(h * 0.94) or cx > sidebar_right + 24:
                 continue
             primary = self._search_result_primary_label(text)
-            if (
-                self.canonical_expected_root_label(primary) == label
-                or self.canonical_expected_root_label(text) == label
-                or self.matches_label(primary, label)
+            text_match = (
+                self.canonical_expected_root_label(text) == label
                 or self.matches_label(text, label)
+            )
+            primary_match = (
+                self.canonical_expected_root_label(primary) == label
+                or self.matches_label(primary, label)
+            )
+            # Fix 3: a `Root → Child` breadcrumb matches only via its leading
+            # segment (primary); tapping it opens the child, never the root. When
+            # enabled, accept such a row ONLY if the FULL text resolves to the
+            # root — so the genuine root row wins instead of a higher-on-screen
+            # breadcrumb tying it at rank 0.
+            if (
+                reject_breadcrumb
+                and primary_match
+                and not text_match
+                and _SEARCH_BREADCRUMB_ARROW_RE.search(text)
             ):
+                continue
+            if text_match or primary_match:
                 if self._is_query_suggestion_result_line(scene, element, label):
                     continue
                 anchor = self._search_result_row_anchor(scene, element, label)

@@ -366,6 +366,32 @@ class AgentConfig(BaseSettings):
     bare singulars). Set 0 to restore exact-only resolution.
     Env GLASSBOX_SETTINGS_LOCALE_FUZZY_RESOLUTION."""
 
+    settings_search_reject_breadcrumb_result: bool = False
+    """Fix 3: in the iPad Settings deep-search results, reject `Root → Child`
+    breadcrumb rows (e.g. `Accessibility → Switch Control`) as root results.
+    Their leading segment matches the requested root, so today they tie the real
+    root row at rank 0 and a higher-on-screen breadcrumb can win — tapping it
+    opens the CHILD page (Keyboards & Typing), never the root, → a spurious
+    `search_no_result` on a required page. When on, a row is accepted as a root
+    result only if its FULL text resolves to the root (the breadcrumb's primary-
+    segment match is dropped when the text carries an arrow), so the genuine root
+    row wins. Default off keeps the selection path byte-identical (changes which
+    element a search-result tap targets); validate on-rig (iPad mini 7 en/HK)
+    before flipping. Env GLASSBOX_SETTINGS_SEARCH_REJECT_BREADCRUMB_RESULT."""
+
+    settings_search_root_fallback_sidebar: bool = False
+    """Fix 3b: when Settings search cannot open a required root, recover via the
+    sidebar instead of logging `search_no_result`. The iPad deep-search for some
+    roots (Accessibility) surfaces ONLY deep-child results (every row is a
+    `Root → Child` breadcrumb, some with the arrow dropped by OCR), so there is no
+    tappable root result to select — search structurally cannot open the root.
+    When on, after the search attempt fails the crawler returns to the root list,
+    scrolls the sidebar to the root row, taps it, and verifies the opened title
+    (one-shot, title-gated, reuses the existing wheel-scroll + landing-retry +
+    title-check machinery). Default off (adds a recovery navigation); validate
+    on-rig (iPad mini 7 en/HK) before flipping. Env
+    GLASSBOX_SETTINGS_SEARCH_ROOT_FALLBACK_SIDEBAR."""
+
     letterbox_refresh_consecutive: int = 2
     """CUQ-3.14: how many consecutive frames must agree on a NEW letterbox crop
     bbox before auto-refresh commits it (hysteresis). >1 stops a single
