@@ -3150,10 +3150,8 @@ def test_search_recovery_decouple_keeps_searching_after_return_to_root_flake(
         max_pages_visited=10_000,
     )
     phone = SimpleNamespace(perceive=lambda: object(), _ios_settings_search_unavailable=False)
-    if flag_on:
-        monkeypatch.setenv("GLASSBOX_SETTINGS_SEARCH_RECOVERY_DECOUPLE_EXEMPT", "1")
-    else:
-        monkeypatch.delenv("GLASSBOX_SETTINGS_SEARCH_RECOVERY_DECOUPLE_EXEMPT", raising=False)
+    # Default is now ON, so the off-case opts out explicitly.
+    monkeypatch.setenv("GLASSBOX_SETTINGS_SEARCH_RECOVERY_DECOUPLE_EXEMPT", "1" if flag_on else "0")
     get_config.cache_clear()
     try:
         settings_navigation.crawl_missing_root_pages_via_search(

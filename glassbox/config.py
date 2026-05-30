@@ -392,21 +392,23 @@ class AgentConfig(BaseSettings):
     on-rig (iPad mini 7 en/HK) before flipping. Env
     GLASSBOX_SETTINGS_SEARCH_ROOT_FALLBACK_SIDEBAR."""
 
-    settings_search_recovery_decouple_exempt: bool = False
+    settings_search_recovery_decouple_exempt: bool = True
     """Decouple the device-unavailable exemption from search-recovery robustness.
     The 4 iPad-absent roots (蜂窝网络/操作按钮/待机显示/紧急SOS) are exempted ONLY
     when search recovery searches them and logs `search_no_result`. But when
     return_to_settings_root flakes (intermittent back-nav) mid-loop, the recovery
-    loop today early-`return`s and never searches the roots after the flake — so
-    they get no evidence and are falsely counted required-missing (false coverage
+    loop used to early-`return` and never search the roots after the flake — so
+    they got no evidence and were falsely counted required-missing (false coverage
     failure, run-to-run flap). When on, a return-to-root failure skips ONLY the
     current root and the loop CONTINUES searching the rest (bounded by a small
     consecutive-failure cap), so every device-unavailable root still gets its real
     search attempt and genuine `search_no_result`. Strictly evidence-preserving:
     a reachable root that search CAN open is still entered (not exempted), and only
-    the 4-label iPad set is ever exemptable — no blind/profile exempt. Default off
-    keeps the early-return behavior byte-identical; validate on-rig before flipping.
-    Env GLASSBOX_SETTINGS_SEARCH_RECOVERY_DECOUPLE_EXEMPT."""
+    the 4-label iPad set is ever exemptable — no blind/profile exempt. Default ON:
+    rig-validated on iPad mini 7 en/HK (2026-05-30, 5-round sample, required_missing
+    == [] in 5/5 incl. 2 rounds that still hit return_to_root_failed, vs 2/5 before).
+    Set 0 to restore the early-return behavior. Env
+    GLASSBOX_SETTINGS_SEARCH_RECOVERY_DECOUPLE_EXEMPT."""
 
     settings_return_root_via_memory: bool = False
     """Smart, app-agnostic return-to-root via the UTG screen-memory graph instead
