@@ -3210,3 +3210,33 @@ def test_return_to_settings_root_tries_memory_first_when_flagged(flag_on, monkey
         assert calls["memory"] == 1 and calls["detail"] == 0  # memory path reached root first
     else:
         assert calls["memory"] == 0 and calls["detail"] == 1  # heuristic path (memory not tried first)
+
+
+# —— Option 3: replay learned "back" edges (not just home / back-shortcut) ——
+@pytest.mark.smoke
+def test_memory_return_replays_back_edge():
+    edge = SimpleNamespace(action_op="back", success_rate=1.0, action_kwargs={})
+    memory = SimpleNamespace(
+        recognize=lambda scene: SimpleNamespace(screen_id="scr_X"),
+        path_to_page=lambda from_id, page, **k: [edge],
+    )
+    calls = []
+
+    def _back():
+        calls.append("back")
+        return ActionResult(ok=True, backend="noop", connected=True, semantic_status="succeeded")
+
+    phone = SimpleNamespace(memory=memory, back_gesture=_back)
+    assert walkthrough._try_memory_return_to_settings_root(phone, object()) is True
+    assert calls == ["back"]  # the op="back" edge was replayed via back_gesture
+
+
+@pytest.mark.smoke
+def test_memory_return_skips_non_replayable_edge():
+    edge = SimpleNamespace(action_op="tap", success_rate=1.0, action_kwargs={})
+    memory = SimpleNamespace(
+        recognize=lambda scene: SimpleNamespace(screen_id="x"),
+        path_to_page=lambda from_id, page, **k: [edge],
+    )
+    phone = SimpleNamespace(memory=memory, back_gesture=lambda: pytest.fail("tap edge is not replayable"))
+    assert walkthrough._try_memory_return_to_settings_root(phone, object()) is False

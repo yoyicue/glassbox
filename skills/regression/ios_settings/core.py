@@ -468,6 +468,14 @@ def _try_memory_return_to_settings_root(phone, scene) -> bool:
         with _action_intent(phone, "return.memory.home", edge_success_rate=edge.success_rate):
             result = phone.home()
         return _record_action_verdict(phone, result)
+    if edge.action_op in {"back", "back_gesture"} and hasattr(phone, "back_gesture"):
+        # Option 3: the drill-down records back transitions as op="back" (6 in a
+        # real iPad graph) — replay them too, not just the "key" back-shortcut, so
+        # a learned back-edge to root is actually followed (back_gesture owns the
+        # backend-specific PicoKVM focus-prime + Cmd-[ sequence).
+        with _action_intent(phone, "return.memory.back_gesture", edge_success_rate=edge.success_rate):
+            result = phone.back_gesture()
+        return _record_action_verdict(phone, result)
     if edge.action_op == "key" and hasattr(phone, "key"):
         modifier = edge.action_kwargs.get("modifier")
         keycode = edge.action_kwargs.get("keycode")
