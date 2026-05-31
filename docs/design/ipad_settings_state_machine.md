@@ -489,6 +489,31 @@ hardened driver: `docs/goals/ipad_settings_l1_rig_ab_handoff.md`. (The first mat
 driver self-restarted and produced two concurrent runs on one rig; only the snapshotted
 `B_1`/`A_1` pair is clean — the handoff adds a single-instance lock.)
 
+⟦as-built rig rerun 2026-05-31⟧ **Median-backed A/B verdict on iPad mini 7:
+ship-negative; keep `GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION` default-off.** The
+hardened matrix driver and extractor completed 3 B + 3 A rows for en/HK and, after
+physically switching the iPad UI to Simplified Chinese, 3 B + 3 A rows for zh-Hans/CN.
+Valid artifacts: `artifacts/ios_settings/ab/results_20260531_165130.jsonl` (en/HK rows
+only) and `artifacts/ios_settings/ab/results_20260531_173903.jsonl` (zh-Hans/CN rows).
+The `zh-CN` rows in `20260531_165130` are invalid (unsupported locale pack), and
+`20260531_171315` is invalid for the locale verdict because the runner args were
+zh-Hans/CN while the physical device UI was still English.
+
+The primary L1 signal is still strong: median `entered_graph` is **B=7 vs A=0** in
+both locales, and median `root_to_detail` is **B=14/13 vs A=0** (en/HK / zh-Hans-CN).
+But the operational gate fails. en/HK B has rc/crash **2/3**, task completion **1/3**,
+and median `root_sigs=3` (over the <=2 collapse gate); zh-Hans/CN B has rc/crash
+**3/3**, task completion **0/3**, median `nav_proxy=0`, and median `visit_count=4`.
+The mandatory exemption cross-check also still fails in en/HK: B's
+`sidebar_absent`/`entry_exempt` set includes reachable roots
+(`声音与触感`, `专注模式`, `屏幕使用时间`, `Face ID与密码`, `隐私与安全性`) that were entered
+by another same-locale arm/round, so the sidebar-exhaustive oracle is still spurious
+under fling/recovery variance. zh-Hans/CN has no same-locale overlap, but only because
+both arms miss the same lower roots; that is not positive device-unavailable evidence.
+Conclusion: L1's graph projection is useful, but default-on is blocked by L4/root
+recovery and L2b sidebar-exhaustive reliability, plus the L1 sidebar-signature case-fold
+via the locale seam.
+
 **Rollout: flag-gated, default-off, rig-validated — exactly like Part A / Fix 3a/3b /
 Option 3.** ⟦review⟧ L1 changes UTG topology, so a census-green change could merge
 without the rig ever proving task improvement.

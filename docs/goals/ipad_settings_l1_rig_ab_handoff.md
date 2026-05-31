@@ -1,13 +1,67 @@
 # Handoff — iPad Settings L1 rig A/B: finish the validation
 
-Status: **L1 (+L2a/L3b-local/L4-first-move) implemented behind
-`GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION` (default-off) and structurally validated
-on the iPad mini 7 rig with n=1/arm. This handoff is the remaining work to reach a
-median-backed ship/no-ship decision on flipping the flag default-on.**
+Status: **COMPLETED 2026-05-31. T1/T2/T3 were run on the iPad mini 7 rig.
+Do not flip `GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION` default-on.** L1 is real
+(`entered_graph` and `root_to_detail` move only in B), but the median-backed gate is
+ship-negative because B is not stable enough: B crash/rc-nonzero is 2/3 on en/HK and
+3/3 on zh-Hans/CN, root signatures regress to median 3, zh-Hans/CN has median
+`nav_proxy=0`, and en/HK still fails the mandatory exemption cross-check.
 
 Owner before handoff: state-machine implementation + first rig pass (2026-05-31).
-Branch: **`settings-ipad-rig-ab`** (3 commits on top of `1069406`, not merged).
+Branch: **`settings-ipad-rig-ab`** (not merged; this handoff added uncommitted
+tooling/docs on top of the branch).
 All paths below are relative to repo root `/Users/biu/glassbox`.
+
+---
+
+## 0. Final result from this handoff
+
+**Valid evidence used for the decision**
+
+- en/HK physical English UI: `artifacts/ios_settings/ab/results_20260531_165130.jsonl`,
+  using only the six `locale=en-HK` rows. The `zh-CN` rows in the same file are invalid
+  because `zh-CN` is not a supported locale pack for this runner (`zh-Hans-CN` is).
+- zh-Hans/CN physical Simplified Chinese UI: the device was actually switched to Chinese
+  in Settings > Language & Region, then verified by OCR/screenshot
+  `artifacts/ios_settings/current_language_region_zh_applied.png` with text including
+  `设置`, `通用`, `语言与地区`, `简体中文`, `地区`, `日期格式`. Valid matrix:
+  `artifacts/ios_settings/ab/results_20260531_173903.jsonl`.
+- Discard `artifacts/ios_settings/ab/results_20260531_171315.jsonl`: it used
+  `zh-Hans/CN` runner args while the physical device UI was still English.
+
+**Median table (n=3 per arm per locale)**
+
+| locale | arm | rc/crash | task_completion | `entered_graph` med | `root_to_detail` med | `root_sigs` med | `nav_proxy` med | `required_missing_count` med | `visit_count` med |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| en-HK | B | 2/3 | 1/3 | **7** | **14** | **3** | 1.0 | 0 | 18 |
+| en-HK | A | 1/3 | 2/3 | 0 | 0 | 0 | 1.0 | 0 | 30 |
+| zh-Hans-CN | B | 3/3 | 0/3 | **7** | **13** | **3** | 0.0 | 0 | 4 |
+| zh-Hans-CN | A | 3/3 | 0/3 | 0 | 0 | 0 | 0.0 | 12 | 4 |
+
+**Verdict**
+
+- Positive signal: L1's graph-authoritative signal is real in both locales. B has
+  `entered_graph` median 7 and `root_to_detail` median 13-14; A stays at 0/0.
+- Blocking signal: default-on is not defensible. B still fails the operational gate:
+  rc/crash is high, `task_completion` is poor, root collapse is median 3 rather than
+  <=2, and zh-Hans/CN falls into low-visit/no-progress runs.
+- Mandatory exemption cross-check: en/HK still fails. B's `sidebar_absent` set
+  (`声音与触感`, `专注模式`, `屏幕使用时间`, `Face ID与密码`, `隐私与安全性`) overlaps roots
+  reached by A/B in the same locale, so those exemptions are spurious. zh-Hans/CN has no
+  same-locale overlap, but that is because both arms miss the same lower roots; it is not
+  a positive proof of device-unavailability.
+- Main contradiction to fix before another default-on attempt: **L4/root recovery and
+  L2b sidebar-exhaustive reliability, plus L1 sidebar-signature case-fold via the locale
+  seam.** L1 is useful, but the current rig behavior cannot distinguish "unavailable"
+  from "not reached" robustly enough.
+
+**Tooling delivered by this handoff**
+
+- `skills/regression/ios_settings/ab_extract.py`: rc-tolerant, always-one-line JSONL
+  extractor, including `sidebar_absent` and `entry_exempt`.
+- `skills/regression/ios_settings/ab_matrix.sh`: single-instance locked, per-stamp,
+  rc-tolerant A/B driver. Default locales are `en:HK zh-Hans:CN`.
+- `skills/smoke/test_ios_settings_ab_extract.py`: good/missing/truncated report coverage.
 
 ---
 
@@ -135,7 +189,7 @@ GLASSBOX_PHONE_MODEL=ipad_mini_7 GLASSBOX_PLATFORM=ipados GLASSBOX_PICOKVM=1 \
   uv run python -m skills.regression.ios_settings.diagnose --require-ready --json
 ```
 
-## 5. Tasks (in order)
+## 5. Historical task list (completed; see §0 for results)
 
 **T1 — Harden the matrix driver** (the §3 four properties). Starting point:
 
@@ -160,7 +214,7 @@ printf 'pid=%s host=%s stamp=%s\n' "$$" "$(hostname)" "$STAMP" > "$LOCK/owner"
 trap 'rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM   # release on normal exit AND on kill
 RESULTS="$AB/results_${STAMP}.jsonl"; : > "$RESULTS"
 ROUNDS=3
-LOCALES="en:HK zh:CN"
+LOCALES="en:HK zh-Hans:CN"
 
 run_one() {
   local arm="$1" round="$2" lang="$3" region="$4"
@@ -213,7 +267,7 @@ and so it's testable. Required behaviour:
 - Add a tiny smoke test feeding it (a) a good report, (b) a missing path, (c) a truncated
   JSON file, asserting one line out each time and `extraction_error` present for (b)/(c).
 
-**T2 — Run the matrix**: ≥3 B + ≥3 A per locale (en/HK **and** zh/CN), interleaved,
+**T2 — Run the matrix**: ≥3 B + ≥3 A per locale (en/HK **and** zh-Hans/CN), interleaved,
 back-to-back on the same device in one session. ~3 min/run → ~36 min for the full 4×3
 matrix. Watch `results_<stamp>.jsonl`.
 
