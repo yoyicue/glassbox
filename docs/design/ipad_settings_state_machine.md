@@ -475,9 +475,15 @@ evidence that L1 removes the C1 return-to-root failure (B recognizes the composi
 in-place via `scene_is_settings_root`, `recovery.py:93-94`; A has no root node and
 default-off `via_memory`, so its 12-retry heuristic fails after a fling overshoot). Two
 caveats the rig exposed: (a) the root's 2-vs-1 signature split is **OCR case drift on the
-sidebar text** (`BluetOOth`/`NOtificatiOns`) — an L3b gap (shipped L3b anchors *detail*
-pages only, not the sidebar text feeding the *root* signature); (b) the coverage gap is
-**L4 fling-overshoot**, orthogonal to L1. **n=1 is insufficient to flip the flag** — the
+sidebar text** (`BluetOOth`/`NOtificatiOns`) — this is an **L1-completion** item (the root
+signature is L1's own sub-item #2; the fix is an OCR case-fold on that sidebar text **at the
+locale seam**), *not* an L3b extension (L3b is detail-page signatures); (b) the coverage gap
+is **L4 fling-overshoot**, orthogonal to L1; (c) **B's `sidebar_exhaustive=true` was a false
+positive** — it exempted 5 reachable roots (the A-arm entered all 5) out of the required set,
+so this run's acceptance-green was partly hollow. **Verdict must cross-check that B's
+`entry_exempt` set excludes any root any arm actually entered, and weigh
+`required_missing` / `task_completion` / crash-rate / median `entered_graph` — not
+acceptance-green alone.** **n=1 is insufficient to flip the flag** — the
 median rerun + zh locale are the remaining gate. Full plan +
 hardened driver: `docs/goals/ipad_settings_l1_rig_ab_handoff.md`. (The first matrix
 driver self-restarted and produced two concurrent runs on one rig; only the snapshotted

@@ -51,16 +51,33 @@ in-place (`recovery.py:93-94`) so no physical return is needed.
 
 **Caveats already visible (quantify these against the A-arm in the rerun):**
 - Root collapsed to **2** signatures, not 1. Root cause: OCR case drift on the *sidebar*
-  text (`BluetOOth` / `NOtificatiOns`, o→O). This is an **L3b gap** — the shipped L3b
-  anchors *detail-page* signatures only; it does not yet fold OCR case on the sidebar
-  text that feeds the *root* signature. Route any fix through the locale seam
-  (`docs/design/locale_seam_english_first.md`), do not add a second canonicalizer.
+  text (`BluetOOth` / `NOtificatiOns`, o→O). **Terminology — keep this consistent with the
+  design doc:** the design doc is right that *root*-signature collapse is **L1's own
+  sub-item #2 (sidebar-scoped signature), not L3b** (L3b is detail-page signatures). What
+  the rig exposed is that L1's sidebar-scoped signature is built from **raw OCR text that
+  still carries case drift**, so it splits 2-vs-1. The fix is an **OCR case-fold on the
+  sidebar text feeding L1's root signature**, applied at the **locale seam**
+  (`docs/design/locale_seam_english_first.md`) so it is shared, not a second canonicalizer.
+  Call it the *"L1 sidebar-signature case-fold (via the locale seam)"* — it is an
+  L1-completion item that reuses the seam, **not** an extension of L3b's detail-page work.
+- **B's `sidebar_exhaustive` was a FALSE positive this run, and it masked the verdict.**
+  B marked 5 roots `sidebar_absent` → `device_unavailable` → `entry_exempt`
+  (声音与触感 / 专注模式 / 屏幕使用时间 / Face ID与密码 / 隐私与安全性), which dropped
+  them from the required set and let `required_missing=[]` + acceptance go green. But the
+  **A-arm entered all 5 of those same roots** (5/5 overlap) — they are reachable; B's fling
+  just didn't reach them, so "sidebar never surfaced them" was wrong. This is the L2b /
+  sidebar-exhaustive oracle firing on a non-exhaustive sidebar walk — exactly the failure
+  the design doc warns about ("can't tell device-unavailable from fling-overshoot until L4
+  makes the walk exhaustive"). **Consequence for the verdict: acceptance-green is NOT
+  sufficient. The verdict MUST cross-check that B's `sidebar_absent`/`entry_exempt` set does
+  not include any root that the A-arm (or any B round) actually entered** — if it does, the
+  exemption is spurious and the green is hollow (see §5 T3).
 - Coverage gap is **L4 (fling overshoot)**, orthogonal to L1: B_1 missed 5 roots its
   fling didn't reach; A_1 happened to fling-hit them (`ticks=12`) before crashing.
   Do **not** read A's wider `entered`=11 as "A better" — that is per-frame coverage that
   the design explicitly distrusts; the graph-authoritative `entered_graph` is A=0 / B=7.
-- A_1 also lost a required root (`蓝牙`) to OCR garble (`Cameral`/`kacier`), same L3b
-  family.
+- A_1 also lost a required root (`蓝牙`) to OCR garble (`Cameral`/`kacier`), same OCR-case /
+  locale-seam family as the root-signature split above.
 
 ## 3. Bug to fix before the rerun — matrix driver self-restart (data corruption)
 
@@ -128,14 +145,19 @@ GLASSBOX_PHONE_MODEL=ipad_mini_7 GLASSBOX_PLATFORM=ipados GLASSBOX_PICOKVM=1 \
 set -u
 cd /Users/biu/glassbox
 AB=artifacts/ios_settings/ab
-LOCK="$AB/.matrix.lock"
+LOCK="$AB/.matrix.lock"          # a DIRECTORY (mkdir is atomic; no flock dependency)
 mkdir -p "$AB"
-# single-instance lock (mkdir is atomic; no flock dependency)
+# single-instance lock. Write our PID + stamp inside so a stale lock is debuggable
+# and a human can see who holds it (and whether that PID is still alive).
 if ! mkdir "$LOCK" 2>/dev/null; then
-  echo "ERROR: another matrix instance holds $LOCK — refusing to start"; exit 3
+  echo "ERROR: matrix lock held: $LOCK"
+  echo "       holder: $(cat "$LOCK/owner" 2>/dev/null || echo unknown)"
+  echo "       if that PID is dead, 'rm -rf $LOCK' and retry."
+  exit 3
 fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 STAMP=$(date +%Y%m%d_%H%M%S)
+printf 'pid=%s host=%s stamp=%s\n' "$$" "$(hostname)" "$STAMP" > "$LOCK/owner"
+trap 'rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM   # release on normal exit AND on kill
 RESULTS="$AB/results_${STAMP}.jsonl"; : > "$RESULTS"
 ROUNDS=3
 LOCALES="en:HK zh:CN"
@@ -152,9 +174,12 @@ run_one() {
       IPAD_SETTINGS_ACCEPTANCE= IPAD_SETTINGS_REPORT="$report" \
       IPAD_SETTINGS_EXTRA_ARGS="--language $lang --region $region" > "$log" 2>&1
   fi
-  local rc=$?   # rc-tolerant: harvest regardless (report exists via crawler finally)
+  local rc=$?   # rc-tolerant: harvest regardless (report exists via crawler finally).
+  # ab_extract.py MUST always print exactly one JSONL line — even when $report is
+  # missing or corrupt — so RESULTS never silently loses a row (see extractor spec).
   uv run python skills/regression/ios_settings/ab_extract.py \
-    "$arm" "$round" "$lang-$region" "$rc" "$report" >> "$RESULTS"
+    "$arm" "$round" "$lang-$region" "$rc" "$report" >> "$RESULTS" \
+    || echo "{\"arm\":\"$arm\",\"round\":$round,\"locale\":\"$lang-$region\",\"rc\":$rc,\"extraction_error\":\"ab_extract crashed\"}" >> "$RESULTS"
 }
 
 for loc in $LOCALES; do
@@ -164,13 +189,29 @@ for loc in $LOCALES; do
     run_one A "$r" "$lang" "$region"
   done
 done
-echo "MATRIX_DONE $STAMP"
+EXPECTED=$(( ROUNDS * 2 * $(echo $LOCALES | wc -w) ))
+GOT=$(grep -c '"arm"' "$RESULTS")
+echo "MATRIX_DONE $STAMP — rows: $GOT / expected: $EXPECTED"
+[ "$GOT" -eq "$EXPECTED" ] || echo "WARNING: row count mismatch — a run produced no line at all"
 ```
 Promote the metrics extractor (the inline python from the first pass) into a committed
 `skills/regression/ios_settings/ab_extract.py` so the driver isn't carrying a heredoc,
-and so it's testable. It must emit one JSON line per run with at least:
-`arm, round, locale, rc, crash(bool), entered_graph, root_to_detail, detail_to_root,
-root_nodes, root_sigs, nav_proxy, required_missing, missing, visit_count, hid_no_progress`.
+and so it's testable. Required behaviour:
+- **Always print exactly ONE JSONL line and exit 0**, even when the report file is missing,
+  empty, or not valid JSON, or the UTG can't be loaded. On any such failure emit a line
+  carrying the call args plus `"extraction_error": "<reason>"` (e.g. `report_missing`,
+  `json_decode_error`, `utg_missing`) — never crash, never print zero lines. The driver
+  has a belt-and-suspenders fallback line too, but the extractor owning this keeps RESULTS
+  row-complete and the reason machine-readable. **A silently missing row is the failure
+  mode to design against** (it's how the first pass would have hidden a dead run).
+- Fields on a successful line, at least: `arm, round, locale, rc, crash(bool — derive from
+  rc≠0 and/or `metrics.exception_hit`), entered_graph, entered (per-frame, for the
+  per-frame-vs-graph contrast), root_to_detail, detail_to_root, root_nodes, root_sigs,
+  nav_proxy, required_missing, missing, visit_count, hid_no_progress`.
+- **`sidebar_absent` and `entry_exempt`** (the raw label lists, not just counts) — these
+  are what the T3 exemption cross-check consumes to detect spurious `sidebar_exhaustive`.
+- Add a tiny smoke test feeding it (a) a good report, (b) a missing path, (c) a truncated
+  JSON file, asserting one line out each time and `extraction_error` present for (b)/(c).
 
 **T2 — Run the matrix**: ≥3 B + ≥3 A per locale (en/HK **and** zh/CN), interleaved,
 back-to-back on the same device in one session. ~3 min/run → ~36 min for the full 4×3
@@ -178,32 +219,59 @@ matrix. Watch `results_<stamp>.jsonl`.
 
 **T3 — Compute the verdict** against the gate in
 `docs/design/ipad_settings_state_machine.md` §4:
+- **Acceptance-green is necessary but NOT sufficient — do not read it as the verdict.**
+  The first pass went green partly by spurious exemption (see the §2 false-positive
+  caveat). Compute every signal below; a green run that fails the exemption cross-check is
+  a hollow green.
 - **Ship-positive (necessary, all required):**
-  - `entered_graph` **median B strictly > median A** (expect A≈0, B≫0).
+  - `entered_graph` **median B strictly > median A** (expect A≈0, B≫0). This is the
+    primary signal — graph-authoritative, not per-frame `entered`.
   - `root_to_detail` median B ≫ 0 (A=0 by construction).
-  - root collapses to **≤2 signatures** (track whether L3b-on-sidebar would get it to 1).
+  - root collapses to **≤2 signatures** (track whether the L1 sidebar-signature case-fold
+    would get it to 1 — see §6).
   - `nav_proxy` Δ **> the run-to-run band** (`nav_proxy` historically swings
     0.808–0.840 → demand Δ>~0.05) — but read this jointly with crash rate.
   - **A-arm crash rate vs B-arm crash rate** — B should not crash; if A crashes in a
     meaningful fraction, that is direct C1-elimination evidence for L1.
-  - No regression in `required_missing` / `task_completion` for B vs A.
-- **Report medians, not single pairs.** State n per cell.
+  - **`required_missing` AND `task_completion`** for B vs A — not just acceptance. A run
+    can show `required_missing=[]` only because roots were exempted; report the raw
+    required-set size alongside it.
+- **Exemption cross-check (MANDATORY anti-gaming gate):** for each B round, take its
+  `root_coverage.sidebar_absent` / `entry_exempt` set and confirm **none of those roots was
+  entered by any A round or any other B round** at the same locale. The first pass FAILED
+  this: B_1 exempted 5 roots (声音与触感/专注模式/屏幕使用时间/Face ID与密码/隐私与安全性)
+  that A_1 entered (5/5). Any overlap ⇒ `sidebar_exhaustive` is a false positive, the
+  exemption is spurious, and that run's green does not count toward ship. Have `ab_extract.py`
+  emit `sidebar_absent` and `entry_exempt` explicitly so this is computable offline.
+- **Report medians, not single pairs.** State n per cell, and report crash count + the
+  exemption-overlap count per arm.
 
 **T4 — Decide & record:**
 - If the gate passes on **both** locales: propose flipping `settings_ipad_root_projection`
   default-on in a separate commit, citing the medians. Keep it a deliberate, reviewed flip
   (main is not branch-protected).
 - If it passes en/HK but not zh (likely if OCR case drift is locale-sensitive): land the
-  **L3b sidebar-text OCR case fold** first (see §6), then re-measure.
+  **L1 sidebar-signature case-fold (via the locale seam)** first (see §6), then re-measure.
 - Either way: write the medians into the design doc's as-built section and update the
   memory `ipad-settings-state-machine.md`.
 
 ## 6. Known follow-on work surfaced by the rig (not blocking the A/B, but likely gating default-on)
 
-- **L3b extension — fold OCR case on the sidebar text feeding the root signature.** This
-  is what collapses root 2→1. Route through the locale seam. Add a smoke test asserting
-  `BluetOOth`≡`Bluetooth` collapse for the root projection. (The `[[locale-seam-english-first]]`
-  o→O fold is the same mechanism.)
+- **L1 sidebar-signature case-fold (via the locale seam) — collapses root 2→1.** NOTE the
+  terminology: this is **completing L1's own sub-item #2** (the sidebar-scoped root
+  signature), **not** an extension of L3b (L3b is detail-page signatures — keep this
+  consistent with the design doc, which is explicit that root-signature collapse belongs to
+  L1, not L3b). The shipped L1 builds the root signature from raw OCR text that still
+  carries case drift (`BluetOOth`), so it splits. Fold OCR case **at the locale seam**
+  (`docs/design/locale_seam_english_first.md`) so the fold is shared, not a second
+  canonicalizer. Add a smoke test asserting `BluetOOth`≡`Bluetooth` collapse for the root
+  projection. (Same `[[locale-seam-english-first]]` o→O mechanism that A_1's `蓝牙`-as-garble
+  loss also needs.)
+- **L2b / sidebar-exhaustive oracle is unsafe until L4 lands.** The first pass proved it
+  fires on a non-exhaustive walk and spuriously exempts reachable roots (§2). Until L4 makes
+  the sidebar walk exhaustive, either keep `sidebar_exhaustive` reporting-only (don't let it
+  drive `entry_exempt`/required-set), or gate it behind L4. The verdict's exemption
+  cross-check (§5 T3) is the interim guard.
 - **L4 — the fling-overshoot ceiling is the real source of "missing".** Independent of
   L1. If L4 reliably lands on each unentered row, B-arm coverage rises to ~12/12 and the
   whole SEARCH-as-availability apparatus (C2) shrinks. Consider promoting L4 alongside L2.
