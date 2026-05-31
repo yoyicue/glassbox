@@ -123,6 +123,23 @@ def test_state_machine_acceptance_rejects_sidebar_absent_without_exhaustive_evid
 
 
 @pytest.mark.smoke
+def test_state_machine_acceptance_accepts_bool_sidebar_exhaustive():
+    # The written rig report spells sidebar_exhaustive as a list (["true"]); the
+    # in-memory context.RootCoverage spells it as a bare bool. Accept both so the
+    # verifier is robust to either producer. (Defensive: the list form is what a
+    # real report contains, and the list-only verifier already handled that.)
+    result = validate_state_machine_acceptance(
+        _report(sidebar_absent=["通知"], sidebar_exhaustive=True),
+        _utg(),
+        min_detail_to_root_edges=1,
+        require_sidebar_exhaustive=True,
+    )
+
+    assert result.errors == []
+    assert result.metrics["sidebar_exhaustive"] is True
+
+
+@pytest.mark.smoke
 def test_state_machine_acceptance_cli_reads_report_and_utg(tmp_path, capsys):
     report_path = tmp_path / "report.json"
     utg_path = tmp_path / "com.apple.Preferences.json"

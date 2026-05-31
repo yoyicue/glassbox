@@ -157,7 +157,17 @@ def _string_list(value: Any) -> list[str]:
 
 
 def _sidebar_exhaustive(root_coverage: dict[str, Any]) -> bool:
-    return any(str(value).lower() == "true" for value in _string_list(root_coverage.get("sidebar_exhaustive")))
+    # The written rig report spells sidebar_exhaustive as a list (["true"] / [],
+    # via reporting.classify_root_coverage + page_records) — handled by the list
+    # branch. The in-memory context.RootCoverage spells the same fact as a bare
+    # bool; accept that (and the string form fixtures use) so this verifier is
+    # robust whether it is handed a written report or one built from the dataclass.
+    value = root_coverage.get("sidebar_exhaustive")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, list):
+        return any(str(item).lower() == "true" for item in value)
+    return str(value).lower() == "true"
 
 
 def _read_report(path: Path) -> dict[str, Any]:
