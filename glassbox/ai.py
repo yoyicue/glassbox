@@ -251,7 +251,7 @@ class AIPhone:
 
     def observe(self) -> ObservationSummary:
         scene = self._phone.perceive()
-        frame = getattr(self._phone, "_last_frame", None)
+        frame = getattr(self._phone, "last_frame", None)
         frame_id = None
         screenshot_path: Path | None = None
         scene_path: Path
@@ -516,17 +516,18 @@ class AIPhone:
         when the backend supports it and the operator opted in, else swipe-fling.
         """
         phone = self._phone
-        uses_plan = getattr(phone, "_uses_semantic_plan", None)
+        uses_plan = getattr(phone, "uses_semantic_plan", None)
         if callable(uses_plan) and uses_plan("scroll"):
-            fresh = phone._picokvm_fresh_verify_kwargs("scroll") if hasattr(phone, "_picokvm_fresh_verify_kwargs") else {}
-            return phone._run_semantic_plan(
+            fresh_kwargs = getattr(phone, "picokvm_fresh_verify_kwargs", None)
+            fresh = fresh_kwargs("scroll") if callable(fresh_kwargs) else {}
+            return phone.run_semantic_plan(
                 "scroll",
                 params={"direction": normalized},
                 via="scroll",
                 policy_action="scroll",
                 **fresh,
             )
-        if getattr(phone, "_ai_scroll_prefer_wheel", False) and phone.supports("scroll_wheel"):
+        if getattr(phone, "ai_scroll_prefer_wheel_enabled", False) and phone.supports("scroll_wheel"):
             return (
                 phone.wheel_scroll_down()
                 if normalized == "down"
@@ -1151,7 +1152,7 @@ class AIPhone:
         if frame is not None and getattr(frame, "img", None) is not None:
             h, w = frame.img.shape[:2]
             return int(w), int(h)
-        viewport_size = getattr(self._phone, "_viewport_size", None)
+        viewport_size = getattr(self._phone, "viewport_size", None)
         if callable(viewport_size):
             try:
                 w, h = viewport_size()
@@ -1161,7 +1162,7 @@ class AIPhone:
         return None
 
     def _phone_coordinate_space(self) -> str:
-        coordinate_space = getattr(self._phone, "_coordinate_space", None)
+        coordinate_space = getattr(self._phone, "effector_coordinate_space", None)
         if callable(coordinate_space):
             try:
                 return str(coordinate_space())
@@ -1170,7 +1171,7 @@ class AIPhone:
         return "frame_px"
 
     def _phone_backend(self) -> str:
-        backend = getattr(self._phone, "_effector_backend", None)
+        backend = getattr(self._phone, "effector_backend", None)
         if callable(backend):
             try:
                 return str(backend())

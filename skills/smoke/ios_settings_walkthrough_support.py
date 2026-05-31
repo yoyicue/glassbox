@@ -160,6 +160,10 @@ class _NoNavigationPhone:
     def perceive(self) -> Scene:
         return self.scene
 
+    def viewport_size(self):
+
+        return self._viewport_size()
+
     def _viewport_size(self):
         return 448, 973
 
@@ -237,6 +241,10 @@ class _SearchTabFallbackPhone:
         else:
             self.scene = self.root_scene
 
+    def viewport_size(self):
+
+        return self._viewport_size()
+
     def _viewport_size(self):
         return 448, 973
 
@@ -260,6 +268,10 @@ class _TopLeftBackFallbackPhone:
     def tap_xy(self, x: int, y: int) -> None:
         self.taps.append((x, y))
         self.scene = self.root
+
+    def viewport_size(self):
+
+        return self._viewport_size()
 
     def _viewport_size(self):
         return 448, 973

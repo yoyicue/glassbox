@@ -533,6 +533,10 @@ def test_ipad_child_audit_taps_visible_sidebar_root_before_root_recovery(monkeyp
         def perceive(self):
             return self.scene
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return (744, 1133)
 

@@ -70,6 +70,103 @@ class AfterObservation:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class CommandExecution:
+    result: ActionResult
+    payload: dict[str, Any]
+    completed_at: float
+    exception: BaseException | None = None
+    semantic: SemanticOutcome | None = None
+
+
+@dataclass(frozen=True)
+class RetryBudgets:
+    semantic: int
+    landing: int
+    transport: int
+
+    @property
+    def max_attempts(self) -> int:
+        return 1 + self.semantic + self.landing + self.transport
+
+
+@dataclass
+class AttemptPreparation:
+    before_requested: Observation | None
+    before_command: Observation | None
+    risk: RiskDecision
+    blocked_attempt: AttemptExecution | None = None
+    command_result: ActionResult | None = None
+    semantic: SemanticOutcome | None = None
+    exception: BaseException | None = None
+
+
+@dataclass
+class AttemptOutcome:
+    command_result: ActionResult
+    semantic: SemanticOutcome
+    command_exception: BaseException | None = None
+    after: list[Observation] = field(default_factory=list)
+    frame_diff: dict[str, Any] | None = None
+    scene_diff: dict[str, Any] | None = None
+    after_observation_metadata: dict[str, Any] = field(default_factory=dict)
+    matched_by_observation: dict[str, Any] | None = None
+    landing_observation: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class SemanticRecoveryResult:
+    used: bool = False
+    recovered: bool = False
+
+
+@dataclass(frozen=True)
+class SemanticPlanAdvance:
+    strategy_index: int
+    attempt_index: int
+    recovery_used: bool
+    recovered: bool
+    terminal_reason: str
+    continue_loop: bool = False
+    stop: bool = False
+
+
+@dataclass(frozen=True)
+class SemanticPlanLoopResult:
+    attempts: list[AttemptExecution]
+    recovered: bool
+    terminal_reason: str
+
+
+@dataclass
+class PostCommandVerification:
+    semantic: SemanticOutcome
+    after: list[Observation] = field(default_factory=list)
+    frame_diff: dict[str, Any] | None = None
+    scene_diff: dict[str, Any] | None = None
+    after_observation_metadata: dict[str, Any] = field(default_factory=dict)
+    matched_by_observation: dict[str, Any] | None = None
+    landing_observation: dict[str, Any] | None = None
+    exception: BaseException | None = None
+
+
+@dataclass(frozen=True)
+class PostCommandContext:
+    phone: Any
+    op: str
+    kwargs: dict[str, Any]
+    settle_strategy: str
+    verifier: Any
+    metadata: dict[str, Any]
+    group_id: str
+    attempt_id: str
+    before_requested: Observation | None
+    before_command: Observation | None
+    risk: RiskDecision
+    command_payload: dict[str, Any]
+    landing_retry_available: bool
+
+
 def _result_to_command(result: ActionResult | None) -> dict[str, Any]:
     if result is None:
         return {"transport_ok": False, "backend": "unknown", "connected": False}
@@ -264,125 +361,43 @@ class ActionOrchestrator:
                 actor=actor,
                 group_id=group_id,
             )
-        retry_budget = int(metadata.get("retry_budget", 0) or 0)
-        if not metadata.get("idempotent"):
-            retry_budget = 0
-        landing_retry_budget = int(metadata.get("landing_retry_budget", 0) or 0)
-        if not self._landing_retry_allowed(metadata):
-            landing_retry_budget = 0
-        # CUQ-0.10: transport failures are retryable independent of idempotency
-        # (the action did not land), so they get their own budget on the legacy
-        # path too — previously only the semantic-plan path retried transport.
-        # Default 0 → byte-identical.
-        transport_retry_budget = int(metadata.get("transport_retry_budget", 0) or 0)
-        max_attempts = 1 + retry_budget + landing_retry_budget + transport_retry_budget
-
-        self.store.audit.append(
-            "attempt_group.started",
+        budgets = self._legacy_retry_budgets(metadata)
+        self._start_attempt_group(op=op, actor=actor, group_id=group_id, budgets=budgets)
+        attempts = self._run_legacy_attempts(
+            phone,
+            op=op,
+            call=call,
+            kwargs=kwargs,
+            metadata=metadata,
+            plan=plan,
+            group_id=group_id,
             actor=actor,
-            attempt_group_id=group_id,
-            payload={
-                "op": op,
-                "retry_budget": retry_budget,
-                "landing_retry_budget": landing_retry_budget,
-                "transport_retry_budget": transport_retry_budget,
-                "actor": actor,
-            },
+            budgets=budgets,
         )
-        self._open_groups[group_id] = {
-            "op": op,
-            "actor": actor,
-            "retry_budget": retry_budget,
-            "landing_retry_budget": landing_retry_budget,
-            "transport_retry_budget": transport_retry_budget,
-            "attempt_ids": [],
-            "started_at": time.monotonic(),
-        }
 
-        attempts: list[AttemptExecution] = []
-        semantic_retries_used = 0
-        landing_retries_used = 0
-        transport_retries_used = 0
-        try:
-            for attempt_index in range(max_attempts):
-                attempt_id = self._next_attempt_id()
-                self._open_groups[group_id]["attempt_ids"].append(attempt_id)
-                attempt_call: ActionCallable
-                attempt_kwargs = dict(kwargs)
-                if plan is not None:
-                    command = plan.command_for_attempt(attempt_index)
-                    attempt_call = command.call
-                    attempt_kwargs.update(command.kwargs)
-                else:
-                    attempt_call = call
-                attempt_metadata = {**metadata, **attempt_kwargs, "attempt_index": attempt_index}
-                attempt = self._run_attempt(
-                    phone,
-                    op=op,
-                    call=attempt_call,
-                    kwargs=attempt_kwargs,
-                    metadata=attempt_metadata,
-                    group_id=group_id,
-                    attempt_id=attempt_id,
-                    attempt_index=attempt_index,
-                    actor=actor,
-                    landing_retry_available=landing_retries_used < landing_retry_budget,
-                )
-                # CUQ-0.7: carry the per-action VLM budget + audit counters
-                # forward across retries (mirrors the semantic-plan path) so an
-                # unknown->VLM->unknown loop cannot re-spend the per-action cap
-                # on every attempt; without this the per-attempt metadata copy
-                # is discarded and each retry sees vlm_calls=0.
-                for key in (
-                    "vlm_calls",
-                    "vlm_triggers",
-                    "last_vlm_trigger",
-                    "vlm_budget_exhausted",
-                    "vlm_cache_hits",
-                    "vlm_cache_misses",
-                ):
-                    if key in attempt_metadata:
-                        metadata[key] = attempt_metadata[key]
-                attempts.append(attempt)
-                retry_kind = self._retry_kind(
-                    attempt,
-                    metadata,
-                    semantic_retries_used=semantic_retries_used,
-                    retry_budget=retry_budget,
-                    landing_retries_used=landing_retries_used,
-                    landing_retry_budget=landing_retry_budget,
-                    transport_retries_used=transport_retries_used,
-                    transport_retry_budget=transport_retry_budget,
-                )
-                if retry_kind is None:
-                    break
-                if retry_kind == "landing":
-                    landing_retries_used += 1
-                elif retry_kind == "transport":
-                    transport_retries_used += 1
-                else:
-                    semantic_retries_used += 1
-                self.store.audit.append(
-                    "action.retry_scheduled",
-                    attempt_id=attempt.attempt_id,
-                    attempt_group_id=group_id,
-                    payload={
-                        "kind": retry_kind,
-                        "reason": attempt.semantic.reason,
-                        "next_attempt_index": attempt_index + 1,
-                    },
-                )
-        except BaseException:
-            self._finalize_group(
-                group_id,
-                op=op,
-                actor=actor,
-                attempts=attempts,
-                group_status="interrupted",
-                terminal_reason="orchestrator exception before group conclusion",
-            )
-            raise
+        return self._finish_legacy_execute(
+            phone,
+            op=op,
+            call=call,
+            kwargs=kwargs,
+            metadata=metadata,
+            group_id=group_id,
+            actor=actor,
+            attempts=attempts,
+        )
 
+    def _finish_legacy_execute(
+        self,
+        phone,
+        *,
+        op: str,
+        call: ActionCallOrPlan,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        group_id: str,
+        actor: str,
+        attempts: list[AttemptExecution],
+    ) -> ActionResult:
         final = attempts[-1]
         self._finalize_group(
             group_id,
@@ -398,7 +413,7 @@ class ActionOrchestrator:
         # plan owns recovery; a nested recovery here would Home-reset mid-ladder.
         # The flag is only set while _run_semantic_plan is active (default off).
         recovered = False
-        if not getattr(phone, "_in_semantic_plan", False):
+        if not getattr(phone, "in_semantic_plan", False):
             recovered = self._maybe_recover_stuck(phone, final, group_id=group_id)
 
         # CUQ-0.12: opt-in — recovery normally only primes the NEXT action. When
@@ -410,7 +425,7 @@ class ActionOrchestrator:
             self._recover_then_retry
             and recovered
             and not self._in_recover_retry
-            and not getattr(phone, "_in_semantic_plan", False)
+            and not getattr(phone, "in_semantic_plan", False)
             and final.semantic.status in {"failed", "unknown", "partial"}
         ):
             self.store.audit.append(
@@ -439,18 +454,178 @@ class ActionOrchestrator:
             raise RuntimeError(f"{op} semantic partial: {final.semantic.reason}")
         return enriched
 
-    def _execute_semantic_plan(
+    def _legacy_retry_budgets(self, metadata: dict[str, Any]) -> RetryBudgets:
+        retry_budget = int(metadata.get("retry_budget", 0) or 0)
+        if not metadata.get("idempotent"):
+            retry_budget = 0
+        landing_retry_budget = int(metadata.get("landing_retry_budget", 0) or 0)
+        if not self._landing_retry_allowed(metadata):
+            landing_retry_budget = 0
+        # CUQ-0.10: transport failures are retryable independent of idempotency
+        # because the action did not land. Default 0 preserves legacy behavior.
+        transport_retry_budget = int(metadata.get("transport_retry_budget", 0) or 0)
+        return RetryBudgets(
+            semantic=retry_budget,
+            landing=landing_retry_budget,
+            transport=transport_retry_budget,
+        )
+
+    def _start_attempt_group(
+        self,
+        *,
+        op: str,
+        actor: str,
+        group_id: str,
+        budgets: RetryBudgets,
+    ) -> None:
+        self.store.audit.append(
+            "attempt_group.started",
+            actor=actor,
+            attempt_group_id=group_id,
+            payload={
+                "op": op,
+                "retry_budget": budgets.semantic,
+                "landing_retry_budget": budgets.landing,
+                "transport_retry_budget": budgets.transport,
+                "actor": actor,
+            },
+        )
+        self._open_groups[group_id] = {
+            "op": op,
+            "actor": actor,
+            "retry_budget": budgets.semantic,
+            "landing_retry_budget": budgets.landing,
+            "transport_retry_budget": budgets.transport,
+            "attempt_ids": [],
+            "started_at": time.monotonic(),
+        }
+
+    def _run_legacy_attempts(
         self,
         phone,
         *,
         op: str,
-        plan: SemanticActionPlan,
+        call: ActionCallOrPlan,
         kwargs: dict[str, Any],
         metadata: dict[str, Any],
+        plan: ActuationPlan | None,
+        group_id: str,
+        actor: str,
+        budgets: RetryBudgets,
+    ) -> list[AttemptExecution]:
+        attempts: list[AttemptExecution] = []
+        semantic_retries_used = 0
+        landing_retries_used = 0
+        transport_retries_used = 0
+        try:
+            for attempt_index in range(budgets.max_attempts):
+                attempt_id = self._next_attempt_id()
+                self._open_groups[group_id]["attempt_ids"].append(attempt_id)
+                attempt_call: ActionCallable
+                attempt_kwargs = dict(kwargs)
+                if plan is not None:
+                    command = plan.command_for_attempt(attempt_index)
+                    attempt_call = command.call
+                    attempt_kwargs.update(command.kwargs)
+                else:
+                    attempt_call = call  # type: ignore[assignment]
+                attempt_metadata = {**metadata, **attempt_kwargs, "attempt_index": attempt_index}
+                attempt = self._run_attempt(
+                    phone,
+                    op=op,
+                    call=attempt_call,
+                    kwargs=attempt_kwargs,
+                    metadata=attempt_metadata,
+                    group_id=group_id,
+                    attempt_id=attempt_id,
+                    attempt_index=attempt_index,
+                    actor=actor,
+                    landing_retry_available=landing_retries_used < budgets.landing,
+                )
+                self._carry_vlm_retry_metadata(attempt_metadata, metadata)
+                attempts.append(attempt)
+                retry_kind = self._retry_kind(
+                    attempt,
+                    metadata,
+                    semantic_retries_used=semantic_retries_used,
+                    retry_budget=budgets.semantic,
+                    landing_retries_used=landing_retries_used,
+                    landing_retry_budget=budgets.landing,
+                    transport_retries_used=transport_retries_used,
+                    transport_retry_budget=budgets.transport,
+                )
+                if retry_kind is None:
+                    break
+                if retry_kind == "landing":
+                    landing_retries_used += 1
+                elif retry_kind == "transport":
+                    transport_retries_used += 1
+                else:
+                    semantic_retries_used += 1
+                self._audit_retry_scheduled(
+                    group_id=group_id,
+                    attempt=attempt,
+                    retry_kind=retry_kind,
+                    next_attempt_index=attempt_index + 1,
+                )
+        except BaseException:
+            self._finalize_group(
+                group_id,
+                op=op,
+                actor=actor,
+                attempts=attempts,
+                group_status="interrupted",
+                terminal_reason="orchestrator exception before group conclusion",
+            )
+            raise
+        return attempts
+
+    @staticmethod
+    def _carry_vlm_retry_metadata(
+        attempt_metadata: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> None:
+        # CUQ-0.7: carry per-action VLM budget + audit counters forward
+        # across retries so each retry cannot re-spend the per-action cap.
+        for key in (
+            "vlm_calls",
+            "vlm_triggers",
+            "last_vlm_trigger",
+            "vlm_budget_exhausted",
+            "vlm_cache_hits",
+            "vlm_cache_misses",
+        ):
+            if key in attempt_metadata:
+                metadata[key] = attempt_metadata[key]
+
+    def _audit_retry_scheduled(
+        self,
+        *,
+        group_id: str,
+        attempt: AttemptExecution,
+        retry_kind: str,
+        next_attempt_index: int,
+    ) -> None:
+        self.store.audit.append(
+            "action.retry_scheduled",
+            attempt_id=attempt.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "kind": retry_kind,
+                "reason": attempt.semantic.reason,
+                "next_attempt_index": next_attempt_index,
+            },
+        )
+
+    def _start_semantic_plan_group(
+        self,
+        *,
+        op: str,
         actor: str,
         group_id: str,
-    ) -> ActionResult:
-        spec = plan.spec
+        spec,
+        strategy_count: int,
+    ) -> None:
         self.store.audit.append(
             "attempt_group.started",
             actor=actor,
@@ -459,7 +634,7 @@ class ActionOrchestrator:
                 "op": op,
                 "actor": actor,
                 "semantic_action_spec": spec.to_dict(),
-                "strategy_count": len(plan.bound),
+                "strategy_count": strategy_count,
             },
         )
         self._open_groups[group_id] = {
@@ -470,172 +645,155 @@ class ActionOrchestrator:
             "attempt_ids": [],
             "started_at": time.monotonic(),
         }
-        attempts: list[AttemptExecution] = []
-        recovered = False
-        recovery_used = False
-        strategy_index = 0
-        attempt_index = 0
-        transport_retry_budget = self._int_metadata(
-            metadata,
-            "transport_retry_budget",
-            self._int_metadata(metadata, "retry_budget", 0),
+
+    def _semantic_strategy_supported(self, phone, strategy) -> bool:
+        capability = strategy.spec.capability
+        return not capability or getattr(phone, "supports", lambda _op: True)(capability)
+
+    def _audit_semantic_strategy_skipped(self, *, group_id: str, strategy, reason: str) -> None:
+        self.store.audit.append(
+            "semantic_plan.strategy_skipped",
+            attempt_group_id=group_id,
+            payload={
+                "strategy": strategy.spec.to_dict(),
+                "reason": reason,
+            },
         )
-        transport_retries_by_strategy: dict[int, int] = {}
-        terminal_reason = "strategies exhausted"
-        try:
-            while strategy_index < len(plan.bound):
-                strategy = plan.bound[strategy_index]
-                if strategy.spec.capability and not getattr(phone, "supports", lambda _op: True)(
-                    strategy.spec.capability
-                ):
-                    self.store.audit.append(
-                        "semantic_plan.strategy_skipped",
-                        attempt_group_id=group_id,
-                        payload={
-                            "strategy": strategy.spec.to_dict(),
-                            "reason": "capability unsupported",
-                        },
-                    )
-                    strategy_index += 1
-                    continue
-                attempt_id = self._next_attempt_id()
-                self._open_groups[group_id]["attempt_ids"].append(attempt_id)
-                attempt_kwargs = {
-                    **kwargs,
-                    "strategy": strategy.spec.name,
-                    "semantic_action_strategy": strategy.spec.to_dict(),
-                    "idempotent": spec.idempotent,
-                    "attempt_index": attempt_index,
-                }
-                # Only inject expected_state when the spec carries one; otherwise
-                # the op's generic verifier alone drives the ladder (CUQ-0.1/0.8),
-                # rather than a missing/permissive expectation short-circuiting it.
-                if spec.expected_state is not None:
-                    attempt_kwargs["expected_state"] = spec.expected_state.to_dict()
-                attempt_metadata = {**metadata, **attempt_kwargs}
-                attempt = self._run_attempt(
-                    phone,
-                    op=op,
-                    call=strategy.call,
-                    kwargs=attempt_kwargs,
-                    metadata=attempt_metadata,
-                    group_id=group_id,
-                    attempt_id=attempt_id,
-                    attempt_index=attempt_index,
-                    actor=actor,
-                )
-                for key in (
-                    "vlm_calls",
-                    "vlm_triggers",
-                    "last_vlm_trigger",
-                    "vlm_budget_exhausted",
-                    "vlm_cache_hits",
-                    "vlm_cache_misses",
-                ):
-                    if key in attempt_metadata:
-                        metadata[key] = attempt_metadata[key]
-                attempts.append(attempt)
-                status = attempt.semantic.status
-                edge = semantic_transition_edge(
-                    status,
-                    disqualifying_state=bool(attempt.semantic.disqualifying_state),
-                )
-                if edge == "done":
-                    terminal_reason = "expected state reached"
-                    break
-                if edge == "terminate":
-                    terminal_reason = attempt.semantic.disqualifying_state
-                    if not terminal_reason:
-                        terminal_reason = attempt.semantic.reason
-                    break
-                if edge == "retry_same" and spec.idempotent:
-                    used_transport_retries = transport_retries_by_strategy.get(strategy_index, 0)
-                    if used_transport_retries < transport_retry_budget:
-                        transport_retries_by_strategy[strategy_index] = used_transport_retries + 1
-                        self.store.audit.append(
-                            "action.retry_scheduled",
-                            attempt_id=attempt.attempt_id,
-                            attempt_group_id=group_id,
-                            payload={
-                                "kind": "transport",
-                                "reason": attempt.semantic.reason,
-                                "strategy": strategy.spec.name,
-                                "next_attempt_index": attempt_index + 1,
-                            },
-                        )
-                        attempt_index += 1
-                        continue
-                self.store.audit.append(
-                    "semantic_plan.strategy_failed",
-                    attempt_id=attempt.attempt_id,
-                    attempt_group_id=group_id,
-                    payload={
-                        "strategy": strategy.spec.name,
-                        "status": status,
-                        "reason": attempt.semantic.reason,
-                        "next_strategy_index": strategy_index + 1,
-                    },
-                )
-                strategy_index += 1
-                attempt_index += 1
-                if strategy_index < len(plan.bound):
-                    continue
-                if (
-                    spec.recovery is not None
-                    and spec.idempotent
-                    and not recovery_used
-                    and self.recovery_policy is not None
-                ):
-                    self.store.audit.append(
-                        "semantic_plan.recovery.started",
-                        attempt_id=attempt.attempt_id,
-                        attempt_group_id=group_id,
-                        payload={
-                            "recovery": spec.recovery,
-                            "reason": attempt.semantic.reason,
-                        },
-                    )
-                    recovery = self.recovery_policy.recover(
-                        phone,
-                        attempt.semantic.reason,
-                        {"semantic_action_spec": spec.to_dict()},
-                    )
-                    self.store.audit.append(
-                        "semantic_plan.recovery.finished",
-                        attempt_id=attempt.attempt_id,
-                        attempt_group_id=group_id,
-                        payload=recovery.to_dict(),
-                    )
-                    recovered = recovery.recovered
-                    recovery_used = True
-                    if recovered:
-                        strategy_index = 0
-                        transport_retries_by_strategy.clear()
-                        continue
-                terminal_reason = attempt.semantic.reason
-                break
-        except BaseException:
-            self._finalize_group(
-                group_id,
-                op=op,
-                actor=actor,
-                attempts=attempts,
-                group_status="interrupted",
-                terminal_reason="semantic plan exception before group conclusion",
-            )
-            raise
 
-        if not attempts:
-            result = phone._failed_action_result(error="semantic plan had no eligible strategies")
-            semantic = _semantic_exception(
-                "semantic_action_plan",
-                RuntimeError("semantic plan had no eligible strategies"),
-                phase="strategy selection",
-            )
-            attempt_id = self._next_attempt_id()
-            self._open_groups[group_id]["attempt_ids"].append(attempt_id)
-            attempts.append(AttemptExecution(attempt_id, result, semantic, {}))
+    def _run_semantic_strategy_attempt(
+        self,
+        phone,
+        *,
+        op: str,
+        spec,
+        strategy,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        group_id: str,
+        attempt_index: int,
+        actor: str,
+    ) -> tuple[AttemptExecution, dict[str, Any]]:
+        attempt_id = self._next_attempt_id()
+        self._open_groups[group_id]["attempt_ids"].append(attempt_id)
+        attempt_kwargs = {
+            **kwargs,
+            "strategy": strategy.spec.name,
+            "semantic_action_strategy": strategy.spec.to_dict(),
+            "idempotent": spec.idempotent,
+            "attempt_index": attempt_index,
+        }
+        if spec.expected_state is not None:
+            attempt_kwargs["expected_state"] = spec.expected_state.to_dict()
+        attempt_metadata = {**metadata, **attempt_kwargs}
+        attempt = self._run_attempt(
+            phone,
+            op=op,
+            call=strategy.call,
+            kwargs=attempt_kwargs,
+            metadata=attempt_metadata,
+            group_id=group_id,
+            attempt_id=attempt_id,
+            attempt_index=attempt_index,
+            actor=actor,
+        )
+        return attempt, attempt_metadata
 
+    def _audit_transport_retry(
+        self,
+        *,
+        group_id: str,
+        attempt: AttemptExecution,
+        strategy,
+        next_attempt_index: int,
+    ) -> None:
+        self.store.audit.append(
+            "action.retry_scheduled",
+            attempt_id=attempt.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "kind": "transport",
+                "reason": attempt.semantic.reason,
+                "strategy": strategy.spec.name,
+                "next_attempt_index": next_attempt_index,
+            },
+        )
+
+    def _audit_semantic_strategy_failed(
+        self,
+        *,
+        group_id: str,
+        attempt: AttemptExecution,
+        strategy,
+        status: str,
+        next_strategy_index: int,
+    ) -> None:
+        self.store.audit.append(
+            "semantic_plan.strategy_failed",
+            attempt_id=attempt.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "strategy": strategy.spec.name,
+                "status": status,
+                "reason": attempt.semantic.reason,
+                "next_strategy_index": next_strategy_index,
+            },
+        )
+
+    def _recover_semantic_plan(
+        self,
+        phone,
+        *,
+        spec,
+        attempt: AttemptExecution,
+        group_id: str,
+    ) -> SemanticRecoveryResult:
+        if spec.recovery is None or not spec.idempotent or self.recovery_policy is None:
+            return SemanticRecoveryResult()
+        self.store.audit.append(
+            "semantic_plan.recovery.started",
+            attempt_id=attempt.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "recovery": spec.recovery,
+                "reason": attempt.semantic.reason,
+            },
+        )
+        recovery = self.recovery_policy.recover(
+            phone,
+            attempt.semantic.reason,
+            {"semantic_action_spec": spec.to_dict()},
+        )
+        self.store.audit.append(
+            "semantic_plan.recovery.finished",
+            attempt_id=attempt.attempt_id,
+            attempt_group_id=group_id,
+            payload=recovery.to_dict(),
+        )
+        return SemanticRecoveryResult(used=True, recovered=recovery.recovered)
+
+    def _append_empty_semantic_plan_attempt(self, phone, *, group_id: str) -> list[AttemptExecution]:
+        result = phone.failed_action_result(error="semantic plan had no eligible strategies")
+        semantic = _semantic_exception(
+            "semantic_action_plan",
+            RuntimeError("semantic plan had no eligible strategies"),
+            phase="strategy selection",
+        )
+        attempt_id = self._next_attempt_id()
+        self._open_groups[group_id]["attempt_ids"].append(attempt_id)
+        return [AttemptExecution(attempt_id, result, semantic, {})]
+
+    def _finish_semantic_plan_result(
+        self,
+        phone,
+        *,
+        op: str,
+        actor: str,
+        spec,
+        attempts: list[AttemptExecution],
+        recovered: bool,
+        group_id: str,
+        terminal_reason: str,
+    ) -> ActionResult:
         final = attempts[-1]
         self._finalize_group(
             group_id,
@@ -668,6 +826,303 @@ class ActionOrchestrator:
             raise RuntimeError(f"{op} semantic {final.semantic.status}: {final.semantic.reason}")
         return enriched
 
+    def _transport_retry_advance(
+        self,
+        *,
+        attempt: AttemptExecution,
+        strategy,
+        strategy_index: int,
+        attempt_index: int,
+        transport_retry_budget: int,
+        transport_retries_by_strategy: dict[int, int],
+        recovery_used: bool,
+        group_id: str,
+    ) -> SemanticPlanAdvance | None:
+        used_transport_retries = transport_retries_by_strategy.get(strategy_index, 0)
+        if used_transport_retries >= transport_retry_budget:
+            return None
+        transport_retries_by_strategy[strategy_index] = used_transport_retries + 1
+        self._audit_transport_retry(
+            group_id=group_id,
+            attempt=attempt,
+            strategy=strategy,
+            next_attempt_index=attempt_index + 1,
+        )
+        return SemanticPlanAdvance(
+            strategy_index,
+            attempt_index + 1,
+            recovery_used,
+            False,
+            "strategies exhausted",
+            continue_loop=True,
+        )
+
+    def _semantic_recovery_advance(
+        self,
+        phone,
+        *,
+        spec,
+        attempt: AttemptExecution,
+        next_strategy_index: int,
+        next_attempt_index: int,
+        recovery_used: bool,
+        transport_retries_by_strategy: dict[int, int],
+        group_id: str,
+    ) -> SemanticPlanAdvance | None:
+        if recovery_used:
+            return None
+        recovery = self._recover_semantic_plan(
+            phone,
+            spec=spec,
+            attempt=attempt,
+            group_id=group_id,
+        )
+        if recovery.recovered:
+            transport_retries_by_strategy.clear()
+            return SemanticPlanAdvance(0, next_attempt_index, recovery.used, True, "strategies exhausted", True)
+        return SemanticPlanAdvance(
+            next_strategy_index,
+            next_attempt_index,
+            recovery.used,
+            False,
+            attempt.semantic.reason,
+            stop=True,
+        )
+
+    @staticmethod
+    def _terminal_semantic_advance(
+        *,
+        edge: str,
+        attempt: AttemptExecution,
+        strategy_index: int,
+        attempt_index: int,
+        recovery_used: bool,
+    ) -> SemanticPlanAdvance | None:
+        if edge == "done":
+            return SemanticPlanAdvance(
+                strategy_index,
+                attempt_index,
+                recovery_used,
+                False,
+                "expected state reached",
+                stop=True,
+            )
+        if edge != "terminate":
+            return None
+        terminal_reason = attempt.semantic.disqualifying_state or attempt.semantic.reason
+        return SemanticPlanAdvance(strategy_index, attempt_index, recovery_used, False, terminal_reason, stop=True)
+
+    def _advance_after_semantic_attempt(
+        self,
+        phone,
+        *,
+        spec,
+        plan: SemanticActionPlan,
+        attempt: AttemptExecution,
+        strategy,
+        status: str,
+        strategy_index: int,
+        attempt_index: int,
+        transport_retry_budget: int,
+        transport_retries_by_strategy: dict[int, int],
+        recovery_used: bool,
+        group_id: str,
+    ) -> SemanticPlanAdvance:
+        edge = semantic_transition_edge(
+            status,
+            disqualifying_state=bool(attempt.semantic.disqualifying_state),
+        )
+        terminal = self._terminal_semantic_advance(
+            edge=edge,
+            attempt=attempt,
+            strategy_index=strategy_index,
+            attempt_index=attempt_index,
+            recovery_used=recovery_used,
+        )
+        if terminal is not None:
+            return terminal
+        if edge == "retry_same" and spec.idempotent:
+            retry = self._transport_retry_advance(
+                attempt=attempt,
+                strategy=strategy,
+                strategy_index=strategy_index,
+                attempt_index=attempt_index,
+                transport_retry_budget=transport_retry_budget,
+                transport_retries_by_strategy=transport_retries_by_strategy,
+                recovery_used=recovery_used,
+                group_id=group_id,
+            )
+            if retry is not None:
+                return retry
+        next_strategy_index = strategy_index + 1
+        self._audit_semantic_strategy_failed(
+            group_id=group_id,
+            attempt=attempt,
+            strategy=strategy,
+            status=status,
+            next_strategy_index=next_strategy_index,
+        )
+        next_attempt_index = attempt_index + 1
+        if next_strategy_index < len(plan.bound):
+            return SemanticPlanAdvance(
+                next_strategy_index,
+                next_attempt_index,
+                recovery_used,
+                False,
+                "strategies exhausted",
+                continue_loop=True,
+            )
+        recovery = self._semantic_recovery_advance(
+            phone,
+            spec=spec,
+            attempt=attempt,
+            next_strategy_index=next_strategy_index,
+            next_attempt_index=next_attempt_index,
+            recovery_used=recovery_used,
+            transport_retries_by_strategy=transport_retries_by_strategy,
+            group_id=group_id,
+        )
+        if recovery is not None:
+            return recovery
+        return SemanticPlanAdvance(
+            next_strategy_index,
+            next_attempt_index,
+            recovery_used,
+            False,
+            attempt.semantic.reason,
+            stop=True,
+        )
+
+    def _run_semantic_plan_loop(
+        self,
+        phone,
+        *,
+        op: str,
+        plan: SemanticActionPlan,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        attempts: list[AttemptExecution],
+        actor: str,
+        group_id: str,
+        transport_retry_budget: int,
+    ) -> SemanticPlanLoopResult:
+        spec = plan.spec
+        recovered = False
+        recovery_used = False
+        strategy_index = 0
+        attempt_index = 0
+        terminal_reason = "strategies exhausted"
+        transport_retries_by_strategy: dict[int, int] = {}
+        while strategy_index < len(plan.bound):
+            strategy = plan.bound[strategy_index]
+            if not self._semantic_strategy_supported(phone, strategy):
+                self._audit_semantic_strategy_skipped(
+                    group_id=group_id,
+                    strategy=strategy,
+                    reason="capability unsupported",
+                )
+                strategy_index += 1
+                continue
+            attempt, attempt_metadata = self._run_semantic_strategy_attempt(
+                phone,
+                op=op,
+                spec=spec,
+                strategy=strategy,
+                kwargs=kwargs,
+                metadata=metadata,
+                group_id=group_id,
+                attempt_index=attempt_index,
+                actor=actor,
+            )
+            self._carry_vlm_retry_metadata(attempt_metadata, metadata)
+            attempts.append(attempt)
+            advance = self._advance_after_semantic_attempt(
+                phone,
+                spec=spec,
+                plan=plan,
+                attempt=attempt,
+                strategy=strategy,
+                status=attempt.semantic.status,
+                strategy_index=strategy_index,
+                attempt_index=attempt_index,
+                transport_retry_budget=transport_retry_budget,
+                transport_retries_by_strategy=transport_retries_by_strategy,
+                recovery_used=recovery_used,
+                group_id=group_id,
+            )
+            strategy_index = advance.strategy_index
+            attempt_index = advance.attempt_index
+            recovery_used = advance.recovery_used
+            recovered = recovered or advance.recovered
+            terminal_reason = advance.terminal_reason
+            if advance.continue_loop:
+                continue
+            break
+        return SemanticPlanLoopResult(attempts, recovered, terminal_reason)
+
+    def _execute_semantic_plan(
+        self,
+        phone,
+        *,
+        op: str,
+        plan: SemanticActionPlan,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        actor: str,
+        group_id: str,
+    ) -> ActionResult:
+        spec = plan.spec
+        self._start_semantic_plan_group(
+            op=op,
+            actor=actor,
+            group_id=group_id,
+            spec=spec,
+            strategy_count=len(plan.bound),
+        )
+        transport_retry_budget = self._int_metadata(
+            metadata,
+            "transport_retry_budget",
+            self._int_metadata(metadata, "retry_budget", 0),
+        )
+        attempts: list[AttemptExecution] = []
+        try:
+            result = self._run_semantic_plan_loop(
+                phone,
+                op=op,
+                plan=plan,
+                kwargs=kwargs,
+                metadata=metadata,
+                attempts=attempts,
+                actor=actor,
+                group_id=group_id,
+                transport_retry_budget=transport_retry_budget,
+            )
+        except BaseException:
+            self._finalize_group(
+                group_id,
+                op=op,
+                actor=actor,
+                attempts=attempts,
+                group_status="interrupted",
+                terminal_reason="semantic plan exception before group conclusion",
+            )
+            raise
+
+        attempts = result.attempts
+        if not attempts:
+            attempts = self._append_empty_semantic_plan_attempt(phone, group_id=group_id)
+
+        return self._finish_semantic_plan_result(
+            phone,
+            op=op,
+            actor=actor,
+            spec=spec,
+            attempts=attempts,
+            recovered=result.recovered,
+            group_id=group_id,
+            terminal_reason=result.terminal_reason,
+        )
+
     def _skip_decision(self, phone, *, op: str, metadata: dict[str, Any]) -> str | None:
         if not self._landing_observation_enabled(metadata):
             return None
@@ -680,6 +1135,75 @@ class ActionOrchestrator:
             method=str(metadata.get("actuation_method") or "mouse_tap"),
         )
         return reason if skip else None
+
+    @staticmethod
+    def _stuck_screen_signature(final: AttemptExecution) -> str | None:
+        observation = final.action_payload.get("observation") if final.action_payload else None
+        signature = (
+            observation.get("screen_signature")
+            if isinstance(observation, dict)
+            else None
+        )
+        return signature if isinstance(signature, str) and signature else None
+
+    def _audit_stuck_observed(
+        self,
+        *,
+        final: AttemptExecution,
+        group_id: str,
+        signature: str,
+        reason: str,
+        decision,
+    ) -> None:
+        self.store.audit.append(
+            "stuck_detector.observed",
+            attempt_id=final.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "screen_signature": signature,
+                "failure_reason": reason,
+                "count": decision.count,
+                "should_recover": decision.should_recover,
+                "recovery": decision.recovery,
+            },
+        )
+
+    def _audit_stuck_recovery_started(
+        self,
+        *,
+        final: AttemptExecution,
+        group_id: str,
+        reason: str,
+        recovery: str,
+    ) -> None:
+        self.store.audit.append(
+            "stuck_detector.recovery.started",
+            attempt_id=final.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "recovery": recovery,
+                "failure_reason": reason,
+            },
+        )
+
+    def _audit_stuck_unrecoverable(
+        self,
+        *,
+        final: AttemptExecution,
+        group_id: str,
+        reason: str,
+        signature: str,
+    ) -> None:
+        self.store.audit.append(
+            "stuck_detector.unrecoverable",
+            attempt_id=final.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "failure_reason": reason,
+                "screen_signature": signature,
+                "recovery_failures": self._stuck_recovery_failures,
+            },
+        )
 
     def _maybe_recover_stuck(
         self,
@@ -699,42 +1223,29 @@ class ActionOrchestrator:
             return False
         if final.semantic.disqualifying_state:
             return False
-        observation = final.action_payload.get("observation") if final.action_payload else None
-        signature = (
-            observation.get("screen_signature")
-            if isinstance(observation, dict)
-            else None
-        )
-        if not isinstance(signature, str) or not signature:
+        signature = self._stuck_screen_signature(final)
+        if signature is None:
             return False
-        reason = final.semantic.disqualifying_state or final.semantic.reason or status
+        reason = str(final.semantic.disqualifying_state or final.semantic.reason or status)
         decision = self.stuck_detector.observe(StuckSample(signature, str(reason)))
-        self.store.audit.append(
-            "stuck_detector.observed",
-            attempt_id=final.attempt_id,
-            attempt_group_id=group_id,
-            payload={
-                "screen_signature": signature,
-                "failure_reason": str(reason),
-                "count": decision.count,
-                "should_recover": decision.should_recover,
-                "recovery": decision.recovery,
-            },
+        self._audit_stuck_observed(
+            final=final,
+            group_id=group_id,
+            signature=signature,
+            reason=reason,
+            decision=decision,
         )
         if not decision.should_recover:
             return False
-        self.store.audit.append(
-            "stuck_detector.recovery.started",
-            attempt_id=final.attempt_id,
-            attempt_group_id=group_id,
-            payload={
-                "recovery": decision.recovery,
-                "failure_reason": str(reason),
-            },
+        self._audit_stuck_recovery_started(
+            final=final,
+            group_id=group_id,
+            reason=reason,
+            recovery=decision.recovery,
         )
         recovery = self.recovery_policy.recover(
             phone,
-            str(reason),
+            reason,
             {
                 "recovery": decision.recovery,
                 "screen_signature": signature,
@@ -759,15 +1270,11 @@ class ActionOrchestrator:
             return True
         self._stuck_recovery_failures += 1
         if self._stuck_recovery_failures >= self.max_stuck_recoveries:
-            self.store.audit.append(
-                "stuck_detector.unrecoverable",
-                attempt_id=final.attempt_id,
-                attempt_group_id=group_id,
-                payload={
-                    "failure_reason": str(reason),
-                    "screen_signature": signature,
-                    "recovery_failures": self._stuck_recovery_failures,
-                },
+            self._audit_stuck_unrecoverable(
+                final=final,
+                group_id=group_id,
+                reason=reason,
+                signature=signature,
             )
             return False
         self.stuck_detector.rearm()
@@ -820,7 +1327,7 @@ class ActionOrchestrator:
             payload=group_payload,
         )
         return replace(
-            phone._failed_action_result(
+            phone.failed_action_result(
                 error=f"actuation skipped: {reason}",
                 unsupported=reason == "unsupported",
             ),
@@ -988,57 +1495,214 @@ class ActionOrchestrator:
     ) -> AttemptExecution:
         verifier = self.registry.resolve(op, metadata)
         settle_strategy = str(metadata["settle_strategy"])
-        before_requested: Observation | None = None
-        before_command: Observation | None = None
-        risk = RiskDecision(
-            level="medium",
-            approval_required=False,
-            allowed=True,
-            reason="runtime exception before policy evaluation",
-            source="runtime",
-            metadata={"op": op},
+        preparation = self._prepare_attempt(
+            phone,
+            op=op,
+            kwargs=kwargs,
+            metadata=metadata,
+            group_id=group_id,
+            attempt_id=attempt_id,
+            attempt_index=attempt_index,
+            actor=actor,
+            verifier_name=verifier.name,
         )
-        command_result: ActionResult | None = None
-        command_exception: BaseException | None = None
-        semantic: SemanticOutcome | None = None
-        after: list[Observation] = []
-        trace_level_override = self._trace_level_override(metadata)
+        if preparation.blocked_attempt is not None:
+            return preparation.blocked_attempt
+        before_requested = preparation.before_requested
+        before_command = preparation.before_command
+        risk = preparation.risk
+        outcome = self._run_prepared_command_attempt(
+            phone,
+            op=op,
+            call=call,
+            kwargs=kwargs,
+            metadata=metadata,
+            group_id=group_id,
+            attempt_id=attempt_id,
+            attempt_index=attempt_index,
+            actor=actor,
+            verifier=verifier,
+            settle_strategy=settle_strategy,
+            before_requested=before_requested,
+            before_command=before_command,
+            risk=risk,
+            preparation=preparation,
+            landing_retry_available=landing_retry_available,
+        )
+        return self._finish_attempt_outcome(
+            phone,
+            op=op,
+            kwargs=kwargs,
+            metadata=metadata,
+            group_id=group_id,
+            attempt_id=attempt_id,
+            actor=actor,
+            before_requested=before_requested,
+            before_command=before_command,
+            risk=risk,
+            outcome=outcome,
+        )
+
+    def _run_prepared_command_attempt(
+        self,
+        phone,
+        *,
+        op: str, call: ActionCallable, kwargs: dict[str, Any], metadata: dict[str, Any],
+        group_id: str, attempt_id: str, attempt_index: int, actor: str, verifier,
+        settle_strategy: str, before_requested: Observation | None, before_command: Observation | None,
+        risk: RiskDecision, preparation: AttemptPreparation, landing_retry_available: bool,
+    ) -> AttemptOutcome:
+        command_result = preparation.command_result
+        command_exception = preparation.exception
+        semantic: SemanticOutcome | None = preparation.semantic
         after_observation_metadata: dict[str, Any] = {
             "settle_strategy": settle_strategy,
             "after_mode": "none",
-            "trace_level": self.store.effective_trace_level(trace_level_override),
+            "trace_level": self.store.effective_trace_level(self._trace_level_override(metadata)),
         }
-        frame_diff_payload = None
-        scene_diff_payload = None
-        landing_observation: dict[str, Any] | None = None
-        matched_by_observation: dict[str, Any] | None = None
-        phase = "attempt setup"
-        self.store.audit.append(
-            "action.started",
-            actor=actor,
-            attempt_id=attempt_id,
-            attempt_group_id=group_id,
-            payload={"op": op, "attempt_index": attempt_index, "metadata": metadata, "actor": actor},
+        try:
+            command_payload = None
+            command_completed_at = 0.0
+            if semantic is None:
+                command = self._run_command(
+                    phone,
+                    op=op,
+                    call=call,
+                    metadata=metadata,
+                    attempt_id=attempt_id,
+                    group_id=group_id,
+                    verifier_name=verifier.name,
+                )
+                command_result = command.result
+                command_payload = command.payload
+                command_completed_at = command.completed_at
+                command_exception = command.exception
+                semantic = command.semantic
+            if semantic is None and command_result is not None and command_result.ok:
+                verification = self._verify_after_successful_command(
+                    phone,
+                    op=op,
+                    kwargs=kwargs,
+                    settle_strategy=settle_strategy,
+                    verifier=verifier,
+                    metadata=metadata,
+                    group_id=group_id,
+                    attempt_id=attempt_id,
+                    attempt_index=attempt_index,
+                    actor=actor,
+                    before_requested=before_requested,
+                    before_command=before_command,
+                    risk=risk,
+                    command_payload=command_payload or {},
+                    command_completed_at=command_completed_at,
+                    landing_retry_available=landing_retry_available,
+                )
+                if verification.exception is not None:
+                    command_exception = verification.exception
+                assert command_result is not None
+                return self._outcome_from_verification(command_result, semantic, command_exception, verification)
+            if semantic is None:
+                assert command_result is not None
+                reason = command_result.error or "command transport failed before GUI verification"
+                semantic = _semantic_transport_failed(verifier.name, reason)
+        except Exception as exc:
+            command_exception = exc
+            if command_result is None:
+                command_result = phone.failed_action_result(error=f"{type(exc).__name__}: {exc}")
+            semantic = _semantic_exception(verifier.name, exc, phase="command")
+        assert command_result is not None
+        assert semantic is not None
+        return AttemptOutcome(
+            command_result=command_result,
+            semantic=semantic,
+            command_exception=command_exception,
+            after_observation_metadata=after_observation_metadata,
         )
+
+    @staticmethod
+    def _outcome_from_verification(
+        command_result: ActionResult,
+        current_semantic: SemanticOutcome | None,
+        command_exception: BaseException | None,
+        verification: PostCommandVerification,
+    ) -> AttemptOutcome:
+        del current_semantic
+        return AttemptOutcome(
+            command_result=command_result,
+            semantic=verification.semantic,
+            command_exception=command_exception,
+            after=verification.after,
+            frame_diff=verification.frame_diff,
+            scene_diff=verification.scene_diff,
+            after_observation_metadata=verification.after_observation_metadata,
+            matched_by_observation=verification.matched_by_observation,
+            landing_observation=verification.landing_observation,
+        )
+
+    def _finish_attempt_outcome(
+        self,
+        phone,
+        *,
+        op: str,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        group_id: str,
+        attempt_id: str,
+        actor: str,
+        before_requested: Observation | None,
+        before_command: Observation | None,
+        risk: RiskDecision,
+        outcome: AttemptOutcome,
+    ) -> AttemptExecution:
+        return self._finish_attempt(
+            phone,
+            op=op,
+            kwargs=kwargs,
+            metadata=metadata,
+            group_id=group_id,
+            attempt_id=attempt_id,
+            before_requested=before_requested,
+            before_command=before_command,
+            after=outcome.after,
+            frame_diff=outcome.frame_diff,
+            scene_diff=outcome.scene_diff,
+            after_observation_metadata=outcome.after_observation_metadata,
+            matched_by_observation=outcome.matched_by_observation,
+            actor=actor,
+            risk=risk,
+            command_result=outcome.command_result,
+            semantic=outcome.semantic,
+            command_exception=outcome.command_exception,
+            landing_observation=outcome.landing_observation,
+        )
+
+    def _prepare_attempt(
+        self,
+        phone,
+        *,
+        op: str,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        group_id: str,
+        attempt_id: str,
+        attempt_index: int,
+        actor: str,
+        verifier_name: str,
+    ) -> AttemptPreparation:
+        before_requested: Observation | None = None
+        before_command: Observation | None = None
+        risk = self._default_attempt_risk(op)
+        trace_level_override = self._trace_level_override(metadata)
+        phase = "attempt setup"
+        self._audit_action_started(op, metadata, group_id=group_id, attempt_id=attempt_id, attempt_index=attempt_index, actor=actor)
         try:
             phase = "before_requested"
-            before_requested = self._observe(
-                phone,
-                role="before_requested",
-                stable=False,
-                attempt_id=attempt_id,
-                attempt_group_id=group_id,
-                trace_level=trace_level_override,
+            before_requested = self._observe_attempt_role(
+                phone, role="before_requested", group_id=group_id, attempt_id=attempt_id, trace_level=trace_level_override
             )
             before_command = before_requested
             phase = "policy"
-            risk = self.risk_policy.evaluate(op, metadata)
-            self.store.audit.append(
-                "policy.evaluated",
-                attempt_id=attempt_id,
-                attempt_group_id=group_id,
-                payload=risk.to_dict(),
-            )
+            risk = self._evaluate_attempt_risk(op, metadata, group_id=group_id, attempt_id=attempt_id)
             if risk.allowed and risk.approval_required:
                 self._record_approval(
                     op=op,
@@ -1051,16 +1715,11 @@ class ActionOrchestrator:
                     decided_by=str(metadata.get("approved_by") or "policy_fixture"),
                 )
                 phase = "before_command"
-                before_command = self._observe(
-                    phone,
-                    role="before_command",
-                    stable=False,
-                    attempt_id=attempt_id,
-                    attempt_group_id=group_id,
-                    trace_level=trace_level_override,
+                before_command = self._observe_attempt_role(
+                    phone, role="before_command", group_id=group_id, attempt_id=attempt_id, trace_level=trace_level_override
                 )
             if not risk.allowed:
-                return self._blocked_attempt(
+                blocked = self._blocked_attempt(
                     phone,
                     op=op,
                     kwargs=kwargs,
@@ -1070,166 +1729,420 @@ class ActionOrchestrator:
                     before_requested=before_requested,
                     before_command=before_command,
                     risk=risk,
-                    verifier_name=verifier.name,
+                    verifier_name=verifier_name,
                     actor=actor,
                 )
+                return AttemptPreparation(before_requested, before_command, risk, blocked_attempt=blocked)
             if before_command is before_requested:
                 phase = "before_command"
-                before_command = self._observe(
-                    phone,
-                    role="before_command",
-                    stable=False,
-                    attempt_id=attempt_id,
-                    attempt_group_id=group_id,
-                    trace_level=trace_level_override,
+                before_command = self._observe_attempt_role(
+                    phone, role="before_command", group_id=group_id, attempt_id=attempt_id, trace_level=trace_level_override
                 )
-
-            self.store.audit.append(
-                "command.sent",
-                attempt_id=attempt_id,
-                attempt_group_id=group_id,
-                payload={"op": op, "command": metadata},
+            return AttemptPreparation(before_requested, before_command, risk)
+        except Exception as exc:
+            return AttemptPreparation(
+                before_requested,
+                before_command,
+                risk,
+                command_result=phone.failed_action_result(error=f"{type(exc).__name__}: {exc}"),
+                semantic=_semantic_exception(verifier_name, exc, phase=phase),
+                exception=exc,
             )
-            phase = "command"
-            try:
-                command_result = call()
-            except Exception as exc:
-                command_exception = exc
-                command_result = phone._failed_action_result(error=f"{type(exc).__name__}: {exc}")
-                semantic = _semantic_exception(verifier.name, exc, phase="command")
 
-            command_payload = _result_to_command(command_result)
-            self.store.audit.append(
-                "command.acked" if command_result.ok else "command.failed",
-                attempt_id=attempt_id,
-                attempt_group_id=group_id,
-                payload=command_payload,
-            )
-            command_completed_at = time.monotonic()
-            phone._needs_stable_frame = True
-            phone._fresh_source_reopened_after_action = False
-            phone.invalidate_perceive_cache()
+    @staticmethod
+    def _default_attempt_risk(op: str) -> RiskDecision:
+        return RiskDecision(
+            level="medium",
+            approval_required=False,
+            allowed=True,
+            reason="runtime exception before policy evaluation",
+            source="runtime",
+            metadata={"op": op},
+        )
 
-            if semantic is None and command_result.ok:
-                if self._landing_observation_enabled(metadata):
-                    phase = "landing_observation"
-                    landing_observation = self._observe_landing(
-                        phone,
-                        before_command=before_command,
-                        metadata=metadata,
-                        group_id=group_id,
-                        attempt_id=attempt_id,
-                        attempt_index=attempt_index,
-                        actor=actor,
-                        command_completed_at=command_completed_at,
-                    )
-                phase = "after_observation"
-                after_observation = self._observe_after(
-                    phone,
-                    strategy=settle_strategy,
-                    verifier=verifier,
-                    metadata=metadata,
-                    attempt_id=attempt_id,
-                    attempt_group_id=group_id,
-                    command_completed_at=command_completed_at,
-                )
-                after = after_observation.frames
-                matched_by_observation = after_observation.matched_by_observation
-                after_observation_metadata = after_observation.metadata
-                if settle_strategy == "no_after":
-                    semantic = _semantic_no_after(
-                        verifier.name,
-                        "GUI verification skipped by no_after strategy",
-                        skipped=True,
-                    )
-                elif not after:
-                    semantic = _semantic_no_after(
-                        verifier.name,
-                        "after observation captured no frames",
-                        skipped=False,
-                    )
-                else:
-                    phase = "diff"
-                    frame_diff_payload, scene_diff_payload = self._compute_diff(
-                        before_command=before_command,
-                        after=after,
-                        attempt_id=attempt_id,
-                        group_id=group_id,
-                    )
-                    verifier_observations = [item for item in after if item[3] is not None]
-                    verifier_input = VerifierInput(
-                        attempt_id=attempt_id,
-                        attempt_group_id=group_id,
-                        action={"op": op, "args": [], "kwargs": kwargs, "metadata": metadata},
-                        before_requested=before_requested[3] if before_requested else None,
-                        before_command=before_command[3] if before_command else None,
-                        after_scenes=[item[3] for item in verifier_observations],
-                        after_frame_ids=[
-                            item[0].frame_id for item in verifier_observations if item[0] is not None
-                        ],
-                        after_scene_ids=[
-                            item[1].scene_id for item in verifier_observations if item[1] is not None
-                        ],
-                        after_mode=self._after_mode(settle_strategy),
-                        frame_diff=frame_diff_payload,
-                        scene_diff=scene_diff_payload,
-                        command_result=command_payload,
-                        risk=risk.to_dict(),
-                        platform=self.platform,
-                        matched_by_observation=matched_by_observation,
-                    )
-                    self.store.audit.append(
-                        "verifier.started",
-                        attempt_id=attempt_id,
-                        attempt_group_id=group_id,
-                        payload={"verifier": verifier.name},
-                    )
-                    phase = "verifier"
-                    semantic = verifier.verify(verifier_input)
-                    semantic = self._semantic_after_expected_state(
-                        phone,
-                        semantic,
-                        metadata,
-                        after[-1][3] if after else None,
-                    )
-                    semantic = self._semantic_after_landing(
-                        semantic,
-                        landing_observation,
-                        metadata,
-                        landing_retry_available=landing_retry_available,
-                    )
-            elif semantic is None:
-                reason = command_result.error or "command transport failed before GUI verification"
-                semantic = _semantic_transport_failed(verifier.name, reason)
+    def _audit_action_started(
+        self,
+        op: str,
+        metadata: dict[str, Any],
+        *,
+        group_id: str,
+        attempt_id: str,
+        attempt_index: int,
+        actor: str,
+    ) -> None:
+        self.store.audit.append(
+            "action.started",
+            actor=actor,
+            attempt_id=attempt_id,
+            attempt_group_id=group_id,
+            payload={"op": op, "attempt_index": attempt_index, "metadata": metadata, "actor": actor},
+        )
+
+    def _observe_attempt_role(
+        self,
+        phone,
+        *,
+        role: str,
+        group_id: str,
+        attempt_id: str,
+        trace_level: str | None,
+    ) -> Observation:
+        return self._observe(
+            phone,
+            role=role,
+            stable=False,
+            attempt_id=attempt_id,
+            attempt_group_id=group_id,
+            trace_level=trace_level,
+        )
+
+    def _evaluate_attempt_risk(
+        self,
+        op: str,
+        metadata: dict[str, Any],
+        *,
+        group_id: str,
+        attempt_id: str,
+    ) -> RiskDecision:
+        risk = self.risk_policy.evaluate(op, metadata)
+        self.store.audit.append(
+            "policy.evaluated",
+            attempt_id=attempt_id,
+            attempt_group_id=group_id,
+            payload=risk.to_dict(),
+        )
+        return risk
+
+    def _run_command(
+        self,
+        phone,
+        *,
+        op: str,
+        call: ActionCallable,
+        metadata: dict[str, Any],
+        attempt_id: str,
+        group_id: str,
+        verifier_name: str,
+    ) -> CommandExecution:
+        self.store.audit.append(
+            "command.sent",
+            attempt_id=attempt_id,
+            attempt_group_id=group_id,
+            payload={"op": op, "command": metadata},
+        )
+        command_exception: BaseException | None = None
+        semantic: SemanticOutcome | None = None
+        try:
+            command_result = call()
         except Exception as exc:
             command_exception = exc
-            if command_result is None:
-                command_result = phone._failed_action_result(error=f"{type(exc).__name__}: {exc}")
-            semantic = _semantic_exception(verifier.name, exc, phase=phase)
+            command_result = phone.failed_action_result(error=f"{type(exc).__name__}: {exc}")
+            semantic = _semantic_exception(verifier_name, exc, phase="command")
 
-        assert command_result is not None
-        assert semantic is not None
+        command_payload = _result_to_command(command_result)
+        self.store.audit.append(
+            "command.acked" if command_result.ok else "command.failed",
+            attempt_id=attempt_id,
+            attempt_group_id=group_id,
+            payload=command_payload,
+        )
+        command_completed_at = time.monotonic()
+        phone.mark_action_observation_dirty()
+        return CommandExecution(
+            result=command_result,
+            payload=command_payload,
+            completed_at=command_completed_at,
+            exception=command_exception,
+            semantic=semantic,
+        )
 
-        return self._finish_attempt(
-            phone,
+    def _verify_after_successful_command(
+        self,
+        phone,
+        *,
+        op: str,
+        kwargs: dict[str, Any],
+        settle_strategy: str,
+        verifier,
+        metadata: dict[str, Any],
+        group_id: str,
+        attempt_id: str,
+        attempt_index: int,
+        actor: str,
+        before_requested: Observation | None,
+        before_command: Observation | None,
+        risk: RiskDecision,
+        command_payload: dict[str, Any],
+        command_completed_at: float,
+        landing_retry_available: bool,
+    ) -> PostCommandVerification:
+        ctx = PostCommandContext(
+            phone=phone,
             op=op,
             kwargs=kwargs,
+            settle_strategy=settle_strategy,
+            verifier=verifier,
             metadata=metadata,
             group_id=group_id,
             attempt_id=attempt_id,
             before_requested=before_requested,
             before_command=before_command,
+            risk=risk,
+            command_payload=command_payload,
+            landing_retry_available=landing_retry_available,
+        )
+        try:
+            landing_observation = self._observe_landing_after_command(
+                ctx,
+                attempt_index=attempt_index,
+                actor=actor,
+                command_completed_at=command_completed_at,
+            )
+        except Exception as exc:
+            return self._post_command_exception(ctx, exc, phase="landing_observation")
+        try:
+            after_observation = self._observe_after(
+                phone,
+                strategy=settle_strategy,
+                verifier=verifier,
+                metadata=metadata,
+                attempt_id=attempt_id,
+                attempt_group_id=group_id,
+                command_completed_at=command_completed_at,
+            )
+        except Exception as exc:
+            return self._post_command_exception(
+                ctx,
+                exc,
+                phase="after_observation",
+                landing_observation=landing_observation,
+            )
+        return self._verify_after_observation(ctx, after_observation, landing_observation)
+
+    def _observe_landing_after_command(
+        self,
+        ctx: PostCommandContext,
+        *,
+        attempt_index: int,
+        actor: str,
+        command_completed_at: float,
+    ) -> dict[str, Any] | None:
+        if not self._landing_observation_enabled(ctx.metadata):
+            return None
+        return self._observe_landing(
+            ctx.phone,
+            before_command=ctx.before_command,
+            metadata=ctx.metadata,
+            group_id=ctx.group_id,
+            attempt_id=ctx.attempt_id,
+            attempt_index=attempt_index,
+            actor=actor,
+            command_completed_at=command_completed_at,
+        )
+
+    def _verify_after_observation(
+        self,
+        ctx: PostCommandContext,
+        after_observation: AfterObservation,
+        landing_observation: dict[str, Any] | None,
+    ) -> PostCommandVerification:
+        after = after_observation.frames
+        matched_by_observation = after_observation.matched_by_observation
+        if ctx.settle_strategy == "no_after":
+            return self._post_command_no_after(
+                ctx,
+                after_observation,
+                landing_observation,
+                "GUI verification skipped by no_after strategy",
+                skipped=True,
+            )
+        if not after:
+            return self._post_command_no_after(
+                ctx,
+                after_observation,
+                landing_observation,
+                "after observation captured no frames",
+                skipped=False,
+            )
+        try:
+            frame_diff_payload, scene_diff_payload = self._compute_diff(
+                before_command=ctx.before_command, after=after, attempt_id=ctx.attempt_id, group_id=ctx.group_id,
+            )
+        except Exception as exc:
+            return self._post_command_exception(
+                ctx,
+                exc,
+                phase="diff",
+                after=after,
+                after_observation_metadata=after_observation.metadata,
+                matched_by_observation=matched_by_observation,
+                landing_observation=landing_observation,
+            )
+        try:
+            semantic = self._verify_after_scenes(
+                ctx.phone,
+                op=ctx.op,
+                kwargs=ctx.kwargs,
+                metadata=ctx.metadata,
+                group_id=ctx.group_id,
+                attempt_id=ctx.attempt_id,
+                verifier=ctx.verifier,
+                before_requested=ctx.before_requested,
+                before_command=ctx.before_command,
+                after=after,
+                settle_strategy=ctx.settle_strategy,
+                frame_diff_payload=frame_diff_payload,
+                scene_diff_payload=scene_diff_payload,
+                command_payload=ctx.command_payload,
+                risk=ctx.risk,
+                matched_by_observation=matched_by_observation,
+                landing_observation=landing_observation,
+                landing_retry_available=ctx.landing_retry_available,
+            )
+        except Exception as exc:
+            return self._post_command_exception(
+                ctx,
+                exc,
+                phase="verifier",
+                after=after,
+                frame_diff=frame_diff_payload,
+                scene_diff=scene_diff_payload,
+                after_observation_metadata=after_observation.metadata,
+                matched_by_observation=matched_by_observation,
+                landing_observation=landing_observation,
+            )
+        return self._post_command_verified(
+            semantic,
             after=after,
             frame_diff=frame_diff_payload,
             scene_diff=scene_diff_payload,
-            after_observation_metadata=after_observation_metadata,
+            after_observation=after_observation,
             matched_by_observation=matched_by_observation,
-            actor=actor,
-            risk=risk,
-            command_result=command_result,
-            semantic=semantic,
-            command_exception=command_exception,
             landing_observation=landing_observation,
+        )
+
+    @staticmethod
+    def _post_command_no_after(
+        ctx: PostCommandContext,
+        after_observation: AfterObservation,
+        landing_observation: dict[str, Any] | None,
+        reason: str,
+        *,
+        skipped: bool,
+    ) -> PostCommandVerification:
+        return PostCommandVerification(
+            semantic=_semantic_no_after(ctx.verifier.name, reason, skipped=skipped),
+            after_observation_metadata=after_observation.metadata,
+            landing_observation=landing_observation,
+        )
+
+    @staticmethod
+    def _post_command_verified(
+        semantic: SemanticOutcome,
+        *,
+        after: list[Observation],
+        frame_diff: dict[str, Any] | None,
+        scene_diff: dict[str, Any] | None,
+        after_observation: AfterObservation,
+        matched_by_observation: dict[str, Any] | None,
+        landing_observation: dict[str, Any] | None,
+    ) -> PostCommandVerification:
+        return PostCommandVerification(
+            semantic=semantic,
+            after=after,
+            frame_diff=frame_diff,
+            scene_diff=scene_diff,
+            after_observation_metadata=after_observation.metadata,
+            matched_by_observation=matched_by_observation,
+            landing_observation=landing_observation,
+        )
+
+    def _post_command_exception(
+        self,
+        ctx: PostCommandContext,
+        exc: Exception,
+        *,
+        phase: str,
+        after: list[Observation] | None = None,
+        frame_diff: dict[str, Any] | None = None,
+        scene_diff: dict[str, Any] | None = None,
+        after_observation_metadata: dict[str, Any] | None = None,
+        matched_by_observation: dict[str, Any] | None = None,
+        landing_observation: dict[str, Any] | None = None,
+    ) -> PostCommandVerification:
+        return PostCommandVerification(
+            semantic=_semantic_exception(ctx.verifier.name, exc, phase=phase),
+            after=after or [],
+            frame_diff=frame_diff,
+            scene_diff=scene_diff,
+            after_observation_metadata=after_observation_metadata or {
+                "settle_strategy": ctx.settle_strategy,
+                "after_mode": "none",
+                "trace_level": self.store.effective_trace_level(self._trace_level_override(ctx.metadata)),
+            },
+            matched_by_observation=matched_by_observation,
+            landing_observation=landing_observation,
+            exception=exc,
+        )
+
+    def _verify_after_scenes(
+        self,
+        phone,
+        *,
+        op: str,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        group_id: str,
+        attempt_id: str,
+        verifier,
+        before_requested: Observation | None,
+        before_command: Observation | None,
+        after: list[Observation],
+        settle_strategy: str,
+        frame_diff_payload: dict[str, Any] | None,
+        scene_diff_payload: dict[str, Any] | None,
+        command_payload: dict[str, Any],
+        risk: RiskDecision,
+        matched_by_observation: dict[str, Any] | None,
+        landing_observation: dict[str, Any] | None,
+        landing_retry_available: bool,
+    ) -> SemanticOutcome:
+        verifier_observations = [item for item in after if item[3] is not None]
+        verifier_input = VerifierInput(
+            attempt_id=attempt_id,
+            attempt_group_id=group_id,
+            action={"op": op, "args": [], "kwargs": kwargs, "metadata": metadata},
+            before_requested=before_requested[3] if before_requested else None,
+            before_command=before_command[3] if before_command else None,
+            after_scenes=[item[3] for item in verifier_observations],
+            after_frame_ids=[item[0].frame_id for item in verifier_observations if item[0] is not None],
+            after_scene_ids=[item[1].scene_id for item in verifier_observations if item[1] is not None],
+            after_mode=self._after_mode(settle_strategy),
+            frame_diff=frame_diff_payload,
+            scene_diff=scene_diff_payload,
+            command_result=command_payload,
+            risk=risk.to_dict(),
+            platform=self.platform,
+            matched_by_observation=matched_by_observation,
+        )
+        self.store.audit.append(
+            "verifier.started",
+            attempt_id=attempt_id,
+            attempt_group_id=group_id,
+            payload={"verifier": verifier.name},
+        )
+        semantic = verifier.verify(verifier_input)
+        semantic = self._semantic_after_expected_state(
+            phone,
+            semantic,
+            metadata,
+            after[-1][3] if after else None,
+        )
+        return self._semantic_after_landing(
+            semantic,
+            landing_observation,
+            metadata,
+            landing_retry_available=landing_retry_available,
         )
 
     def _blocked_attempt(
@@ -1258,7 +2171,7 @@ class ActionOrchestrator:
             decided_by="policy",
         )
         result = ActionResult.failed(
-            backend=getattr(phone, "_effector_backend", lambda: "unknown")(),
+            backend=getattr(phone, "effector_backend", lambda: "unknown")(),
             connected=False,
             error=risk.reason,
             synthetic=True,
@@ -1292,6 +2205,201 @@ class ActionOrchestrator:
             landing_observation=None,
         )
 
+    def _store_attempt_verification(
+        self,
+        *,
+        attempt_id: str,
+        group_id: str,
+        semantic: SemanticOutcome,
+        frame_diff: dict[str, Any] | None,
+        scene_diff: dict[str, Any] | None,
+        trace_level_override: str | None,
+    ) -> tuple[str, dict[str, Any]]:
+        verification_file = self.store.store_verification(attempt_id, semantic.to_dict())
+        diff_files = self.store.store_diff(
+            attempt_id,
+            {"frame": frame_diff, "scene": scene_diff},
+            trace_level=trace_level_override,
+        )
+        self.store.audit.append(
+            "verifier.finished",
+            attempt_id=attempt_id,
+            attempt_group_id=group_id,
+            payload={**semantic.to_dict(), "file": verification_file},
+        )
+        if semantic.disqualifying_state:
+            self.store.audit.append(
+                "disqualifying_state.detected",
+                attempt_id=attempt_id,
+                attempt_group_id=group_id,
+                payload=semantic.to_dict(),
+            )
+        return verification_file, diff_files
+
+    def _attempt_observation_payload(
+        self,
+        phone,
+        *,
+        metadata: dict[str, Any],
+        after: list[Observation],
+        matched_by_observation: dict[str, Any] | None,
+        trace_level_override: str | None,
+        after_observation_metadata: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        after_mode = self._after_mode(str(metadata.get("settle_strategy"))) if after else "none"
+        screen_signature = self._screen_signature(after[-1][3], after[-1][2]) if after else None
+        observation_payload = {
+            "settle_strategy": metadata.get("settle_strategy"),
+            "after_mode": after_mode,
+            "matched_by_observation": matched_by_observation,
+            "stable_policy": getattr(phone, "last_stability_policy", None),
+            "stability_score": getattr(phone, "last_stability_score", None),
+            "frame_ids": [item[0].frame_id for item in after if item[0] is not None],
+            "scene_ids": [item[1].scene_id for item in after if item[1] is not None],
+            "frame_count": len(after),
+            "trace_level": self.store.effective_trace_level(trace_level_override),
+            "screen_signature": screen_signature,
+        }
+        observation_payload.update(after_observation_metadata or {})
+        observation_payload["after_mode"] = after_mode
+        observation_payload["matched_by_observation"] = matched_by_observation
+        return observation_payload
+
+    def _attempt_action_payload(
+        self,
+        *,
+        op: str,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        group_id: str,
+        attempt_id: str,
+        actor: str,
+        risk: RiskDecision,
+        command_result: ActionResult,
+        semantic: SemanticOutcome,
+        before_requested: Observation | None,
+        before_command: Observation | None,
+        after: list[Observation],
+        after_mode: str,
+        diff_files: dict[str, Any],
+        frame_diff: dict[str, Any] | None,
+        scene_diff: dict[str, Any] | None,
+        observation_payload: dict[str, Any],
+        verification_file: str,
+    ) -> dict[str, Any]:
+        action_payload = {
+            "attempt_id": attempt_id,
+            "attempt_group_id": group_id,
+            "actor": actor,
+            "op": op,
+            "intent": {"name": kwargs.get("via") or kwargs.get("policy_action") or op},
+            "risk": risk.to_dict(),
+            "before_requested": self._refs(before_requested),
+            "before_command": self._refs(before_command),
+            "command": {"type": op, **kwargs},
+            "command_result": _result_to_command(command_result),
+            "after": self._refs(after[-1]) if after else None,
+            "after_window": [self._refs(item) for item in after] if after and after_mode == "window" else None,
+            "diff": diff_files,
+            "diff_summary": {"frame": frame_diff, "scene": scene_diff},
+            "observation": observation_payload,
+            "semantic": semantic.to_dict(),
+            "verification": verification_file,
+            "status": semantic.status,
+        }
+        self._carry_vlm_retry_metadata(metadata, action_payload["command"])
+        return action_payload
+
+    def _append_finished_attempt(
+        self,
+        *,
+        action_payload: dict[str, Any],
+        semantic: SemanticOutcome,
+        command_exception: BaseException | None,
+        attempt_id: str,
+        group_id: str,
+    ) -> None:
+        self.store.append_action(action_payload)
+        self.store.audit.append(
+            "action.finished" if command_exception is None else "action.exception",
+            attempt_id=attempt_id,
+            attempt_group_id=group_id,
+            payload={"status": semantic.status, "exception": repr(command_exception) if command_exception else None},
+        )
+        self._actions.append(action_payload)
+
+    def _build_finished_action_payload(
+        self,
+        phone,
+        *,
+        op: str,
+        kwargs: dict[str, Any],
+        metadata: dict[str, Any],
+        group_id: str,
+        attempt_id: str,
+        actor: str,
+        risk: RiskDecision,
+        command_result: ActionResult,
+        semantic: SemanticOutcome,
+        before_requested: Observation | None,
+        before_command: Observation | None,
+        after: list[Observation],
+        frame_diff: dict[str, Any] | None,
+        scene_diff: dict[str, Any] | None,
+        matched_by_observation: dict[str, Any] | None,
+        landing_observation: dict[str, Any] | None,
+        trace_level_override: str | None,
+        after_observation_metadata: dict[str, Any] | None,
+        verification_file: str,
+        diff_files: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        attempt_attribution = self._attempt_attribution(
+            attempt_id=attempt_id,
+            group_id=group_id,
+            attempt_index=int(metadata.get("attempt_index", 0) or 0),
+            metadata=metadata,
+            semantic=semantic,
+            landing_observation=landing_observation,
+            frame_diff=frame_diff,
+            scene_diff=scene_diff,
+            actor=actor,
+        )
+        after_mode = self._after_mode(str(metadata.get("settle_strategy"))) if after else "none"
+        observation_payload = self._attempt_observation_payload(
+            phone,
+            metadata=metadata,
+            after=after,
+            matched_by_observation=matched_by_observation,
+            trace_level_override=trace_level_override,
+            after_observation_metadata=after_observation_metadata,
+        )
+        action_payload = self._attempt_action_payload(
+            op=op,
+            kwargs=kwargs,
+            metadata=metadata,
+            group_id=group_id,
+            attempt_id=attempt_id,
+            actor=actor,
+            risk=risk,
+            command_result=command_result,
+            semantic=semantic,
+            before_requested=before_requested,
+            before_command=before_command,
+            after=after,
+            after_mode=after_mode,
+            diff_files=diff_files,
+            frame_diff=frame_diff,
+            scene_diff=scene_diff,
+            observation_payload=observation_payload,
+            verification_file=verification_file,
+        )
+        if landing_observation is not None or attempt_attribution is not None:
+            action_payload["actuation"] = {
+                "landing_observation": landing_observation,
+                "attempt_attribution": attempt_attribution,
+            }
+        return action_payload, attempt_attribution
+
     def _finish_attempt(
         self,
         phone,
@@ -1316,98 +2424,46 @@ class ActionOrchestrator:
         landing_observation: dict[str, Any] | None = None,
     ) -> AttemptExecution:
         with contextlib.suppress(Exception):
-            phone._record_action(op, result=command_result, **kwargs)
+            phone.record_action(op, result=command_result, **kwargs)
         trace_level_override = self._trace_level_override(metadata)
-        verification_file = self.store.store_verification(attempt_id, semantic.to_dict())
-        diff_files = self.store.store_diff(
-            attempt_id,
-            {"frame": frame_diff, "scene": scene_diff},
-            trace_level=trace_level_override,
-        )
-        self.store.audit.append(
-            "verifier.finished",
-            attempt_id=attempt_id,
-            attempt_group_id=group_id,
-            payload={**semantic.to_dict(), "file": verification_file},
-        )
-        if semantic.disqualifying_state:
-            self.store.audit.append(
-                "disqualifying_state.detected",
-                attempt_id=attempt_id,
-                attempt_group_id=group_id,
-                payload=semantic.to_dict(),
-            )
-        attempt_attribution = self._attempt_attribution(
+        verification_file, diff_files = self._store_attempt_verification(
             attempt_id=attempt_id,
             group_id=group_id,
-            attempt_index=int(metadata.get("attempt_index", 0) or 0),
-            metadata=metadata,
             semantic=semantic,
-            landing_observation=landing_observation,
             frame_diff=frame_diff,
             scene_diff=scene_diff,
-            actor=actor,
+            trace_level_override=trace_level_override,
         )
-        after_mode = self._after_mode(str(metadata.get("settle_strategy"))) if after else "none"
-        screen_signature = self._screen_signature(after[-1][3], after[-1][2]) if after else None
-        observation_payload = {
-            "settle_strategy": metadata.get("settle_strategy"),
-            "after_mode": after_mode,
-            "matched_by_observation": matched_by_observation,
-            "stable_policy": getattr(phone, "_last_stability_policy", None),
-            "stability_score": getattr(phone, "_last_stability_score", None),
-            "frame_ids": [item[0].frame_id for item in after if item[0] is not None],
-            "scene_ids": [item[1].scene_id for item in after if item[1] is not None],
-            "frame_count": len(after),
-            "trace_level": self.store.effective_trace_level(trace_level_override),
-            "screen_signature": screen_signature,
-        }
-        observation_payload.update(after_observation_metadata or {})
-        observation_payload["after_mode"] = after_mode
-        observation_payload["matched_by_observation"] = matched_by_observation
-        action_payload = {
-            "attempt_id": attempt_id,
-            "attempt_group_id": group_id,
-            "actor": actor,
-            "op": op,
-            "intent": {"name": kwargs.get("via") or kwargs.get("policy_action") or op},
-            "risk": risk.to_dict(),
-            "before_requested": self._refs(before_requested),
-            "before_command": self._refs(before_command),
-            "command": {"type": op, **kwargs},
-            "command_result": _result_to_command(command_result),
-            "after": self._refs(after[-1]) if after else None,
-            "after_window": [self._refs(item) for item in after] if after and after_mode == "window" else None,
-            "diff": diff_files,
-            "diff_summary": {"frame": frame_diff, "scene": scene_diff},
-            "observation": observation_payload,
-            "semantic": semantic.to_dict(),
-            "verification": verification_file,
-            "status": semantic.status,
-        }
-        for key in (
-            "vlm_calls",
-            "vlm_triggers",
-            "last_vlm_trigger",
-            "vlm_budget_exhausted",
-            "vlm_cache_hits",
-            "vlm_cache_misses",
-        ):
-            if key in metadata:
-                action_payload["command"][key] = metadata[key]
-        if landing_observation is not None or attempt_attribution is not None:
-            action_payload["actuation"] = {
-                "landing_observation": landing_observation,
-                "attempt_attribution": attempt_attribution,
-            }
-        self.store.append_action(action_payload)
-        self.store.audit.append(
-            "action.finished" if command_exception is None else "action.exception",
+        action_payload, attempt_attribution = self._build_finished_action_payload(
+            phone,
+            op=op,
+            kwargs=kwargs,
+            metadata=metadata,
+            group_id=group_id,
             attempt_id=attempt_id,
-            attempt_group_id=group_id,
-            payload={"status": semantic.status, "exception": repr(command_exception) if command_exception else None},
+            actor=actor,
+            risk=risk,
+            command_result=command_result,
+            semantic=semantic,
+            before_requested=before_requested,
+            before_command=before_command,
+            after=after,
+            frame_diff=frame_diff,
+            scene_diff=scene_diff,
+            matched_by_observation=matched_by_observation,
+            landing_observation=landing_observation,
+            trace_level_override=trace_level_override,
+            after_observation_metadata=after_observation_metadata,
+            verification_file=verification_file,
+            diff_files=diff_files,
         )
-        self._actions.append(action_payload)
+        self._append_finished_attempt(
+            action_payload=action_payload,
+            semantic=semantic,
+            command_exception=command_exception,
+            attempt_id=attempt_id,
+            group_id=group_id,
+        )
         return AttemptExecution(
             attempt_id=attempt_id,
             result=command_result,
@@ -1487,22 +2543,16 @@ class ActionOrchestrator:
         )
         return frame_diff_payload, scene_diff_payload
 
-    def _observe_landing(
+    def _landing_window_frames(
         self,
         phone,
         *,
-        before_command: Observation | None,
-        metadata: dict[str, Any],
         group_id: str,
         attempt_id: str,
-        attempt_index: int,
-        actor: str,
-        command_completed_at: float,
-    ) -> dict[str, Any]:
-        trace_level_override = self._trace_level_override(metadata)
-        max_frames = max(1, int(metadata.get("landing_window_frames", 1) or 1))
-        interval_s = float(metadata.get("landing_sample_interval_ms", 0) or 0) / 1000.0
-        started = time.monotonic()
+        trace_level_override: str | None,
+        max_frames: int,
+        interval_s: float,
+    ) -> list[Observation]:
         frames: list[Observation] = []
         for index in range(max_frames):
             if index > 0 and interval_s > 0:
@@ -1526,23 +2576,47 @@ class ActionOrchestrator:
                     payload={"role": "landing_window", "error": f"{type(exc).__name__}: {exc}"},
                 )
                 break
+        return frames
 
+    def _landing_diff_artifact(
+        self,
+        *,
+        before_command: Observation | None,
+        frames: list[Observation],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         if metadata.get("actuation_method") == "keyboard_focus_activate":
-            diff_artifact = self._focus_evidence_artifact(before_command, frames)
-        else:
-            diff_artifact = self._roi_diff_artifact(
-                before_command[2] if before_command else None,
-                [item[2] for item in frames],
-                metadata.get("target_roi"),
-            )
-        threshold = float(metadata.get("landing_diff_threshold", 0.001) or 0.001)
+            return self._focus_evidence_artifact(before_command, frames)
+        return self._roi_diff_artifact(
+            before_command[2] if before_command else None,
+            [item[2] for item in frames],
+            metadata.get("target_roi"),
+        )
+
+    @staticmethod
+    def _landing_signal(diff_artifact: dict[str, Any], threshold: float) -> str:
         if diff_artifact.get("diff_ratio") is None:
-            signal = "indeterminate"
-        elif bool(diff_artifact.get("focus_changed")) or float(diff_artifact["diff_ratio"]) > threshold:
-            signal = "landed"
-        else:
-            signal = "missed"
-        payload = {
+            return "indeterminate"
+        if bool(diff_artifact.get("focus_changed")) or float(diff_artifact["diff_ratio"]) > threshold:
+            return "landed"
+        return "missed"
+
+    @staticmethod
+    def _landing_payload(
+        *,
+        metadata: dict[str, Any],
+        group_id: str,
+        attempt_id: str,
+        attempt_index: int,
+        actor: str,
+        frames: list[Observation],
+        diff_artifact: dict[str, Any],
+        signal: str,
+        threshold: float,
+        started: float,
+        command_completed_at: float,
+    ) -> dict[str, Any]:
+        return {
             "attempt_group_id": group_id,
             "attempt_id": attempt_id,
             "attempt_index": attempt_index,
@@ -1566,6 +2640,51 @@ class ActionOrchestrator:
             "started_ms_after_command": int((started - command_completed_at) * 1000),
             "duration_ms": int((time.monotonic() - started) * 1000),
         }
+
+    def _observe_landing(
+        self,
+        phone,
+        *,
+        before_command: Observation | None,
+        metadata: dict[str, Any],
+        group_id: str,
+        attempt_id: str,
+        attempt_index: int,
+        actor: str,
+        command_completed_at: float,
+    ) -> dict[str, Any]:
+        trace_level_override = self._trace_level_override(metadata)
+        max_frames = max(1, int(metadata.get("landing_window_frames", 1) or 1))
+        interval_s = float(metadata.get("landing_sample_interval_ms", 0) or 0) / 1000.0
+        started = time.monotonic()
+        frames = self._landing_window_frames(
+            phone,
+            group_id=group_id,
+            attempt_id=attempt_id,
+            trace_level_override=trace_level_override,
+            max_frames=max_frames,
+            interval_s=interval_s,
+        )
+        diff_artifact = self._landing_diff_artifact(
+            before_command=before_command,
+            frames=frames,
+            metadata=metadata,
+        )
+        threshold = float(metadata.get("landing_diff_threshold", 0.001) or 0.001)
+        signal = self._landing_signal(diff_artifact, threshold)
+        payload = self._landing_payload(
+            metadata=metadata,
+            group_id=group_id,
+            attempt_id=attempt_id,
+            attempt_index=attempt_index,
+            actor=actor,
+            frames=frames,
+            diff_artifact=diff_artifact,
+            signal=signal,
+            threshold=threshold,
+            started=started,
+            command_completed_at=command_completed_at,
+        )
         self.store.audit.append(
             "actuation.landing_observed",
             attempt_id=attempt_id,
@@ -1713,7 +2832,7 @@ class ActionOrchestrator:
         # scene becomes the basis for the VLM escalation. perceive(fresh=True)
         # short-circuits via the perceive cache when pixels are unchanged, so this
         # only re-OCRs a genuinely changed screen. Flag-gated (default off).
-        if getattr(phone, "_reverify_fresh_frame", False):
+        if getattr(phone, "reverify_fresh_frame_enabled", False):
             fresh_scene = self._reperceive_fresh(phone)
             if fresh_scene is not None:
                 fresh_semantic = verify_expected_state(expected, fresh_scene)
@@ -2085,13 +3204,13 @@ class ActionOrchestrator:
         trace_level: str | None = None,
     ):
         scene = phone.perceive(stable=stable)
-        frame = phone._last_frame
+        frame = phone.last_frame
         if frame is not None:
             self.observation_buffer.append(frame, source=role)
         stored_frame = self.store.promote_frame(
             frame,
             role=role,
-            stable=phone._last_stable_frame,
+            stable=phone.last_stable_frame,
             attempt_id=attempt_id,
             attempt_group_id=attempt_group_id,
             trace_level=trace_level,
@@ -2132,6 +3251,55 @@ class ActionOrchestrator:
                 "verification_skipped": True,
             })
             return AfterObservation(metadata=base_metadata)
+        self._prepare_fresh_after_capture(phone, metadata=metadata, base_metadata=base_metadata)
+        if strategy == "fixed_delay_after":
+            return self._observe_after_fixed_delay(
+                phone,
+                metadata=metadata,
+                started=started,
+                base_metadata=base_metadata,
+                attempt_id=attempt_id,
+                attempt_group_id=attempt_group_id,
+                trace_level=trace_level_override,
+            )
+        if strategy == "transient_window":
+            return self._observe_after_transient_window(
+                phone,
+                metadata=metadata,
+                started=started,
+                base_metadata=base_metadata,
+                attempt_id=attempt_id,
+                attempt_group_id=attempt_group_id,
+                trace_level=trace_level_override,
+            )
+        if strategy == "stream_until_match":
+            return self._observe_after_stream_until_match(
+                phone,
+                verifier=verifier,
+                metadata=metadata,
+                started=started,
+                base_metadata=base_metadata,
+                attempt_id=attempt_id,
+                attempt_group_id=attempt_group_id,
+                trace_level=trace_level_override,
+            )
+        return self._observe_after_default(
+            phone,
+            strategy=strategy,
+            started=started,
+            base_metadata=base_metadata,
+            attempt_id=attempt_id,
+            attempt_group_id=attempt_group_id,
+            trace_level=trace_level_override,
+        )
+
+    def _prepare_fresh_after_capture(
+        self,
+        phone,
+        *,
+        metadata: dict[str, Any],
+        base_metadata: dict[str, Any],
+    ) -> None:
         fresh_delay_ms = int(metadata.get("fresh_delay_ms", 0) or 0)
         if fresh_delay_ms > 0:
             time.sleep(fresh_delay_ms / 1000.0)
@@ -2143,133 +3311,160 @@ class ActionOrchestrator:
                 "fresh_source_reopen": bool(metadata.get("fresh_source_reopen")),
                 "fresh_source_reopened": reopened,
             })
-        if strategy == "fixed_delay_after":
-            delay_s = float(metadata.get("delay_ms", metadata.get("fixed_delay_ms", 250))) / 1000.0
-            time.sleep(max(0.0, delay_s))
-            frames: list[Observation] = []
+
+    def _observe_after_fixed_delay(
+        self,
+        phone,
+        *,
+        metadata: dict[str, Any],
+        started: float,
+        base_metadata: dict[str, Any],
+        attempt_id: str,
+        attempt_group_id: str,
+        trace_level: str | None,
+    ) -> AfterObservation:
+        delay_s = float(metadata.get("delay_ms", metadata.get("fixed_delay_ms", 250))) / 1000.0
+        time.sleep(max(0.0, delay_s))
+        frames: list[Observation] = []
+        try:
+            frames.append(
+                self._observe(
+                    phone,
+                    role="after",
+                    stable=False,
+                    attempt_id=attempt_id,
+                    attempt_group_id=attempt_group_id,
+                    trace_level=trace_level,
+                )
+            )
+        except Exception as exc:
+            self._audit_after_observation_failed(exc, attempt_id=attempt_id, attempt_group_id=attempt_group_id)
+        base_metadata.update({
+            "fixed_delay_ms": int(delay_s * 1000),
+            "duration_ms": int((time.monotonic() - started) * 1000),
+            "frame_count": len(frames),
+        })
+        return AfterObservation(frames=frames, metadata=base_metadata)
+
+    def _observe_after_transient_window(
+        self,
+        phone,
+        *,
+        metadata: dict[str, Any],
+        started: float,
+        base_metadata: dict[str, Any],
+        attempt_id: str,
+        attempt_group_id: str,
+        trace_level: str | None,
+    ) -> AfterObservation:
+        frames: list[Observation] = []
+        timeout_s = float(metadata.get("window_duration_ms", metadata.get("transient_window_ms", 1800))) / 1000.0
+        interval_s = float(metadata.get("sample_interval_ms", 250)) / 1000.0
+        max_frames = max(1, int(metadata.get("max_stream_frames", metadata.get("max_window_frames", 8))))
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline and len(frames) < max_frames:
             try:
                 frames.append(
                     self._observe(
-                        phone,
-                        role="after",
-                        stable=False,
-                        attempt_id=attempt_id,
-                        attempt_group_id=attempt_group_id,
-                        trace_level=trace_level_override,
-                    )
-                )
-            except Exception as exc:
-                self.store.audit.append(
-                    "after_observation.failed",
-                    attempt_id=attempt_id,
-                    attempt_group_id=attempt_group_id,
-                    payload={"error": f"{type(exc).__name__}: {exc}"},
-                )
-            base_metadata.update({
-                "fixed_delay_ms": int(delay_s * 1000),
-                "duration_ms": int((time.monotonic() - started) * 1000),
-                "frame_count": len(frames),
-            })
-            return AfterObservation(frames=frames, metadata=base_metadata)
-        if strategy == "transient_window":
-            frames: list[Observation] = []
-            timeout_s = float(metadata.get("window_duration_ms", metadata.get("transient_window_ms", 1800))) / 1000.0
-            interval_s = float(metadata.get("sample_interval_ms", 250)) / 1000.0
-            max_frames = max(1, int(metadata.get("max_stream_frames", metadata.get("max_window_frames", 8))))
-            deadline = time.monotonic() + timeout_s
-            while time.monotonic() < deadline and len(frames) < max_frames:
-                try:
-                    frames.append(
-                        self._observe(
-                            phone,
-                            role="after_window",
-                            stable=False,
-                            attempt_id=attempt_id,
-                            attempt_group_id=attempt_group_id,
-                            trace_level=trace_level_override,
-                        )
-                    )
-                except Exception as exc:
-                    self.store.audit.append(
-                        "after_observation.failed",
-                        attempt_id=attempt_id,
-                        attempt_group_id=attempt_group_id,
-                        payload={"error": f"{type(exc).__name__}: {exc}"},
-                    )
-                    break
-                time.sleep(interval_s)
-            base_metadata.update({
-                "duration_ms": int((time.monotonic() - started) * 1000),
-                "timeout_ms": int(timeout_s * 1000),
-                "sample_interval_ms": int(interval_s * 1000),
-                "max_frames": max_frames,
-                "frame_count": len(frames),
-            })
-            return AfterObservation(frames=frames, metadata=base_metadata)
-        if strategy == "stream_until_match":
-            frames: list[Observation] = []
-            matched: dict[str, Any] | None = None
-            timeout_s = float(metadata.get("stream_timeout_ms", 1800)) / 1000.0
-            interval_s = float(metadata.get("sample_interval_ms", 250)) / 1000.0
-            max_frames = max(1, int(metadata.get("max_stream_frames", 12)))
-            deadline = time.monotonic() + timeout_s
-            while time.monotonic() < deadline and len(frames) < max_frames:
-                try:
-                    observation = self._observe(
                         phone,
                         role="after_window",
                         stable=False,
                         attempt_id=attempt_id,
                         attempt_group_id=attempt_group_id,
-                        trace_level=trace_level_override,
+                        trace_level=trace_level,
                     )
-                except Exception as exc:
-                    self.store.audit.append(
-                        "after_observation.failed",
-                        attempt_id=attempt_id,
-                        attempt_group_id=attempt_group_id,
-                        payload={"error": f"{type(exc).__name__}: {exc}"},
-                    )
-                    break
-                frames.append(observation)
-                matched = self._lightweight_match(verifier, observation, metadata=metadata)
-                if matched is not None:
-                    event_type = (
-                        "observation.disqualifying_state_found"
-                        if matched.get("kind") == "disqualifying_state"
-                        else "observation.match_found"
-                    )
-                    self.store.audit.append(
-                        event_type,
-                        attempt_id=attempt_id,
-                        attempt_group_id=attempt_group_id,
-                        payload=matched,
-                    )
-                    break
-                time.sleep(interval_s)
-            if matched is None:
-                self.store.audit.append(
-                    "observation.match_timeout",
+                )
+            except Exception as exc:
+                self._audit_after_observation_failed(exc, attempt_id=attempt_id, attempt_group_id=attempt_group_id)
+                break
+            time.sleep(interval_s)
+        base_metadata.update({
+            "duration_ms": int((time.monotonic() - started) * 1000),
+            "timeout_ms": int(timeout_s * 1000),
+            "sample_interval_ms": int(interval_s * 1000),
+            "max_frames": max_frames,
+            "frame_count": len(frames),
+        })
+        return AfterObservation(frames=frames, metadata=base_metadata)
+
+    def _observe_after_stream_until_match(
+        self,
+        phone,
+        *,
+        verifier,
+        metadata: dict[str, Any],
+        started: float,
+        base_metadata: dict[str, Any],
+        attempt_id: str,
+        attempt_group_id: str,
+        trace_level: str | None,
+    ) -> AfterObservation:
+        frames: list[Observation] = []
+        matched: dict[str, Any] | None = None
+        timeout_s = float(metadata.get("stream_timeout_ms", 1800)) / 1000.0
+        interval_s = float(metadata.get("sample_interval_ms", 250)) / 1000.0
+        max_frames = max(1, int(metadata.get("max_stream_frames", 12)))
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline and len(frames) < max_frames:
+            try:
+                observation = self._observe(
+                    phone,
+                    role="after_window",
+                    stable=False,
                     attempt_id=attempt_id,
                     attempt_group_id=attempt_group_id,
-                    payload={
-                        "frames": len(frames),
-                        "timeout_ms": int(timeout_s * 1000),
-                        "sample_interval_ms": int(interval_s * 1000),
-                    },
+                    trace_level=trace_level,
                 )
-            base_metadata.update({
-                "duration_ms": int((time.monotonic() - started) * 1000),
-                "timeout_ms": int(timeout_s * 1000),
-                "sample_interval_ms": int(interval_s * 1000),
-                "max_frames": max_frames,
-                "frame_count": len(frames),
-            })
-            return AfterObservation(
-                frames=frames,
-                matched_by_observation=matched,
-                metadata=base_metadata,
+            except Exception as exc:
+                self._audit_after_observation_failed(exc, attempt_id=attempt_id, attempt_group_id=attempt_group_id)
+                break
+            frames.append(observation)
+            matched = self._lightweight_match(verifier, observation, metadata=metadata)
+            if matched is not None:
+                event_type = (
+                    "observation.disqualifying_state_found"
+                    if matched.get("kind") == "disqualifying_state"
+                    else "observation.match_found"
+                )
+                self.store.audit.append(
+                    event_type,
+                    attempt_id=attempt_id,
+                    attempt_group_id=attempt_group_id,
+                    payload=matched,
+                )
+                break
+            time.sleep(interval_s)
+        if matched is None:
+            self.store.audit.append(
+                "observation.match_timeout",
+                attempt_id=attempt_id,
+                attempt_group_id=attempt_group_id,
+                payload={
+                    "frames": len(frames),
+                    "timeout_ms": int(timeout_s * 1000),
+                    "sample_interval_ms": int(interval_s * 1000),
+                },
             )
+        base_metadata.update({
+            "duration_ms": int((time.monotonic() - started) * 1000),
+            "timeout_ms": int(timeout_s * 1000),
+            "sample_interval_ms": int(interval_s * 1000),
+            "max_frames": max_frames,
+            "frame_count": len(frames),
+        })
+        return AfterObservation(frames=frames, matched_by_observation=matched, metadata=base_metadata)
+
+    def _observe_after_default(
+        self,
+        phone,
+        *,
+        strategy: str,
+        started: float,
+        base_metadata: dict[str, Any],
+        attempt_id: str,
+        attempt_group_id: str,
+        trace_level: str | None,
+    ) -> AfterObservation:
         policy = getattr(phone, "stability_policy", None)
         stable = strategy == "stable_after" and policy is not None and policy.enabled
         try:
@@ -2280,22 +3475,31 @@ class ActionOrchestrator:
                     stable=stable,
                     attempt_id=attempt_id,
                     attempt_group_id=attempt_group_id,
-                    trace_level=trace_level_override,
+                    trace_level=trace_level,
                 )
             ]
         except Exception as exc:
-            self.store.audit.append(
-                "after_observation.failed",
-                attempt_id=attempt_id,
-                attempt_group_id=attempt_group_id,
-                payload={"error": f"{type(exc).__name__}: {exc}"},
-            )
+            self._audit_after_observation_failed(exc, attempt_id=attempt_id, attempt_group_id=attempt_group_id)
             frames = []
         base_metadata.update({
             "duration_ms": int((time.monotonic() - started) * 1000),
             "frame_count": len(frames),
         })
         return AfterObservation(frames=frames, metadata=base_metadata)
+
+    def _audit_after_observation_failed(
+        self,
+        exc: BaseException,
+        *,
+        attempt_id: str,
+        attempt_group_id: str,
+    ) -> None:
+        self.store.audit.append(
+            "after_observation.failed",
+            attempt_id=attempt_id,
+            attempt_group_id=attempt_group_id,
+            payload={"error": f"{type(exc).__name__}: {exc}"},
+        )
 
     @staticmethod
     def _reopen_source_for_fresh_capture(phone) -> bool:
@@ -2307,8 +3511,9 @@ class ActionOrchestrator:
         close()
         time.sleep(0.05)
         open_()
-        if hasattr(phone, "_fresh_source_reopened_after_action"):
-            phone._fresh_source_reopened_after_action = True
+        mark_reopened = getattr(phone, "mark_fresh_source_reopened_after_action", None)
+        if callable(mark_reopened):
+            mark_reopened()
         return True
 
     @staticmethod

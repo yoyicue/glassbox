@@ -12,12 +12,14 @@ import json
 import re
 from typing import Any
 
+from glassbox.boundaries import action_host_last_frame
 from glassbox.cognition import Box, UIElement
 from glassbox.cognition.vlm_ocr import (
     choose_label_from_region,
     encode_crop_png,
     horizontal_band_box,
 )
+from skills.regression.ios_settings import context as settings_context
 from skills.regression.ios_settings.policy import DEFAULT_SETTINGS_POLICY, EXPECTED_ROOT_NAV_TEXT_ZH
 
 _ROW_TEXT_CACHE: dict[str, str] = {}
@@ -48,7 +50,7 @@ def recover_root_label(
     """Use VLM OCR for root-row labels only when Kimi is enabled."""
     global _row_calls
     kimi = getattr(phone, "kimi", None) if phone is not None else None
-    frame = getattr(phone, "_last_frame", None) if phone is not None else None
+    frame = action_host_last_frame(phone) if phone is not None else None
     if kimi is None or frame is None or not (
         hasattr(kimi, "chat") or hasattr(kimi, "read_text_region")
     ):
@@ -91,7 +93,7 @@ def vlm_point_for_label(phone, label: str, *, scene_kind: str) -> UIElement | No
         _record_point_grounding(phone, label=label, scene_kind=scene_kind, reason="unsafe_label")
         return None
     kimi = getattr(phone, "kimi", None) if phone is not None else None
-    frame = getattr(phone, "_last_frame", None) if phone is not None else None
+    frame = action_host_last_frame(phone) if phone is not None else None
     frame_img = getattr(frame, "img", None)
     if kimi is None or frame_img is None or not hasattr(kimi, "chat"):
         _record_point_grounding(phone, label=label, scene_kind=scene_kind, reason="no_kimi_or_frame")
@@ -325,13 +327,4 @@ def _record_point_grounding(
         payload["reason"] = reason
     if hit is not None:
         payload["point"] = list(hit.box.center)
-    try:
-        phone._ios_settings_last_vlm_point_grounding = payload
-        phone._ios_settings_vlm_point_failure_reason = reason
-        history = getattr(phone, "_ios_settings_vlm_point_grounding_history", None)
-        if not isinstance(history, list):
-            history = []
-            phone._ios_settings_vlm_point_grounding_history = history
-        history.append(payload)
-    except Exception:
-        pass
+    settings_context.record_vlm_point_grounding(phone, payload, reason=reason)

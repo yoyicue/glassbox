@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from glassbox.boundaries import action_host_last_frame
 from glassbox.cognition.text_match import norm_text
 from glassbox.ios.scene import has_strong_ios_home_evidence
 from glassbox.memory.schema import ScreenEdge, ScreenNode
@@ -128,7 +129,7 @@ def _memory(phone):
 
 
 def _recognize_node(memory, scene, phone) -> ScreenNode | None:
-    frame = getattr(phone, "_last_frame", None) if phone is not None else None
+    frame = action_host_last_frame(phone) if phone is not None else None
     frame_img = getattr(frame, "img", None)
     try:
         return memory.recognize(scene, frame_img=frame_img)

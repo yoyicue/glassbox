@@ -290,6 +290,25 @@ def test_enrich_scene_handles_missing_intent_label():
 
 
 @pytest.mark.smoke
+def test_enrich_scene_drops_nonfinite_and_out_of_range_confidence():
+    scene = _scene_with(_ocr_el(0, "登录"), _ocr_el(1, "忘记密码"), _ocr_el(2, "继续"))
+    kimi = FakeKimi(parsed_payload={
+        "scene_type": "login_form",
+        "elements": [
+            {"id": 0, "intent_label": "确认登录", "confidence": float("nan")},
+            {"id": 1, "intent_label": "找回密码", "confidence": 1.5},
+            {"id": 2, "intent_label": "继续", "confidence": 0.75},
+        ],
+    })
+
+    enrich_scene(scene, b"<png>", kimi)
+
+    assert scene.elements[0].intent_confidence is None
+    assert scene.elements[1].intent_confidence is None
+    assert scene.elements[2].intent_confidence == 0.75
+
+
+@pytest.mark.smoke
 def test_enrich_scene_clears_omitted_stale_intent_labels_and_records_coverage():
     omitted = _ocr_el(1, "旧按钮")
     omitted.intent_label = "旧动作"

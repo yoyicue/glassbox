@@ -15,9 +15,11 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any
 
+from glassbox.boundaries import action_host_backend_capabilities
 from glassbox.cognition import Box, UIElement
 from glassbox.cognition.text_match import compact_text
 from glassbox.ios.progress import is_time_text
+from skills.regression.ios_settings import context as settings_context
 from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings import reporting as settings_reporting
 from skills.regression.ios_settings import scene_state as settings_scene_state
@@ -96,7 +98,7 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
     for attempt in range(max_attempts):
         if not actions.clear_settings_search(phone):
             if _is_ipad_target(phone):
-                phone._ios_settings_search_unavailable = True
+                settings_context.set_search_unavailable(phone)
             return False
         if _is_ipad_target(phone):
             scene = phone.perceive()
@@ -114,12 +116,12 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
         if not actions.tap_search_field(phone, scene):
             return False
         time.sleep(0.3)
-        if attempt == 1 and not getattr(phone, "_ios_settings_search_input_toggled", False):
+        if attempt == 1 and not settings_context.search_input_toggled(phone):
             with actions.action_intent(phone, "keyboard.switch_input_method", attempt=attempt + 1):
                 result = phone.key(0x01, 0x2C)
             if not actions.record_action_verdict(phone, result):
                 return False
-            phone._ios_settings_search_input_toggled = True
+            settings_context.set_search_input_toggled(phone)
             time.sleep(0.8)
         with actions.action_intent(
             phone,
@@ -349,7 +351,7 @@ def _visible_row_match(
         if canonical is not None
     }
     if _is_ipad_target(phone):
-        w, _h = phone._viewport_size()
+        w, _h = phone.viewport_size()
         from glassbox.ipados.scene import sidebar_right_x
 
         sidebar_right = sidebar_right_x(w)
@@ -386,7 +388,7 @@ def _compact_row_label(text: str) -> str:
 
 
 def settings_row_tap_point(phone, row_hit: UIElement) -> tuple[int, int]:
-    w, _ = phone._viewport_size()
+    w, _ = phone.viewport_size()
     _, row_y = row_hit.box.center
     if _is_ipad_target(phone):
         from glassbox.ipados.scene import sidebar_right_x
@@ -409,7 +411,7 @@ def settings_row_tap_point(phone, row_hit: UIElement) -> tuple[int, int]:
 
 def settings_row_target_element(phone, scene, row_hit: UIElement) -> UIElement:
     x, y = settings_row_tap_point(phone, row_hit)
-    w, h = phone._viewport_size()
+    w, h = phone.viewport_size()
     pointer_kind = _backend_pointer_kind(phone)
     row_box = _settings_row_target_box(scene, row_hit, viewport_width=w, viewport_height=h)
     if pointer_kind != "external_mouse":
@@ -489,12 +491,9 @@ def _observed_title_missing_or_noise(title: str) -> bool:
 
 
 def _backend_pointer_kind(phone) -> str:
-    capabilities = getattr(phone, "_backend_capabilities", None)
-    if callable(capabilities):
-        with contextlib.suppress(Exception):
-            backend_capabilities = capabilities()
-            if backend_capabilities is not None:
-                return str(getattr(backend_capabilities, "pointer_kind", "unknown"))
+    backend_capabilities = action_host_backend_capabilities(phone)
+    if backend_capabilities is not None:
+        return str(getattr(backend_capabilities, "pointer_kind", "unknown"))
     effector = getattr(phone, "effector", None)
     effector_capabilities = getattr(effector, "capabilities", None)
     if callable(effector_capabilities):
@@ -554,7 +553,7 @@ def crawl_missing_root_pages_via_search(
     navigation_failures: list[NavigationFailure],
     actions: SettingsNavigationActions,
 ) -> None:
-    if getattr(phone, "_ios_settings_search_unavailable", False):
+    if settings_context.search_unavailable(phone):
         limits_hit.add("settings_search_unavailable")
         return
     exempt = actions.entry_exempt_sections(visits, phone=phone)
@@ -576,7 +575,7 @@ def crawl_missing_root_pages_via_search(
                     text=label,
                     reason="search_no_result",
                 )
-                if getattr(phone, "_ios_settings_search_unavailable", False):
+                if settings_context.search_unavailable(phone):
                     limits_hit.add("settings_search_unavailable")
                     return
                 continue

@@ -277,6 +277,10 @@ def test_ipad_settings_wheel_clicks_sidebar_focus_before_wheel():
         def wheel_scroll_down(self, *, ticks: int | None = None) -> None:
             raise AssertionError("iPad Settings should use focused scroll_wheel directly")
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self) -> tuple[int, int]:
             return 640, 980
 
@@ -343,6 +347,10 @@ def test_ipad_scroll_down_confirmed_does_not_retry_stuck_wheel(monkeypatch):
 
         def wheel_scroll_down(self, *, ticks: int | None = None) -> None:
             raise AssertionError("iPad Settings should use focused scroll_wheel directly")
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self) -> tuple[int, int]:
             return 640, 980

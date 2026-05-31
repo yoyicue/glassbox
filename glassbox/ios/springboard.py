@@ -284,7 +284,7 @@ def springboard_signature(scene: Scene) -> tuple[tuple[str, int, int], ...]:
 
 def _viewport_size(phone) -> tuple[int, int] | None:
     try:
-        return phone._viewport_size()
+        return phone.viewport_size()
     except Exception:
         return None
 
@@ -292,7 +292,7 @@ def _viewport_size(phone) -> tuple[int, int] | None:
 def _strict_home(phone) -> bool:
     """CUQ-2.2: whether home recognition should require icon-grid corroboration
     for a bare 'springboard' classification (opt-in via config)."""
-    return bool(getattr(phone, "_require_home_icon_grid", False))
+    return bool(getattr(phone, "require_home_icon_grid_enabled", False))
 
 
 def _perceive_after_settle(phone, settle_s: float) -> Scene:

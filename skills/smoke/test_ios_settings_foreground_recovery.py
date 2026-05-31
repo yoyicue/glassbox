@@ -45,6 +45,10 @@ class FakePhone:
         self.opened = False
         self.actions: list[str] = []
 
+    def viewport_size(self):
+
+        return self._viewport_size()
+
     def _viewport_size(self):
         return 448, 973
 

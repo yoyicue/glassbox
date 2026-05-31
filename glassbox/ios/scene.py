@@ -8,7 +8,6 @@ to unit test.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from glassbox.cognition.base import Scene, UIElement
@@ -17,10 +16,13 @@ from glassbox.cognition.contracts import (
     SceneClassification,
 )
 from glassbox.cognition.text_match import (
-    confusion_compact,
-    fuzzy_ratio,
     text_contains,
-    texts_match,
+)
+from glassbox.ios._scene_common import (
+    element_text,
+    marker_hits,
+    matches_label,
+    scene_size_with_default,
 )
 
 SETTINGS_TITLE_LABELS = ("设置", "Settings")
@@ -306,32 +308,16 @@ def apply_ios_classification(
 
 
 def _scene_size(scene: Scene, viewport_size: tuple[int, int] | None) -> tuple[int, int]:
-    if viewport_size is not None:
-        return viewport_size
-    if scene.viewport_size is not None:
-        return scene.viewport_size
-    width = max((e.box.x2 for e in scene.elements), default=448)
-    height = max((e.box.y2 for e in scene.elements), default=973)
-    return max(width, 448), max(height, 973)
+    return scene_size_with_default(scene, viewport_size, default_size=(448, 973))
 
 
 def _text(el: UIElement) -> str:
-    return (el.text or "").strip()
+    return element_text(el)
 
 
-def _matches(text: str, labels: Iterable[str], *, fuzzy: float = 0.78) -> bool:
-    norm = confusion_compact(text)
-    for label in labels:
-        if texts_match(text, label) or text_contains(text, label):
-            return True
-        if fuzzy_ratio(text, label) >= fuzzy:
-            return True
-        # OCR 视觉混淆容忍:归一后相等也算命中。让 scene 分类的 marker 判定
-        # (Settings 根页 / App 资源库网格 / system search)不被形近字噪音
-        # 拖垮 —— 例如 App 资源库分类「效率与财务」被 OCR 成「效率与財务」。
-        if norm and norm == confusion_compact(label):
-            return True
-    return False
+def _matches(text: str, labels, *, fuzzy: float = 0.78) -> bool:
+    # OCR visual-confusion tolerance lives in the shared iOS-family matcher.
+    return matches_label(text, labels, fuzzy=fuzzy)
 
 
 def _has_back_affordance(scene: Scene) -> bool:
@@ -573,8 +559,8 @@ def settings_detail_semantic_guess(
         return None
 
     joined = "\n".join(_text(el) for el in visible).casefold()
-    noun_hits = _semantic_marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS)
-    copy_hits = _semantic_marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_COPY_MARKERS)
+    noun_hits = marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS)
+    copy_hits = marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_COPY_MARKERS)
     title = _semantic_detail_title_candidate(visible, viewport_size=(w, h))
     has_back = _has_back_affordance(scene)
     intro_copy_lines = sum(
@@ -648,17 +634,6 @@ def has_strong_ios_home_evidence(
     viewport_size: tuple[int, int] | None = None,
 ) -> bool:
     return _has_strong_home_evidence(scene, viewport_size=_scene_size(scene, viewport_size))
-
-
-def _semantic_marker_hits(joined_casefold: str, markers: Iterable[str]) -> int:
-    hits = 0
-    seen: set[str] = set()
-    for marker in markers:
-        compact = marker.casefold()
-        if compact and compact not in seen and compact in joined_casefold:
-            seen.add(compact)
-            hits += 1
-    return hits
 
 
 def _semantic_detail_title_candidate(

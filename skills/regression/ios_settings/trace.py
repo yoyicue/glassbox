@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from glassbox.boundaries import action_host_last_frame
 from glassbox.crawl.trace import ActionRunTrace, TracedPhone
 
 SCROLL_OPS = frozenset({"wheel_scroll_down", "wheel_scroll_up", "scroll_wheel"})
@@ -87,7 +88,7 @@ class SettingsRunTrace(ActionRunTrace):
         self._seen_views[key] = view_id
         ocr_path = self.views_dir / f"{view_id}.ocr.json"
         ocr_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        frame = getattr(phone, "_last_frame", None)
+        frame = action_host_last_frame(phone)
         img = getattr(frame, "img", None)
         if img is not None:
             try:

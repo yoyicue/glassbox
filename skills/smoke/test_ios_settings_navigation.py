@@ -7,6 +7,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 from glassbox.effector import ActionResult
+from skills.regression.ios_settings import context as settings_context
 
 from skills.smoke.ios_settings_walkthrough_support import *
 
@@ -325,7 +326,7 @@ def test_open_root_label_via_search_marks_ipad_search_unavailable_when_clear_fai
     phone = SearchPhone()
 
     assert not settings_navigation.open_root_label_via_search(phone, "电池", actions)
-    assert phone._ios_settings_search_unavailable is True
+    assert settings_context.search_unavailable(phone) is True
 
 
 @pytest.mark.smoke
@@ -462,7 +463,7 @@ def test_open_root_label_via_search_does_not_globally_disable_iphone_search_on_c
     phone = SearchPhone()
 
     assert not settings_navigation.open_root_label_via_search(phone, "电池", actions)
-    assert not hasattr(phone, "_ios_settings_search_unavailable")
+    assert not settings_context.search_unavailable(phone)
 
 
 @pytest.mark.smoke
@@ -1056,7 +1057,7 @@ def test_vlm_point_for_label_normalizes_coordinate_forms(parsed, raw_content):
     assert hit.text == "通用"
     assert hit.box.center[1] == 535
     assert phone.kimi.calls == 1
-    assert phone._ios_settings_last_vlm_point_grounding["status"] == "hit"
+    assert settings_context.state_for(phone).last_vlm_point_grounding["status"] == "hit"
 
 
 @pytest.mark.smoke
@@ -1113,6 +1114,10 @@ def test_open_visible_or_scroll_to_row_matches_ipad_sidebar_by_canonical_label()
     class _Phone:
         device_geometry = _Geometry()
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 640, 989
 
@@ -1152,6 +1157,10 @@ def test_open_visible_or_scroll_to_row_matches_ipad_split_ampersand_sidebar_labe
 
     class _Phone:
         device_geometry = _Geometry()
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 640, 989
@@ -1198,7 +1207,7 @@ def test_vlm_point_for_label_rejects_out_of_band_point():
     phone = _Phone()
 
     assert _vlm_point_for_label(phone, "通用", scene_kind="settings_root") is None
-    assert phone._ios_settings_vlm_point_failure_reason == "out_of_band"
+    assert settings_context.state_for(phone).vlm_point_failure_reason == "out_of_band"
 
 
 @pytest.mark.smoke
@@ -1220,7 +1229,7 @@ def test_vlm_point_for_label_rejects_unsafe_label_without_kimi_call():
     phone = _Phone()
 
     assert _vlm_point_for_label(phone, "密码", scene_kind="settings_root") is None
-    assert phone._ios_settings_vlm_point_failure_reason == "unsafe_label"
+    assert settings_context.state_for(phone).vlm_point_failure_reason == "unsafe_label"
 
 
 @pytest.mark.smoke
@@ -1257,7 +1266,7 @@ def test_vlm_point_for_label_cache_avoids_rebilling_stuck_frame():
     assert first is not None
     assert second is not None
     assert phone.kimi.calls == 1
-    assert phone._ios_settings_last_vlm_point_grounding["cached"] is True
+    assert settings_context.state_for(phone).last_vlm_point_grounding["cached"] is True
 
 
 @pytest.mark.smoke
@@ -1299,7 +1308,7 @@ def test_vlm_point_budget_is_separate_from_text_budget_but_total_capped():
     })()
 
     assert _vlm_point_for_label(phone, "通知", scene_kind="settings_root") is None
-    assert phone._ios_settings_vlm_point_failure_reason == "budget_exhausted"
+    assert settings_context.state_for(phone).vlm_point_failure_reason == "budget_exhausted"
 
 
 @pytest.mark.smoke
@@ -1331,8 +1340,8 @@ def test_vlm_point_for_label_records_failure_reasons(setup, reason):
     scene_kind = "springboard" if setup == "scene_rejected" else "settings_root"
 
     assert _vlm_point_for_label(phone, "通用", scene_kind=scene_kind) is None
-    assert phone._ios_settings_vlm_point_failure_reason == reason
-    assert phone._ios_settings_last_vlm_point_grounding["reason"] == reason
+    assert settings_context.state_for(phone).vlm_point_failure_reason == reason
+    assert settings_context.state_for(phone).last_vlm_point_grounding["reason"] == reason
 
 
 @pytest.mark.smoke
@@ -1463,6 +1472,17 @@ def test_vlm_point_synthetic_element_flows_through_picokvm_settings_row_projecti
         def _effector_backend(self):
             return "picokvm"
 
+        def effector_backend(self):
+            return self._effector_backend()
+
+        @property
+        def last_scene(self):
+            return self._last_scene
+
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 1000
 
@@ -1496,6 +1516,17 @@ def test_picokvm_ipad_settings_row_projection_stays_in_sidebar():
         def _effector_backend(self):
             return "picokvm"
 
+        def effector_backend(self):
+            return self._effector_backend()
+
+        @property
+        def last_scene(self):
+            return self._last_scene
+
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 744, 1133
 
@@ -1524,6 +1555,17 @@ def test_picokvm_ipad_detail_row_projection_moves_inside_detail_pane():
 
         def _effector_backend(self):
             return "picokvm"
+
+        def effector_backend(self):
+            return self._effector_backend()
+
+        @property
+        def last_scene(self):
+            return self._last_scene
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 640, 989
@@ -2304,6 +2346,10 @@ def test_root_crawl_records_observed_root_title_after_shifted_tap(monkeypatch):
         def perceive(self):
             return self.scene
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -2362,6 +2408,10 @@ def test_root_crawl_maps_live_ipad_short_sounds_title_to_root_coverage(monkeypat
 
         def perceive(self):
             return self.scene
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 744, 1133
@@ -2424,6 +2474,10 @@ def test_root_crawl_keeps_observed_non_root_title_instead_of_requested_root(monk
         def perceive(self):
             return self.scene
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 744, 1133
 
@@ -2485,6 +2539,10 @@ def test_root_crawl_canonicalizes_root_alias_when_child_title_is_missing(monkeyp
 
         def perceive(self):
             return self.scene
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 448, 973
@@ -2591,6 +2649,10 @@ def test_root_tap_retries_after_same_page_settle_before_recording_failure(monkey
         def perceive(self):
             return self.scene
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -2658,6 +2720,10 @@ def test_root_child_crawl_returns_one_level_after_blocked_page(monkeypatch):
 
         def perceive(self):
             return self.scene
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 448, 973
@@ -2768,6 +2834,10 @@ def test_return_one_level_falls_back_to_ipad_detail_pane_back_point(monkeypatch)
     class IPadTopLeftBackFallbackPhone(_TopLeftBackFallbackPhone):
         device_geometry = SimpleNamespace(model="ipad_mini_7")
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 640, 989
 
@@ -2821,6 +2891,10 @@ def test_return_one_level_ipad_does_not_accept_sidebar_overlap_as_parent(monkeyp
 
     class IPadTopLeftBackFallbackPhone(_TopLeftBackFallbackPhone):
         device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 640, 989
@@ -2890,6 +2964,10 @@ def test_return_one_level_ipad_final_settle_check_accepts_late_parent(monkeypatc
 
     class IPadTopLeftBackFallbackPhone(_TopLeftBackFallbackPhone):
         device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 640, 989
@@ -3149,7 +3227,7 @@ def test_search_recovery_decouple_keeps_searching_after_return_to_root_flake(
         return_to_settings_root=_r2r,
         max_pages_visited=10_000,
     )
-    phone = SimpleNamespace(perceive=lambda: object(), _ios_settings_search_unavailable=False)
+    phone = SimpleNamespace(perceive=lambda: object())
     # Default is now ON, so the off-case opts out explicitly.
     monkeypatch.setenv("GLASSBOX_SETTINGS_SEARCH_RECOVERY_DECOUPLE_EXEMPT", "1" if flag_on else "0")
     get_config.cache_clear()

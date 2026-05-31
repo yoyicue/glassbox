@@ -25,7 +25,12 @@ from glassbox.backend_registry import (
     static_frame_source_registration,
     vision_ocr_registration,
 )
-from glassbox.boundaries import ARCHITECTURE_BOUNDARY_CONTRACT_VERSION, AppLaunchTarget, StepContext
+from glassbox.boundaries import (
+    ARCHITECTURE_BOUNDARY_CONTRACT_VERSION,
+    ActionHost,
+    AppLaunchTarget,
+    StepContext,
+)
 from glassbox.cognition import (
     COGNITION_CONTRACT_VERSION,
     DEFAULT_SCENE_CLASSIFICATION_PROJECTOR,
@@ -60,7 +65,13 @@ from glassbox.ios.springboard import (
 )
 from glassbox.perception.letterbox import LetterboxCrop
 from glassbox.perception.source import FRAME_CONTRACT_VERSION, Frame, FrameContext
-from glassbox.phone import Phone, PhoneGestureConfig
+from glassbox.phone import (
+    Phone,
+    PhoneFeatureFlags,
+    PhoneGestureConfig,
+    PhoneObservationConfig,
+    PhoneRuntimeOptions,
+)
 from glassbox.platforms import (
     IOSPlatform,
     IPadOSPlatform,
@@ -113,6 +124,86 @@ def test_architecture_boundaries_doc_records_closed_business_decisions():
     assert "才可转正" not in text
     assert "HarmonyOS 待确认" not in text
     assert "归并优先级待业务定" not in text
+
+
+def test_action_host_protocol_declares_record_action_hook():
+    assert "record_action" in ActionHost.__dict__
+
+
+def test_phone_accepts_grouped_runtime_feature_and_observation_config():
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR(),
+        effector=NoOpEffector(),
+        runtime_options=PhoneRuntimeOptions(
+            action_fail_fast=False,
+            auto_refresh_letterbox_crop=True,
+            letterbox_refresh_consecutive=4,
+            default_observation_scope="app",
+            app_viewport_mode="iphone_compat",
+        ),
+        observation_config=PhoneObservationConfig(
+            max_ocr_elements=7,
+            max_ocr_text_chars=11,
+            ocr_timeout=0.25,
+            perceive_cache_diff=0.123,
+        ),
+        feature_flags=PhoneFeatureFlags(
+            detect_icons_in_perceive=True,
+            strict_target_matching=True,
+            require_home_icon_grid=True,
+            reverify_fresh_frame=True,
+            coldstart_promote_controls=True,
+            vlm_set_of_mark=True,
+            memory_locate_priors=True,
+            strict_settings_detail=True,
+            ai_scroll_prefer_wheel=True,
+            vlm_reground_selection=True,
+            whitebox_hint_selection=True,
+        ),
+    )
+
+    assert phone.action_fail_fast is False
+    assert phone.auto_refresh_letterbox_crop is True
+    assert phone.letterbox_refresh_consecutive == 4
+    assert phone.default_observation_scope == "app"
+    assert phone.app_viewport_mode == "iphone_compat"
+    assert phone.perceive_cache_diff == 0.123
+    assert phone.max_ocr_elements == 7
+    assert phone.max_ocr_text_chars == 11
+    assert phone.ocr_timeout == 0.25
+    assert phone.detect_icons_in_perceive_enabled is True
+    assert phone.strict_target_matching_enabled is True
+    assert phone.require_home_icon_grid_enabled is True
+    assert phone.reverify_fresh_frame_enabled is True
+    assert phone.coldstart_promote_controls_enabled is True
+    assert phone.vlm_set_of_mark_enabled is True
+    assert phone.memory_locate_priors_enabled is True
+    assert phone.strict_settings_detail_enabled is True
+    assert phone.ai_scroll_prefer_wheel_enabled is True
+    assert phone.vlm_reground_selection_enabled is True
+    assert phone.whitebox_hint_selection_enabled is True
+
+
+def test_phone_legacy_constructor_flags_still_work_with_bucket_api():
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR(),
+        effector=NoOpEffector(),
+        action_fail_fast=False,
+        auto_refresh_letterbox_crop=True,
+        letterbox_refresh_consecutive=2,
+        perceive_cache_diff=0.2,
+        max_ocr_elements=3,
+        strict_target_matching=True,
+    )
+
+    assert phone.action_fail_fast is False
+    assert phone.auto_refresh_letterbox_crop is True
+    assert phone.letterbox_refresh_consecutive == 2
+    assert phone.perceive_cache_diff == 0.2
+    assert phone.max_ocr_elements == 3
+    assert phone.strict_target_matching_enabled is True
 
 
 def test_boundary_contract_types_expose_stable_versions():
@@ -403,6 +494,38 @@ def test_ipados_platform_does_not_reuse_ios_settings_detail_fallback_on_home_wid
     assert classified is not None
     assert classified.platform_scene_kind == "springboard"
     assert "ipad_home_widgets" in classified.evidence
+
+
+def test_ipados_ios_compat_fallback_is_explicit_and_guards_settings_detail(monkeypatch):
+    import glassbox.ipados.scene as ipados_scene
+    from glassbox.ios.scene import IOSSceneClassification
+
+    def fake_ios_fallback(_scene, *, viewport_size=None):
+        assert viewport_size == (744, 1133)
+        return IOSSceneClassification(
+            kind="settings_detail",
+            confidence=0.93,
+            title="General",
+            safe_actions=("back",),
+            evidence=("fake_ios_detail",),
+        )
+
+    monkeypatch.setattr(ipados_scene, "classify_ios_scene", fake_ios_fallback)
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(744, 1133),
+        elements=[
+            UIElement(type="text", box=Box(x=360, y=82, w=78, h=24), text="General", confidence=0.9),
+        ],
+    )
+
+    classified = ipados_scene.classify_ipados_scene(scene, viewport_size=(744, 1133))
+
+    assert classified.kind == "unknown"
+    assert classified.title == "General"
+    assert classified.safe_actions == ("trace", "vlm_on_uncertain")
+    assert classified.evidence == ("ipados_no_settings_sidebar", "fake_ios_detail")
 
 
 def test_ipados_platform_classifies_live_widget_home_before_top_search():

@@ -21,6 +21,7 @@ from glassbox.action import (
     make_try_memory_path_hook,
     recover_to_home_then_renavigate,
 )
+from glassbox.action import recovery as action_recovery
 from glassbox.cognition import Box, UIElement
 from glassbox.effector import ActionResult, MockEffector
 from glassbox.ios.springboard import IOSSpringboardProvider
@@ -28,6 +29,7 @@ from glassbox.obs.artifacts import ArtifactStore
 from glassbox.perception.source import Frame
 from glassbox.perception.stable import StabilityPolicy
 from glassbox.phone import Phone
+from glassbox.verification.registry import VerifierRegistry
 from glassbox.verification.verifiers import SemanticOutcome
 
 
@@ -151,10 +153,10 @@ def test_recover_to_home_hook_ignores_unknown_kind_and_guards_reentrancy():
     assert other.home_calls == 0
 
     nested = _RecoveryFakePhone()
-    nested._in_recovery = True  # already recovering -> must not recurse into home()
-    assert recover_to_home_then_renavigate(
-        nested, "stuck", {"recovery": "recover_to_home_then_renavigate"}
-    ) is False
+    with action_recovery._recovery_guard(nested):
+        assert recover_to_home_then_renavigate(
+            nested, "stuck", {"recovery": "recover_to_home_then_renavigate"}
+        ) is False
     assert nested.home_calls == 0
 
 
@@ -442,6 +444,132 @@ def test_computer_use_runtime_control_center_success(tmp_path):
         "before_command",
         "after",
     }
+
+
+@pytest.mark.smoke
+def test_orchestrator_attempt_observe_after_side_effect_contract(tmp_path):
+    """P6: lock the concrete _run_attempt/_observe_after boundary outputs.
+
+    The later P2 extraction may move locals into helpers, but it must preserve
+    verifier input shape, action artifacts, audit events, and Phone cache/fresh
+    flags observable at the boundary.
+    """
+
+    captured_inputs = []
+
+    class CapturingVerifier:
+        name = "capturing_verifier"
+        version = "test"
+        success_markers = ()
+
+        def verify(self, input):
+            captured_inputs.append(input)
+            return SemanticOutcome(
+                status="succeeded",
+                verifier=self.name,
+                reason="captured verifier input",
+                confidence=1.0,
+                verifier_version=self.version,
+                matched_frame_id=input.after_frame_ids[-1],
+                matched_scene_id=input.after_scene_ids[-1],
+                deterministic=True,
+                retry_allowed=False,
+            )
+
+    registry = VerifierRegistry(load_entry_points=False)
+    registry.register(CapturingVerifier())
+    source = _ReopenSource()
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store, registry=registry)
+    phone = Phone(
+        source=source,
+        ocr=_OCR([["before requested"], ["before command"], ["after result"]]),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+    )
+
+    result = phone._execute_action(
+        "tap",
+        lambda: phone.effector.tap(3, 4),
+        verifier="capturing_verifier",
+        settle_strategy="fixed_delay_after",
+        delay_ms=0,
+        fresh_source_reopen=True,
+        x=3,
+        y=4,
+        via="test_probe",
+        target="Probe",
+    )
+    orchestrator.close()
+
+    assert result.ok is True
+    assert result.semantic_status == "succeeded"
+    assert result.semantic_verifier == "capturing_verifier"
+    assert source.closes == 1
+    assert source.opens == 1
+
+    assert len(captured_inputs) == 1
+    verifier_input = captured_inputs[0]
+    assert verifier_input.attempt_id == result.attempt_id == "act_000000"
+    assert verifier_input.attempt_group_id == result.attempt_group_id
+    assert verifier_input.action["op"] == "tap"
+    assert verifier_input.action["kwargs"]["via"] == "test_probe"
+    assert verifier_input.before_requested is not None
+    assert verifier_input.before_command is not None
+    assert [e.text for e in verifier_input.after_scenes[0].elements] == ["after result"]
+    assert verifier_input.after_mode == "single_frame"
+    assert len(verifier_input.after_frame_ids) == 1
+    assert len(verifier_input.after_scene_ids) == 1
+    assert verifier_input.command_result["transport_ok"] is True
+    assert verifier_input.risk["allowed"] is True
+
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    action = actions[0]
+    assert groups == [
+        {
+            "attempt_group_id": result.attempt_group_id,
+            "op": "tap",
+            "actor": "agent",
+            "attempt_ids": ["act_000000"],
+            "group_status": "succeeded",
+            "terminal_reason": "captured verifier input",
+            "retry_count": 0,
+        }
+    ]
+    assert action["attempt_id"] == "act_000000"
+    assert action["command"]["x"] == 3
+    assert action["command"]["y"] == 4
+    assert action["command_result"]["transport_ok"] is True
+    assert action["semantic"]["status"] == "succeeded"
+    assert action["semantic"]["matched_frame_id"] == verifier_input.after_frame_ids[0]
+    assert action["semantic"]["matched_scene_id"] == verifier_input.after_scene_ids[0]
+    assert action["observation"]["settle_strategy"] == "fixed_delay_after"
+    assert action["observation"]["after_mode"] == "single_frame"
+    assert action["observation"]["fresh_source_reopen"] is True
+    assert action["observation"]["fresh_source_reopened"] is True
+    assert action["observation"]["frame_ids"] == verifier_input.after_frame_ids
+    assert action["observation"]["scene_ids"] == verifier_input.after_scene_ids
+
+    event_types = [event["type"] for event in audit]
+    assert event_types.index("policy.evaluated") < event_types.index("command.sent")
+    assert event_types.index("command.sent") < event_types.index("command.acked")
+    assert event_types.index("command.acked") < event_types.index("verifier.started")
+    assert event_types.index("verifier.started") < event_types.index("verifier.finished")
+    assert event_types.index("verifier.finished") < event_types.index("action.finished")
+
+    recorded = phone._pending_actions_for_memory[-1]
+    assert recorded.op == "tap"
+    assert recorded.via == "test_probe"
+    assert recorded.target == "Probe"
+    assert recorded.x == 3
+    assert recorded.y == 4
+    assert phone._needs_stable_frame is True
+    assert phone._fresh_source_reopened_after_action is False
+    assert phone._cache_scene is None
+    assert phone._last_scene is None
 
 
 @pytest.mark.smoke

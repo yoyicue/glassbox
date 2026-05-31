@@ -8,7 +8,7 @@ from typing import Any
 
 import cv2
 
-from glassbox.effectors.picokvm.config import PicoKVMEffectorConfig
+from glassbox.perception.picokvm_config import PicoKVMVideoConfig, PicoKVMVideoSettings
 from glassbox.perception.source import Frame
 
 # A fully-decoded iOS screen always has real spatial variance (status bar, text,
@@ -31,13 +31,13 @@ class PicoKVMFrameSource:
     def __init__(
         self,
         *,
-        config: PicoKVMEffectorConfig | None = None,
+        config: PicoKVMVideoSettings | None = None,
         capture: Any = None,
         capture_factory: Any = None,
         fresh_warmup_frames: int = 2,
         fresh_settle_reads: int = 4,
     ):
-        self.config = config or PicoKVMEffectorConfig()
+        self.config = config or PicoKVMVideoConfig()
         self.stream_url = f"{self.config.base_url}{self.config.stream_path}"
         self._capture = capture
         self._capture_factory = capture_factory or cv2.VideoCapture

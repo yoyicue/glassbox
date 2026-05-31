@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from glassbox.cognition import Box, Scene, UIElement
+from skills.regression.ios_settings import context as settings_context
 from skills.regression.ios_settings import scene_state as settings_scene_state
 
 
@@ -21,6 +22,10 @@ class _Phone:
     def __init__(self, *, kimi=None):
         self.kimi = kimi
         self._last_frame = SimpleNamespace(img=np.zeros((80, 80, 3), dtype=np.uint8))
+
+    def viewport_size(self):
+
+        return self._viewport_size()
 
     def _viewport_size(self):
         return 448, 973
@@ -67,7 +72,7 @@ def test_settings_scene_kind_transition_prior_respects_strong_home_evidence():
 
     assert settings_scene_state.scene_kind(scene, phone=phone) == "springboard"
     assert scene.platform_scene_kind is None
-    assert phone._ios_settings_scene_classifications[-1]["override"] is False
+    assert settings_context.state_for(phone).scene_classifications[-1]["override"] is False
 
 
 @pytest.mark.smoke
@@ -96,5 +101,5 @@ def test_settings_scene_kind_vlm_verifier_can_reject_transition_detail():
     assert settings_scene_state.scene_kind(scene, phone=phone) == "unknown"
     assert kimi.calls == 1
     assert scene.platform_scene_kind is None
-    assert phone._ios_settings_scene_classifications[-1]["source"] == "vlm"
-    assert phone._ios_settings_scene_classifications[-1]["override"] is False
+    assert settings_context.state_for(phone).scene_classifications[-1]["source"] == "vlm"
+    assert settings_context.state_for(phone).scene_classifications[-1]["override"] is False

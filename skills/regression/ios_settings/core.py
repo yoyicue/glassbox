@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from glassbox.action.semantics import action_verdict
+from glassbox.boundaries import action_host_effector_backend
 from glassbox.cognition import UIElement, find_text
 from glassbox.effector import ActionResult
 from glassbox.ios.progress import (
@@ -48,6 +49,7 @@ from glassbox.ios.progress import (
 from glassbox.ios.safe_area import IOSSafeArea
 from glassbox.ios.springboard import open_app_from_springboard
 from skills.regression.ios_settings import bootstrap as settings_bootstrap
+from skills.regression.ios_settings import context as settings_context
 from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings import navigation as settings_navigation
 from skills.regression.ios_settings import page_records as settings_page_records
@@ -212,8 +214,7 @@ def _action_intent(phone, name: str, **metadata: Any):
 
 def _record_action_verdict(phone, result: Any) -> bool:
     verdict = action_verdict(result)
-    with suppress(Exception):
-        phone._ios_settings_last_action_verdict = verdict
+    settings_context.record_action_verdict(phone, verdict)
     return verdict.accepted
 
 
@@ -228,8 +229,7 @@ def _accept_tolerating_unknown(phone, result: Any) -> bool:
     `approval_required`) is still rejected.
     """
     verdict = action_verdict(result, unknown_policy="continue")
-    with suppress(Exception):
-        phone._ios_settings_last_action_verdict = verdict
+    settings_context.record_action_verdict(phone, verdict)
     return verdict.accepted
 
 
@@ -493,8 +493,7 @@ def _send_ios_back_action(phone):
     owns that backend-specific sequence. Other backends can keep using the raw
     keyboard shortcut.
     """
-    backend = getattr(phone, "_effector_backend", None)
-    if callable(backend) and backend() == "picokvm" and hasattr(phone, "back_gesture"):
+    if action_host_effector_backend(phone) == "picokvm" and hasattr(phone, "back_gesture"):
         try:
             return phone.back_gesture()
         except RuntimeError as exc:
@@ -588,7 +587,7 @@ def _dismiss_settings_search(phone, scene) -> bool:
         if not _settings_search_has_query_text(scene):
             return False
         try:
-            w, h = phone._viewport_size()
+            w, h = phone.viewport_size()
         except Exception:
             w, h = 448, 973
         safe = IOSSafeArea.from_viewport((w, h))
@@ -606,7 +605,7 @@ def _clear_top_settings_search_field(phone, field: UIElement, scene) -> bool:
     if not _settings_search_has_query_text(scene):
         return False
     try:
-        w, _h = phone._viewport_size()
+        w, _h = phone.viewport_size()
     except Exception:
         w = 0
     if w < 600 and not _is_ipad_target(phone):
@@ -691,7 +690,7 @@ def _find_text_edit_menu_item(scene, labels: set[str]) -> UIElement | None:
 def _top_search_text_edit_point(phone, field: UIElement) -> tuple[int, int]:
     cx, cy = field.box.center
     try:
-        w, _h = phone._viewport_size()
+        w, _h = phone.viewport_size()
     except Exception:
         w = 0
     if w >= 600:
@@ -710,7 +709,7 @@ def _is_top_settings_search_field(phone, field: UIElement) -> bool:
     if _is_ipad_target(phone):
         return _is_ipad_top_search_field(phone, field)
     try:
-        _w, h = phone._viewport_size()
+        _w, h = phone.viewport_size()
     except Exception:
         h = 973
     return field.box.center[1] <= int(h * 0.185)
@@ -718,7 +717,7 @@ def _is_top_settings_search_field(phone, field: UIElement) -> bool:
 
 def _top_settings_search_y_range(phone) -> tuple[int, int]:
     try:
-        _w, h = phone._viewport_size()
+        _w, h = phone.viewport_size()
     except Exception:
         h = 1133
     return int(h * 0.06), int(h * 0.105)
@@ -727,7 +726,7 @@ def _top_settings_search_y_range(phone) -> tuple[int, int]:
 def _top_search_focus_point(phone, field: UIElement) -> tuple[int, int]:
     cx, cy = field.box.center
     try:
-        w, _h = phone._viewport_size()
+        w, _h = phone.viewport_size()
         from glassbox.ipados.scene import sidebar_right_x
 
         sidebar_right = sidebar_right_x(w)
@@ -746,7 +745,7 @@ def _enter_settings_search(phone) -> bool:
     scene = phone.perceive()
     if _is_settings_search_scene(scene):
         return True
-    if getattr(phone, "_ios_settings_search_unavailable", False):
+    if settings_context.search_unavailable(phone):
         return False
     if not _scene_is_settings_root(scene):
         _return_to_settings_root(phone)
@@ -773,7 +772,7 @@ def _enter_settings_search(phone) -> bool:
     phone.invalidate_perceive_cache()
     opened = phone.perceive()
     if _scene_kind(opened, phone=phone) == "system_search":
-        phone._ios_settings_search_unavailable = True
+        settings_context.set_search_unavailable(phone)
         # The Settings-search tap opened iOS Spotlight instead. Dismiss it (Home)
         # so we are not stranded on Spotlight — the caller's
         # return_to_settings_root can then re-ground via SpringBoard rather than
@@ -797,7 +796,7 @@ def _tap_search_field(phone, scene) -> bool:
         with _action_intent(phone, "settings_search.focus_search_field", text=field.text, x=cx, y=cy):
             result = phone.tap_xy(cx, cy)
         return _accept_tolerating_unknown(phone, result)
-    w, h = phone._viewport_size()
+    w, h = phone.viewport_size()
     x, y = int(w * 0.22), int(h * 0.94)
     with _action_intent(phone, "settings_search.focus_search_field_fallback", x=x, y=y):
         result = phone.tap_xy(x, y)
@@ -870,7 +869,7 @@ def _focus_ipad_top_search_field_for_clear(phone, scene) -> UIElement | None:
     if not _is_ipad_target(phone) or not _settings_search_has_query_text(scene):
         return None
     try:
-        w, h = phone._viewport_size()
+        w, h = phone.viewport_size()
         from glassbox.ipados.scene import sidebar_right_x
 
         x = int(sidebar_right_x(w) * 0.54)
@@ -1397,8 +1396,7 @@ def _action_semantically_failed(phone, result: Any) -> bool:
     if getattr(result, "unsupported", False):
         return False
     verdict = action_verdict(result)
-    with suppress(Exception):
-        phone._ios_settings_last_action_verdict = verdict
+    settings_context.record_action_verdict(phone, verdict)
     status = getattr(verdict, "status", None)
     return bool(not verdict.accepted and status in {"failed", "transport_failed"})
 
@@ -1461,7 +1459,7 @@ def _tap_visible_back(phone, scene) -> bool:
 
 def _tap_top_left_back_fallback(phone) -> bool:
     try:
-        w, h = phone._viewport_size()
+        w, h = phone.viewport_size()
     except Exception:
         w, h = 448, 973
     x = max(18, int(w * 0.055))

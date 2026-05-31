@@ -12,7 +12,13 @@ import re
 from collections.abc import Iterable
 
 from glassbox.cognition.base import Scene, UIElement
-from glassbox.cognition.text_match import confusion_compact, fuzzy_ratio, text_contains, texts_match
+from glassbox.cognition.text_match import texts_match
+from glassbox.ios._scene_common import (
+    element_text,
+    marker_hits,
+    matches_label,
+    scene_size_with_default,
+)
 from glassbox.ios.scene import (
     SETTINGS_DETAIL_SEMANTIC_COPY_MARKERS,
     SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS,
@@ -71,7 +77,7 @@ def classify_ipados_scene(
                 safe_actions=("tap_search_result", "clear_search", "home"),
                 evidence=("ipad_settings_top_search", *settings_search),
             )
-        ios = classify_ios_scene(scene, viewport_size=(w, h))
+        ios = _classify_ios_compat_fallback(scene, viewport_size=(w, h))
         if ios.kind == "settings_detail":
             return IOSSceneClassification(
                 kind="unknown",
@@ -104,6 +110,15 @@ def classify_ipados_scene(
     )
 
 
+def _classify_ios_compat_fallback(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int],
+) -> IOSSceneClassification:
+    """Intentional fallback for non-split iPadOS surfaces that share iOS chrome."""
+    return classify_ios_scene(scene, viewport_size=viewport_size)
+
+
 def _strong_settings_top_search(evidence: tuple[str, ...]) -> bool:
     """Return True when top-search evidence should beat Home-widget heuristics."""
     return "settings_search_no_results" in evidence or any(
@@ -113,29 +128,15 @@ def _strong_settings_top_search(evidence: tuple[str, ...]) -> bool:
 
 
 def _scene_size(scene: Scene, viewport_size: tuple[int, int] | None) -> tuple[int, int]:
-    if viewport_size is not None:
-        return viewport_size
-    if scene.viewport_size is not None:
-        return scene.viewport_size
-    width = max((e.box.x2 for e in scene.elements), default=744)
-    height = max((e.box.y2 for e in scene.elements), default=1133)
-    return max(width, 744), max(height, 1133)
+    return scene_size_with_default(scene, viewport_size, default_size=(744, 1133))
 
 
 def _text(el: UIElement) -> str:
-    return (el.text or "").strip()
+    return element_text(el)
 
 
 def _matches(text: str, labels: Iterable[str], *, fuzzy: float = 0.78) -> bool:
-    norm = confusion_compact(text)
-    for label in labels:
-        if texts_match(text, label) or text_contains(text, label):
-            return True
-        if fuzzy_ratio(text, label) >= fuzzy:
-            return True
-        if norm and norm == confusion_compact(label):
-            return True
-    return False
+    return matches_label(text, labels, fuzzy=fuzzy)
 
 
 def sidebar_right_x(width: int) -> int:
@@ -493,8 +494,8 @@ def _detail_pane_evidence(
     if not visible:
         return ()
     joined = "\n".join(_text(el) for el in visible).casefold()
-    noun_hits = _marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS)
-    copy_hits = _marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_COPY_MARKERS)
+    noun_hits = marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS)
+    copy_hits = marker_hits(joined, SETTINGS_DETAIL_SEMANTIC_COPY_MARKERS)
     long_lines = sum(1 for el in visible if el.box.w >= (w - left) * 0.42 or len(_text(el)) >= 18)
     row_bins = {
         round(el.box.center[1] / max(1, h * 0.055))
@@ -548,17 +549,6 @@ def _looks_like_ipad_home_widgets(
         if _text(el) and h * 0.08 <= el.box.center[1] <= h * 0.88 and el.box.w >= 40
     ) >= 4
     return has_date_or_time and has_widget_label and has_widget_grid_geometry
-
-
-def _marker_hits(joined_casefold: str, markers: Iterable[str]) -> int:
-    hits = 0
-    seen: set[str] = set()
-    for marker in markers:
-        compact = marker.casefold()
-        if compact and compact not in seen and compact in joined_casefold:
-            seen.add(compact)
-            hits += 1
-    return hits
 
 
 __all__ = ["classify_ipados_scene", "sidebar_right_x"]

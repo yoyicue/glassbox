@@ -1,0 +1,568 @@
+"""Snapshot, OCR, scene classification, and perception cache handling."""
+
+from __future__ import annotations
+
+import threading
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any
+
+from loguru import logger
+
+from glassbox.cognition import (
+    DEFAULT_SCENE_CLASSIFICATION_PROJECTOR,
+    Box,
+    Scene,
+    SceneClassification,
+    UIElement,
+)
+from glassbox.cognition.coldstart import apply_annotation_to_scene
+from glassbox.cognition.ocr_contract import ocr_results_to_elements
+from glassbox.perception.app_viewport import (
+    detect_iphone_compat_viewport,
+    detected_viewport_needs_update,
+)
+
+if TYPE_CHECKING:
+    import numpy as np
+
+    from glassbox.memory.schema import ActionRecord
+    from glassbox.perception.source import Frame
+
+_LETTERBOX_BBOX_TOLERANCE_PX = 4
+
+
+def _bbox_within_tolerance(
+    a: tuple[int, int, int, int] | None,
+    b: tuple[int, int, int, int] | None,
+    tol: int,
+) -> bool:
+    if a is None or b is None:
+        return False
+    return all(abs(int(a[i]) - int(b[i])) <= tol for i in range(4))
+
+
+class Perceptor:
+    """Owns Phone's perception pipeline while Phone keeps the public facade."""
+
+    def __init__(self, phone: Any) -> None:
+        self._phone = phone
+        self._context = phone.action_context
+
+    def set_last_scene(self, scene: Scene, frame: Frame | None) -> None:
+        context = self._context
+        context.last_scene = scene
+        context.last_scene_coordinate_space = frame.context.coordinate_space if frame is not None else None
+        context.implicit_coordinate_space_error = None
+
+    def observe_memory(self, scene: Scene, frame_img) -> None:
+        host = self._phone
+        context = self._context
+        if host.memory is None:
+            context.pending_actions_for_memory.clear()
+            return
+        actions = [
+            action for action in context.pending_actions_for_memory
+            if self.memory_action_candidate(action)
+        ]
+        last_action = actions[0] if len(actions) == 1 else None
+        node = host.memory.observe(scene, last_action, frame_img=frame_img)
+        context.pending_actions_for_memory = []
+        if host.coldstart is not None and frame_img is not None:
+            try:
+                annotation = host.coldstart.observe(node=node, scene=scene, frame_img=frame_img)
+            except Exception as exc:
+                logger.warning(f"cold-start annotation failed: {exc}")
+            else:
+                if annotation is not None:
+                    apply_annotation_to_scene(
+                        scene, annotation, promote_controls=host.coldstart_promote_controls_enabled
+                    )
+
+    @staticmethod
+    def memory_action_candidate(action: ActionRecord) -> bool:
+        if action.params.get("action_ok") is not True:
+            return False
+        return action.params.get("action_synthetic") is not True
+
+    def apply_scene_classifiers(self, scene: Scene, frame_img: np.ndarray | None) -> None:
+        host = self._phone
+        if not host.scene_classifiers:
+            return
+        viewport_size = None
+        if frame_img is not None and getattr(frame_img, "ndim", 0) >= 2:
+            viewport_size = (int(frame_img.shape[1]), int(frame_img.shape[0]))
+        classifications: list[SceneClassification] = []
+        for classify in host.scene_classifiers:
+            result = classify(scene, viewport_size)
+            if result is not None:
+                classifications.append(result)
+        DEFAULT_SCENE_CLASSIFICATION_PROJECTOR.project(scene, classifications)
+
+    def classify_platform_scene_now(
+        self,
+        scene: Scene,
+        viewport_size: tuple[int, int] | None,
+    ) -> SceneClassification | None:
+        host = self._phone
+        classifier = host.platform_scene_classifier
+        if classifier is None:
+            return None
+        kwargs: dict[str, Any] = {"viewport_size": viewport_size}
+        if host.strict_settings_detail_enabled:
+            kwargs["strict_settings_detail"] = True
+        return classifier.classify(scene, **kwargs)
+
+    def apply_profile(self, scene: Scene, frame_img=None) -> None:
+        host = self._phone
+        if host.profile is None:
+            return
+        match = host.profile.match_vc_detail(scene)
+        scene.current_vc = None if match.ambiguous else match.vc_name
+        if frame_img is not None:
+            from glassbox.cognition.whitebox import apply_whitebox
+            scene.whitebox_evaluated = True
+            apply_whitebox(scene, frame_img, host.profile)
+
+    def should_wait_stable(self, stable: bool | None) -> bool:
+        host = self._phone
+        context = self._context
+        if stable is not None:
+            return stable
+        policy = host.stability_policy
+        if policy is None or not policy.enabled:
+            return False
+        return not policy.after_action_only or context.needs_stable_frame
+
+    def should_fresh_snapshot(self, fresh: bool | None) -> bool:
+        context = self._context
+        if fresh is not None:
+            return bool(fresh)
+        if context.fresh_source_reopened_after_action:
+            return False
+        return context.needs_stable_frame and self.source_supports_fresh_snapshot()
+
+    def source_supports_fresh_snapshot(self) -> bool:
+        return callable(getattr(self._phone.source, "fresh_snapshot", None))
+
+    def source_snapshot(self, *, fresh: bool) -> Frame | None:
+        host = self._phone
+        if fresh:
+            fresh_snapshot = getattr(host.source, "fresh_snapshot", None)
+            if callable(fresh_snapshot):
+                frame = fresh_snapshot()
+                self._context.fresh_source_reopened_after_action = True
+                return frame
+            host.reopen_source_for_fresh_capture()
+        return host.source.snapshot()
+
+    def capture_source_frame(self, *, stable: bool | None, fresh: bool | None) -> Frame | None:
+        host = self._phone
+        context = self._context
+        fresh_source = self.should_fresh_snapshot(fresh)
+        if self.should_wait_stable(stable):
+            from glassbox.perception.stable import wait_stable_result
+            policy = host.stability_policy
+            assert policy is not None
+            result = wait_stable_result(
+                host.source,
+                timeout=policy.timeout,
+                diff_threshold=policy.diff_threshold,
+                consecutive=policy.consecutive,
+                poll_interval=policy.poll_interval,
+                initial_frame=self.source_snapshot(fresh=True) if fresh_source else None,
+            )
+            context.last_observation_mode = "stable"
+            context.last_stable_frame = True
+            context.last_stability_score = result.stability_score
+            context.last_stability_policy = {
+                "timeout": policy.timeout,
+                "diff_threshold": policy.diff_threshold,
+                "consecutive": policy.consecutive,
+                "poll_interval": policy.poll_interval,
+            }
+            return result.frame
+        context.last_observation_mode = "raw"
+        context.last_stable_frame = None
+        context.last_stability_score = None
+        context.last_stability_policy = None
+        return self.source_snapshot(fresh=fresh_source)
+
+    def clear_snapshot_state(self) -> None:
+        context = self._context
+        context.last_frame = None
+        context.last_scene = None
+        context.last_scene_coordinate_space = None
+        context.implicit_coordinate_space_error = None
+
+    def apply_letterbox_crop(self, raw: Frame) -> Frame:
+        from glassbox.perception.source import Frame as _Frame
+
+        host = self._phone
+        if host.crop is None:
+            return raw
+        if raw.shape != host.crop.frame_size:
+            from glassbox.perception.letterbox import LetterboxCrop
+            host.crop = LetterboxCrop.auto_detect(raw.img, phone_size=host.crop.phone_size)
+            logger.info(
+                "letterbox crop refreshed after source resolution changed: "
+                f"frame={host.crop.frame_size} bbox={host.crop.crop_bbox}"
+            )
+        elif host.auto_refresh_letterbox_crop:
+            self.refresh_letterbox_crop_bbox(raw)
+        return _Frame(
+            img=host.crop.crop(raw.img),
+            ts=raw.ts,
+            context=raw.context.with_crop(
+                source_shape=raw.shape,
+                crop_bbox=host.crop.crop_bbox,
+                projection="cropped_px",
+                name="device",
+            ),
+        )
+
+    def commit_snapshot_frame(self, raw: Frame, *, previous_scene_space: str | None) -> Frame:
+        context = self._context
+        context.last_frame = raw
+        current_space = raw.context.coordinate_space
+        if previous_scene_space is not None and previous_scene_space != current_space:
+            context.implicit_coordinate_space_error = (previous_scene_space, current_space)
+        else:
+            context.implicit_coordinate_space_error = None
+        context.last_scene = None
+        context.last_scene_coordinate_space = None
+        return raw
+
+    def snapshot(
+        self,
+        *,
+        stable: bool | None = None,
+        scope: str | None = None,
+        fresh: bool | None = None,
+    ) -> Frame | None:
+        host = self._phone
+        context = self._context
+        frame_scope = host.normalize_observation_scope(scope or host.default_observation_scope)
+        previous_scene_space = context.last_scene_coordinate_space if context.last_scene is not None else None
+        raw = self.capture_source_frame(stable=stable, fresh=fresh)
+        if raw is None:
+            self.clear_snapshot_state()
+            if host.recorder is not None:
+                host.recorder.snapshot(None)
+            return None
+        raw = self.apply_letterbox_crop(raw)
+        if frame_scope == "app":
+            raw = self.apply_app_viewport(raw)
+        raw = self.commit_snapshot_frame(raw, previous_scene_space=previous_scene_space)
+        if host.recorder is not None:
+            host.recorder.snapshot(context.last_frame)
+        return context.last_frame
+
+    def refresh_letterbox_crop_bbox(self, raw: Frame) -> None:
+        host = self._phone
+        context = self._context
+        if host.crop is None:
+            return
+        try:
+            from glassbox.perception.letterbox import LetterboxCrop
+            detected = LetterboxCrop.auto_detect(raw.img, phone_size=host.crop.phone_size)
+        except Exception:
+            return
+        tol = _LETTERBOX_BBOX_TOLERANCE_PX
+        if _bbox_within_tolerance(detected.crop_bbox, host.crop.crop_bbox, tol):
+            context.pending_crop_bbox = None
+            context.pending_crop_count = 0
+            return
+        if _bbox_within_tolerance(detected.crop_bbox, context.pending_crop_bbox, tol):
+            context.pending_crop_count += 1
+        else:
+            context.pending_crop_count = 1
+        context.pending_crop_bbox = detected.crop_bbox
+        if context.pending_crop_count < host.letterbox_refresh_consecutive:
+            return
+        host.crop = detected
+        context.pending_crop_bbox = None
+        context.pending_crop_count = 0
+        logger.info(
+            "letterbox crop refreshed after source bbox changed: "
+            f"frame={host.crop.frame_size} bbox={host.crop.crop_bbox}"
+        )
+
+    def apply_app_viewport(self, frame: Frame) -> Frame:
+        from glassbox.perception.source import Frame as _Frame
+
+        host = self._phone
+        viewport = host.app_viewport
+        if self.should_detect_app_viewport(frame):
+            detected = detect_iphone_compat_viewport(frame.img)
+            if detected is not None:
+                detected = replace(detected, parent_coordinate_space=frame.context.coordinate_space)
+                if viewport is None or (
+                    viewport.source == "detected" and detected_viewport_needs_update(viewport, detected)
+                ):
+                    viewport = detected
+                    host.app_viewport = detected
+            elif viewport is not None and viewport.source == "detected":
+                host.app_viewport = None
+                viewport = None
+        if viewport is None:
+            return frame
+        return _Frame(
+            img=viewport.crop(frame.img),
+            ts=frame.ts,
+            context=frame.context.with_crop(
+                source_shape=frame.shape,
+                crop_bbox=viewport.bbox,
+                projection=viewport.coordinate_space,
+                name=viewport.name,
+            ),
+        )
+
+    def should_detect_app_viewport(self, frame: Frame) -> bool:
+        host = self._phone
+        if host.app_viewport_mode == "device":
+            return False
+        if frame.context.coordinate_space not in {"cropped_px", "frame_px"}:
+            return False
+        model = str(getattr(getattr(host, "device_geometry", None), "model", "") or "").lower().replace("-", "_")
+        if model and not model.startswith("ipad"):
+            return False
+        return host.app_viewport_mode in {"auto", "iphone_compat"}
+
+    def invalidate_app_viewport(self) -> None:
+        host = self._phone
+        if host.app_viewport is not None and host.app_viewport.source == "detected":
+            host.app_viewport = None
+
+    def invalidate_perceive_cache(self) -> None:
+        context = self._context
+        context.cache_frame = None
+        context.cache_scene = None
+        context.last_scene = None
+        context.last_scene_coordinate_space = None
+        context.implicit_coordinate_space_error = None
+
+    def perceive(
+        self,
+        *,
+        stable: bool | None = None,
+        scope: str | None = None,
+        fresh: bool | None = None,
+    ) -> Scene:
+        from glassbox.perception.stable import frame_diff_ratio
+
+        host = self._phone
+        context = self._context
+        frame_scope = host.normalize_observation_scope(scope or host.default_observation_scope)
+        frame = self.snapshot(stable=stable, scope=frame_scope, fresh=fresh)
+        observation_mode = context.last_observation_mode
+        stable_frame = context.last_stable_frame
+
+        if (
+            host.perceive_cache_diff > 0
+            and context.cache_frame is not None
+            and context.cache_scene is not None
+            and context.cache_scope == frame_scope
+            and context.cache_frame.img.shape == frame.img.shape
+            and frame_diff_ratio(context.cache_frame.img, frame.img) < host.perceive_cache_diff
+        ):
+            scene = context.cache_scene.model_copy(
+                update={
+                    "frame_id": int(frame.ts * 1000),
+                    "timestamp": frame.ts,
+                    "source_frame_ids": [int(frame.ts * 1000)],
+                    "source_timestamps": [frame.ts],
+                    "observation_mode": observation_mode,
+                    "stable_frame": stable_frame,
+                    "viewport_size": (int(frame.img.shape[1]), int(frame.img.shape[0])),
+                },
+                deep=True,
+            )
+            self.apply_scene_classifiers(scene, frame.img)
+            host.perceive_cache_stats["hits"] += 1
+            self.observe_memory(scene, frame.img)
+            self.set_last_scene(scene, frame)
+            context.cache_scene = scene.model_copy(deep=True)
+            if host.recorder is not None:
+                host.recorder.scene(scene)
+            context.needs_stable_frame = False
+            return scene
+
+        elements = self.recognize_elements(frame)
+        scene = Scene(
+            frame_id=int(frame.ts * 1000),
+            timestamp=frame.ts,
+            elements=elements,
+            source_frame_ids=[int(frame.ts * 1000)],
+            source_timestamps=[frame.ts],
+            observation_mode=observation_mode,
+            stable_frame=stable_frame,
+            viewport_size=(int(frame.img.shape[1]), int(frame.img.shape[0])),
+        )
+        if host.typer is not None:
+            host.typer.upgrade(scene, frame_img=frame.img)
+        self.apply_profile(scene, frame.img)
+        self.apply_scene_classifiers(scene, frame.img)
+        self.maybe_detect_icons(scene, frame.img)
+        host.perceive_cache_stats["misses"] += 1
+        self.observe_memory(scene, frame.img)
+        context.cache_frame = frame
+        context.cache_scene = scene.model_copy(deep=True)
+        context.cache_scope = frame_scope
+        self.set_last_scene(scene, frame)
+        if host.recorder is not None:
+            host.recorder.scene(scene)
+        context.needs_stable_frame = False
+        return scene
+
+    def recognize_elements(self, frame: Frame) -> list[UIElement]:
+        elements = self.run_ocr(frame)
+        return self.bound_ocr_elements(elements)
+
+    def run_ocr(self, frame: Frame) -> list[UIElement]:
+        host = self._phone
+
+        def _recognize() -> list[UIElement]:
+            if getattr(host.ocr, "contract", None) == "TextRegionOCR":
+                return ocr_results_to_elements(host.ocr.recognize(frame))
+            return ocr_results_to_elements(host.ocr.recognize(frame.img))
+
+        if host.ocr_timeout <= 0:
+            return _recognize()
+
+        result: list[list[UIElement]] = []
+        error: list[BaseException] = []
+
+        def _worker() -> None:
+            try:
+                result.append(_recognize())
+            except BaseException as exc:
+                error.append(exc)
+
+        worker = threading.Thread(target=_worker, name="glassbox-ocr", daemon=True)
+        worker.start()
+        worker.join(host.ocr_timeout)
+        if worker.is_alive():
+            logger.warning(
+                "OCR recognize() exceeded {}s watchdog; treating frame as empty "
+                "(scene will classify unknown → recovery)", host.ocr_timeout,
+            )
+            return []
+        if error:
+            raise error[0]
+        return result[0] if result else []
+
+    def bound_ocr_elements(self, elements: list[UIElement]) -> list[UIElement]:
+        host = self._phone
+        cap = host.max_ocr_elements
+        if cap and len(elements) > cap:
+            logger.warning(
+                "OCR returned {} elements (> cap {}); clipping — likely a "
+                "live-camera/noise frame", len(elements), cap,
+            )
+            elements = elements[:cap]
+        max_chars = host.max_ocr_text_chars
+        if max_chars:
+            for element in elements:
+                if element.text is not None and len(element.text) > max_chars:
+                    element.text = element.text[:max_chars]
+        return elements
+
+    def maybe_detect_icons(self, scene: Scene, frame_img) -> None:
+        host = self._phone
+        if not host.detect_icons_in_perceive_enabled or frame_img is None:
+            return
+        try:
+            from glassbox.cognition.icon_detect import detect_icons
+
+            text_boxes = tuple(
+                (element.box.x, element.box.y, element.box.w, element.box.h)
+                for element in scene.elements
+                if getattr(element, "text", None)
+            )
+            regions = detect_icons(frame_img, text_boxes=text_boxes)
+        except Exception:
+            return
+        if not regions:
+            return
+        next_id = max(
+            (element.element_id for element in scene.elements if element.element_id is not None),
+            default=-1,
+        ) + 1
+        for region in regions:
+            x, y, w, h = region.box
+            scene.elements.append(
+                UIElement(
+                    type="image",
+                    box=Box(x=int(x), y=int(y), w=int(w), h=int(h)),
+                    text=None,
+                    confidence=0.3,
+                    element_id=next_id,
+                )
+            )
+            next_id += 1
+
+    def perceive_voted(self, n: int = 2, *, text_normalizer=None, scope: str | None = None) -> Scene:
+        host = self._phone
+        context = self._context
+        if n <= 1:
+            return self.perceive(scope=scope)
+        frame_scope = host.normalize_observation_scope(scope or host.default_observation_scope)
+        from glassbox.cognition.ocr_vote import vote_scenes
+
+        scenes: list[Scene] = []
+        last_frame = None
+        source_frame_ids: list[int] = []
+        source_timestamps: list[float] = []
+        for _ in range(n):
+            frame = self.snapshot(scope=frame_scope)
+            last_frame = frame
+            frame_id = int(frame.ts * 1000)
+            source_frame_ids.append(frame_id)
+            source_timestamps.append(frame.ts)
+            elements = self.recognize_elements(frame)
+            scene = Scene(
+                frame_id=frame_id,
+                timestamp=frame.ts,
+                elements=elements,
+                source_frame_ids=[frame_id],
+                source_timestamps=[frame.ts],
+                observation_mode=context.last_observation_mode,
+                stable_frame=context.last_stable_frame,
+                viewport_size=(int(frame.img.shape[1]), int(frame.img.shape[0])),
+            )
+            if host.typer is not None:
+                host.typer.upgrade(scene, frame_img=frame.img)
+            scenes.append(scene)
+        scene = vote_scenes(scenes, text_normalizer=text_normalizer)
+        if last_frame is not None:
+            scene = scene.model_copy(
+                update={
+                    "frame_id": int(last_frame.ts * 1000),
+                    "timestamp": last_frame.ts,
+                    "source_frame_ids": source_frame_ids,
+                    "source_timestamps": source_timestamps,
+                    "observation_mode": "voted",
+                    "stable_frame": any(item.stable_frame is True for item in scenes),
+                    "viewport_size": (
+                        int(last_frame.img.shape[1]),
+                        int(last_frame.img.shape[0]),
+                    ),
+                },
+                deep=True,
+            )
+        frame_img = last_frame.img if last_frame is not None else None
+        self.apply_profile(scene, frame_img)
+        self.apply_scene_classifiers(scene, frame_img)
+        context.cache_frame = None
+        context.cache_scene = None
+        context.cache_scope = frame_scope
+        if frame_img is not None:
+            self.observe_memory(scene, frame_img)
+        self.set_last_scene(scene, last_frame)
+        if host.recorder is not None:
+            host.recorder.scene(scene)
+        context.needs_stable_frame = False
+        return scene
+
+
+__all__ = ["Perceptor"]

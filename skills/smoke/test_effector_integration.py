@@ -68,6 +68,58 @@ def test_phone_tap_text_drives_effector(mock_phone):
 
 
 @pytest.mark.smoke
+def test_target_tap_entrypoints_record_action_plan_contract(mock_phone):
+    """P6: high-level tap entrypoints preserve plan metadata in ActionRecord."""
+
+    def assert_last_action(*, x: int, y: int, via: str, target: str) -> None:
+        last = mock_phone.effector.last()
+        assert last is not None
+        assert last.op == "tap"
+        assert last.kwargs == {"x": x, "y": y}
+        record = mock_phone._pending_actions_for_memory[-1]
+        assert record.op == "tap"
+        assert record.via == via
+        assert record.target == target
+        assert record.x == x
+        assert record.y == y
+        assert record.coordinate_space == "frame_px"
+        assert record.params["target_point"] == {"x": x, "y": y, "space": "frame_px"}
+        assert record.params["target_point_frame"] == {"x": x, "y": y, "space": "frame_px"}
+        assert record.params["actuation_attempt_index"] == 0
+        assert record.params["regrounded"] is False
+        assert record.params["action_ok"] is True
+
+    mock_phone.ocr.elements = [
+        UIElement(type="text", box=Box(x=10, y=20, w=20, h=10), text="Login", confidence=0.95)
+    ]
+    mock_phone.tap_text("Login")
+    assert_last_action(x=20, y=25, via="tap_text", target="Login")
+
+    element = UIElement(type="text", box=Box(x=30, y=40, w=20, h=10), text="Next", confidence=0.95)
+    mock_phone.tap_element(element)
+    assert_last_action(x=40, y=45, via="tap_element", target="Next")
+
+    mock_phone.ocr.elements = [
+        UIElement(type="button", box=Box(x=50, y=60, w=30, h=12), text="Save", confidence=0.95)
+    ]
+    mock_phone.tap_button("Save")
+    assert_last_action(x=65, y=66, via="tap_button", target="Save")
+
+    mock_phone.ocr.elements = [
+        UIElement(
+            type="button",
+            box=Box(x=70, y=80, w=30, h=12),
+            text="Pay",
+            confidence=0.95,
+            intent_label="Confirm Payment",
+        )
+    ]
+    mock_phone.tap_intent("Confirm Payment")
+    assert_last_action(x=85, y=86, via="tap_intent", target="Confirm Payment")
+    assert mock_phone._pending_actions_for_memory[-1].params["selection_source"] == "vlm"
+
+
+@pytest.mark.smoke
 def test_phone_tap_text_hits_tab_bar_upper_region(mock_phone, monkeypatch):
     """Bottom tab OCR labels sit low; tap the tab's upper hit region instead."""
     monkeypatch.setattr(mock_phone, "_viewport_size", lambda: (448, 973))
@@ -477,4 +529,3 @@ def test_phone_fail_fast_raises_after_recording_failed_result(tmp_path, mock_pho
     action = next(e for e in iter_events(tmp_path) if e["type"] == "action")
     assert action["action_ok"] is False
     assert action["action_unsupported"] is True
-

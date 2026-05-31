@@ -9,25 +9,25 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from contextlib import AbstractContextManager, suppress
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any
 
 from glassbox.action.semantics import action_verdict
 from glassbox.ios.recovery import dismiss_system_search
+from skills.regression.ios_settings import context as settings_context
 
 ActionIntent = Callable[..., AbstractContextManager[Any]]
 
 
 def _record_action_verdict(phone, result: Any) -> bool:
     verdict = action_verdict(result)
-    with suppress(Exception):
-        phone._ios_settings_last_action_verdict = verdict
+    settings_context.record_action_verdict(phone, verdict)
     return verdict.accepted
 
 
 def _last_semantic_action_rejected(phone) -> bool:
-    verdict = getattr(phone, "_ios_settings_last_action_verdict", None)
+    verdict = settings_context.last_action_verdict(phone)
     status = getattr(verdict, "status", None)
     return bool(
         verdict is not None

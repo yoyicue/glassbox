@@ -47,6 +47,10 @@ class FakePhone:
         self.stack = ["root"]
         self.actions: list[tuple[str, object]] = []
 
+    def viewport_size(self):
+
+        return self._viewport_size()
+
     def _viewport_size(self):
         return 448, 973
 

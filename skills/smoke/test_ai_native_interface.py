@@ -58,6 +58,7 @@ class FakePhone:
         self.observe_calls = 0
         self.actions: list[tuple[str, str | None]] = []
         self.action_kwargs: list[dict[str, object]] = []
+        self.ai_scroll_prefer_wheel_enabled = False
         self._last_frame = Frame(
             img=np.zeros((40, 80, 3), dtype=np.uint8),
             ts=1.0,
@@ -132,14 +133,23 @@ class FakePhone:
     def _uses_semantic_plan(self, op):
         return op in getattr(self, "_plan_ops", set())
 
+    def uses_semantic_plan(self, op):
+        return self._uses_semantic_plan(op)
+
     def _picokvm_fresh_verify_kwargs(self, op):
         del op
         return {}
+
+    def picokvm_fresh_verify_kwargs(self, op):
+        return self._picokvm_fresh_verify_kwargs(op)
 
     def _run_semantic_plan(self, op, *, params=None, **kw):
         self.actions.append(("semantic_plan", op))
         self.action_kwargs.append({"params": params, **kw})
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+    def run_semantic_plan(self, op, *, params=None, **kw):
+        return self._run_semantic_plan(op, params=params, **kw)
 
     def expect_text(self, target, **_kw):
         scene = self.perceive()
@@ -149,11 +159,21 @@ class FakePhone:
     def _viewport_size(self):
         return self._last_frame.shape
 
-    def _coordinate_space(self):
+    def viewport_size(self):
+        return self._viewport_size()
+
+    @property
+    def last_frame(self):
+        return self._last_frame
+
+    def effector_coordinate_space(self):
         return "cropped_px"
 
     def _effector_backend(self):
         return "picokvm"
+
+    def effector_backend(self):
+        return self._effector_backend()
 
 
 @dataclass
@@ -311,7 +331,7 @@ def test_ai_scroll_prefers_wheel_when_enabled_and_supported(tmp_path):
     iPad rig), the generic scroll verb uses the precise wheel instead of swipe."""
     phone = _ai_phone(tmp_path, [_scene("Top"), _scene("Bottom")])
     phone._phone._supported = {"scroll_wheel"}
-    phone._phone._ai_scroll_prefer_wheel = True
+    phone._phone.ai_scroll_prefer_wheel_enabled = True
 
     phone.scroll(direction="down")
     phone.scroll(direction="up")
@@ -327,7 +347,7 @@ def test_ai_scroll_falls_back_to_swipe_without_wheel_support(tmp_path):
     """CUQ-3.15 default-safe: with the flag off (or no wheel support) the scroll
     verb stays on swipe-fling — byte-identical to before."""
     phone = _ai_phone(tmp_path, [_scene("Top"), _scene("Bottom")])
-    phone._phone._ai_scroll_prefer_wheel = True  # flag on, but...
+    phone._phone.ai_scroll_prefer_wheel_enabled = True  # flag on, but...
     # ...backend does NOT support scroll_wheel -> must fall back to swipe.
 
     phone.scroll(direction="down")
@@ -363,7 +383,7 @@ def test_ai_scroll_flag_off_with_wheel_support_stays_on_swipe(tmp_path):
     exercised the flag-gate itself.)"""
     phone = _ai_phone(tmp_path, [_scene("Top"), _scene("Bottom")])
     phone._phone._supported = {"scroll_wheel"}  # iPad-like backend (wheel available)
-    # _ai_scroll_prefer_wheel deliberately NOT set (default off)
+    # ai_scroll_prefer_wheel_enabled deliberately left false (default off)
 
     phone.scroll(direction="down")
 

@@ -140,7 +140,7 @@ def _settings_wheel_focus(phone) -> tuple[int, int] | None:
     if not _is_ipad_target(phone):
         return None
     try:
-        w, h = phone._viewport_size()
+        w, h = phone.viewport_size()
     except Exception:
         return None
     return int(w * 0.23), int(h * 0.55)

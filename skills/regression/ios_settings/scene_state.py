@@ -14,9 +14,11 @@ import time
 from contextlib import suppress
 from typing import Any
 
+from glassbox.boundaries import action_host_last_frame
 from glassbox.cognition import UIElement
 from glassbox.ios.progress import same_visible_page, stable_visible_texts
 from glassbox.ios.scene import has_strong_ios_home_evidence, settings_detail_semantic_guess
+from skills.regression.ios_settings import context as settings_context
 from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings.policy import DEFAULT_SETTINGS_POLICY
 
@@ -38,7 +40,7 @@ _HARD_COUNTER_KINDS = frozenset({
 
 def phone_viewport_size(phone) -> tuple[int, int] | None:
     try:
-        w, h = phone._viewport_size()
+        w, h = phone.viewport_size()
         return int(w), int(h)
     except Exception:
         return None
@@ -95,12 +97,14 @@ def reset_scene_context_state() -> None:
 def record_settings_row_tap(phone, label: str) -> None:
     if phone is None:
         return
-    with suppress(Exception):
-        phone._ios_settings_last_row_tap = {
+    settings_context.record_row_tap(
+        phone,
+        {
             "via": "settings.tap_row",
             "label": (label or "").strip(),
             "created_at": time.monotonic(),
-        }
+        },
+    )
 
 
 def return_state_signature(scene, phone=None) -> tuple[str, tuple[str, ...]]:
@@ -342,7 +346,7 @@ def _contextual_settings_detail_override(
 
 
 def _recent_row_tap_prior(phone) -> dict[str, Any] | None:
-    prior = getattr(phone, "_ios_settings_last_row_tap", None)
+    prior = settings_context.last_row_tap(phone)
     if not isinstance(prior, dict) or prior.get("via") != "settings.tap_row":
         return None
     created_at = prior.get("created_at")
@@ -358,9 +362,7 @@ def _recent_row_tap_prior(phone) -> dict[str, Any] | None:
 def _clear_recent_row_tap_prior(phone) -> None:
     if phone is None:
         return
-    with suppress(Exception):
-        if hasattr(phone, "_ios_settings_last_row_tap"):
-            delattr(phone, "_ios_settings_last_row_tap")
+    settings_context.clear_row_tap(phone)
 
 
 def _vlm_verify_settings_scene_kind(
@@ -372,7 +374,7 @@ def _vlm_verify_settings_scene_kind(
 ) -> str | None:
     global _scene_vlm_calls
     kimi = getattr(phone, "kimi", None) if phone is not None else None
-    frame = getattr(phone, "_last_frame", None) if phone is not None else None
+    frame = action_host_last_frame(phone) if phone is not None else None
     frame_img = getattr(frame, "img", None)
     if kimi is None or frame_img is None or not hasattr(kimi, "chat"):
         return None
@@ -540,12 +542,8 @@ def _record_contextual_scene_kind(
         "override": override,
         "evidence": list(evidence),
     }
-    with suppress(Exception):
-        records = getattr(phone, "_ios_settings_scene_classifications", None)
-        if not isinstance(records, list):
-            records = []
-            phone._ios_settings_scene_classifications = records
-        records.append(record)
+    if phone is not None:
+        settings_context.append_scene_classification(phone, record)
     if not override:
         return
     with suppress(Exception):

@@ -35,7 +35,7 @@ def _texts(scene) -> list[str]:
 
 def _viewport_size(phone) -> tuple[int, int] | None:
     try:
-        w, h = phone._viewport_size()
+        w, h = phone.viewport_size()
         return int(w), int(h)
     except Exception:
         return None

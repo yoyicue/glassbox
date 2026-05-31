@@ -1,6 +1,7 @@
 """glassbox.perception — HDMI frame grabbing + screen-stability detection + static test source + letterbox calibration"""
 
 from glassbox.perception.letterbox import LetterboxCrop, detect_letterbox
+from glassbox.perception.picokvm_config import PicoKVMVideoConfig, PicoKVMVideoSettings
 from glassbox.perception.picokvm_source import PicoKVMFrameSource
 from glassbox.perception.source import (
     FRAME_CONTRACT_VERSION,
@@ -28,6 +29,8 @@ __all__ = [
     "FrameContext",
     "LetterboxCrop",
     "PicoKVMFrameSource",
+    "PicoKVMVideoConfig",
+    "PicoKVMVideoSettings",
     "StabilityPolicy",
     "StabilityResult",
     "StaticFrameSource",

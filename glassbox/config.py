@@ -230,6 +230,16 @@ class AgentConfig(BaseSettings):
     icon-naming cost is paid once per Home layout, not every cold start. When
     None the map is in-memory only (per run). env GLASSBOX_SPRINGBOARD_ICON_MAP_PATH."""
 
+    # ─── Experimental flag retirement policy ───────────────────────────
+    # Each default-off experimental flag in this section must carry its CUQ /
+    # issue identifier, validation conditions, and promote-or-remove intent in
+    # the field docstring. Once a flag is rig-validated as default-on, file the
+    # follow-up to make the behavior unconditional and delete the branch.
+    #
+    # Keep owner boundaries explicit: Phone-owned flags may flow into
+    # PhoneFeatureFlags; runtime dependency gates (for example enable_coldstart)
+    # and ActionOrchestrator flags (for example recover_then_retry) must not.
+
     enable_coldstart: bool = False
     """Enable the cold-start VLM annotator: a brand-new UTG node triggers one
     VLM annotation, fused onto OCR boxes (slow + billed, off by default).

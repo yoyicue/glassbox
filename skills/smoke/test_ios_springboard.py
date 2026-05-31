@@ -18,11 +18,11 @@ from glassbox.ios.springboard import (
 
 @pytest.mark.smoke
 def test_strict_home_reads_phone_require_home_icon_grid_flag():
-    """CUQ-2.2 wiring (audit fix): the Phone flag _require_home_icon_grid actually
+    """CUQ-2.2 wiring (audit fix): the public Phone flag accessor actually
     drives strict home recognition. Locks the config->Phone->strict_springboard
     leg that the function-level is_ios_home_screen tests bypass."""
-    assert _strict_home(SimpleNamespace(_require_home_icon_grid=True)) is True
-    assert _strict_home(SimpleNamespace(_require_home_icon_grid=False)) is False
+    assert _strict_home(SimpleNamespace(require_home_icon_grid_enabled=True)) is True
+    assert _strict_home(SimpleNamespace(require_home_icon_grid_enabled=False)) is False
     assert _strict_home(SimpleNamespace()) is False  # missing attr -> default off
 
 

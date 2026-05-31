@@ -425,7 +425,7 @@ def _visible_ipad_sidebar_root_candidate_for_label(phone, scene, label: str):
     try:
         from glassbox.ipados.scene import sidebar_right_x
 
-        width, height = getattr(scene, "viewport_size", None) or phone._viewport_size()
+        width, height = getattr(scene, "viewport_size", None) or phone.viewport_size()
         sidebar_right = sidebar_right_x(width)
     except Exception:
         return None

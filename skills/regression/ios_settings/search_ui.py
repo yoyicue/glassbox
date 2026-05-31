@@ -59,7 +59,7 @@ def bottom_tab_hit_point(
     fallback_x_fraction: float = 0.5,
 ) -> tuple[int, int]:
     try:
-        w, h = phone._viewport_size()
+        w, h = phone.viewport_size()
     except Exception:
         w, h = 448, 973
     safe = IOSSafeArea.from_viewport((w, h))

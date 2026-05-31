@@ -7,7 +7,28 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from glassbox.boundaries import action_host_last_frame, action_host_last_scene
+
 RecoveryHook = Callable[[object, str, dict[str, Any]], bool]
+_RECOVERY_GUARD_BY_ID: dict[int, int] = {}
+
+
+def _in_recovery(phone: object) -> bool:
+    return _RECOVERY_GUARD_BY_ID.get(id(phone), 0) > 0
+
+
+@contextlib.contextmanager
+def _recovery_guard(phone: object):
+    key = id(phone)
+    _RECOVERY_GUARD_BY_ID[key] = _RECOVERY_GUARD_BY_ID.get(key, 0) + 1
+    try:
+        yield
+    finally:
+        remaining = _RECOVERY_GUARD_BY_ID.get(key, 1) - 1
+        if remaining > 0:
+            _RECOVERY_GUARD_BY_ID[key] = remaining
+        else:
+            _RECOVERY_GUARD_BY_ID.pop(key, None)
 
 
 def recover_to_home_then_renavigate(phone: object, reason: str, payload: dict[str, Any]) -> bool:
@@ -33,13 +54,12 @@ def recover_to_home_then_renavigate(phone: object, reason: str, payload: dict[st
     recovery_kind = str(payload.get("recovery") or "recover_to_home_then_renavigate")
     if recovery_kind != "recover_to_home_then_renavigate":
         return False
-    if getattr(phone, "_in_recovery", False):
+    if _in_recovery(phone):
         return False
     home = getattr(phone, "home", None)
     if not callable(home):
         return False
-    phone._in_recovery = True  # type: ignore[attr-defined]
-    try:
+    with _recovery_guard(phone):
         result = home()
         reached_home = bool(getattr(result, "ok", False)) and getattr(
             result, "semantic_status", None
@@ -56,8 +76,6 @@ def recover_to_home_then_renavigate(phone: object, reason: str, payload: dict[st
             with contextlib.suppress(Exception):
                 path_to_page(str(target_page))
         return True
-    finally:
-        phone._in_recovery = False  # type: ignore[attr-defined]
 
 
 def _current_scene(phone: object) -> Any | None:
@@ -71,11 +89,11 @@ def _current_scene(phone: object) -> Any | None:
                 return perceive()
         except Exception:
             return None
-    return getattr(phone, "_last_scene", None)
+    return action_host_last_scene(phone)
 
 
 def _current_frame_img(phone: object) -> Any | None:
-    frame = getattr(phone, "_last_frame", None)
+    frame = action_host_last_frame(phone)
     return getattr(frame, "img", None) if frame is not None else None
 
 
@@ -149,7 +167,7 @@ def make_try_memory_path_hook(
     allowed = set(allowed_actions) if allowed_actions else {"home", "back"}
 
     def hook(phone: object, reason: str, payload: dict[str, Any]) -> bool:
-        if getattr(phone, "_in_recovery", False):
+        if _in_recovery(phone):
             return False
         page = str(payload.get("target_page") or target_page or "")
         memory = getattr(phone, "memory", None)
@@ -157,8 +175,7 @@ def make_try_memory_path_hook(
         path_to_page = getattr(memory, "path_to_page", None) if memory is not None else None
         recovered = False
         if page and callable(recognize) and callable(path_to_page):
-            phone._in_recovery = True  # type: ignore[attr-defined]
-            try:
+            with _recovery_guard(phone):
                 recovered = _attempt_memory_path(
                     phone,
                     page,
@@ -168,8 +185,6 @@ def make_try_memory_path_hook(
                     allowed=allowed,
                     min_success_rate=min_success_rate,
                 )
-            finally:
-                phone._in_recovery = False  # type: ignore[attr-defined]
         if recovered:
             return True
         # The fallback sets its own re-entrancy guard, so it must run only after

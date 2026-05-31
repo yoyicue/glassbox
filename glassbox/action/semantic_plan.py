@@ -612,7 +612,7 @@ def _bind_phone_strategy(
         if name == "keyboard_combo":
             return lambda: phone.effector.home()
         if name == "assistive_touch_home":
-            return lambda: phone._home_via_assistive_touch_menu()
+            return lambda: phone.home_via_assistive_touch_menu()
         if name == "home_indicator_drag":
             return lambda: _call_phone_method(phone, "close_foreground_app", op, name)
     if op == "back":
@@ -652,7 +652,7 @@ def _bind_phone_strategy(
 
 
 def _phone_nav_back_tap(phone: Any) -> ActionResult:
-    context = getattr(phone, "_picokvm_back_context", None)
+    context = getattr(phone, "picokvm_back_context", None)
     if not callable(context):
         return _unsupported(phone, "back", "nav_back_tap")
     allowed, guard_reason, nav_back_point = context()
@@ -665,13 +665,13 @@ def _phone_nav_back_tap(phone: Any) -> ActionResult:
             result = replace(result, error=str(guard_reason or "nav back point unavailable"))
         return result
     x, y = nav_back_point
-    px, py = phone._to_phone(x, y)
+    px, py = phone.to_phone_coordinates(x, y)
     return phone.effector.tap(px, py)
 
 
 def _phone_target_tap(phone: Any, params: Mapping[str, Any]) -> ActionResult:
     if params.get("x") is not None and params.get("y") is not None:
-        px, py = phone._to_phone(int(params["x"]), int(params["y"]))
+        px, py = phone.to_phone_coordinates(int(params["x"]), int(params["y"]))
         return phone.effector.tap(px, py)
     target = params.get("target") or params.get("text") or params.get("label")
     if target:
@@ -684,8 +684,8 @@ def _phone_drag(phone: Any, params: Mapping[str, Any]) -> ActionResult:
     if any(value is None for value in coords):
         return _unsupported(phone, "scroll", "drag")
     x1, y1, x2, y2 = (int(value) for value in coords)
-    px1, py1 = phone._to_phone(x1, y1)
-    px2, py2 = phone._to_phone(x2, y2)
+    px1, py1 = phone.to_phone_coordinates(x1, y1)
+    px2, py2 = phone.to_phone_coordinates(x2, y2)
     return phone.effector.drag(px1, py1, px2, py2)
 
 
@@ -697,7 +697,7 @@ def _call_phone_method(target: Any, method_name: str, op: str, strategy: str) ->
 
 
 def _unsupported(phone: Any, op: str, strategy: str) -> ActionResult:
-    method = getattr(phone, "_unsupported_action", None)
+    method = getattr(phone, "unsupported_action", None)
     if callable(method):
         return method(op, strategy=strategy)
     return ActionResult.failed(

@@ -32,7 +32,13 @@ from glassbox.memory import save_utg, wrap_with_memory_if_enabled
 from glassbox.obs import open_recorder, wrap_vlm_cache_if_enabled
 from glassbox.perception.letterbox import LetterboxCrop
 from glassbox.perception.stable import StabilityPolicy
-from glassbox.phone import Phone, PhoneGestureConfig
+from glassbox.phone import (
+    Phone,
+    PhoneFeatureFlags,
+    PhoneGestureConfig,
+    PhoneObservationConfig,
+    PhoneRuntimeOptions,
+)
 from glassbox.platforms import DEFAULT_PLATFORM_REGISTRY, select_platform_backend
 
 if TYPE_CHECKING:
@@ -657,8 +663,6 @@ def build_phone(
         memory=memory,
         coldstart=coldstart,
         crop=crop,
-        auto_refresh_letterbox_crop=auto_refresh_letterbox_crop,
-        letterbox_refresh_consecutive=cfg.letterbox_refresh_consecutive,
         coordinate_space=coordinate_space,
         stability_policy=StabilityPolicy(
             enabled=cfg.stable_after_action,
@@ -669,7 +673,6 @@ def build_phone(
         ),
         scene_classifiers=scene_classifiers,
         platform_scene_classifier=platform.scene_classifier,
-        action_fail_fast=getattr(cfg, "action_fail_fast", True),
         action_orchestrator=action_orchestrator,
         app_labels=(profile.app.name,) if profile else None,
         icon_map=icon_map,
@@ -690,25 +693,34 @@ def build_phone(
             ),
         ),
         app_viewport=app_viewport,
-        app_viewport_mode=cfg.app_viewport_mode,
-        default_observation_scope=cfg.default_observation_scope,
+        runtime_options=PhoneRuntimeOptions(
+            action_fail_fast=getattr(cfg, "action_fail_fast", True),
+            auto_refresh_letterbox_crop=auto_refresh_letterbox_crop,
+            letterbox_refresh_consecutive=cfg.letterbox_refresh_consecutive,
+            app_viewport_mode=cfg.app_viewport_mode,
+            default_observation_scope=cfg.default_observation_scope,
+        ),
+        observation_config=PhoneObservationConfig(
+            max_ocr_elements=cfg.max_ocr_elements,
+            max_ocr_text_chars=cfg.max_ocr_text_chars,
+            ocr_timeout=cfg.ocr_timeout,
+        ),
+        feature_flags=PhoneFeatureFlags(
+            detect_icons_in_perceive=cfg.detect_icons_in_perceive,
+            strict_target_matching=cfg.strict_target_matching,
+            require_home_icon_grid=cfg.require_home_icon_grid,
+            reverify_fresh_frame=cfg.reverify_fresh_frame,
+            coldstart_promote_controls=cfg.coldstart_promote_controls,
+            vlm_set_of_mark=cfg.vlm_set_of_mark,
+            memory_locate_priors=cfg.memory_locate_priors,
+            strict_settings_detail=cfg.strict_settings_detail,
+            ai_scroll_prefer_wheel=cfg.ai_scroll_prefer_wheel,
+            vlm_reground_selection=cfg.vlm_reground_selection,
+            whitebox_hint_selection=cfg.whitebox_hint_selection,
+        ),
         semantic_plan_ops=frozenset(
             op.strip() for op in (cfg.semantic_plan_ops or "").split(",") if op.strip()
         ),
-        detect_icons_in_perceive=cfg.detect_icons_in_perceive,
-        max_ocr_elements=cfg.max_ocr_elements,
-        max_ocr_text_chars=cfg.max_ocr_text_chars,
-        ocr_timeout=cfg.ocr_timeout,
-        strict_target_matching=cfg.strict_target_matching,
-        require_home_icon_grid=cfg.require_home_icon_grid,
-        reverify_fresh_frame=cfg.reverify_fresh_frame,
-        coldstart_promote_controls=cfg.coldstart_promote_controls,
-        vlm_set_of_mark=cfg.vlm_set_of_mark,
-        memory_locate_priors=cfg.memory_locate_priors,
-        strict_settings_detail=cfg.strict_settings_detail,
-        ai_scroll_prefer_wheel=cfg.ai_scroll_prefer_wheel,
-        vlm_reground_selection=cfg.vlm_reground_selection,
-        whitebox_hint_selection=cfg.whitebox_hint_selection,
         calibration_probe_target=cfg.calibration_probe_target,
     )
     # CUQ-3.7: eager session-start calibration probe (no-op unless a target is

@@ -58,6 +58,10 @@ class _Phone:
         self.memory = memory
         self._last_frame = None
 
+    def viewport_size(self):
+
+        return self._viewport_size()
+
     def _viewport_size(self):
         return 448, 973
 

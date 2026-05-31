@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from skills.smoke.ios_settings_walkthrough_support import *
 from glassbox.effector import ActionResult
+from skills.regression.ios_settings import context as settings_context
 from skills.regression.ios_settings.recovery import SettingsRootUnreachable
+from skills.smoke.ios_settings_walkthrough_support import *
 
 @pytest.mark.smoke
 def test_siri_page_suggestions_are_not_treated_as_settings_search():
@@ -71,6 +72,10 @@ def test_enter_settings_search_uses_ipad_top_search_pill_hit_point(monkeypatch):
         def perceive(self):
             return self.scene
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 640, 990
 
@@ -96,7 +101,7 @@ def test_ipad_top_search_detection_scales_with_pixel_viewport():
 
     phone = SimpleNamespace(
         device_geometry=SimpleNamespace(model="ipad_mini_7"),
-        _viewport_size=lambda: (1488, 2266),
+        viewport_size=lambda: (1488, 2266),
     )
 
     assert walkthrough._is_ipad_top_search_field(phone, field)
@@ -116,6 +121,10 @@ def test_enter_settings_search_accepts_ipad_top_search_focus_without_scene_chang
 
         def perceive(self):
             return root
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 640, 990
@@ -185,6 +194,10 @@ def test_dismiss_settings_search_does_not_bottom_tap_ipad_top_search_without_cle
         def __init__(self):
             self.taps: list[tuple[int, int]] = []
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 640, 990
 
@@ -217,6 +230,10 @@ def test_dismiss_settings_search_clears_ipad_top_query_with_keyboard(monkeypatch
 
         def invalidate_perceive_cache(self):
             pass
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 640, 990
@@ -273,6 +290,10 @@ def test_dismiss_settings_search_clears_ipad_top_query_via_edit_menu(monkeypatch
         def invalidate_perceive_cache(self):
             pass
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 640, 990
 
@@ -319,6 +340,10 @@ def test_clear_settings_search_fails_when_ipad_top_query_does_not_clear(monkeypa
         def invalidate_perceive_cache(self):
             pass
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 640, 990
 
@@ -356,6 +381,10 @@ def test_clear_settings_search_handles_ipad_top_query_even_when_scene_not_search
 
         def invalidate_perceive_cache(self):
             pass
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 640, 990
@@ -399,6 +428,10 @@ def test_clear_settings_search_focuses_hidden_ipad_top_query_before_clear(monkey
 
         def invalidate_perceive_cache(self):
             pass
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 640, 990
@@ -509,6 +542,10 @@ def test_return_to_settings_root_recovers_from_system_search_via_home(monkeypatc
             self.homes += 1
             self.scene = root
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -582,13 +619,17 @@ def test_enter_settings_search_marks_global_system_search_unavailable(monkeypatc
         def invalidate_perceive_cache(self) -> None:
             pass
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
     phone = SearchPhone()
 
     assert not _enter_settings_search(phone)
-    assert phone._ios_settings_search_unavailable is True
+    assert settings_context.search_unavailable(phone) is True
     assert phone.taps == [(79, 922)]
 
 @pytest.mark.smoke
@@ -692,6 +733,10 @@ def test_return_to_settings_root_exits_search_results_after_back(monkeypatch):
             else:
                 self.scene = root
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -751,6 +796,10 @@ def test_return_to_settings_root_exits_search_results_without_tapping_result(mon
             else:
                 self.scene = root
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -800,6 +849,10 @@ def test_settings_tab_from_search_rejects_semantic_failure():
                 semantic_reason="tab tap did not navigate",
             )
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -843,6 +896,10 @@ def test_tap_search_field_uses_ipad_top_search_pill_hit_point(monkeypatch):
         def __init__(self):
             self.taps: list[tuple[int, int]] = []
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 640, 990
 
@@ -873,6 +930,10 @@ def test_tap_settings_row_rejects_semantic_failure():
                 semantic_status="failed",
                 semantic_reason="row tap did not navigate",
             )
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 448, 973
@@ -937,6 +998,10 @@ def test_return_to_settings_root_does_not_blind_tap_blocked_safety(monkeypatch):
             self.back_gestures += 1
             self.scene = root
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -992,6 +1057,10 @@ def test_return_to_settings_root_uses_back_for_settings_app_search_page(monkeypa
             self.back_gestures += 1
             self.scene = root
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -1043,6 +1112,10 @@ def test_return_to_settings_root_uses_edge_back_when_unknown_page_only_has_ocr_n
             self.back_gestures += 1
             self.scene = root
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -1087,6 +1160,10 @@ def test_return_to_settings_root_stops_when_back_shortcut_semantically_fails(mon
         def back_gesture(self):
             self.back_gestures += 1
             raise AssertionError("back_gesture should not run after semantic rejection")
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 448, 973
@@ -1146,6 +1223,10 @@ def test_return_to_settings_root_can_use_safe_utg_home_edge(monkeypatch):
         def key(self, modifier: int, keycode: int):
             self.keys.append((modifier, keycode))
 
+        def viewport_size(self):
+
+            return self._viewport_size()
+
         def _viewport_size(self):
             return 448, 973
 
@@ -1184,6 +1265,10 @@ def test_tap_top_left_back_fallback_rejects_semantic_failure():
                 semantic_status="failed",
                 semantic_reason="tap did not navigate",
             )
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 448, 973
@@ -1246,6 +1331,10 @@ def test_ensure_settings_root_returns_from_unknown_restored_settings_page(monkey
         def back_gesture(self):
             self.back_gestures += 1
             self.scene = root
+
+        def viewport_size(self):
+
+            return self._viewport_size()
 
         def _viewport_size(self):
             return 448, 973

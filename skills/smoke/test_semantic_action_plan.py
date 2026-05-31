@@ -97,8 +97,14 @@ def test_default_semantic_action_plan_binds_core_phone_entrypoints():
         def _to_phone(self, x, y):
             return x + 10, y + 20
 
+        def to_phone_coordinates(self, x, y):
+            return self._to_phone(x, y)
+
         def _picokvm_back_context(self):
             return True, None, (1, 2)
+
+        def picokvm_back_context(self):
+            return self._picokvm_back_context()
 
         def open_app(self, label, *, aliases=(), max_pages=8, settle_s=0.8):
             calls.append(("open_app", label, aliases, max_pages, settle_s))
@@ -111,6 +117,9 @@ def test_default_semantic_action_plan_binds_core_phone_entrypoints():
         def _home_via_assistive_touch_menu(self):
             calls.append(("assistive_touch_home",))
             return _ok()
+
+        def home_via_assistive_touch_menu(self):
+            return self._home_via_assistive_touch_menu()
 
         def close_foreground_app(self):
             calls.append(("close_foreground_app",))
@@ -193,6 +202,9 @@ def test_default_semantic_action_plan_serializes_runtime_strategy_params():
 
         def _to_phone(self, x, y):
             return x, y
+
+        def to_phone_coordinates(self, x, y):
+            return self._to_phone(x, y)
 
         def open_app(self, *_args, **_kwargs):
             return _ok()

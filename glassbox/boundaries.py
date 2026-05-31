@@ -126,6 +126,70 @@ class RecoveryProvider(Protocol):
     def recover(self, ctx: StepContext) -> bool: ...
 
 
+class ActionHost(Protocol):
+    """Narrow host surface consumed by action/crawl collaborators."""
+
+    @property
+    def last_frame(self) -> Frame | None: ...
+    @property
+    def last_scene(self) -> Scene | None: ...
+    @property
+    def last_stable_frame(self) -> bool | None: ...
+    def viewport_size(self) -> tuple[int, int]: ...
+    def backend_capabilities(self) -> Any | None: ...
+    def effector_backend(self) -> str: ...
+    def effector_coordinate_space(self) -> str: ...
+    def record_action(
+        self,
+        op: str,
+        *,
+        result: Any | None = None,
+        **kwargs: Any,
+    ) -> None: ...
+
+
+def action_host_last_frame(host: object) -> Frame | None:
+    frame = getattr(host, "last_frame", None)
+    if frame is not None:
+        return frame
+    # Transitional duck-test compatibility while P1 moves callers to ActionHost.
+    return getattr(host, "_last_frame", None)
+
+
+def action_host_last_scene(host: object) -> Scene | None:
+    scene = getattr(host, "last_scene", None)
+    if scene is not None:
+        return scene
+    # Transitional duck-test compatibility while P1 moves callers to ActionHost.
+    return getattr(host, "_last_scene", None)
+
+
+def action_host_backend_capabilities(host: object) -> Any | None:
+    capabilities = getattr(host, "backend_capabilities", None)
+    if callable(capabilities):
+        try:
+            return capabilities()
+        except Exception:
+            return None
+    # Transitional duck-test compatibility while P1 moves callers to ActionHost.
+    legacy = getattr(host, "_backend_capabilities", None)
+    if callable(legacy):
+        try:
+            return legacy()
+        except Exception:
+            return None
+    return None
+
+
+def action_host_effector_backend(host: object) -> str:
+    backend = getattr(host, "effector_backend", None)
+    if callable(backend):
+        return str(backend())
+    # Transitional duck-test compatibility while P1 moves callers to ActionHost.
+    legacy = getattr(host, "_effector_backend", None)
+    return str(legacy()) if callable(legacy) else "unknown"
+
+
 class SpringboardProvider(Protocol):
     def open_app(
         self,
@@ -176,6 +240,7 @@ __all__ = [
     "ARCHITECTURE_BOUNDARY_CONTRACT_VERSION",
     "OCR",
     "VLM",
+    "ActionHost",
     "AppLaunchTarget",
     "AppSceneClassifier",
     "CrawlPolicy",
@@ -192,4 +257,8 @@ __all__ = [
     "SpringboardProvider",
     "StepContext",
     "Verifier",
+    "action_host_backend_capabilities",
+    "action_host_effector_backend",
+    "action_host_last_frame",
+    "action_host_last_scene",
 ]

@@ -39,6 +39,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 import re
 import time
@@ -768,7 +769,7 @@ def _confidence_or_none(value: Any) -> float | None:
     if not isinstance(value, (int, float)):
         return None
     conf = float(value)
-    if conf < 0.0 or conf > 1.0:
+    if not math.isfinite(conf) or conf < 0.0 or conf > 1.0:
         return None
     return conf
 
