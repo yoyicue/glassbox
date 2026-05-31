@@ -466,6 +466,23 @@ on the **outcome metrics the harness already computes** (`computer_use_success_r
   drops**. Reject any change where `action_success_rate` rises while
   `task_completion_rate` or `entered_graph` fall.
 
+⟦as-built rig 2026-05-31⟧ **First on-rig pass (iPad mini 7, en/HK, n=1/arm — NOT yet
+median-backed).** Back-to-back B-arm (L1 on) vs A-arm (flag off): `entered_graph` **0→7**,
+`root_to_detail` success edges **0→14**, root mints + collapses to **2** signatures
+(passes the ≤2 gate; ideal 1), acceptance green. **The A-arm (baseline) crashed with
+`SettingsRootUnreachable` (`recovery.py:122`) while the B-arm completed** — direct
+evidence that L1 removes the C1 return-to-root failure (B recognizes the composite root
+in-place via `scene_is_settings_root`, `recovery.py:93-94`; A has no root node and
+default-off `via_memory`, so its 12-retry heuristic fails after a fling overshoot). Two
+caveats the rig exposed: (a) the root's 2-vs-1 signature split is **OCR case drift on the
+sidebar text** (`BluetOOth`/`NOtificatiOns`) — an L3b gap (shipped L3b anchors *detail*
+pages only, not the sidebar text feeding the *root* signature); (b) the coverage gap is
+**L4 fling-overshoot**, orthogonal to L1. **n=1 is insufficient to flip the flag** — the
+median rerun + zh locale are the remaining gate. Full plan +
+hardened driver: `docs/goals/ipad_settings_l1_rig_ab_handoff.md`. (The first matrix
+driver self-restarted and produced two concurrent runs on one rig; only the snapshotted
+`B_1`/`A_1` pair is clean — the handoff adds a single-instance lock.)
+
 **Rollout: flag-gated, default-off, rig-validated — exactly like Part A / Fix 3a/3b /
 Option 3.** ⟦review⟧ L1 changes UTG topology, so a census-green change could merge
 without the rig ever proving task improvement.
