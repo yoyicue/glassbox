@@ -18,6 +18,13 @@ All paths below are relative to repo root `/Users/biu/glassbox`.
 
 **Valid evidence used for the decision**
 
+> ⚠️ **2026-05-31 post-review note: the `artifacts/ios_settings/ab/` directory (all
+> `results_*.jsonl`, per-run reports, and `*.artifacts/.../memory/*.json` UTGs) was
+> deleted when the host ran out of disk.** The numbers in this section are preserved
+> because they were read row-by-row into the review transcript before deletion; the raw
+> files are gone, so the zh-stale-graph hypothesis below could not be re-confirmed at the
+> UTG-file level. To reproduce, re-run the matrix (the tooling in §5 is intact).
+
 - en/HK physical English UI: `artifacts/ios_settings/ab/results_20260531_165130.jsonl`,
   using only the six `locale=en-HK` rows. The `zh-CN` rows in the same file are invalid
   because `zh-CN` is not a supported locale pack for this runner (`zh-Hans-CN` is).
@@ -35,13 +42,32 @@ All paths below are relative to repo root `/Users/biu/glassbox`.
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 | en-HK | B | 2/3 | 1/3 | **7** | **14** | **3** | 1.0 | 0 | 18 |
 | en-HK | A | 1/3 | 2/3 | 0 | 0 | 0 | 1.0 | 0 | 30 |
-| zh-Hans-CN | B | 3/3 | 0/3 | **7** | **13** | **3** | 0.0 | 0 | 4 |
+| zh-Hans-CN | B ⚠️ | 3/3 | 0/3 | ~~7~~ | ~~13~~ | 3–14 | 0.0 | 0 | 4 |
 | zh-Hans-CN | A | 3/3 | 0/3 | 0 | 0 | 0 | 0.0 | 12 | 4 |
+
+⚠️ **The zh-Hans-CN B row is a BROKEN run, not valid positive evidence — see the review
+correction below. Do not read its `entered_graph`/`root_to_detail` as real.**
 
 **Verdict**
 
-- Positive signal: L1's graph-authoritative signal is real in both locales. B has
-  `entered_graph` median 7 and `root_to_detail` median 13-14; A stays at 0/0.
+- ⟦review-correction 2026-05-31⟧ **L1's graph signal is demonstrated on en/HK only — NOT
+  "both locales".** The original line claimed "real in both locales"; that overstates the
+  zh data. The zh-Hans-CN B matrix is internally self-contradictory and must be treated as
+  a broken run:
+  - r2 and r3 report `visit_count=4` with `nav_proxy=0.0` (zero navigation progress) yet
+    `entered_graph=7` / `root_to_detail=13`. A run that visited 4 pages with zero progress
+    **cannot** have entered 7 distinct roots or built 13 root→detail edges — these are
+    almost certainly read from a **stale/leaked UTG store** (a prior run's graph), not the
+    zh run that actually died. (Could not be confirmed at the UTG-file level — those files
+    were deleted with the rest of `ab/`; the internal contradiction alone is disqualifying.)
+  - r1 reports `root_sigs=14` (root fragmented into 14 signatures — Chinese sidebar OCR is
+    far worse than English's 3), `visit_count=18`.
+  - All 3 zh-B rounds crashed; 2 of 3 stalled at `visit_count=4`. This is a cold-start /
+    post-language-switch navigation failure, not L1 evidence either way. **zh is
+    inconclusive/broken, not a positive or negative L1 result.**
+  - **Net: the only trustworthy L1 signal is en/HK** — B `entered_graph` median 7,
+    `root_to_detail` 14, vs A's 0/0. That alone is enough to keep the verdict
+    ship-negative; zh adds no positive support.
 - Blocking signal: default-on is not defensible. B still fails the operational gate:
   rc/crash is high, `task_completion` is poor, root collapse is median 3 rather than
   <=2, and zh-Hans/CN falls into low-visit/no-progress runs.
@@ -54,14 +80,29 @@ All paths below are relative to repo root `/Users/biu/glassbox`.
   L2b sidebar-exhaustive reliability, plus L1 sidebar-signature case-fold via the locale
   seam.** L1 is useful, but the current rig behavior cannot distinguish "unavailable"
   from "not reached" robustly enough.
+- ⟦review-correction 2026-05-31⟧ **New follow-on surfaced by the zh run: a crashed run can
+  emit graph metrics from a stale/leaked UTG store.** The zh-B `visit=4 → entered_graph=7`
+  contradiction means `ab_extract` (or the run's memory wiring) read a graph that did not
+  belong to that run. Before trusting any future matrix: ensure each run gets a fresh
+  isolated `memory_dir` AND that the extractor reads only that run's UTG (verify the report
+  `run_id` matches the UTG path's `run_id` segment, and treat a `visit_count`-vs-`entered_graph`
+  contradiction as an automatic `extraction_error`/quarantine, not a valid row).
 
-**Tooling delivered by this handoff**
+**Tooling delivered by this handoff** (all intact; only the `artifacts/ios_settings/ab/`
+output data was lost to the disk-full event — the code survives in the branch):
 
 - `skills/regression/ios_settings/ab_extract.py`: rc-tolerant, always-one-line JSONL
-  extractor, including `sidebar_absent` and `entry_exempt`.
+  extractor, including `sidebar_absent`, `entry_exempt`, and the `entered`/`entered_graph`
+  label lists (richer than the original spec, so the exemption cross-check is computable
+  offline). ⟦review 2026-05-31⟧ smoke test re-run green (3 passed) after the disk event.
 - `skills/regression/ios_settings/ab_matrix.sh`: single-instance locked, per-stamp,
   rc-tolerant A/B driver. Default locales are `en:HK zh-Hans:CN`.
 - `skills/smoke/test_ios_settings_ab_extract.py`: good/missing/truncated report coverage.
+
+**Review outcome (2026-05-31):** verdict (ship-negative, don't flip) is **confirmed
+correct**; en/HK numbers and the exemption-cross-check failure are accurate; tooling meets
+(exceeds) spec and tests pass. One correction applied above — the "real in both locales"
+claim was overstated; zh is a broken/contaminated run, so the en/HK evidence stands alone.
 
 ---
 
