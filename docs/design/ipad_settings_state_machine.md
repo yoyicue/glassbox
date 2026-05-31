@@ -357,14 +357,30 @@ very different blast radius:**
   structural it is largely unnecessary. (⟦review⟧ Caveat: `ipados/scene.py` imports
   and *calls* `classify_ios_scene` for its non-split fallback — `scene.py:74/83` — so
   even L3a touches shared iOS markers, not purely iPad-local.)
-- **L3b (shared `signature.py`, higher risk — the L2/detail-coverage precondition).**
+- **L3b (detail-page signature anchoring — the L2/detail-coverage precondition).**
   ⟦review-2 2026-05-31⟧ **Scope note:** L3b is **not** an L1 precondition — L1 collapses
   the *root* signature itself via its sub-item #2 (sidebar-scoped). L3b stabilizes the
   *detail-page* signatures so that `root→detail` / `detail→detail` edges accumulate
   reliably, which is what **L2** (graph-authoritative coverage) needs. Make detail-page
   signatures title-anchored + scroll-invariant (canonicalize OCR variants) so
-  `settings/Camera` is one node, not five. ⟦review⟧ This edits
-  *cross-platform* `signature.py` (affects iPhone too — guard against over-merge:
+  `settings/Camera` is one node, not five.
+
+  ⟦as-built 2026-05-31⟧ **Shipped memory-local, NOT in shared `signature.py`.** The
+  implementation anchors the detail signature inside the iPad root-projection write path
+  (`graph.py:_ipados_settings_detail_signature` /
+  `_should_use_ipados_settings_detail_signature`): for a `com.apple.Preferences`
+  `settings_detail` frame whose `page_id` starts with `settings/`, the node signature is
+  `stable_texts=[norm_text(page_id)]` + `type_histogram={"settings_detail": 1}` +
+  `phash=""`, computed only when `GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION` is on. This is
+  **narrower and safer than the original plan**: same iPad flag, never touches the
+  cross-platform signature path, so iPhone signatures are byte-identical with the flag
+  off — the over-merge risk below does not apply to what shipped. Because the anchor keys
+  off the already-resolved `page_id` (not raw OCR), OCR-variant canonicalization is
+  deferred to whatever produced `page_id`; no second competing canonicalization was
+  introduced.
+
+  *Original (deferred) plan — only if detail anchoring is promoted into the shared path:*
+  editing *cross-platform* `signature.py` (affects iPhone too — guard against over-merge:
   assert distinct known pages still resolve to distinct nodes), and its OCR-variant
   canonicalization **must route through the locale seam** (see
   `locale_seam_english_first.md`) rather than introduce a second, competing
@@ -469,18 +485,30 @@ python -m skills.regression.ios_settings.state_machine_acceptance \
   --min-detail-to-root-edges 0
 ```
 
-The wired entry point is:
+The wired entry point runs the **B-arm** (projection on + acceptance asserted):
 
 ```
-make ipad-settings-state-machine
+make ipad-settings-state-machine IPAD_SETTINGS_REPORT=artifacts/ios_settings/candidate_enHK.json \
+  IPAD_SETTINGS_EXTRA_ARGS='--language en --region HK'
 ```
 
-For an English greater-China device (for example a sidebar that shows `WLAN`),
-pass the live-run locale explicitly without changing global defaults:
+Run the flag-off **A-arm** through the same target by overriding two make
+variables — turn the projection off **and** empty the acceptance flags (with the
+flag off no `settings/root` node is projected, so the structural assertions would
+fail by construction). Use a distinct report path so the two arms get isolated UTG
+stores and do not cross-pollute:
 
 ```
-make ipad-settings-state-machine IPAD_SETTINGS_EXTRA_ARGS='--language en --region CN'
+make ipad-settings-state-machine IPAD_SETTINGS_ROOT_PROJECTION=0 IPAD_SETTINGS_ACCEPTANCE= \
+  IPAD_SETTINGS_REPORT=artifacts/ios_settings/baseline_enHK.json \
+  IPAD_SETTINGS_EXTRA_ARGS='--language en --region HK'
 ```
+
+Repeat both arms for `--language zh --region CN`, ≥3 rounds per arm per locale,
+back-to-back on the same device. (Override via make **variables**, not a shell env
+var: the recipe sets `GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION` explicitly from
+`IPAD_SETTINGS_ROOT_PROJECTION`. For an English greater-China sidebar that shows
+`WLAN`, `--language en --region CN` works the same way.)
 
 This gates the specific state-machine claims: root projection exists and collapses,
 `entered_graph` is fed by successful `root→detail` edges, optional return replay has
