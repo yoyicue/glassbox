@@ -64,21 +64,30 @@ ab-semantic-plan:
 	$(COMPUTER_USE_SUCCESS_RATE) compare "$(AB_DIR)/baseline.json" "$(AB_DIR)/candidate.json" --tolerance $(TOLERANCE)
 
 # One-command on-rig acceptance for docs/design/ipad_settings_state_machine.md.
-# Runs the read-only Settings drill-down with the iPad root projection enabled,
-# then verifies both the report and the persisted UTG state-machine signals.
+# Default (B-arm): root projection ON + the state-machine acceptance asserted.
+# For the flag-off A-arm of the rig A/B, override BOTH make variables — turn the
+# projection off AND empty the acceptance flags, because with the flag off no
+# settings/root node is projected, so the structural assertions would fail by
+# construction. Use a distinct report path so the arms get isolated UTG stores:
+#   make ipad-settings-state-machine \
+#       IPAD_SETTINGS_ROOT_PROJECTION=0 IPAD_SETTINGS_ACCEPTANCE= \
+#       IPAD_SETTINGS_REPORT=artifacts/ios_settings/baseline.json \
+#       IPAD_SETTINGS_EXTRA_ARGS='--language en --region HK'
+# Override via make VARIABLES, not a shell env var: the recipe sets
+# GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION explicitly from IPAD_SETTINGS_ROOT_PROJECTION.
 IPAD_SETTINGS_REPORT ?= artifacts/ios_settings/state_machine.json
 IPAD_SETTINGS_RUN_FULL ?= uv run python -m skills.regression.ios_settings.run_full
 IPAD_SETTINGS_MIN_RETURN_EDGES ?= 0
 IPAD_SETTINGS_PHONE_MODEL ?= ipad_mini_7
 IPAD_SETTINGS_PLATFORM ?= ipados
+IPAD_SETTINGS_ROOT_PROJECTION ?= 1
+IPAD_SETTINGS_ACCEPTANCE ?= --state-machine-acceptance --state-machine-require-sidebar-exhaustive --state-machine-min-detail-to-root-edges $(IPAD_SETTINGS_MIN_RETURN_EDGES)
 IPAD_SETTINGS_EXTRA_ARGS ?=
 ipad-settings-state-machine:
 	GLASSBOX_PHONE_MODEL=$(IPAD_SETTINGS_PHONE_MODEL) \
 	GLASSBOX_PLATFORM=$(IPAD_SETTINGS_PLATFORM) \
-	GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION=1 $(IPAD_SETTINGS_RUN_FULL) \
+	GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION=$(IPAD_SETTINGS_ROOT_PROJECTION) $(IPAD_SETTINGS_RUN_FULL) \
 		--report "$(IPAD_SETTINGS_REPORT)" \
 		--drill-down \
-		--state-machine-acceptance \
-		--state-machine-require-sidebar-exhaustive \
-		--state-machine-min-detail-to-root-edges $(IPAD_SETTINGS_MIN_RETURN_EDGES) \
+		$(IPAD_SETTINGS_ACCEPTANCE) \
 		$(IPAD_SETTINGS_EXTRA_ARGS)
