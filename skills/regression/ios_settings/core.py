@@ -974,7 +974,17 @@ def _wheel_scroll_down(phone, ticks: int | None = None) -> None:
     settings_scrolling.wheel_scroll_down(phone, action_intent=_action_intent, ticks=ticks)
 
 
-def _scroll_down_confirmed(phone, before_texts, *, depth=0, idx=0):
+def _scroll_down_confirmed(
+    phone,
+    before_texts,
+    *,
+    depth=0,
+    idx=0,
+    scene=None,
+    target_labels=(),
+    canonical_expected_root_label=None,
+    scroll_metadata=None,
+):
     return settings_scrolling.scroll_down_confirmed(
         phone,
         before_texts,
@@ -982,6 +992,10 @@ def _scroll_down_confirmed(phone, before_texts, *, depth=0, idx=0):
         texts=_texts,
         depth=depth,
         idx=idx,
+        scene=scene,
+        target_labels=target_labels,
+        canonical_expected_root_label=canonical_expected_root_label,
+        scroll_metadata=scroll_metadata,
     )
 
 
@@ -1132,8 +1146,21 @@ def _entry_exempt_sections(visits: list[PageVisit], *, phone=None) -> set[str]:
     蜂窝网络 on a no-SIM phone). Reported coverage is unchanged — this only stops
     the multi-pass reset + search recovery from re-scanning unreachable rows."""
     return set(settings_policy.ROOT_COVERAGE_ONLY_LABELS) | settings_graph_state.inert_root_labels(phone) | (
-        settings_policy.detect_device_unavailable_root_labels(visits)
-    )
+        settings_policy.detect_device_unavailable_root_labels(
+            visits,
+            platform=_phone_platform(phone),
+            phone_model=_phone_model(phone),
+        )
+    ) | settings_context.sidebar_absent_root_labels(phone)
+
+
+def _phone_model(phone) -> str | None:
+    model = getattr(getattr(phone, "device_geometry", None), "model", None)
+    return str(model) if model else None
+
+
+def _phone_platform(phone) -> str | None:
+    return "ipados" if _is_ipad_target(phone) else None
 
 
 def _blocked_child_navigation_reason(scene) -> str | None:

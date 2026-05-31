@@ -29,6 +29,56 @@ def _scene(*texts, current_vc=None):
                  current_vc=current_vc)
 
 
+def _ipad_settings_split_scene(title: str, *detail_texts: str) -> Scene:
+    elements = [
+        UIElement(type="text", box=Box(x=48, y=72, w=72, h=28), text="Settings", confidence=0.9),
+        UIElement(type="text", box=Box(x=72, y=220, w=96, h=24), text="Wi-Fi", confidence=0.9),
+        UIElement(type="text", box=Box(x=72, y=276, w=80, h=24), text="Bluetooth", confidence=0.9),
+        UIElement(type="text", box=Box(x=72, y=332, w=72, h=24), text="General", confidence=0.9),
+        UIElement(type="text", box=Box(x=418, y=76, w=140, h=28), text=title, confidence=0.9),
+    ]
+    for index, text in enumerate(detail_texts or ("About", "Software Update")):
+        elements.append(
+            UIElement(
+                type="text",
+                box=Box(x=384, y=180 + index * 56, w=180, h=24),
+                text=text,
+                confidence=0.9,
+            )
+        )
+    scene = Scene(frame_id=0, timestamp=0.0, viewport_size=(744, 1133), elements=elements)
+    scene.scene_type = "settings_detail"
+    scene.platform_scene_kind = "settings_detail"
+    scene.page_id = f"settings/{title}"
+    scene.safe_actions = ["tap_root_row", "scroll", "back"]
+    scene.classification_source = "platform"
+    scene.classification_confidence = 0.88
+    scene.classification_evidence = [
+        "ipad_split_view",
+        "settings_sidebar_rows:4",
+        "settings_detail_pane_visible:3",
+    ]
+    return scene
+
+
+def _ipad_settings_search_overlay_scene() -> Scene:
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(744, 1133),
+        elements=[
+            UIElement(type="text", box=Box(x=42, y=78, w=86, h=24), text="Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=54, y=180, w=180, h=24), text="No Results", confidence=0.9),
+        ],
+    )
+    scene.scene_type = "settings_search_results"
+    scene.platform_scene_kind = "settings_search_results"
+    scene.safe_actions = ["tap_search_result", "clear_search", "home"]
+    scene.classification_source = "platform"
+    scene.classification_evidence = ["ipad_settings_top_search", "settings_search_no_results"]
+    return scene
+
+
 @pytest.mark.smoke
 def test_observe_records_transition_edge():
     mem = ScreenMemory(UTG(bundle_id="com.x"))
@@ -501,6 +551,132 @@ def test_observe_does_not_write_settings_metadata_for_generic_app_scene():
     assert node.scene_type == "paywall"
     assert node.page_id is None
     assert node.safe_actions == []
+
+
+@pytest.mark.smoke
+def test_ipados_settings_root_projection_is_default_off():
+    mem = ScreenMemory(UTG(bundle_id="com.apple.Preferences"))
+
+    node = mem.observe(_ipad_settings_split_scene("General"))
+
+    assert node.page_id == "settings/General"
+    assert mem.nodes_for_page("settings/root", scene_type="settings_root") == []
+    assert len(mem.utg.nodes) == 1
+
+
+@pytest.mark.smoke
+def test_ipados_settings_root_projection_writes_root_and_detail_nodes():
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        ipados_settings_root_projection=True,
+    )
+
+    detail = mem.observe(_ipad_settings_split_scene("General"))
+
+    roots = mem.nodes_for_page("settings/root", scene_type="settings_root")
+    assert len(roots) == 1
+    assert roots[0].platform_scene_kind == "settings_root"
+    assert roots[0].page_id == "settings/root"
+    assert detail.page_id == "settings/General"
+    assert detail.platform_scene_kind == "settings_detail"
+    assert len(mem.utg.nodes) == 2
+
+
+@pytest.mark.smoke
+def test_ipados_settings_root_projection_collapses_across_detail_pages():
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        ipados_settings_root_projection=True,
+    )
+
+    mem.observe(_ipad_settings_split_scene("General", "About"))
+    mem.observe(_ipad_settings_split_scene("Bluetooth", "My Devices"))
+
+    roots = mem.nodes_for_page("settings/root", scene_type="settings_root")
+    assert len(roots) == 1
+    assert roots[0].visit_count == 2
+    assert len(mem.nodes_for_page("settings/General", scene_type="settings_detail")) == 1
+    assert len(mem.nodes_for_page("settings/Bluetooth", scene_type="settings_detail")) == 1
+
+
+@pytest.mark.smoke
+def test_ipados_settings_sidebar_row_tap_sources_edge_from_root_projection():
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        ipados_settings_root_projection=True,
+    )
+
+    mem.observe(_ipad_settings_split_scene("General"))
+    bluetooth = mem.observe(
+        _ipad_settings_split_scene("Bluetooth", "My Devices"),
+        last_action=("tap", {"via": "settings.tap_row", "target": "Bluetooth", "action_ok": True}),
+    )
+
+    root = mem.nodes_for_page("settings/root", scene_type="settings_root")[0]
+    edge = mem.utg.edges[0]
+    assert (edge.from_id, edge.to_id) == (root.screen_id, bluetooth.screen_id)
+    assert edge.success_rate == 1.0
+
+
+@pytest.mark.smoke
+def test_ipados_settings_within_detail_action_sources_edge_from_detail_projection():
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        ipados_settings_root_projection=True,
+    )
+
+    detail = mem.observe(_ipad_settings_split_scene("General", "About"))
+    scrolled = mem.observe(
+        _ipad_settings_split_scene("General", "Software Update", "iPad Storage"),
+        last_action=("scroll_wheel", {"ticks": 30, "outcome": "progress"}),
+    )
+
+    root = mem.nodes_for_page("settings/root", scene_type="settings_root")[0]
+    edge = mem.utg.edges[0]
+    assert (edge.from_id, edge.to_id) == (detail.screen_id, scrolled.screen_id)
+    assert scrolled.screen_id == detail.screen_id
+    assert edge.from_id != root.screen_id
+
+
+@pytest.mark.smoke
+def test_ipados_settings_back_action_records_detail_to_root_projection_target():
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        ipados_settings_root_projection=True,
+    )
+
+    detail = mem.observe(_ipad_settings_split_scene("General", "About"))
+    observed = mem.observe(
+        _ipad_settings_split_scene("General", "About"),
+        last_action=("key", {"modifier": 0x08, "keycode": 0x2F, "action_ok": True}),
+    )
+
+    root = mem.nodes_for_page("settings/root", scene_type="settings_root")[0]
+    edge = mem.utg.edges[0]
+    assert observed.screen_id == detail.screen_id
+    assert (edge.from_id, edge.to_id) == (detail.screen_id, root.screen_id)
+    assert edge.policy_action == "back"
+    assert mem.path_to_page(
+        detail.screen_id,
+        "settings/root",
+        scene_type="settings_root",
+        allowed_actions={"back", "home"},
+        min_success_rate=0.5,
+    ) == [edge]
+
+
+@pytest.mark.smoke
+def test_ipados_settings_search_overlay_does_not_write_root_projection():
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        ipados_settings_root_projection=True,
+    )
+
+    node = mem.observe(_ipad_settings_search_overlay_scene())
+
+    assert node.platform_scene_kind == "settings_search_results"
+    assert mem.nodes_for_page("settings/root", scene_type="settings_root") == []
+    assert len(mem.utg.nodes) == 1
 
 
 @pytest.mark.smoke

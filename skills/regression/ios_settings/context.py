@@ -22,6 +22,8 @@ class SettingsRuntimeState:
     last_vlm_point_grounding: dict[str, Any] | None = None
     vlm_point_failure_reason: str | None = None
     vlm_point_grounding_history: list[dict[str, Any]] = field(default_factory=list)
+    root_sidebar_exhaustive: bool = False
+    sidebar_absent_root_labels: set[str] = field(default_factory=set)
 
 
 _STATE_BY_ID: dict[int, SettingsRuntimeState] = {}
@@ -96,3 +98,26 @@ def record_vlm_point_grounding(
     state.last_vlm_point_grounding = payload
     state.vlm_point_failure_reason = reason
     state.vlm_point_grounding_history.append(payload)
+
+
+def mark_root_sidebar_exhaustive(phone: object, value: bool = True) -> None:
+    state_for(phone).root_sidebar_exhaustive = bool(value)
+
+
+def root_sidebar_exhaustive(phone: object) -> bool:
+    return state_for(phone).root_sidebar_exhaustive
+
+
+def record_sidebar_absent_root_labels(phone: object, labels: Any) -> None:
+    state = state_for(phone)
+    for label in labels or ():
+        text = str(label or "").strip()
+        if text:
+            state.sidebar_absent_root_labels.add(text)
+
+
+def sidebar_absent_root_labels(phone: object) -> set[str]:
+    state = state_for(phone)
+    if not state.root_sidebar_exhaustive:
+        return set()
+    return set(state.sidebar_absent_root_labels)

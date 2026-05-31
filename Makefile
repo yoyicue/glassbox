@@ -1,5 +1,5 @@
 .PHONY: lint test check regression-gate regression-compare ab-semantic-plan \
-	computer-use-success-rate-ios-settings
+	computer-use-success-rate-ios-settings ipad-settings-state-machine
 
 # CUQ-3.3: the reliability merge gate. `make check` is device-independent (no
 # PicoKVM/HDMI rig needed) and is what CI runs on every PR so a reliability
@@ -62,3 +62,23 @@ ab-semantic-plan:
 		--rounds $(ROUNDS) --out "$(AB_DIR)/candidate.json" --artifact-root "$(AB_DIR)/candidate_runs"
 	@echo ">>> gate: candidate must not regress vs baseline (rc 1 = regression -> keep ladder off)"
 	$(COMPUTER_USE_SUCCESS_RATE) compare "$(AB_DIR)/baseline.json" "$(AB_DIR)/candidate.json" --tolerance $(TOLERANCE)
+
+# One-command on-rig acceptance for docs/design/ipad_settings_state_machine.md.
+# Runs the read-only Settings drill-down with the iPad root projection enabled,
+# then verifies both the report and the persisted UTG state-machine signals.
+IPAD_SETTINGS_REPORT ?= artifacts/ios_settings/state_machine.json
+IPAD_SETTINGS_RUN_FULL ?= uv run python -m skills.regression.ios_settings.run_full
+IPAD_SETTINGS_MIN_RETURN_EDGES ?= 0
+IPAD_SETTINGS_PHONE_MODEL ?= ipad_mini_7
+IPAD_SETTINGS_PLATFORM ?= ipados
+IPAD_SETTINGS_EXTRA_ARGS ?=
+ipad-settings-state-machine:
+	GLASSBOX_PHONE_MODEL=$(IPAD_SETTINGS_PHONE_MODEL) \
+	GLASSBOX_PLATFORM=$(IPAD_SETTINGS_PLATFORM) \
+	GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION=1 $(IPAD_SETTINGS_RUN_FULL) \
+		--report "$(IPAD_SETTINGS_REPORT)" \
+		--drill-down \
+		--state-machine-acceptance \
+		--state-machine-require-sidebar-exhaustive \
+		--state-machine-min-detail-to-root-edges $(IPAD_SETTINGS_MIN_RETURN_EDGES) \
+		$(IPAD_SETTINGS_EXTRA_ARGS)

@@ -321,16 +321,20 @@ ROOT_COVERAGE_ONLY_LABELS = (
     "钱包与 Apple Pay",
     "Wallet & Apple Pay",
 )
-IPAD_SEARCH_ABSENT_DEVICE_UNAVAILABLE_ROOT_LABELS = (
+IPAD_DEVICE_PROFILE_UNAVAILABLE_ROOT_LABELS = (
     # These are expected iPhone-oriented roots in the shared Settings vocabulary,
-    # but they are device/profile-dependent on iPadOS. Treat them as unavailable
-    # only after an iPad report records Settings search as no-result, so a
-    # capable iPad/iPhone still has to prove entry.
+    # but they are unavailable on the current iPad Settings rig profile. Keep the
+    # fact static so the crawler does not spend a run re-proving it through
+    # Settings search no-results.
     "蜂窝网络",
     "操作按钮",
     "待机显示",
     "紧急 SOS",
 )
+IPAD_SEARCH_ABSENT_DEVICE_UNAVAILABLE_ROOT_LABELS = IPAD_DEVICE_PROFILE_UNAVAILABLE_ROOT_LABELS
+IPAD_DEVICE_PROFILE_UNAVAILABLE_ROOT_LABELS_BY_MODEL = {
+    "ipad_mini_7": IPAD_DEVICE_PROFILE_UNAVAILABLE_ROOT_LABELS,
+}
 
 # A no-SIM iPhone shows one of these on the Mobile Service row and the row is
 # tap-inert (it does not open a detail page), so 蜂窝网络 is *device-unavailable*,
@@ -349,12 +353,12 @@ def detect_device_unavailable_root_labels(
     platform: str | None = None,
     phone_model: str | None = None,
 ) -> set[str]:
-    """Canonical root labels this *device* cannot open, inferred from seen text.
+    """Canonical root labels this *device* cannot open.
 
     Returns canonical zh labels so callers can treat them as entry-exempt
-    without a manual flag. Cellular remains required by default; on iPadOS,
-    iPhone-oriented roots are exempted only when Settings search itself reports
-    no result for that root in the captured run."""
+    without a manual flag. Cellular remains required by default on iPhone unless
+    seen text proves a no-SIM device. On iPadOS, known unavailable roots come
+    from the device profile instead of search-failure evidence."""
     joined = "\n".join(
         str(t)
         for v in visits or ()
@@ -363,8 +367,26 @@ def detect_device_unavailable_root_labels(
     out: set[str] = set()
     if any(marker.casefold() in joined for marker in _NO_SIM_MARKERS):
         out.add("蜂窝网络")
-    if _is_ipad_device_context(platform=platform, phone_model=phone_model):
-        ipad_unavailable = {
+    out.update(
+        static_device_unavailable_root_labels(
+            platform=platform,
+            phone_model=phone_model,
+        )
+    )
+    return out
+
+
+def static_device_unavailable_root_labels(
+    *,
+    platform: str | None = None,
+    phone_model: str | None = None,
+) -> set[str]:
+    """Canonical root labels unavailable from the static device profile."""
+    labels = IPAD_DEVICE_PROFILE_UNAVAILABLE_ROOT_LABELS_BY_MODEL.get(
+        _device_model_key(phone_model)
+    )
+    if labels is not None and _is_ipad_device_context(platform=platform, phone_model=phone_model):
+        return {
             canonical_label(
                 label,
                 EXPECTED_ROOT_NAV_TEXT_ZH,
@@ -372,28 +394,19 @@ def detect_device_unavailable_root_labels(
                 fuzzy=0.82,
                 max_leading_noise_chars=1,
             )
-            for label in IPAD_SEARCH_ABSENT_DEVICE_UNAVAILABLE_ROOT_LABELS
+            for label in labels
         }
-        for failure in navigation_failures or ():
-            if (getattr(failure, "reason", None) if not isinstance(failure, dict) else failure.get("reason")) != "search_no_result":
-                continue
-            text = getattr(failure, "text", None) if not isinstance(failure, dict) else failure.get("text")
-            label = canonical_label(
-                str(text or ""),
-                EXPECTED_ROOT_NAV_TEXT_ZH,
-                aliases={**ROOT_LABEL_ALIASES, **_GREATER_CHINA_EN_OVERLAY},
-                fuzzy=0.82,
-                max_leading_noise_chars=1,
-            )
-            if label in ipad_unavailable:
-                out.add(label)
-    return out
+    return set()
 
 
 def _is_ipad_device_context(*, platform: str | None, phone_model: str | None) -> bool:
     platform_key = str(platform or "").lower().replace("-", "_")
-    model_key = str(phone_model or "").lower().replace("-", "_")
+    model_key = _device_model_key(phone_model)
     return platform_key == "ipados" or model_key.startswith("ipad")
+
+
+def _device_model_key(phone_model: str | None) -> str:
+    return str(phone_model or "").lower().replace("-", "_").replace(" ", "_")
 
 
 def _active_section_vocab():
@@ -1575,7 +1588,7 @@ class IPadSettingsPolicy(SettingsPolicy):
         allow_sensitive_root_labels: bool = False,
         allow_known_without_affordance: bool = True,
     ) -> list[UIElement]:
-        if self.blocks_child_navigation(scene):
+        if self.blocks_child_navigation(scene) and not allow_sensitive_root_labels:
             return []
         viewport_size = getattr(scene, "viewport_size", None) or self._scene_extent(scene)
         from glassbox.ipados.scene import sidebar_right_x

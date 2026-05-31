@@ -7,6 +7,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 from glassbox.effector import ActionResult
+from glassbox.memory import ScreenMemory, UTG
 from skills.regression.ios_settings import context as settings_context
 
 from skills.smoke.ios_settings_walkthrough_support import *
@@ -36,6 +37,37 @@ def test_visible_root_rows_count_as_root_coverage_evidence():
     assert "紧急 SOS" in coverage["visited"]
     assert "Face ID与密码" in coverage["visited"]
     assert "待机显示" in coverage["visited"]
+
+
+@pytest.mark.smoke
+def test_ipad_root_ignores_blocked_detail_reason_for_root_traversal():
+    scene = _scene(_el("Control Centre", 320, 80), _el("Reset Control Centre", 320, 320))
+    actions = SimpleNamespace(
+        blocked_child_navigation_reason=lambda _scene: "control centre customization/reset rows",
+        scene_is_settings_root=lambda _scene: True,
+    )
+    ipad_phone = SimpleNamespace(device_geometry=SimpleNamespace(model="ipad_mini_7"))
+    iphone_phone = SimpleNamespace(device_geometry=SimpleNamespace(model="iphone_15"))
+
+    assert settings_navigation._blocked_child_navigation_reason_for_depth(
+        actions,
+        scene,
+        depth=0,
+        phone=ipad_phone,
+    ) is None
+    assert settings_navigation._blocked_child_navigation_reason_for_depth(
+        actions,
+        scene,
+        depth=1,
+        phone=ipad_phone,
+    ) == "control centre customization/reset rows"
+    assert settings_navigation._blocked_child_navigation_reason_for_depth(
+        actions,
+        scene,
+        depth=0,
+        phone=iphone_phone,
+    ) == "control centre customization/reset rows"
+
 
 @pytest.mark.smoke
 def test_root_coverage_mode_skips_root_row_navigation(monkeypatch):
@@ -2291,6 +2323,73 @@ def test_ipad_root_stuck_scroll_uses_wheel_reset_before_search_when_supported(mo
 
 
 @pytest.mark.smoke
+def test_root_crawl_skips_graph_entered_root_candidate(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    memory = ScreenMemory(UTG(bundle_id="com.apple.Preferences"))
+    remembered_root = _scene(_el("Settings", 48, 72, w=70), _el("Bluetooth", 72, 276, w=80))
+    remembered_root.scene_type = "settings_root"
+    remembered_root.page_id = "settings/root"
+    remembered_child = _scene(_el("Bluetooth", 420, 78, w=120), _el("My Devices", 384, 180, w=120))
+    remembered_child.scene_type = "settings_detail"
+    remembered_child.page_id = "settings/Bluetooth"
+    memory.observe(remembered_root)
+    memory.observe(
+        remembered_child,
+        last_action=("tap", {"via": "settings.tap_row", "target": "Bluetooth", "action_ok": True}),
+    )
+    root = _scene(_el("Settings", 48, 72, w=70), _el("Bluetooth", 72, 276, w=80))
+
+    class Phone:
+        def __init__(self):
+            self.memory = memory
+
+        def perceive(self):
+            return root
+
+    taps: list[str] = []
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        root_coverage_perceive=lambda _phone, _depth: root,
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=lambda *_args, **_kwargs: [_el("Bluetooth", 72, 276, w=80)],
+        tap_settings_row=lambda _phone, row: taps.append(row.text or "") or True,
+        scroll_budget_for_depth=lambda _depth: 1,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", root),
+        root_coverage=lambda _visits, phone=None: {
+            "expected": ["蓝牙"],
+            "visited": ["蓝牙"],
+            "missing": [],
+            "entered_graph": ["蓝牙"],
+        },
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        crawl_missing_root_pages_via_search=lambda *_args, **_kwargs: None,
+    )
+
+    settings_navigation.crawl_current_page(
+        Phone(),
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert taps == []
+
+
+@pytest.mark.smoke
 def test_crawler_records_navigation_failure_when_tap_does_not_open(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
     monkeypatch.setattr(walkthrough, "CHILD_NAVIGATION_ENABLED", True)
@@ -3239,6 +3338,110 @@ def test_search_recovery_decouple_keeps_searching_after_return_to_root_flake(
     finally:
         get_config.cache_clear()
     assert recorded == expected_recorded
+
+
+@pytest.mark.smoke
+def test_search_recovery_skips_ipad_static_device_unavailable_roots():
+    opened: list[str] = []
+    actions = SimpleNamespace(
+        entry_exempt_sections=walkthrough._entry_exempt_sections,
+        expected_root_labels=["操作按钮"],
+        root_coverage=lambda visits, phone: {"missing": ["操作按钮"]},
+        open_root_label_via_search=lambda _phone, label: opened.append(label) or False,
+        record_navigation_failure=lambda *_args, **_kwargs: None,
+        crawl_current_page=lambda *a, **k: None,
+        return_to_settings_root=lambda _phone: None,
+        max_pages_visited=10_000,
+    )
+    phone = SimpleNamespace(
+        device_geometry=SimpleNamespace(model="ipad_mini_7"),
+        perceive=lambda: object(),
+    )
+
+    settings_navigation.crawl_missing_root_pages_via_search(
+        phone,
+        visits=[],
+        seen_sigs=set(),
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert opened == []
+
+
+@pytest.mark.smoke
+def test_root_crawl_marks_row_tracked_sidebar_absent_roots_and_skips_search(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root = _scene(
+        _el("Settings", 48, 72, w=70),
+        _el("Wi-Fi", 72, 280, w=70),
+        _el("Bluetooth", 72, 344, w=120),
+    )
+
+    class IPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return root
+
+    phone = IPadPhone()
+    settings_context.reset_for(phone)
+    opened: list[str] = []
+    actions = None
+
+    def _scroll_down(*_args, **kwargs):
+        kwargs["scroll_metadata"]["row_tracked"] = True
+        return "stuck", root
+
+    def _crawl_search(_phone, **kwargs):
+        settings_navigation.crawl_missing_root_pages_via_search(
+            _phone,
+            **kwargs,
+            actions=actions,
+        )
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        root_coverage_perceive=lambda _phone, _depth: root,
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: False,
+        scroll_budget_for_depth=lambda _depth: 1,
+        scroll_down_confirmed=_scroll_down,
+        scroll_to_top=lambda _phone: None,
+        max_root_scroll_resets=0,
+        root_coverage=lambda _visits, phone=None: {"missing": ["通知"]},
+        entry_exempt_sections=walkthrough._entry_exempt_sections,
+        expected_root_labels=["通知"],
+        open_root_label_via_search=lambda _phone, label: opened.append(label) or False,
+        crawl_missing_root_pages_via_search=_crawl_search,
+    )
+
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert settings_context.sidebar_absent_root_labels(phone) == {"通知"}
+    assert "通知" in walkthrough._entry_exempt_sections([], phone=phone)
+    assert opened == []
 
 
 # —— UTG-path return: try the learned memory path to root FIRST when flagged ——

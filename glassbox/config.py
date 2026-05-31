@@ -434,6 +434,13 @@ class AgentConfig(BaseSettings):
     off keeps the hardcoded path byte-identical; needs memory enabled (it is, per
     run); validate on-rig before flipping. Env GLASSBOX_SETTINGS_RETURN_ROOT_VIA_MEMORY."""
 
+    settings_ipad_root_projection: bool = False
+    """L1 iPad Settings state-machine model: when screen memory observes a
+    split-view Settings frame, also write a sidebar-scoped virtual
+    `settings/root` node and attribute sidebar-row taps from that root node.
+    Default off because it changes UTG topology; validate on the iPad rig before
+    enabling. Env GLASSBOX_SETTINGS_IPAD_ROOT_PROJECTION."""
+
     letterbox_refresh_consecutive: int = 2
     """CUQ-3.14: how many consecutive frames must agree on a NEW letterbox crop
     bbox before auto-refresh commits it (hysteresis). >1 stops a single

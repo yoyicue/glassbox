@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -130,6 +131,24 @@ def test_graph_root_coverage_uses_successful_root_outbound_edges():
 
 
 @pytest.mark.smoke
+def test_graph_entered_root_does_not_suppress_visible_row_visit():
+    memory, _child = _memory_with_root_edge("Bluetooth")
+    phone = _Phone(memory)
+    root = _settings_root_scene()
+    visits: list[settings_reporting.PageVisit] = []
+    seen: set[settings_page_records.ViewportKey] = set()
+
+    settings_page_records.record_visible_root_row_visits(
+        scene=root,
+        visits=visits,
+        seen_sigs=seen,
+        phone=phone,
+    )
+
+    assert any(visit.path == ("Settings", "蓝牙") for visit in visits)
+
+
+@pytest.mark.smoke
 def test_graph_root_coverage_excludes_root_to_root_edges():
     # A no-SIM inert row (e.g. Mobile Service / 蜂窝网络) can tap and coincide with
     # a root re-render, producing a successful tap edge to a DIFFERENT root-
@@ -182,6 +201,15 @@ def test_graph_inert_root_labels_come_from_repeated_self_loop_edges():
 
     assert settings_graph_state.inert_root_labels(phone) == {"蜂窝网络"}
     assert "蜂窝网络" in walkthrough._entry_exempt_sections([], phone=phone)
+
+
+@pytest.mark.smoke
+def test_entry_exempt_sections_include_ipad_static_device_profile():
+    phone = SimpleNamespace(device_geometry=SimpleNamespace(model="ipad_mini_7"))
+
+    exempt = walkthrough._entry_exempt_sections([], phone=phone)
+
+    assert {"蜂窝网络", "操作按钮", "待机显示", "紧急 SOS"} <= exempt
 
 
 @pytest.mark.smoke

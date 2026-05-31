@@ -30,12 +30,16 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from glassbox.config import get_config
+from glassbox.memory.store import load_utg
 from glassbox.runtime import RuntimeUnavailable, build_phone, make_source
 from skills.regression.ios_settings import diagnose as diagnose_mod
 from skills.regression.ios_settings.config import SettingsRunConfig, build_full_run_env
 from skills.regression.ios_settings.crawler import (
     SettingsCrawlerUnavailable,
     crawl_readonly_settings,
+)
+from skills.regression.ios_settings.state_machine_acceptance import (
+    validate_state_machine_acceptance,
 )
 from skills.regression.ios_settings.verify_report import validate_report
 
@@ -112,7 +116,15 @@ def _run_crawler(env: dict[str, str]) -> int:
     return 0
 
 
-def _verify_report(report: Path, *, expected_run_id: str, require_exhaustive: bool) -> int:
+def _verify_report(
+    report: Path,
+    *,
+    expected_run_id: str,
+    require_exhaustive: bool,
+    state_machine_acceptance: bool = False,
+    state_machine_min_detail_to_root_edges: int = 0,
+    state_machine_require_sidebar_exhaustive: bool = False,
+) -> int:
     payload = json.loads(report.read_text(encoding="utf-8"))
     errors = validate_report(
         payload,
@@ -123,6 +135,24 @@ def _verify_report(report: Path, *, expected_run_id: str, require_exhaustive: bo
         for error in errors:
             print(f"ERROR: {error}")
         return 1
+    if state_machine_acceptance:
+        config = payload.get("config")
+        memory_dir = config.get("memory_dir") if isinstance(config, dict) else None
+        if not isinstance(memory_dir, str) or not memory_dir:
+            print("ERROR: state-machine acceptance needs config.memory_dir")
+            return 1
+        utg = load_utg(".".join(("com", "apple", "Preferences")), memory_dir=memory_dir)
+        state_machine = validate_state_machine_acceptance(
+            payload,
+            utg,
+            min_detail_to_root_edges=state_machine_min_detail_to_root_edges,
+            require_sidebar_exhaustive=state_machine_require_sidebar_exhaustive,
+        )
+        if state_machine.errors:
+            for error in state_machine.errors:
+                print(f"ERROR: state-machine: {error}")
+            return 1
+        print("state-machine OK")
     print("OK")
     return 0
 
@@ -148,6 +178,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--skip-diagnose", action="store_true", help="Skip the PicoKVM readiness preflight.")
     parser.add_argument("--skip-verify", action="store_true", help="Skip report verification.")
+    parser.add_argument(
+        "--state-machine-acceptance",
+        action="store_true",
+        help="After report verification, also validate the iPad Settings state-machine UTG signals.",
+    )
+    parser.add_argument(
+        "--state-machine-min-detail-to-root-edges",
+        type=int,
+        default=0,
+        help="Minimum successful detail→root return edges required by state-machine acceptance.",
+    )
+    parser.add_argument(
+        "--state-machine-require-sidebar-exhaustive",
+        action="store_true",
+        help="Require L2b sidebar_exhaustive evidence in state-machine acceptance.",
+    )
     parser.add_argument(
         "--drill-down",
         action="store_true",
@@ -225,7 +271,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.skip_verify:
         print(f"report: {report}")
         return 0
-    return _verify_report(report, expected_run_id=run_id, require_exhaustive=not args.quick)
+    return _verify_report(
+        report,
+        expected_run_id=run_id,
+        require_exhaustive=not args.quick,
+        state_machine_acceptance=args.state_machine_acceptance,
+        state_machine_min_detail_to_root_edges=args.state_machine_min_detail_to_root_edges,
+        state_machine_require_sidebar_exhaustive=args.state_machine_require_sidebar_exhaustive,
+    )
 
 
 if __name__ == "__main__":

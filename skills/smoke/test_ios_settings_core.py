@@ -297,6 +297,63 @@ def test_ipad_settings_wheel_clicks_sidebar_focus_before_wheel():
 
 
 @pytest.mark.smoke
+def test_ipad_root_scroll_down_confirmed_uses_row_tracked_ticks_for_missing_root(monkeypatch):
+    monkeypatch.setattr(settings_scrolling.time, "sleep", lambda _seconds: None)
+    monkeypatch.delenv("IOS_SETTINGS_WHEEL_TICKS_PER_SWIPE", raising=False)
+    monkeypatch.delenv("GLASSBOX_WHEEL_TICKS_PER_SCROLL", raising=False)
+    monkeypatch.setenv("IOS_SETTINGS_IPAD_WHEEL_PIXELS_PER_TICK", "16")
+    scene = _scene(
+        _el("Settings", 48, 72, w=70),
+        _el("Wi-Fi", 72, 280, w=70),
+        _el("Bluetooth", 72, 344, w=120),
+        _el("General", 72, 408, w=90),
+    )
+
+    class IPadWheelPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, dict]] = []
+
+        def supports(self, action: str) -> bool:
+            return action == "scroll_wheel"
+
+        def wheel_scroll_down(self, *, ticks: int | None = None) -> None:
+            raise AssertionError("iPad Settings should use focused scroll_wheel directly")
+
+        def viewport_size(self) -> tuple[int, int]:
+            return 640, 980
+
+        def scroll_wheel(self, ticks: int, **kwargs) -> None:
+            self.calls.append((ticks, kwargs))
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def perceive(self):
+            return scene
+
+    phone = IPadWheelPhone()
+
+    outcome, _after = settings_scrolling.scroll_down_confirmed(
+        phone,
+        ["Settings", "Wi-Fi", "Bluetooth", "General"],
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        texts=lambda observed: [element.text for element in observed.elements if element.text],
+        depth=0,
+        idx=0,
+        scene=scene,
+        target_labels=["电池"],
+        canonical_expected_root_label=lambda text: {"Wi-Fi": "无线局域网", "Bluetooth": "蓝牙"}.get(text),
+    )
+
+    assert outcome == "stuck"
+    assert phone.calls == [
+        (4, {"focus_x": 147, "focus_y": 539, "focus_click": True}),
+    ]
+
+
+@pytest.mark.smoke
 def test_ipad_settings_without_wheel_does_not_fallback_to_swipe():
     class IPadNoWheelPhone:
         device_geometry = SimpleNamespace(model="ipad_mini_7")

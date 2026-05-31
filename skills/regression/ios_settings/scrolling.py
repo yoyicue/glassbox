@@ -11,6 +11,7 @@ import os
 import time
 from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager
+from itertools import pairwise
 from typing import Any
 
 from glassbox.cognition.text_match import confusion_compact
@@ -83,9 +84,22 @@ def scroll_down_confirmed(
     texts: TextsFn,
     depth: int = 0,
     idx: int = 0,
+    scene: Any | None = None,
+    target_labels: Iterable[str] = (),
+    canonical_expected_root_label: Callable[[str], str | None] | None = None,
+    scroll_metadata: dict[str, Any] | None = None,
 ):
     """Scroll once, settle, then classify progress/stuck/overshoot."""
-    ticks = settings_wheel_ticks_per_swipe()
+    row_tracked_ticks = _row_tracked_ipad_sidebar_ticks(
+        phone,
+        scene=scene,
+        target_labels=target_labels,
+        canonical_expected_root_label=canonical_expected_root_label,
+    )
+    ticks = row_tracked_ticks or settings_wheel_ticks_per_swipe()
+    if scroll_metadata is not None:
+        scroll_metadata["ticks"] = ticks
+        scroll_metadata["row_tracked"] = row_tracked_ticks is not None
     wheel_scroll_down(phone, action_intent=action_intent, ticks=ticks)
     time.sleep(0.8)
     phone.invalidate_perceive_cache()
@@ -162,6 +176,68 @@ def settings_wheel_ticks_per_swipe() -> int:
     except (TypeError, ValueError):
         ticks = DEFAULT_SETTINGS_WHEEL_TICKS_PER_SWIPE
     return max(1, ticks)
+
+
+def settings_ipad_wheel_pixels_per_tick() -> float:
+    raw = os.getenv("IOS_SETTINGS_IPAD_WHEEL_PIXELS_PER_TICK", "16")
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = 16.0
+    return max(1.0, value)
+
+
+def _row_tracked_ipad_sidebar_ticks(
+    phone,
+    *,
+    scene: Any | None,
+    target_labels: Iterable[str],
+    canonical_expected_root_label: Callable[[str], str | None] | None,
+) -> int | None:
+    if scene is None or not _is_ipad_target(phone):
+        return None
+    targets = {
+        str(label or "").strip()
+        for label in target_labels
+        if str(label or "").strip()
+    }
+    if not targets:
+        return None
+    try:
+        width, height = phone.viewport_size()
+    except Exception:
+        return None
+    from glassbox.ipados.scene import sidebar_right_x
+
+    sidebar_right = sidebar_right_x(width)
+    row_centers: list[int] = []
+    visible_targets: set[str] = set()
+    for element in getattr(scene, "elements", ()) or ():
+        text = str(getattr(element, "text", "") or "").strip()
+        box = getattr(element, "box", None)
+        if not text or box is None:
+            continue
+        cx, cy = box.center
+        if cx > sidebar_right + 24 or cy < 70 or cy > height - 44:
+            continue
+        row_centers.append(int(cy))
+        if canonical_expected_root_label is not None:
+            canonical = canonical_expected_root_label(text)
+            if canonical in targets:
+                visible_targets.add(canonical)
+    if visible_targets:
+        return None
+    row_centers = sorted(set(row_centers))
+    gaps = [
+        b - a
+        for a, b in pairwise(row_centers)
+        if b - a >= 32
+    ]
+    if not gaps:
+        return None
+    row_gap = sorted(gaps)[len(gaps) // 2]
+    ticks = round(row_gap / settings_ipad_wheel_pixels_per_tick())
+    return min(settings_wheel_ticks_per_swipe(), max(2, ticks))
 
 
 def _classify_scene_scroll_outcome(outcome: str, scene) -> str:

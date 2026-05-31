@@ -15,7 +15,14 @@ from typing import TYPE_CHECKING
 
 from glassbox.cognition.text_match import norm_text
 from glassbox.memory.element_key import element_key, merge_element, to_remembered
-from glassbox.memory.schema import UTG, ActionRecord, RememberedElement, ScreenEdge, ScreenNode
+from glassbox.memory.schema import (
+    UTG,
+    ActionRecord,
+    RememberedElement,
+    ScreenEdge,
+    ScreenNode,
+    ScreenSignature,
+)
 from glassbox.memory.signature import (
     SIGNATURE_MATCH_THRESHOLD,
     compute_signature,
@@ -41,10 +48,14 @@ class ScreenMemory:
         match_threshold: float = SIGNATURE_MATCH_THRESHOLD,
         autosave: Callable[[UTG], None] | None = None,
         autosave_every: int = 0,
+        ipados_settings_root_projection: bool = False,
     ):
         self.utg = utg
         self.match_threshold = match_threshold
         self._last_node_id: str | None = None
+        self._last_ipados_settings_root_node_id: str | None = None
+        self._last_ipados_settings_sidebar_right_x: int | None = None
+        self._ipados_settings_root_projection = bool(ipados_settings_root_projection)
         # continue the scr_N counter past whatever was loaded from disk
         self._sig_counter = max(
             (int(n[4:]) for n in utg.nodes if n.startswith("scr_") and n[4:].isdigit()),
@@ -80,22 +91,43 @@ class ScreenMemory:
         """Fold one perceived Scene into the graph. If an action preceded it,
         record the transition edge. Returns the resolved node."""
         phash = dhash(frame_img) if frame_img is not None else ""
-        sig = compute_signature(scene, phash=phash)
-        node = self._resolve_node(scene, sig)
+        root_projection: ScreenNode | None = None
+        sidebar_right_x_value: int | None = None
+        if self._should_project_ipados_settings_root(scene):
+            root_projection, sidebar_right_x_value = self._observe_ipados_settings_root_projection(
+                scene,
+                frame_img=frame_img,
+            )
 
-        self._merge_scene_fields(node, scene, frame_img)
-        node.visit_count += 1
-        node.last_seen = time.time()
+        if root_projection is not None and self._scene_is_ipados_settings_root(scene):
+            node = root_projection
+        else:
+            sig = (
+                self._ipados_settings_detail_signature(scene)
+                if self._should_use_ipados_settings_detail_signature(scene)
+                else compute_signature(scene, phash=phash)
+            )
+            node = self._observe_node(scene, sig, frame_img=frame_img)
 
         self.last_transition_mismatch = None
         if self._last_node_id is not None and last_action is not None:
             action = self._coerce_action(last_action)
             if self._action_is_learnable(action):
-                self.last_transition_mismatch = self._detect_transition_mismatch(
-                    self._last_node_id, node.screen_id, action
+                from_id = self._transition_source_id(action)
+                to_id = self._transition_target_id(
+                    node,
+                    root_projection=root_projection,
+                    action=action,
                 )
-                self._bump_edge(self._last_node_id, node.screen_id, action)
+                self.last_transition_mismatch = self._detect_transition_mismatch(
+                    from_id, to_id, action
+                )
+                self._bump_edge(from_id, to_id, action)
         self._last_node_id = node.screen_id
+        self._last_ipados_settings_root_node_id = (
+            root_projection.screen_id if root_projection is not None else None
+        )
+        self._last_ipados_settings_sidebar_right_x = sidebar_right_x_value
         self._maybe_autosave()
         return node
 
@@ -318,6 +350,158 @@ class ScreenMemory:
         )
         self.utg.nodes[sid] = node
         return node
+
+    def _observe_node(
+        self,
+        scene: Scene,
+        sig: ScreenSignature,
+        *,
+        frame_img: np.ndarray | None,
+    ) -> ScreenNode:
+        node = self._resolve_node(scene, sig)
+        self._merge_scene_fields(node, scene, frame_img)
+        node.visit_count += 1
+        node.last_seen = time.time()
+        return node
+
+    def _should_project_ipados_settings_root(self, scene: Scene) -> bool:
+        if not self._ipados_settings_root_projection:
+            return False
+        if self.utg.bundle_id != "com.apple.Preferences":
+            return False
+        evidence = set(scene.classification_evidence or ())
+        if "ipad_split_view" not in evidence:
+            return False
+        if "tap_root_row" not in set(scene.safe_actions or ()):
+            return False
+        kind = scene.platform_scene_kind or scene.scene_type or scene.semantic_scene_type
+        return kind in {"settings_detail", "settings_root"}
+
+    def _should_use_ipados_settings_detail_signature(self, scene: Scene) -> bool:
+        if not self._ipados_settings_root_projection:
+            return False
+        if self.utg.bundle_id != "com.apple.Preferences":
+            return False
+        kind = scene.platform_scene_kind or scene.scene_type or scene.semantic_scene_type
+        return kind == "settings_detail" and str(scene.page_id or "").startswith("settings/")
+
+    @staticmethod
+    def _ipados_settings_detail_signature(scene: Scene) -> ScreenSignature:
+        page_key = norm_text(scene.page_id or "")
+        if not page_key:
+            page_key = "settings/detail"
+        return ScreenSignature(
+            stable_texts=[page_key],
+            type_histogram={"settings_detail": 1},
+            phash="",
+        )
+
+    @staticmethod
+    def _scene_is_ipados_settings_root(scene: Scene) -> bool:
+        kind = scene.platform_scene_kind or scene.scene_type or scene.semantic_scene_type
+        return kind == "settings_root" or scene.page_id == "settings/root"
+
+    def _observe_ipados_settings_root_projection(
+        self,
+        scene: Scene,
+        *,
+        frame_img: np.ndarray | None,
+    ) -> tuple[ScreenNode, int]:
+        root_scene, sidebar_right = self._ipados_settings_root_projection_scene(scene)
+        # The projection signature must be sidebar-scoped. Reusing the full-frame
+        # phash would reintroduce detail-pane fragmentation.
+        sig = compute_signature(root_scene, phash="")
+        node = self._observe_node(root_scene, sig, frame_img=frame_img)
+        return node, sidebar_right
+
+    @staticmethod
+    def _ipados_settings_root_projection_scene(scene: Scene) -> tuple[Scene, int]:
+        from glassbox.ipados.scene import sidebar_right_x
+
+        viewport_size = ScreenMemory._scene_viewport_size(scene)
+        right = sidebar_right_x(viewport_size[0])
+        sidebar_elements = [
+            element for element in scene.elements
+            if element.box.center[0] <= right
+        ]
+        root_scene = scene.model_copy(
+            update={
+                "elements": sidebar_elements,
+                "scene_type": "settings_root",
+                "semantic_scene_type": None,
+                "platform_scene_kind": "settings_root",
+                "page_id": "settings/root",
+                "safe_actions": ["tap_root_row", "open_search", "scroll"],
+                "classification_source": scene.classification_source or "platform",
+                "classification_confidence": scene.classification_confidence,
+                "classification_evidence": [
+                    *tuple(scene.classification_evidence or ()),
+                    "ipados_settings_root_projection",
+                ],
+                "app_state": {},
+                "current_vc": None,
+            },
+            deep=True,
+        )
+        return root_scene, right
+
+    @staticmethod
+    def _scene_viewport_size(scene: Scene) -> tuple[int, int]:
+        if scene.viewport_size is not None:
+            return scene.viewport_size
+        w = max((element.box.x2 for element in scene.elements), default=1) or 1
+        h = max((element.box.y2 for element in scene.elements), default=1) or 1
+        return w, h
+
+    def _transition_source_id(self, action: ActionRecord) -> str:
+        root_id = self._last_ipados_settings_root_node_id
+        if root_id is not None and self._action_sources_from_ipados_settings_root(action):
+            return root_id
+        assert self._last_node_id is not None
+        return self._last_node_id
+
+    def _transition_target_id(
+        self,
+        node: ScreenNode,
+        *,
+        root_projection: ScreenNode | None,
+        action: ActionRecord,
+    ) -> str:
+        if root_projection is not None and self._action_lands_in_ipados_settings_root(action):
+            return root_projection.screen_id
+        return node.screen_id
+
+    def _action_sources_from_ipados_settings_root(self, action: ActionRecord) -> bool:
+        via = str(action.via or action.params.get("via") or "")
+        policy_action = str(action.params.get("policy_action") or "")
+        if policy_action == "tap_root_row":
+            return True
+        if via.startswith("settings.tap_row") or via == "settings_root.open_search_tab":
+            return True
+        if action.op != "tap":
+            return False
+        point = self._action_frame_point(action)
+        if point is None or self._last_ipados_settings_sidebar_right_x is None:
+            return False
+        x, _y = point
+        return x <= self._last_ipados_settings_sidebar_right_x + 24
+
+    def _action_lands_in_ipados_settings_root(self, action: ActionRecord) -> bool:
+        edge_element_key = self._edge_element_key(action)
+        edge_action = self._edge_action(action, edge_element_key)
+        return self._policy_action(edge_action) in {"back", "home"}
+
+    @staticmethod
+    def _action_frame_point(action: ActionRecord) -> tuple[int, int] | None:
+        frame_point = action.params.get("target_point_frame")
+        if isinstance(frame_point, dict):
+            try:
+                return int(frame_point["x"]), int(frame_point["y"])
+            except (KeyError, TypeError, ValueError):
+                pass
+        if action.x is not None and action.y is not None:
+            return action.x, action.y
+        return None
 
     def _nearest_signature_node(
         self, sig: ScreenSignature, scene: Scene | None = None

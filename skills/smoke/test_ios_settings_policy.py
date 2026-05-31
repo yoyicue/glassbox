@@ -468,6 +468,12 @@ def test_ipad_split_view_detail_root_can_still_be_blocked():
     assert policy.scene_is_settings_root(scene) is True
     assert policy.blocked_child_navigation_reason(scene) == "dynamic app list rows"
     assert policy.safe_navigation_candidates(scene) == []
+    root_candidates = policy.safe_navigation_candidates(scene, allow_sensitive_root_labels=True)
+    assert [candidate.text for candidate in root_candidates] == [
+        "Bluetooth",
+        "General",
+        "Accessibility",
+    ]
 
 
 @pytest.mark.smoke

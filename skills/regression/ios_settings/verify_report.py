@@ -177,10 +177,6 @@ def validate_report(
             value = config.get(key)
             if not isinstance(value, int) or value <= 0:
                 errors.append(f"config.{key} must be positive")
-        min_pages = config.get("min_pages")
-        if isinstance(min_pages, int) and len(visits) < min_pages:
-            errors.append(f"visit count is below configured minimum: {len(visits)} < {min_pages}")
-
     limits_hit = report.get("limits_hit", [])
     if not isinstance(limits_hit, list):
         errors.append("limits_hit is not a list")
@@ -195,15 +191,22 @@ def validate_report(
     if not isinstance(root_coverage, dict):
         errors.append("missing root_coverage")
         root_coverage = {}
+    sidebar_exhaustive = _root_sidebar_exhaustive(root_coverage)
+    if root_coverage.get("sidebar_absent") and not sidebar_exhaustive:
+        errors.append("root_coverage.sidebar_absent requires sidebar_exhaustive evidence")
+    if sidebar_exhaustive:
+        entry_exempt |= _root_sidebar_absent_labels(root_coverage)
     expected = root_coverage.get("expected", [])
     reported_visited = root_coverage.get("visited", [])
     missing = root_coverage.get("missing", [])
     computed_root = computed_root_coverage(visits, locale_code=locale_code)
+    graph_entered = _root_entered_graph_labels(root_coverage)
+    effective_root = _effective_root_coverage(computed_root, graph_entered)
     if expected != list(EXPECTED_ROOT_NAV_TEXT_ZH):
         errors.append("root_coverage.expected does not match current expected root page list")
-    if reported_visited != computed_root["visited"]:
+    if reported_visited != effective_root["visited"]:
         errors.append("root_coverage.visited does not match visits")
-    if missing != computed_root["missing"]:
+    if missing != effective_root["missing"]:
         errors.append("root_coverage.missing does not match visits")
     _validate_root_coverage_ids(
         root_coverage,
@@ -214,10 +217,16 @@ def validate_report(
         errors=errors,
     )
     unentered_required = [
-        label for label in computed_root["missing"] if label not in entry_exempt
+        label for label in effective_root["missing"] if label not in entry_exempt
     ]
     if require_exhaustive and unentered_required:
         errors.append(f"missing expected root pages: {unentered_required}")
+    if require_exhaustive:
+        min_pages = config.get("min_pages")
+        graph_only_entries = set(effective_root["visited"]) - set(computed_root["visited"])
+        effective_visit_count = len(visits) + len(graph_only_entries)
+        if isinstance(min_pages, int) and effective_visit_count < min_pages:
+            errors.append(f"visit count is below configured minimum: {len(visits)} < {min_pages}")
 
     blocked_pages = report.get("blocked_pages")
     if not isinstance(blocked_pages, list):
@@ -487,7 +496,10 @@ def _validate_root_coverage_ids(
         ("expected", "expected_ids", expected),
         ("visited", "visited_ids", visited),
         ("missing", "missing_ids", missing),
+        ("sidebar_absent", "sidebar_absent_ids", root_coverage.get("sidebar_absent", [])),
     ):
+        if label_key == "sidebar_absent" and label_key not in root_coverage and id_key not in root_coverage:
+            continue
         ids = root_coverage.get(id_key)
         if ids is None and not require_exhaustive:
             continue
@@ -522,6 +534,43 @@ def _optional_config_str(value: Any) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _root_sidebar_exhaustive(root_coverage: dict[str, Any]) -> bool:
+    values = root_coverage.get("sidebar_exhaustive", [])
+    return isinstance(values, list) and any(str(value).lower() == "true" for value in values)
+
+
+def _root_sidebar_absent_labels(root_coverage: dict[str, Any]) -> set[str]:
+    values = root_coverage.get("sidebar_absent", [])
+    if not isinstance(values, list):
+        return set()
+    return {
+        label
+        for label in (_canonical_expected_root_label(str(value)) for value in values)
+        if label is not None
+    }
+
+
+def _root_entered_graph_labels(root_coverage: dict[str, Any]) -> set[str]:
+    values = root_coverage.get("entered_graph", [])
+    if not isinstance(values, list):
+        return set()
+    return {
+        label
+        for label in (_canonical_expected_root_label(str(value)) for value in values)
+        if label is not None
+    }
+
+
+def _effective_root_coverage(computed_root: dict[str, list[str]], graph_entered: set[str]) -> dict[str, list[str]]:
+    expected = list(computed_root.get("expected", EXPECTED_ROOT_NAV_TEXT_ZH))
+    visited = set(computed_root.get("visited", ())) | graph_entered
+    return {
+        **computed_root,
+        "visited": [label for label in expected if label in visited],
+        "missing": [label for label in expected if label not in visited],
+    }
+
+
 def _validate_metrics(
     metrics: dict[str, Any],
     *,
@@ -546,6 +595,7 @@ def _validate_metrics(
             root_coverage.get("required_missing", root_coverage.get("missing", []))
         ),
         "root_entry_exempt_count": len(root_coverage.get("entry_exempt", [])),
+        "root_sidebar_absent_count": len(root_coverage.get("sidebar_absent", [])),
         "root_search_absent_count": len(root_coverage.get("search_absent", [])),
         "blocked_page_count": len(blocked_pages),
         "rejected_candidate_count": len(rejected_candidates),
@@ -556,6 +606,7 @@ def _validate_metrics(
         "root_required_expected_count",
         "root_required_missing_count",
         "root_entry_exempt_count",
+        "root_sidebar_absent_count",
         "root_search_absent_count",
     }
     for key, expected in expected_counts.items():
@@ -587,6 +638,8 @@ def _validate_metrics(
         errors.append("metrics.unique_visible_signatures must be a non-negative integer")
     if not isinstance(metrics.get("exhaustive_ready"), bool):
         errors.append("metrics.exhaustive_ready must be a boolean")
+    if not isinstance(metrics.get("root_sidebar_exhaustive"), bool):
+        errors.append("metrics.root_sidebar_exhaustive must be a boolean")
 
 
 def _validate_known_issues(

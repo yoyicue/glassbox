@@ -641,7 +641,7 @@ def crawl_current_page(
     actions.record_visible_page(scene=scene, path=path, visits=visits, seen_sigs=seen_sigs, depth=depth)
     if depth == 0:
         actions.record_visible_root_row_visits(scene=scene, visits=visits, seen_sigs=seen_sigs, phone=phone)
-    blocked_reason = actions.blocked_child_navigation_reason(scene)
+    blocked_reason = _blocked_child_navigation_reason_for_depth(actions, scene, depth=depth, phone=phone)
     if blocked_reason is not None:
         actions.record_blocked_page(blocked_pages, path=path, scene=scene, reason=blocked_reason)
     if actions.should_audit_candidates(depth):
@@ -683,7 +683,7 @@ def crawl_current_page(
         if len(visits) >= actions.max_pages_visited:
             limits_hit.add("max_pages")
             return
-        blocked_reason = actions.blocked_child_navigation_reason(scene)
+        blocked_reason = _blocked_child_navigation_reason_for_depth(actions, scene, depth=depth, phone=phone)
         if blocked_reason is not None:
             actions.record_blocked_page(blocked_pages, path=path, scene=scene, reason=blocked_reason)
             return
@@ -712,6 +712,9 @@ def crawl_current_page(
         for cand in candidates:
             label = (cand.text or "").strip()
             if label in attempted:
+                continue
+            if depth == 0 and _root_label_entered_by_graph(phone, actions, label):
+                attempted.add(label)
                 continue
             if depth == 0 and settings_graph_state.is_inert_root_label(phone, label):
                 _record_inert_root_candidate(rejected_candidates, actions=actions, path=path, scene=scene, label=label)
@@ -872,12 +875,21 @@ def crawl_current_page(
                 limits_hit.add("max_pages")
                 return
 
+        required_missing = (
+            _required_missing_root_labels(actions, visits, phone)
+            if depth == 0 else []
+        )
         before_scroll_texts = actions.texts(scene)
+        scroll_metadata: dict[str, Any] = {}
         outcome, _after_scroll = actions.scroll_down_confirmed(
             phone,
             before_scroll_texts,
             depth=depth,
             idx=scroll_idx,
+            scene=scene,
+            target_labels=required_missing,
+            canonical_expected_root_label=actions.canonical_expected_root_label,
+            scroll_metadata=scroll_metadata,
         )
         if outcome in {"overshoot", "top-overshoot"}:
             limits_hit.add("scroll_overshoot")
@@ -893,11 +905,6 @@ def crawl_current_page(
             # and device-unavailable (e.g. 蜂窝网络 on a no-SIM phone, detected
             # from seen text) can never be entered, so re-scanning for them is pure
             # waste — stop once only those remain.
-            required_missing = [
-                label
-                for label in actions.root_coverage(visits, phone=phone)["missing"]
-                if label not in actions.entry_exempt_sections(visits, phone=phone)
-            ]
             if (
                 depth == 0
                 and (not _is_ipad_target(phone) or _supports_wheel_scroll(phone))
@@ -913,6 +920,14 @@ def crawl_current_page(
                 )
                 actions.scroll_to_top(phone)
                 continue
+            if (
+                depth == 0
+                and required_missing
+                and scroll_metadata.get("row_tracked") is True
+                and _is_ipad_target(phone)
+            ):
+                settings_context.mark_root_sidebar_exhaustive(phone)
+                settings_context.record_sidebar_absent_root_labels(phone, required_missing)
             break
     else:
         if depth > 0 and not actions.child_sampling_mode(depth):
@@ -958,6 +973,42 @@ def _supports_wheel_scroll(phone) -> bool:
         return bool(supports("scroll_wheel"))
     except Exception:
         return False
+
+
+def _blocked_child_navigation_reason_for_depth(
+    actions: SettingsNavigationActions,
+    scene,
+    *,
+    depth: int,
+    phone,
+) -> str | None:
+    reason = actions.blocked_child_navigation_reason(scene)
+    if (
+        reason is not None
+        and depth == 0
+        and _is_ipad_target(phone)
+        and actions.scene_is_settings_root(scene)
+    ):
+        return None
+    return reason
+
+
+def _root_label_entered_by_graph(phone, actions: SettingsNavigationActions, label: str) -> bool:
+    canonical = actions.canonical_expected_root_label(label)
+    return canonical is not None and canonical in settings_graph_state.root_entered_labels(phone)
+
+
+def _required_missing_root_labels(
+    actions: SettingsNavigationActions,
+    visits: list[PageVisit],
+    phone,
+) -> list[str]:
+    exempt = actions.entry_exempt_sections(visits, phone=phone)
+    return [
+        label
+        for label in actions.root_coverage(visits, phone=phone)["missing"]
+        if label not in exempt
+    ]
 
 
 def _relocate_detail_candidate(

@@ -76,7 +76,7 @@ def test_classify_root_coverage_treats_detected_no_sim_as_entry_exempt():
 
 
 @pytest.mark.smoke
-def test_classify_root_coverage_marks_ipad_search_absent_roots_unavailable():
+def test_classify_root_coverage_marks_ipad_profile_roots_unavailable():
     expected = ["操作按钮", "待机显示", "蓝牙", "钱包与 Apple Pay"]
     visits = [PageVisit(("Settings",), "Settings", ("Settings",))]
     failures = [
@@ -94,10 +94,34 @@ def test_classify_root_coverage_marks_ipad_search_absent_roots_unavailable():
         phone_model="ipad_mini_7",
     )
 
-    assert result["device_unavailable"] == ["操作按钮"]
-    assert result["entry_exempt"] == ["操作按钮", "钱包与 Apple Pay"]
+    assert result["device_unavailable"] == ["操作按钮", "待机显示"]
+    assert result["entry_exempt"] == ["操作按钮", "待机显示", "钱包与 Apple Pay"]
     assert result["search_absent"] == ["操作按钮", "蓝牙"]
-    assert result["required_missing"] == ["待机显示", "蓝牙"]
+    assert result["required_missing"] == ["蓝牙"]
+
+
+@pytest.mark.smoke
+def test_classify_root_coverage_uses_sidebar_absence_only_when_exhaustive():
+    expected = ["通知", "蓝牙"]
+    visits = [PageVisit(("Settings",), "Settings", ("Settings",))]
+    base = {"expected": expected, "visited": ["蓝牙"], "missing": ["通知"]}
+
+    non_exhaustive = classify_root_coverage(
+        {**base, "sidebar_absent": ["通知"]},
+        visits,
+        [],
+    )
+    exhaustive = classify_root_coverage(
+        {**base, "sidebar_absent": ["通知"], "sidebar_exhaustive": ["true"]},
+        visits,
+        [],
+    )
+
+    assert non_exhaustive["device_unavailable"] == []
+    assert non_exhaustive["required_missing"] == ["通知"]
+    assert exhaustive["device_unavailable"] == ["通知"]
+    assert exhaustive["entry_exempt"] == ["通知"]
+    assert exhaustive["required_missing"] == []
 
 
 @pytest.mark.smoke
@@ -270,7 +294,7 @@ def test_detect_device_unavailable_root_labels_no_sim():
 
 
 @pytest.mark.smoke
-def test_detect_device_unavailable_root_labels_ipad_search_absent_only():
+def test_detect_device_unavailable_root_labels_ipad_static_profile():
     failures = [
         {"path": ["Settings"], "title": "Settings", "text": "Action Button", "reason": "search_no_result"},
         {"path": ["Settings"], "title": "Settings", "text": "Bluetooth", "reason": "search_no_result"},
@@ -281,7 +305,13 @@ def test_detect_device_unavailable_root_labels_ipad_search_absent_only():
         failures,
         platform="ipados",
         phone_model="ipad_mini_7",
-    ) == {"操作按钮"}
+    ) == {"蜂窝网络", "操作按钮", "待机显示", "紧急 SOS"}
+    assert detect_device_unavailable_root_labels(
+        [],
+        failures,
+        platform="ipados",
+        phone_model=None,
+    ) == set()
     assert detect_device_unavailable_root_labels(
         [],
         failures,
@@ -386,6 +416,42 @@ def test_verifier_still_requires_ipad_search_absent_roots_without_ipad_context()
 
 
 @pytest.mark.smoke
+def test_verifier_accepts_sidebar_absent_root_only_with_exhaustive_evidence():
+    missing = ["通知"]
+    report = _report(
+        visits=[
+            {"path": ["Settings"], "title": "Settings", "texts": ["Settings"]},
+            *[
+                {"path": ["Settings", label], "title": label, "texts": [label, "body line"]}
+                for label in EXPECTED_ROOT_NAV_TEXT_ZH
+                if label != "通知"
+            ],
+        ],
+        missing=missing,
+    )
+    report["root_coverage"]["sidebar_absent"] = ["通知"]
+    report["root_coverage"]["sidebar_absent_ids"] = root_section_ids_for_canonical_labels(["通知"])
+    report["root_coverage"]["sidebar_exhaustive"] = ["true"]
+    _refresh_report_summaries(report)
+
+    errors = validate_report(report)
+
+    assert not any("missing expected root pages" in e for e in errors), errors
+
+
+@pytest.mark.smoke
+def test_verifier_rejects_sidebar_absent_root_without_exhaustive_evidence():
+    report = _report(missing=["通知"])
+    report["root_coverage"]["sidebar_absent"] = ["通知"]
+    report["root_coverage"]["sidebar_absent_ids"] = root_section_ids_for_canonical_labels(["通知"])
+    _refresh_report_summaries(report)
+
+    errors = validate_report(report)
+
+    assert any("sidebar_absent requires sidebar_exhaustive" in e for e in errors)
+
+
+@pytest.mark.smoke
 def test_ios_settings_report_verifier_rejects_missing_root_pages():
     visits = [
         {"path": ["Settings"], "title": "设置", "texts": []},
@@ -414,6 +480,31 @@ def test_ios_settings_report_verifier_recomputes_root_coverage_from_visits():
     assert any("root_coverage.visited does not match visits" in error for error in errors)
     assert any("root_coverage.missing does not match visits" in error for error in errors)
     assert any("missing expected root pages" in error for error in errors)
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_accepts_graph_entered_root_coverage():
+    visits = [
+        {"path": ["Settings"], "title": "设置", "texts": ["设置"]},
+        *[
+            {"path": ["Settings", label], "title": label, "texts": [label]}
+            for label in EXPECTED_ROOT_NAV_TEXT_ZH
+            if label != "蓝牙"
+        ],
+    ]
+    report = _report(visits=visits)
+    report["root_coverage"]["visited"] = list(EXPECTED_ROOT_NAV_TEXT_ZH)
+    report["root_coverage"]["missing"] = []
+    report["root_coverage"]["entered_graph"] = ["蓝牙"]
+    report["root_coverage"]["visited_ids"] = root_section_ids_for_canonical_labels(EXPECTED_ROOT_NAV_TEXT_ZH)
+    report["root_coverage"]["missing_ids"] = []
+    _refresh_report_summaries(report)
+
+    errors = validate_report(report)
+
+    assert not any("visit count is below configured minimum" in error for error in errors), errors
+    assert not any("root_coverage.visited does not match visits" in error for error in errors), errors
+    assert not any("missing expected root pages" in error for error in errors), errors
 
 
 @pytest.mark.smoke

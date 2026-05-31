@@ -538,6 +538,7 @@ def build_phone(
             enabled=cfg.enable_memory,
             memory_dir=cfg.memory_dir,
             autosave_every=cfg.memory_autosave_every,
+            ipados_settings_root_projection=cfg.settings_ipad_root_projection,
         )
 
     vlm_backend = select_vlm_backend(cfg)

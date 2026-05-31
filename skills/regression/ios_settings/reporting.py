@@ -290,6 +290,11 @@ def classify_root_coverage(
         platform=platform,
         phone_model=phone_model,
     ) & set(expected)
+    sidebar_absent = (
+        _expected_labels(base.get("sidebar_absent", ()), expected=expected)
+        if _sidebar_exhaustive(base) else set()
+    )
+    device_unavailable |= sidebar_absent
     entry_exempt = coverage_only | device_unavailable
     search_absent = {
         label
@@ -308,6 +313,8 @@ def classify_root_coverage(
     enriched["entry_exempt"] = [label for label in expected if label in entry_exempt]
     enriched["search_absent"] = [label for label in expected if label in search_absent]
     enriched["required_missing"] = [label for label in expected if label in missing and label not in entry_exempt]
+    enriched["sidebar_absent"] = [label for label in expected if label in sidebar_absent]
+    enriched["sidebar_exhaustive"] = ["true"] if _sidebar_exhaustive(base) else []
     enriched["visible_only"] = [
         label for label in expected if label in visited and label not in entered and label not in blocked
     ]
@@ -319,12 +326,16 @@ def classify_root_coverage(
     for key in (
         "expected", "visited", "missing", "entered", "entered_graph", "blocked",
         "visible_only", "device_unavailable", "entry_exempt", "search_absent",
-        "required_missing",
+        "required_missing", "sidebar_absent", "sidebar_exhaustive",
     ):
         labels = enriched.get(key, [])
         enriched[f"{key}_ids"] = _section_ids(labels)
         enriched[f"{key}_display"] = _section_display(labels, vocab)
     return enriched
+
+
+def _sidebar_exhaustive(base: Mapping[str, Sequence[str]]) -> bool:
+    return any(str(value).lower() == "true" for value in base.get("sidebar_exhaustive", ()))
 
 
 def _expected_labels(labels: Iterable[str], *, expected: Sequence[str]) -> set[str]:
@@ -400,6 +411,7 @@ def report_metrics(
     missing = list(root_coverage.get("missing", ()))
     required_missing = list(root_coverage.get("required_missing", missing))
     entry_exempt = list(root_coverage.get("entry_exempt", ()))
+    sidebar_absent = list(root_coverage.get("sidebar_absent", ()))
     return {
         "visit_count": len(visits),
         "unique_visible_signatures": len(text_signatures),
@@ -409,6 +421,8 @@ def report_metrics(
         "root_missing_count": len(missing),
         "root_required_missing_count": len(required_missing),
         "root_entry_exempt_count": len(entry_exempt),
+        "root_sidebar_exhaustive": _sidebar_exhaustive(root_coverage),
+        "root_sidebar_absent_count": len(sidebar_absent),
         "root_search_absent_count": len(root_coverage.get("search_absent", ())),
         "blocked_page_count": len(blocked_pages),
         "rejected_candidate_count": len(rejected_candidates),
