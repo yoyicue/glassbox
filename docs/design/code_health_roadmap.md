@@ -9,21 +9,33 @@ action execution; `ActionHost` declares the public read surface plus the
 `record_action` write hook; the production private-Phone reach inventory is
 pinned by a smoke test; P2's touched orchestrator phase methods have been split
 below the ~80-line target; P3 shared iOS/iPadOS scene helpers and recovery
-ownership note are in place; `make check` passes locally. iPad mini 7 live
-validation passed on 2026-05-31: canonical primitive A/B
-(`artifacts/code_health_roadmap/ipad_ab_20260531_100240`) improved
-`action_success_rate` 0.50→0.75 and `scroll_success_rate` 0.40→1.00, and
-Settings `run_full --quick --language en --region HK`
-(`artifacts/code_health_roadmap/ipad_settings_quick_20260531_100631`) verified
-OK after 9 visits. P6's concrete `_run_attempt`/`_observe_after` side-effect
-contract is pinned by `test_orchestrator_attempt_observe_after_side_effect_contract`,
-and memory-path fallback/arrival edge cases are covered. `Phone.__init__` now
-keeps the legacy signature but delegates configuration resolution, dependency
-wiring, feature state, platform state, collaborator setup, and compatibility
-context setup to focused helpers. **Not complete until the required iPhone half
-of the P1/P2 rig A/B is run and any drift is resolved.** Remaining offline
-cleanup is complete for this roadmap snapshot; VLM-selection coverage now
-includes non-finite/out-of-range confidence handling.
+ownership note are in place; `make check` passes locally. P6's concrete
+`_run_attempt`/`_observe_after` side-effect contract is pinned by
+`test_orchestrator_attempt_observe_after_side_effect_contract`, and memory-path
+fallback/arrival edge cases are covered. `Phone.__init__` now keeps the legacy
+signature but delegates configuration resolution, dependency wiring, feature
+state, platform state, collaborator setup, and compatibility context setup to
+focused helpers. **Not complete until the required P1/P2 rig A/B is run on both
+iPad mini 7 and iPhone with distinct baseline/candidate SHAs and any drift is
+resolved.** Remaining offline cleanup is complete for this roadmap snapshot;
+VLM-selection coverage now includes non-finite/out-of-range confidence handling.
+
+**Invalidated validation note (2026-05-31):** do not use
+`artifacts/code_health_roadmap/ipad_ab_20260531_100240` as evidence for this
+refactor. Both `baseline.json` and `candidate.json` record `git_sha=a48433b`,
+and the Makefile target varies `GLASSBOX_SEMANTIC_PLAN_OPS` (empty vs.
+`back,scroll,tap`), so that artifact validates the strategy-ladder flag on the
+pre-refactor baseline, not behavior preservation of this roadmap refactor.
+`artifacts/code_health_roadmap/ipad_settings_quick_20260531_100631` also lacks a
+recorded git SHA. Follow-up iPad distinct-SHA smoke is recorded under
+`artifacts/code_health_roadmap/ipad_refactor_smoke_20260531_104307`: the usable
+comparison is `baseline2_a48433b.json` vs `candidate_b143faa.json` with matching
+metrics (`task_completion_rate=0.5`, `action_success_rate=0.75`,
+`scroll_success_rate=1.0`) across one canonical-primitives round. That is only a
+smoke check, not the required P1/P2 live A/B: the sample is one round, both sides
+still fail `go_home` final page-id classification and `launch_app` remains
+`unknown`, and iPhone has not run. Both device halves therefore remain pending
+for the full P1/P2 live-refactor gate.
 Originally produced after a 5-dimension
 evidence-based health assessment of the repo (architecture / god-files /
 cross-platform duplication / tests / debt). Verdict going in: **this is a healthy
