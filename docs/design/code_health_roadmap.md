@@ -34,8 +34,18 @@ metrics (`task_completion_rate=0.5`, `action_success_rate=0.75`,
 `scroll_success_rate=1.0`) across one canonical-primitives round. That is only a
 smoke check, not the required P1/P2 live A/B: the sample is one round, both sides
 still fail `go_home` final page-id classification and `launch_app` remains
-`unknown`, and iPhone has not run. Both device halves therefore remain pending
-for the full P1/P2 live-refactor gate.
+`unknown`. iPhone distinct-SHA smoke is recorded under
+`artifacts/code_health_roadmap/iphone_refactor_smoke_20260531_110740`: the
+uncontrolled first pair is invalid because Settings reopened onto stale subpages
+(`settings/WLAN` / `settings/Wallpaper`) instead of the root. After resetting the
+Settings nav stack, `baseline_controlled_a48433b.json` vs
+`candidate_controlled_b143faa.json` held the primary one-round metrics
+(`task_completion_rate=0.5`, `action_success_rate=1.0`, `unknown_rate=0.0`), but
+`scroll_success_rate` slipped `0.952381` -> `0.9`. Treat this as a smoke result
+with residual scroll variance, not a completed gate: rounds=1, expected-state
+coverage is 0, VLM-action coverage is 0, and no variance bounds were measured.
+Both device halves therefore remain pending for the full P1/P2 live-refactor
+gate.
 Originally produced after a 5-dimension
 evidence-based health assessment of the repo (architecture / god-files /
 cross-platform duplication / tests / debt). Verdict going in: **this is a healthy
