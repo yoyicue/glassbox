@@ -36,7 +36,6 @@ from glassbox.cognition import (
     DEFAULT_SCENE_CLASSIFICATION_PROJECTOR,
     Box,
     IconBox,
-    IconDetectFunctionAdapter,
     Scene,
     SceneClassification,
     SceneClassificationProjector,
@@ -47,7 +46,6 @@ from glassbox.cognition import (
     VLMResult,
     VLMStageOutcome,
 )
-from glassbox.cognition.icon_detect import IconRegion
 from glassbox.cognition.ocr_contract import LegacyUIElementOCRAdapter
 from glassbox.crawl_policies import (
     DEFAULT_CRAWL_POLICY_REGISTRY,
@@ -751,34 +749,6 @@ def test_phone_ocr_stage_converts_text_regions_to_ui_elements():
     assert scene.elements[0].type == "text"
     assert scene.elements[0].text == "Settings"
     assert scene.elements[0].element_id == 0
-
-
-def test_icon_detector_adapter_uses_frame_text_regions_and_roi(monkeypatch):
-    calls = []
-
-    def fake_detect_icons(frame_img, *, text_boxes=(), backend=None, **_kwargs):
-        calls.append((frame_img.shape, text_boxes, backend))
-        return [IconRegion(box=(2, 3, 4, 5))]
-
-    monkeypatch.setattr("glassbox.cognition.icon_contract.detect_icons", fake_detect_icons)
-    adapter = IconDetectFunctionAdapter(backend="classical")
-    frame = Frame(img=np.zeros((80, 100, 3), dtype=np.uint8), ts=1.0)
-
-    icons = adapter.detect(
-        frame,
-        text_regions=[
-            TextRegion(
-                text="Label",
-                box=Box(x=15, y=25, w=10, h=10),
-                confidence=0.9,
-            )
-        ],
-        roi=Box(x=10, y=20, w=30, h=40),
-    )
-
-    assert calls == [((40, 30, 3), ((5, 5, 10, 10),), "classical")]
-    assert icons[0].box == Box(x=12, y=23, w=4, h=5)
-    assert icons[0].label is None
 
 
 def test_phone_uses_injected_safe_area_provider_for_tab_bar_hit_point():

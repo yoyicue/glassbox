@@ -383,55 +383,8 @@ def assistive_touch_unsafe_reason(label: str) -> str | None:
     return None
 
 
-def assistive_touch_layout_model() -> dict[str, Any]:
-    return {
-        "contexts": {
-            name: {
-                "labels": list(labels),
-                "nominal_size": {
-                    "w": _GRID_CONTEXT_SIZE[name][0],
-                    "h": _GRID_CONTEXT_SIZE[name][1],
-                },
-            }
-            for name, labels in _GRID_CONTEXT_LABELS.items()
-        },
-        "relative_points": {
-            label: {"x": rel[0], "y": rel[1]}
-            for label, rel in _GRID_RELATIVE_POINTS.items()
-        },
-        "context_relative_overrides": {
-            "more": {
-                label: {"x": rel[0], "y": rel[1]}
-                for label, rel in _MORE_MENU_GRID_RELATIVE_POINTS.items()
-            },
-        },
-    }
-
-
-def assistive_touch_safe_primitives() -> tuple[AssistiveTouchPrimitive, ...]:
-    return _ASSISTIVE_TOUCH_SAFE_PRIMITIVES
-
-
 def assistive_touch_primitive(name: str) -> AssistiveTouchPrimitive | None:
     return _ASSISTIVE_TOUCH_SAFE_PRIMITIVE_BY_NAME.get(name)
-
-
-def assistive_touch_primitive_catalog() -> dict[str, Any]:
-    primitives = [primitive.to_report() for primitive in _ASSISTIVE_TOUCH_SAFE_PRIMITIVES]
-    return {
-        "schema_version": 1,
-        "source": "glassbox.ios.assistive_touch.assistive_touch_safe_primitives",
-        "safety_policy": {
-            "default": "safe primitives only; unsafe menu labels are excluded and blocked before physical input",
-            "unsafe_labels": sorted(ASSISTIVE_TOUCH_UNSAFE_REASONS),
-        },
-        "count": len(primitives),
-        "primitives": primitives,
-    }
-
-
-def scene_has_assistive_touch_labels(scene: Scene, labels: tuple[str, ...]) -> bool:
-    return all(find_assistive_touch_menu_item(scene, label) is not None for label in labels)
 
 
 def assistive_touch_menu_box(scene: Scene) -> tuple[int, int, int, int] | None:

@@ -40,7 +40,6 @@ from glassbox.cognition.heuristic import (
     find_by_type,
     find_by_whitebox_hint,
 )
-from glassbox.cognition.icon_contract import IconDetectFunctionAdapter
 from glassbox.cognition.ocr import AppleVisionOCR, find_text
 from glassbox.cognition.ocr_contract import (
     LegacyUIElementOCRAdapter,
@@ -90,7 +89,6 @@ __all__ = [
     "ElementType",
     "HeuristicTyper",
     "IconBox",
-    "IconDetectFunctionAdapter",
     "KimiAnthropic",
     "KimiResponse",
     "KimiVL",

@@ -11,7 +11,6 @@ from glassbox.backend_registry import (
     BackendRegistration,
     select_effector_backend,
     select_frame_source_backend,
-    select_icon_detector_backend,
     select_ocr_backend,
     select_vlm_backend,
 )
@@ -275,7 +274,6 @@ def test_runtime_selects_registered_frame_source_and_effector_backends(tmp_path)
     )
     assert select_ocr_backend(AgentConfig(_env_file=None, ocr="vision")) == "vision"
     assert select_ocr_backend(AgentConfig(_env_file=None, ocr="ocrmac")) == "ocrmac"
-    assert select_icon_detector_backend(AgentConfig(_env_file=None)) == "classical"
     assert select_vlm_backend(AgentConfig(_env_file=None, enable_kimi=False)) is None
     assert select_vlm_backend(AgentConfig(_env_file=None, enable_kimi=True)) == "moonshot"
     assert select_vlm_backend(
