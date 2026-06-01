@@ -101,7 +101,7 @@ def test_classify_root_coverage_marks_ipad_profile_roots_unavailable():
 
 
 @pytest.mark.smoke
-def test_classify_root_coverage_uses_sidebar_absence_only_when_exhaustive():
+def test_classify_root_coverage_does_not_exempt_sidebar_absence():
     expected = ["通知", "蓝牙"]
     visits = [PageVisit(("Settings",), "Settings", ("Settings",))]
     base = {"expected": expected, "visited": ["蓝牙"], "missing": ["通知"]}
@@ -119,9 +119,9 @@ def test_classify_root_coverage_uses_sidebar_absence_only_when_exhaustive():
 
     assert non_exhaustive["device_unavailable"] == []
     assert non_exhaustive["required_missing"] == ["通知"]
-    assert exhaustive["device_unavailable"] == ["通知"]
-    assert exhaustive["entry_exempt"] == ["通知"]
-    assert exhaustive["required_missing"] == []
+    assert exhaustive["device_unavailable"] == []
+    assert exhaustive["entry_exempt"] == []
+    assert exhaustive["required_missing"] == ["通知"]
 
 
 @pytest.mark.smoke
@@ -416,7 +416,7 @@ def test_verifier_still_requires_ipad_search_absent_roots_without_ipad_context()
 
 
 @pytest.mark.smoke
-def test_verifier_accepts_sidebar_absent_root_only_with_exhaustive_evidence():
+def test_verifier_rejects_sidebar_absent_root_even_with_exhaustive_evidence():
     missing = ["通知"]
     report = _report(
         visits=[
@@ -436,7 +436,7 @@ def test_verifier_accepts_sidebar_absent_root_only_with_exhaustive_evidence():
 
     errors = validate_report(report)
 
-    assert not any("missing expected root pages" in e for e in errors), errors
+    assert any("missing expected root pages" in e for e in errors), errors
 
 
 @pytest.mark.smoke

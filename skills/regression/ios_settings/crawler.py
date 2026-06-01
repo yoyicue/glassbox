@@ -466,7 +466,17 @@ def _opened_requested_root(scene, label: str) -> bool:
     return (
         settings_scene_state.canonical_expected_root_label(title) == requested
         or settings_scene_state.title_matches_navigation_label(title, label)
+        or _has_requested_root_detail_evidence(scene, requested)
     )
+
+
+def _has_requested_root_detail_evidence(scene, requested: str) -> bool:
+    """Confirm iPad split-view detail pages when the title is not OCR-visible."""
+    texts = tuple((getattr(element, "text", None) or "").strip() for element in getattr(scene, "elements", ()))
+    if requested == "屏幕使用时间":
+        markers = {"Daily Average", "Downtime", "App Limits", "Always Allowed"}
+        return len(markers.intersection(texts)) >= 2
+    return False
 
 
 def _wait_opened_requested_root(phone, label: str, *, polls: int = 4, interval_s: float = 0.4) -> bool:
