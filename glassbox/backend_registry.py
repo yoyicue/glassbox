@@ -8,7 +8,7 @@ from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Generic, TypeVar
 
-from glassbox.cognition import AppleVisionOCR, IconDetectFunctionAdapter, VisionOCR
+from glassbox.cognition import AppleVisionOCR, VisionOCR
 from glassbox.cognition.ocr_contract import LegacyUIElementOCRAdapter
 from glassbox.cognition.vlm_kimi import MoonshotAnthropicVLM, SiliconFlowVLM
 from glassbox.config import AgentConfig
@@ -195,18 +195,6 @@ def vision_ocr_registration() -> BackendRegistration:
     return BackendRegistration(name="vision", factory=_vision_ocr_factory)
 
 
-def _icon_detector_factory(*, cfg: AgentConfig):
-    return IconDetectFunctionAdapter(backend=select_icon_detector_backend(cfg))
-
-
-def classical_icon_detector_registration() -> BackendRegistration:
-    return BackendRegistration(name="classical", factory=_icon_detector_factory)
-
-
-def select_icon_detector_backend(cfg: AgentConfig) -> str:
-    return str(getattr(cfg, "icon_detector", "classical")).lower()
-
-
 def _moonshot_vlm_factory(*, cfg: AgentConfig):
     _ = cfg
     return MoonshotAnthropicVLM()
@@ -277,14 +265,6 @@ DEFAULT_OCR_REGISTRY = BackendRegistry(
 )
 
 
-DEFAULT_ICON_DETECTOR_REGISTRY = BackendRegistry(
-    entry_point_group="glassbox.icon_detectors",
-    registrations=(
-        classical_icon_detector_registration(),
-    ),
-)
-
-
 DEFAULT_VLM_REGISTRY = BackendRegistry(
     entry_point_group="glassbox.vlm",
     registrations=(
@@ -297,14 +277,12 @@ DEFAULT_VLM_REGISTRY = BackendRegistry(
 __all__ = [
     "DEFAULT_EFFECTOR_REGISTRY",
     "DEFAULT_FRAME_SOURCE_REGISTRY",
-    "DEFAULT_ICON_DETECTOR_REGISTRY",
     "DEFAULT_OCR_REGISTRY",
     "DEFAULT_VLM_REGISTRY",
     "BackendRegistration",
     "BackendRegistry",
     "avf_frame_source_registration",
     "canonicalize_vlm_backend",
-    "classical_icon_detector_registration",
     "moonshot_vlm_registration",
     "noop_effector_registration",
     "ocrmac_registration",
@@ -312,7 +290,6 @@ __all__ = [
     "picokvm_frame_source_registration",
     "select_effector_backend",
     "select_frame_source_backend",
-    "select_icon_detector_backend",
     "select_ocr_backend",
     "select_vlm_backend",
     "siliconflow_vlm_registration",

@@ -116,7 +116,7 @@ def test_find_text_ambiguity_guard_prefers_closest_and_escalates():
 
 @pytest.mark.smoke
 def test_find_text_matches_em_dash_with_hyphen_query():
-    from glassbox.cognition.ocr_vision import find_text
+    from glassbox.cognition import find_text
     elements = [
         UIElement(type="text", box=Box(x=10, y=10, w=20, h=10),
                   text="—", confidence=0.3, element_id=0),
@@ -200,7 +200,7 @@ def test_real_cap_ctrl_picks_up_minus_button():
     must recognize the - button (as - or em-dash) and it must be hit by find_text('-')."""
     import cv2
 
-    from glassbox.cognition.ocr_vision import find_text
+    from glassbox.cognition import find_text
     from glassbox.perception.device import IPHONE_17_PRO_MAX
     from glassbox.perception.letterbox import LetterboxCrop
 

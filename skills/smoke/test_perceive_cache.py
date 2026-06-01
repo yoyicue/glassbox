@@ -15,7 +15,7 @@ import time
 import numpy as np
 import pytest
 
-from glassbox.cognition import Box, KimiResponse, UIElement
+from glassbox.cognition import Box, UIElement, VLMResponse
 from glassbox.cognition.heuristic import HeuristicTyper
 from glassbox.effector import MockEffector
 from glassbox.obs import Recorder
@@ -310,7 +310,7 @@ def test_describe_after_cache_hit_persists_top_level_layer3_fields():
         model = "fake"
 
         def describe_scene(self, *, frame_image, elements, scene_hint=None):
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="{}",
                 parsed={
                     "scene_type": "login_form",

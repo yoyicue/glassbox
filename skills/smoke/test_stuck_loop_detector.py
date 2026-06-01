@@ -50,17 +50,6 @@ def test_stuck_detector_resets_when_failure_reason_changes():
     assert detector.observe(StuckSample("sig-a", "transport_failed")).should_recover is True
 
 
-def test_stuck_detector_observe_and_recover_invokes_callback_once():
-    detector = StuckLoopDetector(threshold=2, recovery="home_anchor")
-    calls = []
-
-    detector.observe_and_recover(StuckSample("sig-a", "unknown"), lambda name, decision: calls.append((name, decision.count)) or True)
-    detector.observe_and_recover(StuckSample("sig-a", "unknown"), lambda name, decision: calls.append((name, decision.count)) or True)
-    detector.observe_and_recover(StuckSample("sig-a", "unknown"), lambda name, decision: calls.append((name, decision.count)) or True)
-
-    assert calls == [("home_anchor", 2)]
-
-
 def test_stuck_detector_reset_allows_same_pair_to_fire_again():
     detector = StuckLoopDetector(threshold=2)
     sample = StuckSample("sig-a", "unknown")

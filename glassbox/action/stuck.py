@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -121,17 +120,6 @@ class StuckLoopDetector:
             key = (self._anchor.screen_signature, self._anchor.failure_reason)
             self._fired_anchors.discard(key)
         self._count = 0
-
-    def observe_and_recover(
-        self,
-        sample: StuckSample,
-        recover: Callable[[str, StuckDecision], bool],
-    ) -> StuckDecision:
-        decision = self.observe(sample)
-        if decision.should_recover and not recover(decision.recovery, decision):
-            # Recovery reported failure -> re-arm so the dead-end can fire again.
-            self.rearm()
-        return decision
 
     def reset(self) -> None:
         self._anchor = None

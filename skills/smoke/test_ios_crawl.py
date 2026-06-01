@@ -5,8 +5,6 @@ import pytest
 from glassbox.ios.crawl import (
     ActionTraceObserver,
     CrawlMetrics,
-    NavigationCandidate,
-    NavigationResult,
     call_scroll_method,
     classify_scroll_attempt,
     phone_supports,
@@ -76,12 +74,9 @@ def test_phone_supports_uses_capability_method():
 
 
 @pytest.mark.smoke
-def test_navigation_and_metric_schemas_are_serializable():
-    candidate = NavigationCandidate(label="通用", page_id="settings/通用")
-    result = NavigationResult(candidate=candidate, status="ok", returned_to_origin=True)
+def test_metric_schema_is_serializable():
     metrics = CrawlMetrics(pages_visited=2, actions=3, scroll_overshoots=1)
 
-    assert result.candidate.safe is True
     assert metrics.to_dict() == {
         "pages_visited": 2,
         "actions": 3,

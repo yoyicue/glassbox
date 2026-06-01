@@ -34,14 +34,6 @@ class DeviceGeometry:
 
 
 @dataclass(frozen=True)
-class Insets:
-    top: int = 0
-    right: int = 0
-    bottom: int = 0
-    left: int = 0
-
-
-@dataclass(frozen=True)
 class RecoverySignal:
     kind: str
     confidence: float
@@ -109,7 +101,6 @@ class AppSceneClassifier(Protocol):
 
 
 class SafeAreaProvider(Protocol):
-    def insets(self, scene: Scene) -> Insets: ...
     def bottom_hit_point(
         self,
         viewport_size: tuple[int, int],
@@ -248,7 +239,6 @@ __all__ = [
     "Effector",
     "FrameSource",
     "IconDetector",
-    "Insets",
     "Platform",
     "RecoveryProvider",
     "RecoverySignal",

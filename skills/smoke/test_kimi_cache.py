@@ -8,7 +8,7 @@ Coverage:
   - a second call with the same frame+elements+hint is a hit (does not call inner)
   - different image / different elements / different hint → different key
   - a cross-instance hit (same cache_dir) also hits
-  - the rehydrated KimiResponse has complete fields
+  - the rehydrated VLMResponse has complete fields
   - wrap_with_cache_if_enabled checks the env
 """
 
@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 from glassbox.cognition import Box, UIElement, VLMRequest
-from glassbox.cognition.vlm_kimi import KimiResponse, describe_prompt_cache_key
+from glassbox.cognition.vlm_kimi import VLMResponse, describe_prompt_cache_key
 from glassbox.obs import (
     CachedKimi,
     CachedVLM,
@@ -36,7 +36,7 @@ from glassbox.perception.source import Frame
 class FakeInner:
     """Implements the describe_scene protocol; records every call."""
 
-    response: KimiResponse
+    response: VLMResponse
     calls: int = 0
     model: str = "fake"
     last_kwargs: dict[str, Any] | None = None
@@ -61,8 +61,8 @@ class FakeInner:
         return self.response
 
 
-def _resp(intent_label: str = "确认登录") -> KimiResponse:
-    return KimiResponse(
+def _resp(intent_label: str = "确认登录") -> VLMResponse:
+    return VLMResponse(
         raw_content=f'{{"scene_type":"login_form","elements":[{{"id":0,"intent_label":"{intent_label}"}}]}}',
         parsed={"scene_type": "login_form",
                 "elements": [{"id": 0, "intent_label": intent_label}]},

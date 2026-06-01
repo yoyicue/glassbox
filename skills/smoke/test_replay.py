@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from glassbox.cognition import Box, KimiResponse, UIElement
+from glassbox.cognition import Box, UIElement, VLMResponse
 from glassbox.obs import Recorder, Replay
 from glassbox.obs.recorder import iter_events
 
@@ -60,7 +60,7 @@ def test_phone_describe_records_kimi_call_miss(tmp_path, mock_phone):
         last_hit = False
 
         def describe_scene(self, *, frame_image, elements, scene_hint=None):
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="{}",
                 parsed={"scene_type": "x", "elements": []},
                 usage={"prompt_tokens": 10}, model="fake-miss", elapsed_ms=42,
@@ -104,7 +104,7 @@ def test_phone_describe_records_kimi_call_hit(tmp_path, mock_phone):
 
         def describe_scene(self, *, frame_image, elements, scene_hint=None):
             self.last_hit = True   # mark on call, just like CachedKimi
-            return KimiResponse(raw_content="{}", parsed={"elements": []},
+            return VLMResponse(raw_content="{}", parsed={"elements": []},
                                 usage={}, model="fake-hit", elapsed_ms=1)
 
     rec = Recorder(tmp_path)

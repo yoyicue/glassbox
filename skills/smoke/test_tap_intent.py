@@ -16,8 +16,8 @@ import pytest
 
 from glassbox.cognition import (
     Box,
-    KimiResponse,
     UIElement,
+    VLMResponse,
     find_by_intent,
 )
 
@@ -131,7 +131,7 @@ def test_tap_intent_runs_describe_when_kimi_present(mock_phone):
             captured["called"] = True
             captured["hint"] = scene_hint
             captured["element_ids"] = [e["id"] for e in elements]
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="(fake)",
                 parsed={
                     "scene_type": "login_form",
@@ -167,7 +167,7 @@ def test_tap_intent_refreshes_when_existing_labels_do_not_cover_request(mock_pho
     class FakeKimi:
         def describe_scene(self, *, frame_image, elements, scene_hint=None):
             captured["called"] = True
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="(fake)",
                 parsed={
                     "scene_type": "paywall",
@@ -205,7 +205,7 @@ def test_tap_intent_retries_even_after_prior_vlm_ok_without_target(mock_phone):
     class FakeKimi:
         def describe_scene(self, *, frame_image, elements, scene_hint=None):
             calls["n"] += 1
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="(fake)",
                 parsed={
                     "scene_type": "paywall",
@@ -244,7 +244,7 @@ def test_tap_intent_reperceives_after_prior_action(mock_phone):
     class FakeKimi:
         def describe_scene(self, *, frame_image, elements, scene_hint=None):
             captured["texts"] = [e["text"] for e in elements]
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="(fake)",
                 parsed={
                     "scene_type": "next_screen",
@@ -321,7 +321,7 @@ def test_expect_text_escalates_to_vlm_when_ocr_misses(mock_phone):
     class FakeKimi:
         def describe_scene(self, *, frame_image, elements, scene_hint=None):
             calls["n"] += 1
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="(fake)",
                 parsed={
                     "scene_type": "settings_detail",

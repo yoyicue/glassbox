@@ -65,9 +65,6 @@ picokvm = "glassbox.backend_registry:picokvm_effector_registration"
 ocrmac = "glassbox.backend_registry:ocrmac_registration"
 vision = "glassbox.backend_registry:vision_ocr_registration"
 
-[project.entry-points."glassbox.icon_detectors"]
-classical = "glassbox.backend_registry:classical_icon_detector_registration"
-
 [project.entry-points."glassbox.vlm"]
 moonshot = "glassbox.backend_registry:moonshot_vlm_registration"
 siliconflow = "glassbox.backend_registry:siliconflow_vlm_registration"

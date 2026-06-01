@@ -40,7 +40,6 @@ from glassbox.cognition.heuristic import (
     find_by_type,
     find_by_whitebox_hint,
 )
-from glassbox.cognition.icon_contract import IconDetectFunctionAdapter
 from glassbox.cognition.ocr import AppleVisionOCR, find_text
 from glassbox.cognition.ocr_contract import (
     LegacyUIElementOCRAdapter,
@@ -66,14 +65,10 @@ from glassbox.cognition.vlm_gate import (
     escalation_triggers,
 )
 from glassbox.cognition.vlm_kimi import (
-    KimiAnthropic,
-    KimiResponse,
-    KimiVL,
     MoonshotAnthropicVLM,
     SiliconFlowVLM,
     VLMResponse,
     enrich_scene,
-    make_kimi_client,
     make_vlm_client,
     vlm_stage_outcome_from_result,
 )
@@ -90,10 +85,6 @@ __all__ = [
     "ElementType",
     "HeuristicTyper",
     "IconBox",
-    "IconDetectFunctionAdapter",
-    "KimiAnthropic",
-    "KimiResponse",
-    "KimiVL",
     "LegacyUIElementOCRAdapter",
     "MoonshotAnthropicVLM",
     "Scene",
@@ -123,7 +114,6 @@ __all__ = [
     "find_by_type",
     "find_by_whitebox_hint",
     "find_text",
-    "make_kimi_client",
     "make_vlm_client",
     "match_asset",
     "norm_text",
