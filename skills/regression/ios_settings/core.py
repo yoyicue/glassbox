@@ -1164,10 +1164,19 @@ def _entry_exempt_sections(visits: list[PageVisit], *, phone=None) -> set[str]:
 
 def _phone_model(phone) -> str | None:
     model = getattr(getattr(phone, "device_geometry", None), "model", None)
-    return str(model) if model else None
+    if model:
+        return str(model)
+    env_model = os.getenv("GLASSBOX_PHONE_MODEL")
+    return str(env_model) if env_model else None
 
 
 def _phone_platform(phone) -> str | None:
+    env_platform = os.getenv("GLASSBOX_PLATFORM")
+    if env_platform:
+        return str(env_platform)
+    model = _phone_model(phone)
+    if model and str(model).lower().replace("-", "_").replace(" ", "_").startswith("ipad"):
+        return "ipados"
     return "ipados" if _is_ipad_target(phone) else None
 
 

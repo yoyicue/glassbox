@@ -77,6 +77,154 @@ def test_root_coverage_mode_skips_root_row_navigation(monkeypatch):
     assert not _should_traverse_candidates(0)
     assert _should_traverse_candidates(1)
 
+
+@pytest.mark.smoke
+def test_root_path_prefers_requested_label_when_detail_title_ocr_is_garbled():
+    actions = SimpleNamespace(
+        page_title=lambda _scene: "Bluetgoth",
+        canonical_expected_root_label=DEFAULT_SETTINGS_POLICY.canonical_expected_root_label,
+    )
+
+    assert settings_navigation._observed_path_label(
+        actions,
+        requested_label="Bluetooth",
+        after_scene=object(),
+        depth=0,
+    ) == "蓝牙"
+
+
+@pytest.mark.smoke
+def test_root_crawl_credits_semantic_success_when_same_page_texts_match(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root = _scene(_el("Settings", 48, 72, w=70), _el("Bluetooth", 72, 344, w=120))
+    detail = _scene(
+        _el("Settings", 48, 72, w=70),
+        _el("Bluetooth", 72, 344, w=120),
+        _el("Bluefooth", 446, 92, w=120),
+        _el("This iPad is discoverable as", 446, 188, w=240),
+    )
+
+    class IPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self):
+            self.scene = root
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self):
+            pass
+
+    phone = IPadPhone()
+    opened_paths: list[tuple[str, ...]] = []
+    scrolls: list[str] = []
+
+    def tap_row(_phone, _row):
+        phone.scene = detail
+        settings_context.record_action_verdict(
+            phone,
+            SimpleNamespace(status="succeeded", accepted=True),
+        )
+        return True
+
+    def crawl_child(_phone, *, path, visits, **_kwargs):
+        opened_paths.append(path)
+        visits.append(PageVisit(path=path, title=path[-1], texts=()))
+
+    def root_coverage(visits, phone=None):
+        visited = {visit.path[-1] for visit in visits if len(visit.path) > 1}
+        return {"visited": list(visited), "missing": [] if "蓝牙" in visited else ["蓝牙"]}
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        scene_kind=lambda _scene, phone=None: "settings_root",
+        root_coverage_perceive=lambda _phone, _depth: phone.perceive(),
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=lambda _scene, **_kwargs: [_el("Bluetooth", 72, 344, w=120)],
+        tap_settings_row=tap_row,
+        same_page_after_tap=lambda *_args, **_kwargs: True,
+        is_settings_section_header=lambda *_args, **_kwargs: False,
+        return_one_level=lambda *_args, **_kwargs: True,
+        crawl_current_page=crawl_child,
+        scroll_down_confirmed=lambda *_args, **_kwargs: scrolls.append("down") or ("stuck", detail),
+        root_coverage=root_coverage,
+        crawl_missing_root_pages_via_search=lambda *_args, **_kwargs: None,
+    )
+
+    settings_context.reset_for(phone)
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert opened_paths == [("Settings", "蓝牙")]
+    assert scrolls == []
+
+
+@pytest.mark.smoke
+def test_root_crawl_stops_before_scroll_when_required_missing_is_empty(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root = _scene(_el("Settings", 48, 72, w=70), _el("Bluetooth", 72, 344, w=120))
+
+    class IPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return root
+
+    scrolls: list[str] = []
+    searches: list[str] = []
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        root_coverage_perceive=lambda _phone, _depth: root,
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: False,
+        scroll_budget_for_depth=lambda _depth: 1,
+        scroll_down_confirmed=lambda *_args, **_kwargs: scrolls.append("down") or ("stuck", root),
+        root_coverage=lambda _visits, phone=None: {"missing": []},
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        crawl_missing_root_pages_via_search=lambda *_args, **_kwargs: searches.append("search"),
+    )
+
+    settings_navigation.crawl_current_page(
+        IPadPhone(),
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert scrolls == []
+    assert searches == ["search"]
+
+
 @pytest.mark.smoke
 def test_search_result_picker_uses_top_visible_root_result():
     scene = _scene(

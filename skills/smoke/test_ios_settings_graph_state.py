@@ -213,6 +213,17 @@ def test_entry_exempt_sections_include_ipad_static_device_profile():
 
 
 @pytest.mark.smoke
+def test_entry_exempt_sections_fall_back_to_target_env_for_wrapped_phone(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_PHONE_MODEL", "ipad_mini_7")
+    monkeypatch.setenv("GLASSBOX_PLATFORM", "ipados")
+    phone = SimpleNamespace()
+
+    exempt = walkthrough._entry_exempt_sections([], phone=phone)
+
+    assert {"蜂窝网络", "操作按钮", "待机显示", "紧急 SOS"} <= exempt
+
+
+@pytest.mark.smoke
 def test_crawl_skips_graph_inert_root_candidate_without_tapping():
     memory = ScreenMemory(UTG(bundle_id="com.apple.Preferences"))
     root = _settings_root_scene()

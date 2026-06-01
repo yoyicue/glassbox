@@ -436,7 +436,16 @@ def _observed_path_label(
         if observed_root_label is not None:
             return observed_root_label
         requested_root_label = actions.canonical_expected_root_label(requested_label)
-        if requested_root_label is not None and _observed_title_missing_or_noise(observed_title):
+        if requested_root_label is not None and (
+            actions.page_title(after_scene) == requested_label
+            or settings_scene_state.title_matches_navigation_label(observed_title, requested_label)
+            or compact_text(observed_title).casefold() in {"settings", "设置"}
+            or _observed_title_missing_or_noise(observed_title)
+        ):
+            # Root-row intent is more stable than the detail title OCR. Live iPad
+            # Settings has produced titles such as "Bluetgoth"; treating that as
+            # a new path makes coverage think the root was never entered and
+            # triggers wasteful search recovery back to an already-visited row.
             return requested_root_label
     return observed_title or requested_label
 
@@ -450,6 +459,11 @@ def _observed_title_missing_or_noise(title: str) -> bool:
         or is_time_text(text)
         or settings_scene_state.is_status_bar_clock_text(text)
     )
+
+
+def _last_action_succeeded(phone) -> bool:
+    verdict = settings_context.last_action_verdict(phone)
+    return str(getattr(verdict, "status", "")).lower() == "succeeded"
 
 
 def _backend_pointer_kind(phone) -> str:
@@ -768,6 +782,13 @@ def crawl_current_page(
             phone.invalidate_perceive_cache()
             after = phone.perceive()
             same_page_after_tap = actions.same_page_after_tap(scene, after, expected_title=label)
+            if (
+                same_page_after_tap
+                and depth == 0
+                and actions.canonical_expected_root_label(label) is not None
+                and _last_action_succeeded(phone)
+            ):
+                same_page_after_tap = False
             if same_page_after_tap and depth == 0:
                 retry_cand = next(
                     (element for element in after.elements if (element.text or "").strip() == label),
@@ -849,6 +870,8 @@ def crawl_current_page(
             _required_missing_root_labels(actions, visits, phone)
             if depth == 0 else []
         )
+        if depth == 0 and not required_missing:
+            break
         before_scroll_texts = actions.texts(scene)
         scroll_metadata: dict[str, Any] = {}
         outcome, _after_scroll = actions.scroll_down_confirmed(
