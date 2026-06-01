@@ -54,6 +54,31 @@ def test_ios_recovery_foregrounds_target_from_weather_surface():
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_keeps_ipad_home_widget_as_springboard():
+    scene = _scene(
+        _el("12:32PM Mon 1 Jun", 14, 10, w=120),
+        _el("No Events Today", 96, 268, w=118),
+        _el("Daxing 7", 98, 370, w=66),
+        _el("34°", 98, 394, w=80),
+        _el("Sunny", 188, 420, w=48),
+        _el("H:36° L:17°", 190, 450, w=88),
+        _el("No Notes", 222, 132, w=70),
+        _el("Home", 128, 650, w=44),
+        _el("Camera", 246, 650, w=58),
+        _el("App Store", 354, 650, w=78),
+        _el("Settings", 354, 760, w=72),
+        _el("Files", 500, 420, w=42),
+        _el("Maps", 500, 540, w=42),
+    )
+    scene.platform_scene_kind = "springboard"
+
+    classified = classify_ios_scene(scene, viewport_size=(640, 989))
+
+    assert classified.kind == "springboard"
+    assert "home_widget_surface" in classified.evidence
+
+
+@pytest.mark.smoke
 @pytest.mark.parametrize(
     ("fixture_name", "expected_title"),
     [

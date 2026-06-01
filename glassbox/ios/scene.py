@@ -204,6 +204,15 @@ def classify_ios_scene(
             evidence=("suggestions_title", "app_category", "bottom_search_chrome"),
         )
 
+    if _looks_like_platform_home_widget_surface(scene, viewport_size=(w, h)):
+        return IOSSceneClassification(
+            kind="springboard",
+            confidence=0.84,
+            title=title,
+            safe_actions=("scan_icons", "search_app"),
+            evidence=("platform_springboard", "home_widget_surface"),
+        )
+
     if _looks_like_settings_search_results(scene, viewport_size=(w, h)):
         return IOSSceneClassification(
             kind="settings_search_results",
@@ -1219,3 +1228,56 @@ def _looks_like_springboard(scene: Scene, *, viewport_size: tuple[int, int]) -> 
     if _looks_like_settings_detail(scene, viewport_size=(w, h)):
         return False
     return spread_x >= w * 0.40 and row_count >= 2
+
+
+def _looks_like_platform_home_widget_surface(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:
+    """Recognize iPad Home/Today widget pages before Settings-detail guesses.
+
+    Live iPad widget pages can contain a large weather panel plus short app
+    labels; the generic Settings-detail semantic guess may otherwise latch onto
+    labels such as Camera/Settings and misclassify Home as Settings detail.
+    Only trust this shortcut when the capture stack already reports SpringBoard.
+    """
+    if str(getattr(scene, "platform_scene_kind", "") or "") != "springboard":
+        return False
+    w, h = viewport_size
+    texts = [_text(el) for el in scene.elements if _text(el)]
+    if not texts:
+        return False
+    widget_markers = {
+        "No Events Today",
+        "No Notes",
+        "Sunny",
+        "Cloudy",
+        "Drizzle",
+        "Rain",
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
+        "SUNDAY",
+    }
+    weatherish = sum(1 for text in texts if "°" in text or text in widget_markers)
+    has_widget_copy = weatherish >= 4 or any(text in {"No Events Today", "No Notes"} for text in texts)
+    short_labels = [
+        el for el in scene.elements
+        if 0.12 * h <= el.box.center[1] <= 0.94 * h
+        and 0.06 * w <= el.box.center[0] <= 0.94 * w
+        and 1 <= len(_text(el)) <= 18
+        and el.box.w <= w * 0.25
+    ]
+    if len(short_labels) < 4:
+        return False
+    spread_x = max(el.box.center[0] for el in short_labels) - min(el.box.center[0] for el in short_labels)
+    rows = len({round(el.box.center[1] / max(1, h * 0.11)) for el in short_labels})
+    app_label_hits = sum(
+        1
+        for text in texts
+        if text in {
+            "Settings", "设置", "App Store", "Camera", "Home", "Files", "Maps",
+            "Books", "Videos", "FaceTime", "Facetime", "Reminders", "Games",
+        }
+    )
+    return has_widget_copy and (app_label_hits >= 2 or (spread_x >= w * 0.35 and rows >= 2))
