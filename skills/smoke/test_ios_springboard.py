@@ -1053,6 +1053,50 @@ def test_open_app_via_spotlight_reports_failure_when_still_in_known_other_app(mo
 
 
 @pytest.mark.smoke
+def test_open_app_via_spotlight_rejects_weather_search_settings_text(monkeypatch):
+    monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
+
+    weather_search = _scene(
+        _el("Search for a city or ai...", 36, 94, w=188),
+        _el("SUGGESTED", 28, 138, w=70, h=10),
+        _el("Home", 30, 166, w=48),
+        _el("Settings", 62, 194, w=68),
+        _el("Daxing", 402, 148, w=90, h=30),
+        _el("34°", 392, 176, w=136, h=78),
+        _el("Sunny", 420, 264, w=58, h=18),
+        _el("10-DAY FORECAST", 294, 576, w=120, h=12),
+    )
+    weather_search.platform_scene_kind = "unknown"
+
+    class FakePhone:
+        def __init__(self):
+            self.actions: list[tuple[str, tuple | None]] = []
+
+        def _viewport_size(self):
+            return 640, 989
+
+        def home(self):
+            self.actions.append(("home", None))
+
+        def perceive(self):
+            return weather_search
+
+        def invalidate_perceive_cache(self):
+            self.actions.append(("invalidate", None))
+
+        def key(self, modifier: int, keycode: int):
+            self.actions.append(("key", (modifier, keycode)))
+
+        def type(self, text: str):
+            self.actions.append(("type", (text,)))
+
+    phone = FakePhone()
+
+    assert not open_app_via_spotlight(phone, ("设置", "Settings"), settle_s=0.0)
+    assert phone.actions.count(("home", None)) >= 2
+
+
+@pytest.mark.smoke
 def test_open_app_via_spotlight_requires_target_label_after_return(monkeypatch):
     monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
 

@@ -617,12 +617,13 @@ def _tap_spotlight_result_if_visible(
     phone.tap_xy(tap_x, cy)
     scene_after_tap = _perceive_after_settle(phone, settle_s)
     classified = classify_ios_scene(scene_after_tap, viewport_size=_viewport_size(phone))
-    return (
-        not is_ios_home_screen(scene_after_tap, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone))
-        and not _looks_like_spotlight_results(scene_after_tap)
-        and classified.kind != "system_search"
-        and _scene_has_target_label(scene_after_tap, labels)
-    )
+    if (
+        is_ios_home_screen(scene_after_tap, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone))
+        or _looks_like_spotlight_results(scene_after_tap)
+        or classified.kind == "system_search"
+    ):
+        return False
+    return _opened_expected_app_or_recover(phone, scene_after_tap, labels, settle_s=settle_s)
 
 
 def _spotlight_result_candidates(scene: Scene, labels: Iterable[str]) -> list[UIElement]:
@@ -695,7 +696,7 @@ def open_app_via_spotlight(
     scene = _perceive_after_settle(phone, settle_s)
     if is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
         return False
-    return _scene_has_target_label(scene, app_labels)
+    return _opened_expected_app_or_recover(phone, scene, app_labels, settle_s=settle_s)
 
 
 def _clear_spotlight_query(phone, *, settle_s: float) -> None:
@@ -718,12 +719,13 @@ def _open_spotlight_result_with_return_if_visible(
     phone.key(0, _KEY_RETURN)
     scene_after_return = _perceive_after_settle(phone, settle_s)
     classified = classify_ios_scene(scene_after_return, viewport_size=_viewport_size(phone))
-    return (
-        not is_ios_home_screen(scene_after_return, viewport_size=_viewport_size(phone))
-        and not _looks_like_spotlight_results(scene_after_return)
-        and classified.kind != "system_search"
-        and _scene_has_target_label(scene_after_return, labels)
-    )
+    if (
+        is_ios_home_screen(scene_after_return, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone))
+        or _looks_like_spotlight_results(scene_after_return)
+        or classified.kind == "system_search"
+    ):
+        return False
+    return _opened_expected_app_or_recover(phone, scene_after_return, labels, settle_s=settle_s)
 
 
 def _scene_has_target_label(scene: Scene, labels: Iterable[str]) -> bool:
@@ -781,7 +783,7 @@ def _opened_expected_app_or_recover(
     if not _requires_post_open_target_label(app_labels):
         return True
     classified = classify_ios_scene(scene, viewport_size=_viewport_size(phone))
-    if classified.kind.startswith("settings_") or _scene_has_target_label(scene, app_labels):
+    if classified.kind.startswith("settings_"):
         return True
     # An "unknown" scene may be the target app reopened onto a sub-page whose
     # chrome defeats detection. Try climbing out before giving up — recovering
