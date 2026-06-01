@@ -194,8 +194,6 @@ def validate_report(
     sidebar_exhaustive = _root_sidebar_exhaustive(root_coverage)
     if root_coverage.get("sidebar_absent") and not sidebar_exhaustive:
         errors.append("root_coverage.sidebar_absent requires sidebar_exhaustive evidence")
-    if sidebar_exhaustive:
-        entry_exempt |= _root_sidebar_absent_labels(root_coverage)
     expected = root_coverage.get("expected", [])
     reported_visited = root_coverage.get("visited", [])
     missing = root_coverage.get("missing", [])

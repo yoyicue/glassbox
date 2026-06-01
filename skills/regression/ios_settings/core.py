@@ -1151,7 +1151,7 @@ def _entry_exempt_sections(visits: list[PageVisit], *, phone=None) -> set[str]:
             platform=_phone_platform(phone),
             phone_model=_phone_model(phone),
         )
-    ) | settings_context.sidebar_absent_root_labels(phone)
+    )
 
 
 def _phone_model(phone) -> str | None:

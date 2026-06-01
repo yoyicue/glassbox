@@ -16,10 +16,11 @@ ROUNDS ?= 1
 OUT ?= artifacts/computer_use_success_rate/benchmark.json
 ARTIFACT_ROOT ?= artifacts/computer_use_success_rate/runs
 REPORT_DIR ?= artifacts/computer_use_success_rate/reports
-TERMINAL_EXPECTED_STATE ?= {"kind":"page_id","payload":{"page_id":"settings/root"}}
+TERMINAL_EXPECTED_STATE ?= {"kind":"root_coverage_complete","payload":{}}
 COMPUTER_USE_SUCCESS_RATE ?= uv run python -m skills.regression.computer_use_success_rate
 
 computer-use-success-rate-ios-settings:
+	GLASSBOX_PICOKVM_ROBUST_CAPTURE=$${GLASSBOX_PICOKVM_ROBUST_CAPTURE:-1} \
 	$(COMPUTER_USE_SUCCESS_RATE) run-ios-settings \
 		--rounds $(ROUNDS) \
 		--out "$(OUT)" \

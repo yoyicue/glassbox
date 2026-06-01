@@ -103,7 +103,7 @@ auto-compared).** One JSON document per benchmark run:
     {
       "task": "settings_readonly_walkthrough",
       "round": 0,
-      "terminal_expected_state": { "kind": "page_id|visible_text|…", "payload": {} },
+      "terminal_expected_state": { "kind": "page_id|visible_text|root_coverage_complete|…", "payload": {} },
       "outcome": "succeeded|failed|unknown",
       "final_state": { "page_id": "…", "is_anchor": true },
       "root_pages_expected": 17,        // size of the task's expected top-level page set
@@ -190,8 +190,12 @@ diffs):**
   completion" — it is not the recovery action itself.
 - A strategy switch within one action is **not** a new action; it increments
   `strategy_switches`. A retry of the same strategy increments `retries`.
-- `task_completion_rate` = rounds whose `final_state` satisfies the task's
-  `terminal_expected_state` ÷ total rounds.
+- `task_completion_rate` = rounds whose task evidence satisfies
+  `terminal_expected_state` ÷ total rounds. For ordinary terminal kinds
+  (`page_id`, `visible_text`, element states), that evidence is `final_state`.
+  For the Settings drill-down, `root_coverage_complete` means every required
+  reachable root section was actually entered; blocked, device-unavailable, and
+  entry-exempt sections are excluded.
 - `root_pages_coverage` = mean over rounds of `root_pages_covered ÷ (expected −
   blocked)`. The walkthrough's `root_coverage` classifies each expected section
   (`reporting.classify_root_coverage`):
@@ -200,8 +204,9 @@ diffs):**
   - **visible_only** — the row was seen on the scrolled root list but not entered
     (`record_visible_root_row_visits`). Counts as `missing` for coverage.
   - **blocked** — deliberately not entered for safety (e.g. Face ID, Wallet,
-    flagged `unsafe_text` in `rejected_candidates`). **Excluded from the
-    denominator** so unreachable pages do not penalize coverage.
+    flagged `unsafe_text` in `rejected_candidates`). `entry_exempt` and
+    `device_unavailable` report entries are treated the same way. **Excluded
+    from the denominator** so unreachable pages do not penalize coverage.
   - **missing** — not seen at all.
 
   So coverage measures **fraction of reachable sections actually entered**, not
@@ -210,8 +215,9 @@ diffs):**
   screenshot, per-visit text is just the label), while `run_full --drill-down`
   opens each section's detail page and saves a verifiable per-page screenshot
   (`IOS_SETTINGS_SAVE_VIEW_SNAPSHOTS`), turning rows into `entered`.
-  `terminal_expected_state` (e.g. "ended at Settings root") stays a separate,
-  coarser end-state signal. `root_pages_coverage` is higher-is-better in
+  `terminal_expected_state` can stay a separate, coarser end-state signal (for
+  example, "ended at Settings root") or be set to `root_coverage_complete` when
+  the task definition is exhaustive root coverage. `root_pages_coverage` is higher-is-better in
   `compare` (regression on a drop), like the success rates.
 
 **Acceptance criteria:**
@@ -418,7 +424,7 @@ P3**:
    `python -m skills.regression.computer_use_success_rate`; the repository
    `Makefile` exposes `computer-use-success-rate-ios-settings` as the
    unattended Settings benchmark wrapper.
-   `task_completion_rate` is computed from the final state satisfying
+   `task_completion_rate` is computed from task evidence satisfying
    `terminal_expected_state`; action success remains a separate primary-action
    metric. Metrics and compare output also include `vlm_calls`,
    `vlm_calls_per_task`, and VLM cache hit/miss metrics so P1 cost is visible.

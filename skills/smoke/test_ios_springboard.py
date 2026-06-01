@@ -717,6 +717,64 @@ def test_open_app_from_springboard_falls_back_to_spotlight_when_home_ocr_fails(m
 
 
 @pytest.mark.smoke
+def test_open_app_from_springboard_uses_spotlight_from_widget_surface(monkeypatch):
+    calls: list[tuple[str, tuple[str, ...]]] = []
+
+    def fake_spotlight(phone, labels, *, settle_s=0.8):
+        calls.append(("spotlight", tuple(labels)))
+        return True
+
+    def fail_icon_search(*args, **kwargs):
+        raise AssertionError("widget surfaces should use Spotlight before icon search")
+
+    monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
+    monkeypatch.setattr("glassbox.ios.springboard.open_app_via_spotlight", fake_spotlight)
+    monkeypatch.setattr("glassbox.ios.springboard._tap_icon_any", fail_icon_search)
+
+    scene = _scene(
+        _el("Q Search for a city or ai...", 34, 94, w=190),
+        _el("MY LOCATION", 408, 130, w=80),
+        _el("Daxing", 401, 148, w=92),
+        _el("31°", 402, 184, w=112),
+        _el("Sunny", 420, 264, w=58),
+        _el("32°", 286, 610, w=44),
+        _el("30°", 360, 610, w=44),
+        _el("10-DAY FORECAST", 294, 576, w=120),
+    )
+    scene.viewport_size = (640, 989)
+    scene.platform_scene_kind = "springboard"
+
+    class FakePhone:
+        def __init__(self):
+            self.actions: list[str] = []
+
+        def _viewport_size(self):
+            return 640, 989
+
+        def home(self):
+            self.actions.append("home")
+
+        def perceive(self):
+            return scene
+
+        def invalidate_perceive_cache(self):
+            self.actions.append("invalidate")
+
+        def swipe_right(self):
+            self.actions.append("swipe_right")
+
+        def swipe_left(self):
+            self.actions.append("swipe_left")
+
+    phone = FakePhone()
+
+    assert open_app_from_springboard(phone, ("设置", "Settings"), settle_s=0.0)
+    assert calls == [("spotlight", ("设置", "Settings"))]
+    assert "swipe_right" not in phone.actions
+    assert "swipe_left" not in phone.actions
+
+
+@pytest.mark.smoke
 def test_open_app_via_spotlight_uses_keyboard_search(monkeypatch):
     monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
 

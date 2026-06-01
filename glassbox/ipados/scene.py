@@ -234,8 +234,9 @@ def _settings_top_search_evidence(
             result_path_hints += 1
         if cx > right and h * 0.05 <= cy <= h * 0.96:
             right_pane_items += 1
-    top_search = top_search_affordance or (
-        top_query_text and (edit_menu or no_results or result_path_hints > 0)
+    settings_result_evidence = no_results or result_path_hints > 0
+    top_search = settings_result_evidence and (
+        top_search_affordance or (top_query_text and (edit_menu or no_results or result_path_hints > 0))
     )
     if not top_search:
         return ()

@@ -294,7 +294,6 @@ def classify_root_coverage(
         _expected_labels(base.get("sidebar_absent", ()), expected=expected)
         if _sidebar_exhaustive(base) else set()
     )
-    device_unavailable |= sidebar_absent
     entry_exempt = coverage_only | device_unavailable
     search_absent = {
         label

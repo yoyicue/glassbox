@@ -147,6 +147,25 @@ def _looks_like_home_widget_text(text: str, *, viewport_width: int) -> bool:
     return stripped in {"No Events Today", "No Notes"}
 
 
+def _looks_like_today_widget_surface(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None,
+) -> bool:
+    """Return True for iPad Today/widget pages that are Home but not icon pages."""
+    w, h = _scene_size(scene, viewport_size)
+    labels = _icon_label_candidates(scene, viewport_size=(w, h))
+    if _has_strong_icon_grid(labels, viewport_size=(w, h)):
+        return False
+    texts = [_text(el) for el in scene.elements if _text(el)]
+    if any(text in {"SUGGESTED", "Suggested"} for text in texts):
+        return True
+    if any("Search for a city" in text or "10-DAY FORECAST" in text for text in texts):
+        return True
+    weatherish = sum(1 for text in texts if "°" in text or text in {"Sunny", "Cloudy", "Drizzle"})
+    return weatherish >= 3
+
+
 def _has_strong_icon_grid(labels: list[UIElement], *, viewport_size: tuple[int, int]) -> bool:
     w, h = viewport_size
     if len(labels) < 6:
@@ -827,6 +846,9 @@ def open_app_from_springboard(
             print("[sb] could not reach Home → spotlight fallback", flush=True)
             return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
         scene = waited
+    if _looks_like_today_widget_surface(scene, viewport_size=_viewport_size(phone)):
+        print("[sb] widget surface without icon grid → spotlight fallback", flush=True)
+        return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
     if _tap_icon_any(phone, scene, app_labels, icon_map=icon_map, settle_s=settle_s):
         return True
     attempted_folder_pages: set[tuple[tuple[str, int, int], ...]] = set()

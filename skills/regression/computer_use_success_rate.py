@@ -24,7 +24,14 @@ SCHEMA_VERSION = 1
 ARTIFACT_LEDGER_FILES = ("manifest.json", "actions.jsonl", "attempt_groups.jsonl", "audit.jsonl")
 SOURCE_VALUES = {"none", "system", "memory", "ocr", "vlm"}
 VERDICT_VALUES = {"succeeded", "failed", "unknown", "blocked", "transport_failed"}
-EXPECTED_STATE_VALUES = {"page_id", "visible_text", "element_appears", "element_gone", "unknown"}
+EXPECTED_STATE_VALUES = {
+    "page_id",
+    "visible_text",
+    "element_appears",
+    "element_gone",
+    "root_coverage_complete",
+    "unknown",
+}
 RAW_STATUS_VALUES = {
     "succeeded",
     "failed",
@@ -47,8 +54,8 @@ VLM_TRIGGER_VALUES = {
 
 DEFAULT_TERMINAL_EXPECTED_STATE = {"kind": "unknown", "payload": {}}
 IOS_SETTINGS_TERMINAL_EXPECTED_STATE = {
-    "kind": "page_id",
-    "payload": {"page_id": "settings/root"},
+    "kind": "root_coverage_complete",
+    "payload": {},
 }
 
 
@@ -444,10 +451,17 @@ def _coverage_from_report(root_coverage: Mapping[str, Any]) -> tuple[int, int, i
         entered = {str(page) for page in entered_list}
     else:
         entered = {str(page) for page in (root_coverage.get("visited") or [])}
-    blocked = {str(page) for page in (root_coverage.get("blocked") or [])}
+    blocked: set[str] = set()
+    for key in ("blocked", "entry_exempt", "device_unavailable"):
+        blocked.update(str(page) for page in (root_coverage.get(key) or []))
     covered = [page for page in expected if page in entered]
     blocked_pages = [page for page in expected if page in blocked and page not in entered]
-    missing = [page for page in expected if page not in entered and page not in blocked]
+    required_missing = root_coverage.get("required_missing")
+    if isinstance(required_missing, list):
+        missing_set = {str(page) for page in required_missing}
+        missing = [page for page in expected if page in missing_set and page not in entered and page not in blocked]
+    else:
+        missing = [page for page in expected if page not in entered and page not in blocked]
     return len(covered), len(expected), len(blocked_pages), missing
 
 
@@ -599,7 +613,12 @@ def _task_outcome(
     actions: list[dict[str, Any]],
     final_state: Mapping[str, Any],
     terminal_expected_state: Mapping[str, Any],
+    root_coverage_complete: bool | None = None,
 ) -> str:
+    if terminal_expected_state.get("kind") == "root_coverage_complete":
+        if root_coverage_complete is None:
+            return "unknown"
+        return "succeeded" if root_coverage_complete else "failed"
     terminal_met = _terminal_expected_state_met(final_state, terminal_expected_state)
     if terminal_met is not None:
         return "succeeded" if terminal_met else "failed"
@@ -812,11 +831,18 @@ def aggregate_run_dir(
         covered, expected_count, blocked_count, missing = _root_page_coverage(
             action_records, expected_root_pages
         )
+    reachable_count = max(0, expected_count - blocked_count)
+    root_coverage_complete = reachable_count > 0 and covered == reachable_count and not missing
     return {
         "task": task,
         "round": round_index,
         "terminal_expected_state": terminal,
-        "outcome": _task_outcome(action_records, final_state, terminal),
+        "outcome": _task_outcome(
+            action_records,
+            final_state,
+            terminal,
+            root_coverage_complete=root_coverage_complete,
+        ),
         "final_state": final_state,
         "root_pages_expected": expected_count,
         "root_pages_covered": covered,
@@ -1270,6 +1296,11 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
             cmd.extend(("--region", args.region))
         env = dict(os.environ)
         env["GLASSBOX_COMPUTER_USE_ARTIFACT_DIR"] = str(artifact_root)
+        # The long PicoKVM stream can yield partial H.264 decodes during
+        # multi-round runs. The gate needs fresh visual evidence, so default to
+        # the bounded reconnect/garble-rejection path while preserving explicit
+        # caller overrides.
+        env.setdefault("GLASSBOX_PICOKVM_ROBUST_CAPTURE", "1")
         result = subprocess.run(cmd, cwd=Path(__file__).resolve().parents[2], env=env)
         if result.returncode != 0 and not args.keep_going:
             return result.returncode

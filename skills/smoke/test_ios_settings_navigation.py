@@ -3374,7 +3374,7 @@ def test_search_recovery_skips_ipad_static_device_unavailable_roots():
 
 
 @pytest.mark.smoke
-def test_root_crawl_marks_row_tracked_sidebar_absent_roots_and_skips_search(monkeypatch):
+def test_root_crawl_marks_row_tracked_sidebar_absent_roots_without_exempting(monkeypatch):
     monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
     root = _scene(
         _el("Settings", 48, 72, w=70),
@@ -3440,8 +3440,32 @@ def test_root_crawl_marks_row_tracked_sidebar_absent_roots_and_skips_search(monk
     )
 
     assert settings_context.sidebar_absent_root_labels(phone) == {"通知"}
-    assert "通知" in walkthrough._entry_exempt_sections([], phone=phone)
-    assert opened == []
+    assert "通知" not in walkthrough._entry_exempt_sections([], phone=phone)
+    assert opened == ["通知"]
+
+
+@pytest.mark.smoke
+def test_sidebar_absent_roots_stay_required_missing_in_report():
+    from skills.regression.ios_settings import reporting as settings_reporting
+
+    coverage = settings_reporting.classify_root_coverage(
+        {
+            "expected": ["屏幕使用时间"],
+            "visited": [],
+            "missing": ["屏幕使用时间"],
+            "sidebar_absent": ["屏幕使用时间"],
+            "sidebar_exhaustive": ["true"],
+        },
+        visits=[],
+        rejected_candidates=[],
+        platform="ipados",
+        phone_model="ipad_mini_7",
+    )
+
+    assert coverage["sidebar_absent"] == ["屏幕使用时间"]
+    assert coverage["device_unavailable"] == []
+    assert coverage["entry_exempt"] == []
+    assert coverage["required_missing"] == ["屏幕使用时间"]
 
 
 # —— UTG-path return: try the learned memory path to root FIRST when flagged ——

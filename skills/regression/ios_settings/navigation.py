@@ -19,6 +19,7 @@ from glassbox.boundaries import action_host_backend_capabilities
 from glassbox.cognition import Box, UIElement
 from glassbox.cognition.text_match import compact_text
 from glassbox.ios.progress import is_time_text
+from glassbox.target_planner import TargetPlanner
 from skills.regression.ios_settings import context as settings_context
 from skills.regression.ios_settings import graph_state as settings_graph_state
 from skills.regression.ios_settings import reporting as settings_reporting
@@ -319,72 +320,33 @@ def open_visible_or_scroll_to_row(
     labels = tuple(labels)
     if not labels:
         return None
-    for attempt in range(5):
-        scene = phone.perceive()
-        hit = _visible_row_match(phone, scene, labels, actions)
-        if hit is not None:
-            return hit
-        vlm_hit = actions.vlm_point_for_label(
+    planner = getattr(phone, "target_planner", None) or TargetPlanner(phone)
+    region = "ipados_settings_sidebar" if _is_ipad_target(phone) else None
+
+    def fallback_locator(scene):
+        return actions.vlm_point_for_label(
             phone,
             labels[0],
             scene_kind=actions.scene_kind(scene, phone=phone),
         )
-        if vlm_hit is not None:
-            return vlm_hit
+
+    def log_seek_attempt(attempt: int) -> None:
         print(f"[scroll] seek-row attempt={attempt}", flush=True)
-        if attempt == 2:
-            actions.wheel_scroll_up(phone)
-        else:
-            actions.wheel_scroll_down(phone)
-        time.sleep(1.0)
-    return None
 
-
-def _visible_row_match(
-    phone,
-    scene,
-    labels: tuple[str, ...],
-    actions: SettingsNavigationActions,
-) -> UIElement | None:
-    target_canonicals = {
-        canonical for canonical in (actions.canonical_expected_root_label(label) for label in labels)
-        if canonical is not None
-    }
-    if _is_ipad_target(phone):
-        w, _h = phone.viewport_size()
-        from glassbox.ipados.scene import sidebar_right_x
-
-        sidebar_right = sidebar_right_x(w)
-        elements = [
-            element for element in scene.elements
-            if element.box.center[0] <= sidebar_right + 24
-        ]
-    else:
-        elements = list(scene.elements)
-    for element in elements:
-        text = (element.text or "").strip()
-        if not text:
-            continue
-        if text in labels:
-            return element
-        if target_canonicals and actions.canonical_expected_root_label(text) in target_canonicals:
-            return element
-        if any(_matches_split_sidebar_row_label(text, label) for label in labels):
-            return element
-    return actions.match_any(elements, labels)
-
-
-def _matches_split_sidebar_row_label(text: str, label: str) -> bool:
-    """Match OCR split rows such as ``Home Screen &`` to their full label."""
-    text = (text or "").strip()
-    label = (label or "").strip()
-    if not text.endswith("&") or len(label) <= len(text):
-        return False
-    return _compact_row_label(label).startswith(_compact_row_label(text))
-
-
-def _compact_row_label(text: str) -> str:
-    return "".join(str(text or "").casefold().split())
+    return planner.scroll_to_visible_label(
+        labels,
+        region=region,
+        canonicalizer=actions.canonical_expected_root_label,
+        match_any=actions.match_any,
+        fallback_locator=fallback_locator,
+        perceive=phone.perceive,
+        scroll_down=lambda: actions.wheel_scroll_down(phone),
+        scroll_up=lambda: actions.wheel_scroll_up(phone),
+        max_attempts=5,
+        upward_attempt=2,
+        settle_s=1.0,
+        on_seek_attempt=log_seek_attempt,
+    )
 
 
 def settings_row_tap_point(phone, row_hit: UIElement) -> tuple[int, int]:

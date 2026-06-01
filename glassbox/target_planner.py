@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from loguru import logger
@@ -16,6 +18,7 @@ from glassbox.action.actuation import (
     target_identity_for_element,
 )
 from glassbox.cognition import UIElement
+from glassbox.cognition.text_match import compact_text
 
 _KEY_RETURN = 0x28
 _REGROUND_MIN_SHIFT_PX = 24
@@ -113,6 +116,117 @@ class TargetPlanner:
         if icon.element.box != el.box or icon.element.text != el.text:
             return None
         return icon.tap_point
+
+    def find_visible_label(
+        self,
+        scene,
+        labels: Iterable[str],
+        *,
+        region: str | None = None,
+        canonicalizer: Callable[[str], str | None] | None = None,
+        match_any: Callable[..., UIElement | None] | None = None,
+    ) -> UIElement | None:
+        """Find a visible UI element by label, optionally scoped to a platform region."""
+        labels = tuple(label for label in labels if label)
+        if not labels:
+            return None
+        elements = self._elements_in_region(scene, region=region)
+        target_canonicals = self._target_canonicals(labels, canonicalizer)
+        for element in elements:
+            text = (element.text or "").strip()
+            if not text:
+                continue
+            if text in labels:
+                return element
+            if target_canonicals and canonicalizer is not None and canonicalizer(text) in target_canonicals:
+                return element
+            if any(self._matches_split_row_label(text, label) for label in labels):
+                return element
+        if match_any is not None:
+            return match_any(elements, labels)
+        return None
+
+    def scroll_to_visible_label(
+        self,
+        labels: Iterable[str],
+        *,
+        region: str | None = None,
+        canonicalizer: Callable[[str], str | None] | None = None,
+        match_any: Callable[..., UIElement | None] | None = None,
+        fallback_locator: Callable[[Any], UIElement | None] | None = None,
+        perceive: Callable[[], Any] | None = None,
+        scroll_down: Callable[[], None],
+        scroll_up: Callable[[], None] | None = None,
+        max_attempts: int = 5,
+        upward_attempt: int | None = 2,
+        settle_s: float = 1.0,
+        on_seek_attempt: Callable[[int], None] | None = None,
+    ) -> UIElement | None:
+        """Seek a label by repeated perception, optional fallback locating, and scrolling."""
+        labels = tuple(label for label in labels if label)
+        if not labels:
+            return None
+        perceive = perceive or self._phone.perceive
+        for attempt in range(max(1, max_attempts)):
+            scene = perceive()
+            hit = self.find_visible_label(
+                scene,
+                labels,
+                region=region,
+                canonicalizer=canonicalizer,
+                match_any=match_any,
+            )
+            if hit is not None:
+                return hit
+            if fallback_locator is not None:
+                fallback_hit = fallback_locator(scene)
+                if fallback_hit is not None:
+                    return fallback_hit
+            if on_seek_attempt is not None:
+                on_seek_attempt(attempt)
+            if upward_attempt is not None and attempt == upward_attempt and scroll_up is not None:
+                scroll_up()
+            else:
+                scroll_down()
+            if settle_s > 0:
+                time.sleep(settle_s)
+        return None
+
+    def _elements_in_region(self, scene, *, region: str | None) -> list[UIElement]:
+        elements = list(getattr(scene, "elements", ()) or ())
+        if region is None:
+            return elements
+        if region == "ipados_settings_sidebar":
+            width, _height = self._viewport_size()
+            from glassbox.ipados.scene import sidebar_right_x
+
+            sidebar_right = sidebar_right_x(width)
+            return [
+                element for element in elements
+                if element.box.center[0] <= sidebar_right + 24
+            ]
+        raise ValueError(f"unknown target region: {region}")
+
+    @staticmethod
+    def _target_canonicals(
+        labels: tuple[str, ...],
+        canonicalizer: Callable[[str], str | None] | None,
+    ) -> set[str]:
+        if canonicalizer is None:
+            return set()
+        return {
+            canonical for canonical in (canonicalizer(label) for label in labels)
+            if canonical is not None
+        }
+
+    @staticmethod
+    def _matches_split_row_label(text: str, label: str) -> bool:
+        """Match OCR split rows such as ``Home Screen &`` to their full label."""
+        text = (text or "").strip()
+        label = (label or "").strip()
+        if not text.endswith("&") or len(label) <= len(text):
+            return False
+        return compact_text(label).casefold().startswith(compact_text(text).casefold())
 
     def picokvm_settings_row_tap_point_for_element(self, el: UIElement) -> tuple[int, int] | None:
         phone = self._phone

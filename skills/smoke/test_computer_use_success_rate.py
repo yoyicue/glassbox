@@ -635,6 +635,62 @@ def test_root_page_coverage_uses_entered_and_excludes_blocked(tmp_path):
     assert validate_benchmark(payload) == []
 
 
+def test_task_completion_rate_supports_root_coverage_terminal_state(tmp_path):
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path)],
+        terminal_expected_state={"kind": "root_coverage_complete", "payload": {}},
+        root_coverages=[{
+            "expected": ["A", "B", "C"],
+            "entered": ["A", "B"],
+            "blocked": ["C"],
+        }],
+    )
+
+    assert validate_benchmark(payload) == []
+    assert payload["tasks"][0]["outcome"] == "succeeded"
+    assert payload["metrics"]["task_completion_rate"] == 1.0
+
+
+def test_root_coverage_terminal_state_fails_when_reachable_page_is_missing(tmp_path):
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path)],
+        terminal_expected_state={"kind": "root_coverage_complete", "payload": {}},
+        root_coverages=[{
+            "expected": ["A", "B"],
+            "entered": ["A"],
+            "visible_only": ["B"],
+        }],
+    )
+
+    assert validate_benchmark(payload) == []
+    assert payload["tasks"][0]["outcome"] == "failed"
+    assert payload["metrics"]["task_completion_rate"] == 0.0
+
+
+def test_root_coverage_terminal_state_uses_report_required_missing_and_exemptions(tmp_path):
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path)],
+        terminal_expected_state={"kind": "root_coverage_complete", "payload": {}},
+        root_coverages=[{
+            "expected": ["A", "B", "C", "D"],
+            "entered": ["A", "B"],
+            "entry_exempt": ["C"],
+            "device_unavailable": ["D"],
+            "missing": ["C", "D"],
+            "required_missing": [],
+        }],
+    )
+
+    task = payload["tasks"][0]
+    assert validate_benchmark(payload) == []
+    assert task["root_pages_covered"] == 2
+    assert task["root_pages_blocked"] == 2
+    assert task["root_pages_missing"] == []
+    assert task["outcome"] == "succeeded"
+    assert payload["metrics"]["root_pages_coverage"] == 1.0
+    assert payload["metrics"]["task_completion_rate"] == 1.0
+
+
 def test_validate_benchmark_rejects_covered_exceeding_reachable(tmp_path):
     """covered > expected − blocked would report root_pages_coverage > 1.0
     (covered ÷ reachable in _metrics), so validation must reject it."""
@@ -1188,12 +1244,80 @@ def test_cli_run_ios_settings_runs_rounds_and_aggregates(tmp_path, monkeypatch):
     assert len(calls) == 2
     assert all(call[0][-2:] == ["--quick", "--skip-diagnose"] for call in calls)
     assert all(call[2]["GLASSBOX_COMPUTER_USE_ARTIFACT_DIR"] == str(artifact_root.resolve()) for call in calls)
+    assert all(call[2]["GLASSBOX_PICOKVM_ROBUST_CAPTURE"] == "1" for call in calls)
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert validate_benchmark(payload) == []
     assert payload["config"]["rounds"] == 2
     assert payload["config"]["task_set"] == "ios_settings"
     assert [task["round"] for task in payload["tasks"]] == [0, 1]
     assert payload["metrics"]["task_completion_rate"] == 1.0
+
+
+def test_cli_run_ios_settings_preserves_explicit_picokvm_robust_capture(tmp_path, monkeypatch):
+    artifact_root = tmp_path / "artifacts"
+    report_dir = tmp_path / "reports"
+    out = tmp_path / "benchmark.json"
+    calls = []
+
+    def fake_run(cmd, *, cwd, env):
+        index = len(calls)
+        calls.append((cmd, cwd, env))
+        run_dir = artifact_root / f"run-{index:03d}"
+        _write_json(
+            run_dir / "manifest.json",
+            {
+                "run_id": f"run-{index:03d}",
+                "device": {"model": "iphone_test"},
+            },
+        )
+        _write_json(run_dir / "scenes" / "after.json", {"page_id": "settings/root"})
+        _append_jsonl(
+            run_dir / "actions.jsonl",
+            _action(
+                f"act_{index:06d}",
+                f"grp_{index:06d}",
+                status="succeeded",
+                strategy="springboard_icon_tap",
+                scene_file="scenes/after.json",
+            ),
+        )
+        _append_jsonl(
+            run_dir / "attempt_groups.jsonl",
+            {
+                "attempt_group_id": f"grp_{index:06d}",
+                "op": "launch_app",
+                "actor": "agent",
+                "attempt_ids": [f"act_{index:06d}"],
+                "group_status": "succeeded",
+                "retry_count": 0,
+            },
+        )
+        _append_jsonl(run_dir / "audit.jsonl")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setenv("GLASSBOX_PICOKVM_ROBUST_CAPTURE", "0")
+    monkeypatch.setattr(success_rate.subprocess, "run", fake_run)
+
+    rc = main(
+        [
+            "run-ios-settings",
+            "--rounds",
+            "1",
+            "--out",
+            str(out),
+            "--artifact-root",
+            str(artifact_root),
+            "--report-dir",
+            str(report_dir),
+            "--terminal-expected-state",
+            '{"kind":"page_id","payload":{"page_id":"settings/root"}}',
+            "--quick",
+            "--skip-diagnose",
+        ]
+    )
+
+    assert rc == 0
+    assert calls[0][2]["GLASSBOX_PICOKVM_ROBUST_CAPTURE"] == "0"
 
 
 def test_cli_run_ios_settings_rejects_incomplete_artifact_run(tmp_path, monkeypatch):
@@ -1333,4 +1457,4 @@ def test_make_entrypoint_wraps_ios_settings_success_rate_harness():
     assert "skills.regression.computer_use_success_rate" in makefile
     assert "run-ios-settings" in makefile
     assert "--rounds $(ROUNDS)" in makefile
-    assert 'TERMINAL_EXPECTED_STATE ?= {"kind":"page_id","payload":{"page_id":"settings/root"}}' in makefile
+    assert 'TERMINAL_EXPECTED_STATE ?= {"kind":"root_coverage_complete","payload":{}}' in makefile

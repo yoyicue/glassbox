@@ -627,6 +627,34 @@ def test_ipados_scene_classifier_weather_settings_search_detail_is_not_springboa
 
 
 @pytest.mark.smoke
+def test_ipados_scene_classifier_weather_app_search_is_not_settings_search_results():
+    scene = _scene(
+        _el("11:04AM Mon 1 Jun", 16, 14, w=120, h=12),
+        _el("Q Search for a city or ai...", 34, 92, w=190),
+        _el("Daxing", 38, 144, w=64),
+        _el("My Location", 38, 168, w=68),
+        _el("Sunny", 38, 202, w=36),
+        _el("Shanghai", 38, 250, w=86),
+        _el("Beijing", 38, 353, w=63),
+        _el("MY LOCATION", 406, 128, w=82),
+        _el("Daxing", 402, 143, w=91, h=34),
+        _el("31", 402, 182, w=86, h=70),
+        _el("Sunny conditions will continue all day. Wind gusts", 292, 400, w=294, h=16),
+        _el("Now", 292, 456, w=30, h=14),
+        _el("11AM", 344, 456, w=34, h=12),
+        _el("12PM", 398, 456, w=34, h=12),
+        _el("1PM", 452, 456, w=30, h=12),
+        _el("10-DAY FORECAST", 294, 574, w=120, h=12),
+    )
+    scene.viewport_size = (640, 989)
+
+    classified = classify_ipados_scene(scene)
+
+    assert classified.kind != "settings_search_results"
+    assert "ipad_settings_top_search" not in classified.evidence
+
+
+@pytest.mark.smoke
 def test_ios_scene_classifier_scrolled_app_settings_detail_without_nav_ocr():
     scene = _scene(
         _el("通讯录", 40, 230, w=66, h=24, ty="button"),
