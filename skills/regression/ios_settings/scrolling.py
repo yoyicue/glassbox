@@ -144,7 +144,7 @@ def call_wheel_scroll(method, ticks: int) -> None:
 def _settings_wheel_scroll(phone, ticks: int) -> None:
     focus = _settings_wheel_focus(phone)
     if focus is not None and hasattr(phone, "scroll_wheel"):
-        phone.scroll_wheel(ticks, focus_x=focus[0], focus_y=focus[1], focus_click=True)
+        phone.scroll_wheel(ticks, focus_x=focus[0], focus_y=focus[1], focus_click=False)
         return
     method = phone.wheel_scroll_down if ticks > 0 else phone.wheel_scroll_up
     call_wheel_scroll(method, abs(ticks))

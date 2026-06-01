@@ -264,7 +264,7 @@ def test_scroll_down_confirmed_marks_top_status_bar_boundary_overshoot(monkeypat
     assert outcome == "top-overshoot"
 
 @pytest.mark.smoke
-def test_ipad_settings_wheel_clicks_sidebar_focus_before_wheel():
+def test_ipad_settings_wheel_hovers_sidebar_focus_without_clicking_row():
     class IPadWheelPhone:
         device_geometry = SimpleNamespace(model="ipad_mini_7")
 
@@ -292,7 +292,7 @@ def test_ipad_settings_wheel_clicks_sidebar_focus_before_wheel():
     _wheel_scroll_down(phone, ticks=6)
 
     assert phone.calls == [
-        (6, {"focus_x": 147, "focus_y": 539, "focus_click": True}),
+        (6, {"focus_x": 147, "focus_y": 539, "focus_click": False}),
     ]
 
 
@@ -349,7 +349,7 @@ def test_ipad_root_scroll_down_confirmed_uses_row_tracked_ticks_for_missing_root
 
     assert outcome == "stuck"
     assert phone.calls == [
-        (4, {"focus_x": 147, "focus_y": 539, "focus_click": True}),
+        (4, {"focus_x": 147, "focus_y": 539, "focus_click": False}),
     ]
 
 
