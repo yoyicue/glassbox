@@ -114,6 +114,50 @@ these should feed [`code_health_roadmap.md`](code_health_roadmap.md).
 | **`IOSSafeArea.insets()` stub + `Insets`** `ios/safe_area.py:53`, `boundaries.py:37` | always returns empty `Insets()`; zero callers (live method is `bottom_hit_point`) | keep provider + `bottom_hit_point` |
 | **Misc dead leaves** | `_KEY_UP_ARROW`/`_KEY_V` keycodes (`effector.py:31`, zero refs); `assistive_touch_layout_model` + 3 helpers behind an unimported shim; `apply_ios_classification` (`ios/scene.py:287`, test-only); `make_vlm_client`/Kimi aliases (`DEFAULT_URL`/`MODEL` zero refs); `ios/crawl.py` `settle_then_read`/`ReadPolicy`/3 result types | each trivial-to-low risk; keep the singular `assistive_touch_primitive`, `classify_scroll_attempt`, `CrawlMetrics` (live) |
 
+### Prune outcome (verified, 2026-06-01 — branch `chore/recognition-pipeline-prunes`)
+
+Each removal below was applied on a worktree branch and verified (targeted tests
++ `ruff check glassbox skills` + full smoke suite green, except the inherited
+honest-gate floor). Closer inspection **corrected several §4 entries** — the
+audit's "redundant" label conflated genuine dead code with live seams / tested
+pure logic.
+
+**Removed (6 commits):**
+- Duplicate `ocr_vision.find_text`; PicoKVM `_KEY_UP_ARROW`/`_KEY_V` keycodes;
+  `StuckLoopDetector.observe_and_recover`.
+- AssistiveTouch dead helpers (`assistive_touch_layout_model`,
+  `*_safe_primitives`, `*_primitive_catalog`, `scene_has_assistive_touch_labels`)
+  + the unimported `ios_gestures/assistive_touch.py` shim.
+- IconDetect registry: `IconDetectFunctionAdapter` + `icon_contract.py`,
+  `_icon_detector_factory`, `select_icon_detector_backend`,
+  `DEFAULT_ICON_DETECTOR_REGISTRY`, the `glassbox.icon_detectors` entry point.
+  (Live path uses `icon_detect.active_icon_backend()` + raw `detect_icons()`.)
+- `ios.crawl` `ReadPolicy` + `settle_then_read` (superseded read/settle) and the
+  test-only `NavigationCandidate`/`NavigationResult` records.
+- `IOSSafeArea.insets()` stub + `SafeAreaProvider.insets` + the `Insets` dataclass.
+- Legacy Kimi aliases (`KimiResponse`/`KimiVL`/`KimiAnthropic`/`make_kimi_client`/
+  `DEFAULT_URL`/`DEFAULT_MODEL`); migrated 6 smoke tests to `VLMResponse` etc.
+
+**Kept — audit errors / net-negative on inspection:**
+- `ScrollResult` — NOT dead: it is `classify_scroll_attempt`'s live return type.
+- `NavigationCandidate` — the entry conflated `ios.crawl.NavigationCandidate`
+  (test-only, removed) with `crawl.policy.NavigationCandidate` (heavily live in
+  `ai.py`); only the former was removed.
+- `PicoKVMVideoConfig`/`Settings` — a deliberate decoupling seam (keeps the
+  frame-source layer independent of the PicoKVM effector package); the
+  "unreachable fallback" *is* the seam. Removing it re-couples perception→effector.
+- `IOSRecoveryProvider` — a declared Platform capability slot (`Platform.recovery`
+  / `RecoveryProvider` Protocol) and a §3 wire-default candidate; removing it
+  tears out a boundary contract — an architecture decision, not cleanup.
+- `apply_ios_classification` — a widely-used test fixture (6 call sites / 4
+  files), not dead; removal forces risky setup rewrites for marginal value.
+- `SemanticActionPlan.run()` — NOT dead duplication: a pure, 12-unit-test-covered
+  ladder *decision* engine. The orchestrator's `_run_semantic_plan_loop` is the
+  I/O-interleaved production version (separately integration-tested) and cannot
+  reuse `run()`. Only `run()`'s `escalate_vlm`/`vlm_budget_per_action` are truly
+  doubly-dead; removing the whole engine would convert clean unit tests into
+  brittle integration tests and net-reduce coverage.
+
 ## 5. Correctly opt-in — do **not** over-wire (Occam cuts both ways)
 
 - **P1 VLM escalation + the whole VLM layer** (`vlm_gate`, describe/enrich, SoM,
