@@ -54,12 +54,12 @@ _ZH_OCR_LANGUAGES = ("zh-Hans", "en-US")
 _EN_OCR_LANGUAGES = ("en-US",)
 
 # iOS proper nouns that NL language correction must NOT "fix" into dictionary
-# words. Seeded with the walkthrough "+"/"-" then the brand tokens that actually
-# appear in the en/HK Settings corpus (occurrence counts, snapshot 2026-06-01:
-# WLAN 1107×, Siri 1684×, iCloud 1080×, VoiceOver 428×, FaceTime 134×, AirDrop
-# 27×, AppleCare 27×). Only consumed when uses_language_correction=True, which is
-# the flag-gated English path (`resolve_ocr_locale`); zh keeps the ("+","-")
-# default and is unaffected.
+# words. Seeded with the walkthrough "+"/"-", then the iOS brand tokens that
+# recur in the en/HK Settings corpus (e.g. WLAN — the en-HK/en-CN label for
+# Wi-Fi). Membership is pinned by
+# skills/smoke/test_locale.py::test_en_ocr_correction_on_with_flag. Only consumed
+# when uses_language_correction=True (the flag-gated English path,
+# `resolve_ocr_locale`); zh keeps the ("+","-") default and is unaffected.
 _EN_CUSTOM_WORDS = (
     "+",
     "-",
@@ -159,7 +159,7 @@ def resolve_ocr_locale(cfg: AgentConfig, *, registry: LocaleRegistry | None = No
         coverage and MUST clear an on-rig task_completion A/B before defaulting on.
     """
     loc = resolve_locale(cfg, registry=registry)
-    if loc.language == "en" and getattr(cfg, "en_ocr_correction", False):
+    if loc.language == "en" and cfg.en_ocr_correction:
         return replace(loc, uses_language_correction=True, custom_words=_EN_CUSTOM_WORDS)
     return loc
 
