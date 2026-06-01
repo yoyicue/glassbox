@@ -17,9 +17,10 @@ from glassbox.platforms import IOSPlatform
 
 
 class FakeRpc:
-    def __init__(self):
+    def __init__(self, *, video_states=None):
         self.calls = []
         self.next_id = 0
+        self.video_states = list(video_states or [{"ready": True}])
 
     def ping(self):
         return self.call("ping")
@@ -33,12 +34,14 @@ class FakeRpc:
         if method == "getDeviceID":
             return PicoKVMRpcResponse(id=self.next_id, result="unit-device")
         if method == "getVideoState":
-            return PicoKVMRpcResponse(id=self.next_id, result={"ready": True})
+            if len(self.video_states) > 1:
+                return PicoKVMRpcResponse(id=self.next_id, result=self.video_states.pop(0))
+            return PicoKVMRpcResponse(id=self.next_id, result=self.video_states[0])
         return PicoKVMRpcResponse(id=self.next_id, result=None)
 
 
-def make_eff(*, wheel_enabled=False, semantic_verify_enabled=False, device_geometry=None, crop=None):
-    rpc = FakeRpc()
+def make_eff(*, wheel_enabled=False, semantic_verify_enabled=False, device_geometry=None, crop=None, rpc=None):
+    rpc = rpc or FakeRpc()
     cfg = PicoKVMEffectorConfig(
         _env_file=None,
         wheel_enabled=wheel_enabled,
@@ -124,6 +127,38 @@ def test_picokvm_effector_preflight_and_supports():
     assert eff.capabilities().paste_strategy == "unsupported"
     assert eff.capabilities().switch_input_source_strategy == "unsupported"
     assert eff.capabilities().requires_assistive_touch is True
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_preflight_recovers_no_signal_with_hid_wake_unlock():
+    geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    rpc = FakeRpc(video_states=[{"ready": False, "error": "no_signal"}, {"ready": True}])
+    eff, rpc = make_eff(device_geometry=geometry, rpc=rpc)
+
+    result = eff.preflight()
+
+    assert result.ok is True
+    assert result.code == "ok"
+    assert "recovered" in result.message
+    assert ("keyboardReport", {"modifier": 0, "keys": [0x2C]}) in rpc.calls
+    assert ("keyboardReport", {"modifier": 0, "keys": [0x28]}) in rpc.calls
+    assert any(method == "absMouseReport" and params["buttons"] == 1 for method, params in rpc.calls)
+
+
+@pytest.mark.smoke
+def test_picokvm_iphone_preflight_also_recovers_no_signal_with_hid_wake_unlock():
+    geometry = SimpleNamespace(model="iphone_17_pro_max", phone_size=(1320, 2868), phone_points=(440, 956))
+    rpc = FakeRpc(video_states=[{"ready": False, "error": "no_signal"}, {"ready": True}])
+    eff, rpc = make_eff(device_geometry=geometry, rpc=rpc)
+
+    result = eff.preflight()
+
+    assert result.ok is True
+    assert result.code == "ok"
+    assert "recovered" in result.message
+    assert ("keyboardReport", {"modifier": 0, "keys": [0x2C]}) in rpc.calls
+    assert ("keyboardReport", {"modifier": 0, "keys": [0x28]}) in rpc.calls
+    assert any(method == "absMouseReport" and params["buttons"] == 1 for method, params in rpc.calls)
 
 
 @pytest.mark.smoke
@@ -664,6 +699,50 @@ def test_picokvm_page_slide_presets_use_raw_logical_trajectories():
     assert result.ok is True
     assert rpc.calls[0] == ("absMouseReport", {"x": logical_fraction(0.08), "y": expected_y, "buttons": 0})
     assert rpc.calls[-1] == ("absMouseReport", {"x": logical_fraction(0.92), "y": expected_y, "buttons": 0})
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_page_slide_uses_reset_and_edge_to_edge_drag():
+    geometry = SimpleNamespace(model="ipad_mini_7", phone_size=(1488, 2266), phone_points=(744, 1133))
+    eff, rpc = make_eff(device_geometry=geometry)
+
+    result = eff.page_slide_left()
+
+    assert result.ok is True
+    expected_y = logical_fraction(0.56)
+    center = logical_fraction(0.50)
+    assert rpc.calls[:3] == [
+        ("keyboardReport", {"modifier": 0, "keys": []}),
+        ("absMouseReport", {"x": center, "y": center, "buttons": 0}),
+        ("absMouseReport", {"x": center, "y": center, "buttons": 0}),
+    ]
+    assert rpc.calls[3] == (
+        "absMouseReport",
+        {"x": logical_fraction(0.997), "y": expected_y, "buttons": 0},
+    )
+    assert rpc.calls[-4] == (
+        "absMouseReport",
+        {"x": logical_fraction(0.003), "y": expected_y, "buttons": 0},
+    )
+    assert rpc.calls[-3:] == [
+        ("keyboardReport", {"modifier": 0, "keys": []}),
+        ("absMouseReport", {"x": center, "y": center, "buttons": 0}),
+        ("absMouseReport", {"x": center, "y": center, "buttons": 0}),
+    ]
+    assert len(rpc.calls) == 30
+
+    rpc.calls.clear()
+    result = eff.page_slide_right()
+
+    assert result.ok is True
+    assert rpc.calls[3] == (
+        "absMouseReport",
+        {"x": logical_fraction(0.003), "y": expected_y, "buttons": 0},
+    )
+    assert rpc.calls[-4] == (
+        "absMouseReport",
+        {"x": logical_fraction(0.997), "y": expected_y, "buttons": 0},
+    )
 
 
 @pytest.mark.smoke

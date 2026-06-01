@@ -131,6 +131,7 @@ class Scene(BaseModel):
     observation_mode: str = "raw"
     stable_frame: bool | None = None
     viewport_size: tuple[int, int] | None = None
+    ocr_vote_metadata: dict[str, Any] = Field(default_factory=dict)
 
     # populated by Layer 3 (optional)
     scene_type: str | None = None          # legacy compatibility alias

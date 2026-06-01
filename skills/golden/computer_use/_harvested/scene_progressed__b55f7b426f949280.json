@@ -1,0 +1,51 @@
+{
+  "case_id": "scene_progressed_b55f7b426f949280",
+  "action": "drag",
+  "verifier": "scene_progressed",
+  "expected_status": "succeeded",
+  "before_texts": [
+    "2:57PM Mon 1 Jun",
+    "Clock",
+    "Phone",
+    "Magnifler",
+    "Tunes Store",
+    "Tips",
+    "Weather",
+    "Transiate",
+    "Calculator",
+    "Stocks",
+    "Shortcuts",
+    "Podeasts",
+    "Health",
+    "Find My",
+    "Voice Memos",
+    "Preview",
+    "ww",
+    "Freeform",
+    "- W 0 100% L2",
+    "Contacts",
+    "TUPUTU",
+    "Measure",
+    "Journal"
+  ],
+  "after_texts": [
+    "2:57PM",
+    "Mon 1 Jun",
+    "Suggestions",
+    "Productivity & Finance",
+    "Other",
+    "QApp Library",
+    "Recently Added",
+    "Utilities",
+    "Creativity",
+    "Social",
+    "Q",
+    "-©100%",
+    "Information & Reading",
+    "Stv",
+    "Entertainment"
+  ],
+  "metadata": {
+    "verifier": "scene_progressed"
+  }
+}

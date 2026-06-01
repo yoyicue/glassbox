@@ -154,15 +154,30 @@ class PicoKVMEffectorConfig(BaseSettings):
     page_slide_start_edge_fraction: float = 0.92
     page_slide_end_edge_fraction: float = 0.08
     page_slide_y_fraction: float = 0.45
+    ipad_page_slide_start_edge_fraction: float = 0.997
+    ipad_page_slide_end_edge_fraction: float = 0.003
+    ipad_page_slide_y_fraction: float = 0.56
+    ipad_page_slide_down_hold_ms: int = 260
+    ipad_page_slide_up_hold_ms: int = 260
     preset_drag_down_hold_ms: int = 350
     preset_drag_up_hold_ms: int = 150
-    """Raw HID logical trajectory presets for PicoKVM drag-based gestures."""
+    """Raw HID logical trajectory presets for PicoKVM drag-based gestures.
+
+    The generic page-slide defaults preserve the original iPhone/AssistiveTouch
+    retakes. iPad uses the dedicated edge-to-edge preset above: live SpringBoard
+    retakes on 2026-06-01 showed the shorter iPhone-style slide only partially
+    moved pages, while a reset + full-width edge drag reached App Library.
+    """
     semantic_verify_enabled: bool = True
     """Verify opt-in system shortcuts with a fresh frame instead of ACK only."""
     semantic_verify_delay_ms: int = 800
     semantic_verify_timeout_ms: int = 1800
     semantic_verify_sample_interval_ms: int = 250
     semantic_verify_reopen_source: bool = True
+    no_video_wake_recovery_enabled: bool = True
+    """Try a bounded USB HID wake/unlock sequence when HDMI reports no_signal
+    before failing preflight. This is device-agnostic: the failure mode is the
+    HDMI output being asleep/unnegotiated, not an iPad-specific state."""
 
     stream_path: str = "/video/stream"
 
@@ -197,6 +212,9 @@ class PicoKVMEffectorConfig(BaseSettings):
         "page_slide_start_edge_fraction",
         "page_slide_end_edge_fraction",
         "page_slide_y_fraction",
+        "ipad_page_slide_start_edge_fraction",
+        "ipad_page_slide_end_edge_fraction",
+        "ipad_page_slide_y_fraction",
         "ipad_wheel_activation_ssh_timeout_s",
     )
     @classmethod
@@ -226,6 +244,8 @@ class PicoKVMEffectorConfig(BaseSettings):
         "keyboard_shortcut_gap_ms",
         "preset_drag_down_hold_ms",
         "preset_drag_up_hold_ms",
+        "ipad_page_slide_down_hold_ms",
+        "ipad_page_slide_up_hold_ms",
         "semantic_verify_delay_ms",
         "semantic_verify_timeout_ms",
         "semantic_verify_sample_interval_ms",

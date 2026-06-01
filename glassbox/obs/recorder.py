@@ -220,6 +220,7 @@ class Recorder:
                     if scene.viewport_size is not None
                     else (list(self._last_viewport_size) if self._last_viewport_size else None)
                 ),
+                "ocr_vote_metadata": dict(scene.ocr_vote_metadata),
                 "snapshot_seq": self._last_snapshot_seq,
                 "scene": scene.model_dump(mode="json"),
                 "scene_type": scene.scene_type,

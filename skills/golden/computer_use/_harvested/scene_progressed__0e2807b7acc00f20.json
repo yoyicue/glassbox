@@ -1,0 +1,48 @@
+{
+  "case_id": "scene_progressed_0e2807b7acc00f20",
+  "action": "close_foreground_app",
+  "verifier": "scene_progressed",
+  "expected_status": "succeeded",
+  "before_texts": [
+    "2:58PM Mon 1 Jun",
+    "Suggestions",
+    "Productivity & Finance",
+    "Other",
+    "Q App Library",
+    "Recently Added",
+    "Utilities",
+    "Creativity",
+    "Social",
+    "• W ©100%",
+    "Information & Reading",
+    "ớtv",
+    "Entertainment"
+  ],
+  "after_texts": [
+    "2:58PM Mon 1 Jun",
+    "Clock",
+    "Phone",
+    "Magnifler",
+    "Tunes Store",
+    "Tips",
+    "Weather",
+    "uranslate",
+    "Calculator",
+    "Stocks",
+    "Shortcuts",
+    "Health",
+    "Find My",
+    "Voice Memos",
+    "Preview",
+    "ww",
+    "Freeform",
+    "a D © 100% C2",
+    "Contacts",
+    "PPUTUU",
+    "Measure",
+    "Journal"
+  ],
+  "metadata": {
+    "verifier": "scene_progressed"
+  }
+}

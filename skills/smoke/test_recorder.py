@@ -177,6 +177,10 @@ def test_phone_perceive_voted_records_multi_frame_provenance(tmp_path, mock_phon
     assert scene_ev["snapshot_seq"] == snapshots[-1]["seq"]
     assert scene_ev["source_frame_ids"] == [1000, 2000]
     assert scene_ev["scene"]["source_frame_ids"] == [1000, 2000]
+    assert scene_ev["ocr_vote_metadata"]["samples_requested"] == 2
+    assert scene_ev["scene"]["ocr_vote_metadata"]["samples_used"] == 2
+    assert scene_ev["scene"]["ocr_vote_metadata"]["distinct_frames"] == 1
+    assert scene_ev["scene"]["ocr_vote_metadata"]["degrade_reason"] == "duplicate_frames"
 
 
 @pytest.mark.smoke

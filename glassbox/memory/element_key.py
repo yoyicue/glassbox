@@ -18,6 +18,10 @@ if TYPE_CHECKING:
 _BOX_EMA_ALPHA = 0.4          # weight of the newest observation in box smoothing
 _GRID_COLS = 6
 _GRID_ROW_PX = 160            # ~one grid row band per 160 px of height
+_CANONICAL_TEXT_INTENT_SOURCES = frozenset({
+    "springboard_lexicon",
+    "settings_root_lexicon",
+})
 
 
 def is_volatile(el: UIElement) -> bool:
@@ -30,9 +34,13 @@ def is_volatile(el: UIElement) -> bool:
 
 
 def element_key(el: UIElement, frame_size: tuple[int, int]) -> str:
-    """A node-stable id for an element. Priority (design §4):
-    own text > whitebox asset > accessibility id > coarse grid cell."""
-    t = norm_text(el.text)
+    """A node-stable id for an element.
+
+    Closed-set canonicalizers may override noisy OCR text with an intent label;
+    otherwise the identity follows design §4: own text > whitebox asset >
+    accessibility id > coarse grid cell.
+    """
+    t = _text_identity(el)
     if t:
         return f"text:{t}"
     wb = el.whitebox_hint
@@ -46,6 +54,13 @@ def element_key(el: UIElement, frame_size: tuple[int, int]) -> str:
     rows = max(1, h // _GRID_ROW_PX)
     row = min(rows - 1, max(0, cy * rows // max(1, h)))
     return f"{el.type}@{col},{row}"
+
+
+def _text_identity(el: UIElement) -> str:
+    intent = norm_text(el.intent_label)
+    if intent and el.intent_source in _CANONICAL_TEXT_INTENT_SOURCES:
+        return intent
+    return norm_text(el.text)
 
 
 def to_remembered(el: UIElement, key: str) -> RememberedElement:

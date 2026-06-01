@@ -10,6 +10,8 @@ from glassbox.ios.springboard import (
     _looks_like_today_widget_surface,
     _opened_expected_app_or_recover,
     _strict_home,
+    _tap_icon_via_map_if_visible,
+    annotate_springboard_icon_intents,
     find_springboard_icon,
     is_ios_home_screen,
     open_app_from_springboard,
@@ -96,6 +98,100 @@ def test_ios_home_screen_accepts_weather_widget_page_misread_as_settings_detail(
 
     assert is_ios_home_screen(scene, viewport_size=(448, 973))
     assert find_springboard_icon(scene, ("设置", "Settings"), viewport_size=(448, 973)) is not None
+
+
+@pytest.mark.smoke
+def test_ipad_home_widget_page_with_ocr_noise_counts_as_home():
+    scene = _scene(
+        _el("522PM Mon 1 Jun", 650, 56, w=120),
+        _el("1112", 737, 104, w=30),
+        _el("No.Events louay", 737, 324, w=90),
+        _el("Daxing？", 737, 382, w=54),
+        _el("34°", 737, 396, w=42, h=34),
+        _el("Tue", 737, 488, w=22),
+        _el("Wed", 737, 508, w=25),
+        _el("Books", 762, 818, w=36),
+        _el("日 Notes", 857, 142, w=59),
+        _el("No Notes", 857, 179, w=47),
+        _el("Files", 1125, 460, w=28),
+        _el("camera", 879, 698, w=42),
+        _el("atv", 873, 770, w=50),
+        _el("Videos", 879, 818, w=39),
+        _el("Settings", 996, 820, w=48),
+    )
+
+    assert is_ios_home_screen(scene, viewport_size=(1920, 1080))
+    assert is_ios_home_screen(scene, viewport_size=(1920, 1080), strict_springboard=True)
+
+
+@pytest.mark.smoke
+def test_home_icon_lookup_uses_lexicon_for_deterministic_noisy_label():
+    scene = _scene(
+        _el("口 Notes", 860, 142, w=64),
+        _el("Books", 762, 818, w=36),
+        _el("Files", 1125, 460, w=28),
+        _el("Camera", 879, 698, w=42),
+        _el("Videos", 879, 818, w=39),
+        _el("Settings", 996, 820, w=48),
+        _el("Search", 940, 1010, w=54),
+    )
+
+    icon = find_springboard_icon(scene, ("Notes",), viewport_size=(1920, 1080))
+
+    assert icon is not None
+    assert icon.element.text == "口 Notes"
+    assert icon.element.intent_label == "Notes"
+    assert icon.element.intent_source == "springboard_lexicon"
+
+
+@pytest.mark.smoke
+def test_home_icon_canonicalization_populates_intent_labels():
+    scene = _scene(
+        _el("日 Notes", 860, 142, w=64),
+        _el("Facefime", 760, 700, w=72),
+        _el("stv", 870, 770, w=50),
+        _el("camera", 879, 698, w=42),
+        _el("App Store", 382, 615, w=82),
+        _el("Settings", 996, 820, w=60),
+        _el("Search", 940, 1010, w=54),
+    )
+    scene.platform_scene_kind = "springboard"
+
+    updated = annotate_springboard_icon_intents(scene, viewport_size=(1920, 1080), platform="ipados")
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 6
+    assert by_text["日 Notes"].intent_label == "Notes"
+    assert by_text["Facefime"].intent_label == "FaceTime"
+    assert by_text["stv"].intent_label == "Apple TV"
+    assert by_text["camera"].intent_label == "Camera"
+    assert by_text["App Store"].intent_label == "App Store"
+    assert by_text["Settings"].intent_source == "springboard_lexicon"
+
+
+@pytest.mark.smoke
+def test_home_icon_lookup_does_not_match_hgtv_as_apple_tv():
+    scene = _scene(
+        _el("HGTV", 760, 700, w=52),
+        _el("PPTV", 870, 700, w=52),
+        _el("Camera", 879, 818, w=52),
+        _el("Settings", 996, 818, w=60),
+        _el("Search", 940, 1010, w=54),
+    )
+    scene.platform_scene_kind = "springboard"
+
+    updated = annotate_springboard_icon_intents(scene, viewport_size=(1920, 1080), platform="ipados")
+    icon = find_springboard_icon(
+        scene,
+        ("Apple TV", "TV", "视频", "Videos", "atv", "stv"),
+        viewport_size=(1920, 1080),
+    )
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 2
+    assert by_text["HGTV"].intent_label is None
+    assert by_text["PPTV"].intent_label is None
+    assert icon is None
 
 
 @pytest.mark.smoke
@@ -1020,6 +1116,74 @@ def test_open_app_via_spotlight_reports_failure_when_still_on_home(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_open_app_from_springboard_prefers_spotlight_for_app_store(monkeypatch):
+    calls: list[tuple[str, ...]] = []
+
+    def fake_spotlight(_phone, labels, *, query=None, require_visible_result=False, settle_s):
+        assert query == "app store"
+        assert require_visible_result is True
+        calls.append(tuple(labels))
+        return True
+
+    monkeypatch.setattr("glassbox.ios.springboard.open_app_via_spotlight", fake_spotlight)
+
+    assert open_app_from_springboard(object(), ("App Store", "AppStore"), settle_s=0.0)
+    assert calls == [("App Store", "AppStore")]
+
+
+@pytest.mark.smoke
+def test_open_app_via_spotlight_can_require_visible_target_result(monkeypatch):
+    monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
+
+    home_page = _scene(
+        _el("文件", 42, 176),
+        _el("DemoApp", 252, 176, w=82),
+        _el("搜索", 196, 892, w=48),
+    )
+    spotlight_without_target = _scene(
+        _el("Siri Suggestions", 18, 76, w=120),
+        _el("Weather", 62, 194, w=68),
+        _el("Notes", 142, 196, w=64),
+        _el("Q app store", 48, 901, w=110),
+    )
+
+    class FakePhone:
+        def __init__(self):
+            self.actions: list[tuple[str, tuple | None]] = []
+            self.typed = False
+
+        def _viewport_size(self):
+            return 440, 956
+
+        def perceive(self):
+            return spotlight_without_target if self.typed else home_page
+
+        def invalidate_perceive_cache(self):
+            self.actions.append(("invalidate", None))
+
+        def tap_xy(self, x: int, y: int):
+            self.actions.append(("tap", (x, y)))
+
+        def key(self, modifier: int, keycode: int):
+            self.actions.append(("key", (modifier, keycode)))
+
+        def type(self, text: str):
+            self.actions.append(("type", (text,)))
+            self.typed = True
+
+    phone = FakePhone()
+
+    assert not open_app_via_spotlight(
+        phone,
+        ("App Store", "AppStore"),
+        query="app store",
+        require_visible_result=True,
+        settle_s=0.0,
+    )
+    assert ("key", (0, 0x28)) not in phone.actions
+
+
+@pytest.mark.smoke
 def test_open_app_via_spotlight_reports_failure_when_still_in_known_other_app(monkeypatch):
     monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
 
@@ -1251,3 +1415,94 @@ def test_opened_expected_app_accepts_ipad_settings_split_view_without_recovering
 
     assert _opened_expected_app_or_recover(phone, scene, ("设置", "Settings"), settle_s=0) is True
     assert phone.home_calls == 0
+
+
+@pytest.mark.smoke
+def test_opened_app_store_does_not_use_unvalidated_post_open_recovery_by_default():
+    notes = _scene(
+        _el("Notes", 180, 72, 72, 20),
+        _el("No Notes", 160, 280, 92, 20),
+    )
+
+    class FakePhone:
+        def __init__(self):
+            self.home_calls = 0
+
+        def home(self):
+            self.home_calls += 1
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 640, 989
+
+    phone = FakePhone()
+
+    assert _opened_expected_app_or_recover(phone, notes, ("App Store", "AppStore"), settle_s=0) is True
+    assert phone.home_calls == 0
+
+
+@pytest.mark.smoke
+def test_opened_app_store_accepts_app_store_tab_chrome():
+    app_store = _scene(
+        _el("Today", 52, 918, 58, 20),
+        _el("Games", 172, 918, 64, 20),
+        _el("Apps", 292, 918, 48, 20),
+        _el("Search", 412, 918, 64, 20),
+    )
+
+    class FakePhone:
+        def __init__(self):
+            self.home_calls = 0
+
+        def home(self):
+            self.home_calls += 1
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 640, 989
+
+    phone = FakePhone()
+
+    assert _opened_expected_app_or_recover(phone, app_store, ("App Store", "AppStore"), settle_s=0) is True
+    assert phone.home_calls == 0
+
+
+@pytest.mark.smoke
+def test_vlm_icon_map_skips_non_strict_home_scenes(monkeypatch):
+    monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
+    settings_like = _scene(
+        _el("Display & Brightness", 660, 284, 180, 24),
+        _el("Notifications", 660, 571, 130, 24),
+        _el("Sounds", 660, 616, 80, 24),
+    )
+    settings_like.platform_scene_kind = "unknown"
+
+    class FakePhone:
+        kimi = object()
+
+        def __init__(self):
+            self.snapshot_calls = 0
+
+        def _viewport_size(self):
+            return 640, 989
+
+        def snapshot(self):
+            self.snapshot_calls += 1
+            return None
+
+    class FakeIconMap:
+        pass
+
+    phone = FakePhone()
+    assert not _tap_icon_via_map_if_visible(
+        phone,
+        settings_like,
+        ("App Store",),
+        icon_map=FakeIconMap(),
+        settle_s=0,
+    )
+    assert phone.snapshot_calls == 0

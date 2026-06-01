@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import pytest
 
@@ -39,6 +41,19 @@ class FakeSource:
         self.closed = True
 
 
+class AdvancingSource(FakeSource):
+    def __init__(self):
+        super().__init__()
+        self.index = 0
+
+    def snapshot(self):
+        image = np.zeros((956, 440, 3), dtype=np.uint8)
+        image[0, 0, 0] = self.index
+        ts = float(self.index + 1)
+        self.index += 1
+        return Frame(img=image, ts=ts)
+
+
 class FreshSource(FakeSource):
     def __init__(self):
         super().__init__()
@@ -56,6 +71,64 @@ class FakeOCR:
                 type="text",
                 box=Box(x=20, y=100, w=120, h=40),
                 text="设置",
+                confidence=0.9,
+            )
+        ]
+
+
+class HomeIconOCR:
+    def recognize(self, _image):
+        def el(text: str, x: int, y: int, w: int = 60):
+            return UIElement(
+                type="text",
+                box=Box(x=x, y=y, w=w, h=20),
+                text=text,
+                confidence=0.9,
+            )
+
+        return [
+            el("日 Notes", 42, 176),
+            el("Facefime", 154, 176),
+            el("App Store", 252, 176, 82),
+            el("camera", 42, 316),
+            el("Settings", 154, 316),
+            el("Books", 252, 316),
+            el("Search", 196, 892),
+        ]
+
+
+class CountingVotingOCR:
+    def __init__(self):
+        self.calls = 0
+        self.readings = ["待机見示", "待机显示", "侍机昰示"]
+
+    def recognize(self, _image):
+        text = self.readings[min(self.calls, len(self.readings) - 1)]
+        self.calls += 1
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=20, y=100, w=120, h=40),
+                text=text,
+                confidence=0.9,
+            )
+        ]
+
+
+class TimeoutOnceOCR:
+    def __init__(self):
+        self.calls = 0
+
+    def recognize(self, _image):
+        call_index = self.calls
+        self.calls += 1
+        if call_index == 0:
+            time.sleep(0.05)
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=20, y=100, w=120, h=40),
+                text=f"frame-{call_index}",
                 confidence=0.9,
             )
         ]
@@ -95,6 +168,66 @@ class FakeSettingsOCR:
                 type="text",
                 box=Box(x=80, y=725, w=40, h=20),
                 text="通用",
+                confidence=0.9,
+            ),
+        ]
+
+
+class NoisySettingsRootOCR:
+    def recognize(self, _image):
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=198, y=72, w=48, h=20),
+                text="设置",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=300, w=40, h=20),
+                text="蓝牙",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=360, w=86, h=20),
+                text="待机見示",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=420, w=40, h=20),
+                text="S0S",
+                confidence=0.9,
+            ),
+        ]
+
+
+class GreaterChinaEnglishSettingsRootOCR:
+    def recognize(self, _image):
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=198, y=72, w=72, h=20),
+                text="Settings",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=300, w=64, h=20),
+                text="WLAN",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=360, w=140, h=20),
+                text="Mobile Service",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=420, w=96, h=20),
+                text="Screem Time",
                 confidence=0.9,
             ),
         ]
@@ -358,6 +491,52 @@ def test_build_phone_activates_app_scene_classifier_by_bundle():
     assert runtime.phone.recovery_provider is not None
     assert scene.scene_type == "settings_root"
     assert scene.platform_scene_kind == "settings_root"
+
+
+@pytest.mark.smoke
+def test_runtime_populates_settings_root_row_intent_labels_from_core_annotator():
+    source = FakeSource()
+    effector = FakeEffector()
+    cfg = AgentConfig(_env_file=None, memory_bundle="com.apple.Preferences")
+
+    runtime = build_phone(source=source, cfg=cfg, ocr=NoisySettingsRootOCR(), effector=effector)
+
+    scene = runtime.phone.perceive()
+
+    by_text = {element.text: element for element in scene.elements}
+    assert scene.platform_scene_kind == "settings_root"
+    assert by_text["待机見示"].intent_label == "待机显示"
+    assert by_text["待机見示"].intent_source == "settings_root_lexicon"
+    assert by_text["S0S"].intent_label == "紧急 SOS"
+
+
+@pytest.mark.smoke
+def test_runtime_populates_greater_china_english_settings_root_intents_from_core_annotator():
+    source = FakeIPadSource()
+    effector = FakeEffector()
+    cfg = AgentConfig(
+        _env_file=None,
+        phone_model="ipad_mini_7",
+        memory_bundle="com.apple.Preferences",
+        language="en",
+        region="HK",
+        settings_locale_fuzzy_resolution=True,
+    )
+
+    runtime = build_phone(
+        source=source,
+        cfg=cfg,
+        ocr=GreaterChinaEnglishSettingsRootOCR(),
+        effector=effector,
+    )
+
+    scene = runtime.phone.perceive()
+
+    by_text = {element.text: element for element in scene.elements}
+    assert scene.platform_scene_kind == "settings_root"
+    assert by_text["WLAN"].intent_label == "无线局域网"
+    assert by_text["Mobile Service"].intent_label == "蜂窝网络"
+    assert by_text["Screem Time"].intent_label == "屏幕使用时间"
 
 
 @pytest.mark.smoke
@@ -700,3 +879,90 @@ def test_build_phone_freshens_source_after_effector_connect(monkeypatch):
     assert isinstance(runtime.effector, ConnectingEffector)
     assert runtime.effector.connected is True
     assert source.fresh_snapshots == 1
+
+
+@pytest.mark.smoke
+def test_runtime_wires_ocr_temporal_voting_config_without_global_perceive_side_effect():
+    ocr = CountingVotingOCR()
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(
+            _env_file=None,
+            ocr_temporal_voting_enabled=True,
+            ocr_temporal_voting_frames=3,
+            ocr_temporal_voting_min_presence=2,
+        ),
+        ocr=ocr,
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert ocr.calls == 1
+    assert scene.observation_mode == "raw"
+    assert scene.ocr_vote_metadata == {}
+    assert runtime.phone.ocr_temporal_voting_config.enabled is True
+
+    runtime.phone.action_context.ocr_temporal_voting_opt_in = True
+    scene = runtime.phone.perceive()
+
+    assert ocr.calls == 4
+    assert scene.observation_mode == "voted_degraded"
+    assert scene.ocr_vote_metadata["samples_requested"] == 3
+    assert scene.ocr_vote_metadata["samples_used"] == 3
+    assert scene.ocr_vote_metadata["degrade_reason"] == "duplicate_frames"
+
+
+@pytest.mark.smoke
+def test_runtime_populates_springboard_icon_intent_labels_from_lexicon():
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(_env_file=None),
+        ocr=HomeIconOCR(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    by_text = {element.text: element for element in scene.elements}
+    assert scene.platform_scene_kind == "springboard"
+    assert by_text["日 Notes"].intent_label == "Notes"
+    assert by_text["Facefime"].intent_label == "FaceTime"
+    assert by_text["App Store"].intent_label == "App Store"
+    assert by_text["camera"].intent_label == "Camera"
+    assert by_text["Settings"].intent_source == "springboard_lexicon"
+
+
+@pytest.mark.smoke
+def test_perceive_voted_n_one_bypasses_enabled_global_voting():
+    ocr = CountingVotingOCR()
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(
+            _env_file=None,
+            ocr_temporal_voting_enabled=True,
+            ocr_temporal_voting_frames=3,
+        ),
+        ocr=ocr,
+    )
+
+    scene = runtime.phone.perceive_voted(n=1)
+
+    assert ocr.calls == 1
+    assert scene.observation_mode == "raw"
+    assert scene.ocr_vote_metadata == {}
+
+
+@pytest.mark.smoke
+def test_perceive_voted_degrades_when_timeouts_leave_too_few_usable_samples():
+    runtime = build_phone(
+        source=AdvancingSource(),
+        cfg=AgentConfig(_env_file=None, ocr_timeout=0.001),
+        ocr=TimeoutOnceOCR(),
+    )
+
+    scene = runtime.phone.perceive_voted(n=2)
+
+    assert scene.observation_mode == "voted_degraded"
+    assert scene.ocr_vote_metadata["samples_used"] == 2
+    assert scene.ocr_vote_metadata["distinct_frames"] == 2
+    assert scene.ocr_vote_metadata["timeouts"] == 1
+    assert scene.ocr_vote_metadata["degrade_reason"] == "ocr_timeouts"

@@ -5,6 +5,14 @@ from __future__ import annotations
 from contextlib import nullcontext
 from types import SimpleNamespace
 
+from glassbox.effector import ActionResult
+from glassbox.ios.settings_rows import (
+    GREATER_CHINA_EN_ROOT_LABEL_ALIASES,
+    SETTINGS_ROOT_LABEL_ALIASES,
+    annotate_settings_root_row_intents,
+    canonical_settings_root_row_label,
+)
+from glassbox.memory.element_key import element_key
 from skills.smoke.ios_settings_walkthrough_support import *
 
 @pytest.mark.smoke
@@ -113,6 +121,125 @@ def test_root_label_matching_handles_single_glyph_ocr_prefix_without_alias():
 def test_root_label_matching_handles_zero_letter_sos_ocr_without_alias():
     assert "S0S" not in ROOT_LABEL_ALIASES
     assert _canonical_expected_root_label("S0S") == "紧急 SOS"
+
+
+@pytest.mark.smoke
+def test_settings_root_rows_get_canonical_intent_labels():
+    scene = _scene(
+        _el("设置", 198, 72, w=48),
+        _el("蓝牙", 80, 300, w=40),
+        _el("待机見示", 80, 360, w=86),
+        _el("S0S", 80, 420, w=40),
+    )
+    scene.viewport_size = (448, 973)
+
+    candidates = _safe_navigation_candidates(scene)
+
+    by_text = {element.text: element for element in candidates}
+    assert by_text["待机見示"].intent_label == "待机显示"
+    assert by_text["待机見示"].intent_source == "settings_root_lexicon"
+    assert by_text["S0S"].intent_label == "紧急 SOS"
+    assert element_key(by_text["待机見示"], (448, 973)) == "text:待机显示"
+
+
+@pytest.mark.smoke
+def test_tap_settings_row_uses_canonical_root_label_target():
+    row = _el("待机見示", 80, 360, w=86)
+    settings_scene_state.annotate_root_row_intent(row)
+
+    class CanonicalTapPhone:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def tap_element(self, element, **kwargs):
+            self.calls.append({"element": element, **kwargs})
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+        def viewport_size(self):
+            return 448, 973
+
+    phone = CanonicalTapPhone()
+
+    assert settings_navigation.tap_settings_row(phone, row, walkthrough._navigation_actions())
+    assert phone.calls[0]["target"] == "待机显示"
+    assert phone.calls[0]["intent"] == "settings.row:待机显示"
+    assert row.intent_label == "待机显示"
+
+
+@pytest.mark.smoke
+def test_core_settings_root_row_annotator_skips_non_root_settings_detail():
+    scene = _scene(
+        _el("待机見示", 80, 360, w=86),
+        _el("About", 280, 240, w=80),
+    )
+    scene.platform_scene_kind = "settings_detail"
+    scene.safe_actions = ["back", "scroll"]
+
+    updated = annotate_settings_root_row_intents(scene, viewport_size=(448, 973))
+
+    assert updated == 0
+    assert scene.elements[0].intent_label is None
+
+
+@pytest.mark.smoke
+def test_core_settings_root_row_annotator_leaves_unknown_rows_raw():
+    scene = _scene(
+        _el("设置", 198, 72, w=48),
+        _el("多多通用", 80, 360, w=86),
+        _el("HGTV", 80, 420, w=60),
+    )
+    scene.platform_scene_kind = "settings_root"
+
+    updated = annotate_settings_root_row_intents(scene, viewport_size=(448, 973))
+
+    assert updated == 0
+    assert canonical_settings_root_row_label("多多通用") is None
+    assert all(element.intent_label is None for element in scene.elements)
+
+
+@pytest.mark.smoke
+def test_core_settings_root_row_annotator_accepts_injected_greater_china_english_aliases():
+    scene = _scene(
+        _el("Settings", 198, 72, w=72),
+        _el("WLAN", 80, 360, w=64),
+        _el("Mobile Service", 80, 420, w=140),
+    )
+    scene.platform_scene_kind = "settings_root"
+    aliases = {**SETTINGS_ROOT_LABEL_ALIASES, **GREATER_CHINA_EN_ROOT_LABEL_ALIASES}
+
+    updated = annotate_settings_root_row_intents(
+        scene,
+        viewport_size=(448, 973),
+        aliases=aliases,
+        fuzzy_aliases=True,
+    )
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 2
+    assert by_text["WLAN"].intent_label == "无线局域网"
+    assert by_text["Mobile Service"].intent_label == "蜂窝网络"
+
+
+@pytest.mark.smoke
+def test_core_settings_root_row_annotator_uses_viewport_relative_band_for_ipad_sidebar():
+    scene = _scene(
+        _el("Settings", 372, 70, w=72),
+        _el("Mobile Service", 90, 960, w=140),
+    )
+    scene.platform_scene_kind = "settings_detail"
+    scene.classification_evidence = ["ipad_split_view"]
+    aliases = {**SETTINGS_ROOT_LABEL_ALIASES, **GREATER_CHINA_EN_ROOT_LABEL_ALIASES}
+
+    updated = annotate_settings_root_row_intents(
+        scene,
+        viewport_size=(744, 1133),
+        aliases=aliases,
+    )
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 1
+    assert by_text["Mobile Service"].intent_label == "蜂窝网络"
+
 
 @pytest.mark.smoke
 def test_expected_root_labels_have_search_queries():

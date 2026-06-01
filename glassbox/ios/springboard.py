@@ -16,6 +16,12 @@ from loguru import logger
 from glassbox.boundaries import AppLaunchTarget
 from glassbox.cognition.base import Scene, UIElement
 from glassbox.cognition.text_match import fuzzy_ratio, text_contains, texts_match
+from glassbox.ios.default_apps import (
+    DefaultAppLaunchProfile,
+    canonical_default_app_label,
+    default_launch_profile_for_labels,
+    verify_default_app_opened,
+)
 from glassbox.ios.scene import classify_ios_scene
 from glassbox.ios.weather_surface import looks_like_weather_app_surface
 
@@ -98,7 +104,7 @@ def _icon_label_candidates(
         if assistive_menu_bounds is not None and _point_in_bounds(el.box.center, assistive_menu_bounds):
             continue
         _cx, cy = el.box.center
-        min_label_y = h * (0.16 if w >= 600 else 0.10)
+        min_label_y = h * 0.10
         if cy < min_label_y or cy > h * 0.98:
             continue
         if el.box.w > w * 0.55 or el.box.h > h * 0.06:
@@ -183,6 +189,39 @@ def _looks_like_today_widget_surface(
     return weatherish >= 3
 
 
+def _looks_like_ipad_home_widget_page(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int],
+) -> bool:
+    w, _h = viewport_size
+    if w < 600:
+        return False
+    texts = [_text(el) for el in scene.elements if _text(el)]
+    if not texts:
+        return False
+    joined = "\n".join(texts)
+    has_widget_evidence = (
+        any("°" in text for text in texts)
+        or any(text in {"No Notes", "无备忘录", "No Events Today", "今天无日程"} for text in texts)
+        or any(marker in joined for marker in ("Daxing", "Weather", "天气", "Notes", "备忘录", "Calendar", "日历"))
+    )
+    if not has_widget_evidence:
+        return False
+    default_icon_hits = 0
+    icon_labels = (
+        "App Store", "Settings", "Camera", "Files", "Maps", "Books", "Videos", "FaceTime",
+        "设置", "相机", "文件", "地图", "图书", "视频", "FaceTime 通话",
+    )
+    for text in texts:
+        if any(_matches(text, (label,), fuzzy=0.78) for label in icon_labels):
+            default_icon_hits += 1
+    if default_icon_hits < 3:
+        return False
+    app_store_chrome = sum(1 for marker in ("Today", "Games", "Apps", "Arcade") if marker in texts)
+    return app_store_chrome < 2
+
+
 def _has_strong_icon_grid(labels: list[UIElement], *, viewport_size: tuple[int, int]) -> bool:
     w, h = viewport_size
     if len(labels) < 6:
@@ -232,6 +271,8 @@ def is_ios_home_screen(
 
     labels = _icon_label_candidates(scene, viewport_size=(w, h))
     has_spotlight_marker = _looks_like_spotlight_results(scene)
+    if not has_spotlight_marker and _looks_like_ipad_home_widget_page(scene, viewport_size=(w, h)):
+        return True
     if not has_spotlight_marker and _has_strong_icon_grid(labels, viewport_size=(w, h)):
         return True
 
@@ -247,6 +288,8 @@ def is_ios_home_screen(
     }:
         return False
     if classified.kind == "springboard" and not strict_springboard:
+        return True
+    if not has_spotlight_marker and _looks_like_ipad_home_widget_page(scene, viewport_size=(w, h)):
         return True
 
     if len(labels) < 3:
@@ -279,19 +322,23 @@ def find_springboard_icon(
         return None
 
     w, h = _scene_size(scene, viewport_size)
+    annotate_springboard_icon_intents(scene, viewport_size=(w, h))
     best: UIElement | None = None
     best_ratio = fuzzy
     for el in _icon_label_candidates(scene, viewport_size=(w, h)):
-        text = _text(el)
+        text_candidates = _icon_match_texts(el)
         for label in labels:
-            if texts_match(text, label) or text_contains(text, label):
-                best = el
-                best_ratio = 1.0
+            for text in text_candidates:
+                if _icon_text_matches_label(text, label):
+                    best = el
+                    best_ratio = 1.0
+                    break
+                ratio = fuzzy_ratio(text, label)
+                if ratio >= best_ratio:
+                    best = el
+                    best_ratio = ratio
+            if best is el and best_ratio >= 1.0:
                 break
-            ratio = fuzzy_ratio(text, label)
-            if ratio >= best_ratio:
-                best = el
-                best_ratio = ratio
         if best is el and best_ratio >= 1.0:
             break
     if best is None:
@@ -306,6 +353,69 @@ def find_springboard_icon(
     tap_y = max(int(h * 0.05), best.box.y - offset)
     tap_x = min(max(cx, int(w * 0.05)), int(w * 0.95))
     return SpringboardIcon(element=best, tap_point=(tap_x, tap_y))
+
+
+def annotate_springboard_icon_intents(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+    platform: str | None = None,
+) -> int:
+    """Attach canonical built-in app names to Home icon OCR elements."""
+    w, h = _scene_size(scene, viewport_size)
+    labels = _icon_label_candidates(scene, viewport_size=(w, h))
+    if not labels:
+        return 0
+    platform_kind = str(getattr(scene, "platform_scene_kind", "") or "")
+    home_like = (
+        platform_kind == "springboard"
+        or _has_strong_icon_grid(labels, viewport_size=(w, h))
+        or _looks_like_ipad_home_widget_page(scene, viewport_size=(w, h))
+    )
+    if not home_like:
+        return 0
+    updated = 0
+    for element in labels:
+        if element.intent_label and element.intent_source != "springboard_lexicon":
+            continue
+        match = canonical_default_app_label(_text(element), platform=platform)
+        if match is None:
+            continue
+        evidence = list(element.type_evidence)
+        evidence.extend([
+            "springboard_lexicon",
+            f"springboard_app:{match.profile.key}",
+            f"springboard_label:{match.label}",
+        ])
+        element.intent_label = match.canonical_label
+        element.intent_source = "springboard_lexicon"
+        element.intent_confidence = min(1.0, max(0.0, match.score))
+        element.type_evidence = list(dict.fromkeys(evidence))
+        updated += 1
+    return updated
+
+
+def _icon_match_texts(element: UIElement) -> tuple[str, ...]:
+    texts: list[str] = []
+    if element.intent_label and element.intent_source == "springboard_lexicon":
+        texts.append(str(element.intent_label))
+    raw = _text(element)
+    if raw:
+        texts.append(raw)
+    return tuple(dict.fromkeys(texts))
+
+
+def _icon_text_matches_label(text: str, label: str) -> bool:
+    if texts_match(text, label):
+        return True
+    if _unsafe_short_ascii_icon_label(label):
+        return False
+    return text_contains(text, label)
+
+
+def _unsafe_short_ascii_icon_label(label: str) -> bool:
+    compact = "".join(ch for ch in str(label or "") if not ch.isspace())
+    return 0 < len(compact) <= 3 and all(ch.isascii() and ch.isalnum() for ch in compact)
 
 
 def springboard_signature(scene: Scene) -> tuple[tuple[str, int, int], ...]:
@@ -426,6 +536,13 @@ def _tap_icon_via_map_if_visible(
     if icon_map is None or getattr(phone, "kimi", None) is None:
         print(f"[sb] vlm-map: disabled (icon_map={icon_map is not None}, "
               f"kimi={getattr(phone, 'kimi', None) is not None})", flush=True)
+        return False
+    viewport = _viewport_size(phone)
+    if not is_ios_home_screen(scene, viewport_size=viewport, strict_springboard=True):
+        print("[sb] vlm-map: skipped; scene is not a strict Home icon grid", flush=True)
+        return False
+    if _looks_like_today_widget_surface(scene, viewport_size=viewport):
+        print("[sb] vlm-map: skipped; widget surface is not an app icon page", flush=True)
         return False
     from glassbox.cognition.icon_detect import detect_icons_voted
     from glassbox.ios.springboard_map import build_icon_map, match_entry
@@ -674,6 +791,8 @@ def open_app_via_spotlight(
     phone,
     labels: Iterable[str],
     *,
+    query: str | None = None,
+    require_visible_result: bool = False,
     settle_s: float = 0.8,
 ) -> bool:
     """Open an app with SpringBoard/Spotlight keyboard search.
@@ -682,8 +801,8 @@ def open_app_via_spotlight(
     Return the best result. It avoids URLs and host-side app activation.
     """
     app_labels = tuple(labels)
-    query = _keyboard_query(app_labels)
-    if query is None:
+    search_query = query or _keyboard_query(app_labels)
+    if search_query is None:
         return False
 
     scene = _ensure_home_scene(phone, settle_s)
@@ -696,10 +815,12 @@ def open_app_via_spotlight(
     time.sleep(settle_s)
     phone.invalidate_perceive_cache()
     _clear_spotlight_query(phone, settle_s=settle_s)
-    phone.type(query)
+    phone.type(search_query)
     time.sleep(settle_s)
     phone.invalidate_perceive_cache()
     scene = phone.perceive()
+    if require_visible_result:
+        return _tap_spotlight_result_if_visible(phone, scene, app_labels, settle_s=settle_s)
     if _open_spotlight_result_with_return_if_visible(phone, scene, app_labels, settle_s=settle_s):
         return True
     if _tap_spotlight_result_if_visible(phone, scene, app_labels, settle_s=settle_s):
@@ -744,8 +865,26 @@ def _scene_has_target_label(scene: Scene, labels: Iterable[str]) -> bool:
     return any(_matches(_text(el), labels, fuzzy=0.78) for el in scene.elements)
 
 
-def _requires_post_open_target_label(labels: Iterable[str]) -> bool:
-    return any(str(label).strip() in {"设置", "Settings"} for label in labels)
+def _platform_key_for_phone(phone) -> str | None:
+    model = str(getattr(getattr(phone, "device_geometry", None), "model", "") or "").lower().replace("-", "_")
+    if model.startswith("ipad"):
+        return "ipados"
+    if model:
+        return "ios"
+    return None
+
+
+def _launch_profile(labels: Iterable[str], *, phone=None) -> DefaultAppLaunchProfile | None:
+    return default_launch_profile_for_labels(labels, platform=_platform_key_for_phone(phone))
+
+
+def _requires_post_open_target_label(labels: Iterable[str], *, phone=None) -> bool:
+    profile = _launch_profile(labels, phone=phone)
+    # Keep the default recovery behavior at the pre-profile scope: Settings only.
+    # Other default-app launch profiles provide labels/queries, but their
+    # post-open "verify or recover Home" semantics need per-app validation
+    # before they can be enabled on the hot launch path.
+    return bool(profile and profile.key == "settings" and profile.require_post_open_verification)
 
 
 def _climb_out_to_target(
@@ -792,15 +931,26 @@ def _opened_expected_app_or_recover(
 ) -> bool:
     """Reject known wrong app launches for targets with recognizable roots."""
     app_labels = tuple(labels)
-    if not _requires_post_open_target_label(app_labels):
+    if not _requires_post_open_target_label(app_labels, phone=phone):
         return True
+    profile = _launch_profile(app_labels, phone=phone)
     classified = _classify_scene_for_phone(phone, scene)
-    if classified.kind.startswith("settings_"):
+    if profile is not None and verify_default_app_opened(
+        profile,
+        scene,
+        labels=app_labels,
+        classified_kind=classified.kind,
+    ):
         return True
     # An "unknown" scene may be the target app reopened onto a sub-page whose
     # chrome defeats detection. Try climbing out before giving up — recovering
     # Home leaves that app's nav stack intact, so a reopen would just loop here.
-    if classified.kind == "unknown" and _climb_out_to_target(phone, app_labels, settle_s=settle_s):
+    if (
+        profile is not None
+        and profile.climb_unknown_subpages
+        and classified.kind == "unknown"
+        and _climb_out_to_target(phone, app_labels, settle_s=settle_s)
+    ):
         return True
     logger.warning(
         "springboard tap opened a non-target app for labels={} kind={}; recovering Home",
@@ -854,8 +1004,20 @@ def open_app_from_springboard(
     the OCR-label path — OCR cannot read Home icon labels reliably.
     """
     app_labels = tuple(labels)
+    profile = _launch_profile(app_labels, phone=phone)
     _reset_icon_map_build_budget()
     print(f"[sb] open_app_from_springboard start labels={app_labels}", flush=True)
+    if profile is not None and profile.preferred_open == "spotlight":
+        print("[sb] spotlight preferred for this target", flush=True)
+        if open_app_via_spotlight(
+            phone,
+            app_labels,
+            query=profile.spotlight_query,
+            require_visible_result=profile.require_visible_spotlight_result,
+            settle_s=settle_s,
+        ):
+            return True
+        print("[sb] spotlight preferred path failed → Home scan fallback", flush=True)
 
     # Cold-start scan may enter from a dirty state (foregrounded app, modal), so
     # retry home() while it makes progress. The Spotlight path keeps the default

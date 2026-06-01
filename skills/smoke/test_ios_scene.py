@@ -812,6 +812,27 @@ def test_ios_scene_classifier_app_library():
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_settings_app_library_title_is_not_system_app_library():
+    scene = _scene(
+        _el("• Search 6:51PM Mon 1Jun", 650, 59, w=179, h=17),
+        _el("Q Search", 675, 139, w=73, h=17),
+        _el("Apple Account, iCloud", 734, 212, w=120, h=14),
+        _el("Airplane Mode", 703, 273, w=100, h=17),
+        _el("WLAN", 703, 318, w=47, h=14),
+        _el("Bluetooth", 706, 363, w=67, h=14),
+        _el("Battery", 706, 407, w=50, h=17),
+        _el("General", 706, 460, w=53, h=14),
+        _el("Home Screen & App Library", 991, 95, w=195, h=17),
+        _el("Use Large App Icons", 921, 179, w=142, h=17),
+        _el("Show App Library in Dock", 921, 410, w=173, h=17),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(1920, 1080))
+
+    assert classified.kind != "app_library"
+
+
+@pytest.mark.smoke
 def test_ios_scene_classifier_app_library_category_grid_without_title():
     scene = _scene(
         _el("pp资", 196, 86, w=54),

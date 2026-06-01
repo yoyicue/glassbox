@@ -1,0 +1,52 @@
+{
+  "case_id": "ios_home_screen_visible_91c237a1794aac9e",
+  "action": "home",
+  "verifier": "ios_home_screen_visible",
+  "expected_status": "failed",
+  "before_texts": [
+    "G:46PM Mon1.Jun",
+    "11121",
+    "No.Lvents |ouay",
+    "Daxing？",
+    "32°",
+    "300",
+    "Tue",
+    "Wed",
+    "•",
+    "189",
+    "160",
+    "Books",
+    "口 Notes",
+    "No Notes：",
+    "21 22 23 26",
+    "28 29 30",
+    "9PM",
+    "290",
+    "H:35°LS17",
+    "10PM",
+    "11PX！",
+    "280",
+    "27",
+    "260",
+    "27",
+    "camera",
+    "atv",
+    "Videos",
+    "Settings",
+    "分司 心 100% ta",
+    "Files",
+    "Maps",
+    "医口"
+  ],
+  "after_texts": [
+    "A：",
+    "000ag",
+    "J",
+    "Weglne",
+    "cotinag",
+    "口a"
+  ],
+  "metadata": {
+    "verifier": "ios_home_screen_visible"
+  }
+}

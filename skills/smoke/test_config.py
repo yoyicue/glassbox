@@ -35,6 +35,13 @@ def test_defaults():
     assert cfg.vlm_cache_dir is None
     assert cfg.kimi_cache_dir is None
     assert cfg.action_fail_fast is True
+    assert cfg.ocr_temporal_voting_enabled is False
+    assert cfg.ocr_temporal_voting_frames == 3
+    assert cfg.ocr_temporal_voting_min_presence == 2
+    assert cfg.ocr_temporal_voting_pos_tol == 20
+    assert cfg.ocr_temporal_voting_sample_spacing_ms == 0
+    assert cfg.ocr_temporal_voting_outer_timeout == 0.0
+    assert cfg.ocr_temporal_voting_keep_raw_samples is False
 
 
 @pytest.mark.smoke
@@ -48,6 +55,8 @@ def test_env_override_int(monkeypatch):
     monkeypatch.setenv("GLASSBOX_APP_VIEWPORT_BBOX", "10,20,300,600")
     monkeypatch.setenv("GLASSBOX_APP_VIEWPORT_MODE", "iphone_compat")
     monkeypatch.setenv("GLASSBOX_DEFAULT_OBSERVATION_SCOPE", "app")
+    monkeypatch.setenv("GLASSBOX_OCR_TEMPORAL_VOTING_FRAMES", "4")
+    monkeypatch.setenv("GLASSBOX_OCR_TEMPORAL_VOTING_MIN_PRESENCE", "3")
 
     cfg = AgentConfig(_env_file=None)
 
@@ -60,6 +69,8 @@ def test_env_override_int(monkeypatch):
     assert cfg.app_viewport_bbox == (10, 20, 300, 600)
     assert cfg.app_viewport_mode == "iphone_compat"
     assert cfg.default_observation_scope == "app"
+    assert cfg.ocr_temporal_voting_frames == 4
+    assert cfg.ocr_temporal_voting_min_presence == 3
 
 
 @pytest.mark.smoke
@@ -70,6 +81,8 @@ def test_env_override_bool(monkeypatch):
     monkeypatch.setenv("GLASSBOX_WHEEL_INVERT", "true")
     monkeypatch.setenv("GLASSBOX_ALLOW_NOOP_FALLBACK", "true")
     monkeypatch.setenv("GLASSBOX_ACTION_FAIL_FAST", "false")
+    monkeypatch.setenv("GLASSBOX_OCR_TEMPORAL_VOTING_ENABLED", "true")
+    monkeypatch.setenv("GLASSBOX_OCR_TEMPORAL_VOTING_KEEP_RAW_SAMPLES", "true")
 
     cfg = AgentConfig(_env_file=None)
 
@@ -79,6 +92,8 @@ def test_env_override_bool(monkeypatch):
     assert cfg.wheel_invert is True
     assert cfg.allow_noop_fallback is True
     assert cfg.action_fail_fast is False
+    assert cfg.ocr_temporal_voting_enabled is True
+    assert cfg.ocr_temporal_voting_keep_raw_samples is True
 
 
 @pytest.mark.smoke

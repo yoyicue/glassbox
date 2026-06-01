@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from glassbox.cognition.base import Box, UIElement
 from glassbox.config import get_config
 from skills.regression.ios_settings.policy import DEFAULT_SETTINGS_POLICY as P
 from skills.regression.ios_settings.sections import (
@@ -66,6 +67,27 @@ def test_greater_china_english_is_pack_bound(text, section, _locale):
     for language, region in ((None, None), ("en", "US"), ("zh-Hans", "CN")):
         _locale(language, region)
         assert P.canonical_expected_root_label(text) is None
+
+
+@pytest.mark.smoke
+def test_policy_visible_root_row_label_uses_greater_china_english_overlay(_locale):
+    _locale("en", "HK")
+
+    wlan = UIElement(
+        type="text",
+        box=Box(x=80, y=360, w=64, h=20),
+        text="WLAN",
+        confidence=0.9,
+    )
+    mobile_service = UIElement(
+        type="text",
+        box=Box(x=80, y=420, w=140, h=20),
+        text="Mobile Service",
+        confidence=0.9,
+    )
+
+    assert P.visible_root_row_label(wlan) == "无线局域网"
+    assert P.visible_root_row_label(mobile_service) == "蜂窝网络"
 
 
 @pytest.mark.smoke
