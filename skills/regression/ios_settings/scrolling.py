@@ -65,6 +65,10 @@ def wheel_scroll_down(
     action_intent: ActionIntent,
     ticks: int | None = None,
 ) -> None:
+    if _is_ipad_target(phone) and _settings_sidebar_drag_available(phone):
+        with action_intent(phone, "scroll.down.sidebar_drag"):
+            _settings_sidebar_drag(phone, direction="down")
+            return
     if _phone_supports(phone, "scroll_wheel") and hasattr(phone, "wheel_scroll_down"):
         with action_intent(phone, "scroll.down.wheel"):
             _settings_wheel_scroll(phone, settings_wheel_ticks_per_swipe() if ticks is None else ticks)
@@ -126,6 +130,10 @@ def scroll_down_confirmed(
 
 
 def wheel_scroll_up(phone, *, action_intent: ActionIntent) -> None:
+    if _is_ipad_target(phone) and _settings_sidebar_drag_available(phone):
+        with action_intent(phone, "scroll.up.sidebar_drag"):
+            _settings_sidebar_drag(phone, direction="up")
+            return
     if _phone_supports(phone, "scroll_wheel") and hasattr(phone, "wheel_scroll_up"):
         with action_intent(phone, "scroll.up.wheel"):
             _settings_wheel_scroll(phone, -settings_wheel_ticks_per_swipe())
@@ -148,6 +156,31 @@ def _settings_wheel_scroll(phone, ticks: int) -> None:
         return
     method = phone.wheel_scroll_down if ticks > 0 else phone.wheel_scroll_up
     call_wheel_scroll(method, abs(ticks))
+
+
+def _settings_sidebar_drag_available(phone) -> bool:
+    drag = getattr(phone, "_page_drag_xy", None)
+    if not callable(drag):
+        return False
+    try:
+        phone.viewport_size()
+    except Exception:
+        return False
+    return True
+
+
+def _settings_sidebar_drag(phone, *, direction: str) -> None:
+    w, h = phone.viewport_size()
+    x = int(w * 0.23)
+    top = int(h * 0.32)
+    bottom = int(h * 0.86)
+    if direction == "down":
+        phone._page_drag_xy(x, bottom, x, top, via="settings_sidebar_drag")
+        return
+    if direction == "up":
+        phone._page_drag_xy(x, top, x, bottom, via="settings_sidebar_drag")
+        return
+    raise ValueError(f"unknown settings sidebar drag direction: {direction!r}")
 
 
 def _settings_wheel_focus(phone) -> tuple[int, int] | None:

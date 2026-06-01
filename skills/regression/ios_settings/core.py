@@ -254,11 +254,19 @@ def _wait_any_text(phone, labels: Iterable[str], *, timeout: float = 4.0) -> UIE
 
 
 def _is_settings_root(phone) -> bool:
-    return settings_scene_state.is_settings_root(phone)
+    scene = phone.perceive()
+    return settings_scene_state.scene_is_settings_root(scene) or (
+        _is_ipad_target(phone) and _ipad_scene_has_root_sidebar(scene)
+    )
 
 
 def _scene_is_settings_root(scene) -> bool:
     return settings_scene_state.scene_is_settings_root(scene)
+
+
+def _ipad_scene_has_root_sidebar(scene) -> bool:
+    safe_actions = set(getattr(scene, "safe_actions", ()) or ())
+    return "tap_root_row" in safe_actions
 
 
 def _has_visible_back_affordance(scene) -> bool:
@@ -1357,7 +1365,7 @@ def _return_one_level(
     if parent_is_root and _is_ipad_target(phone):
         phone.invalidate_perceive_cache()
         scene = phone.perceive()
-        if _scene_is_settings_root(scene):
+        if _scene_is_settings_root(scene) or _ipad_scene_has_root_sidebar(scene):
             return True
     with _action_intent(phone, "return.one_level.back_shortcut", parent_title=parent_title):
         result = _send_ios_back_action(phone)
@@ -1463,6 +1471,8 @@ def _returned_to_parent_scene(
     ipad_target: bool = False,
 ) -> bool:
     if parent_is_root:
+        if ipad_target and _ipad_scene_has_root_sidebar(scene):
+            return True
         return _scene_is_settings_root(scene)
     if parent_title and _title_matches_navigation_label(_page_title(scene), parent_title):
         if ipad_target:

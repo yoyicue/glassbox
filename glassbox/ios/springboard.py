@@ -61,6 +61,18 @@ def _text(el: UIElement) -> str:
     return (el.text or "").strip()
 
 
+def _classify_scene_for_phone(phone, scene: Scene):
+    model = str(getattr(getattr(phone, "device_geometry", None), "model", "") or "")
+    if model.lower().replace("-", "_").startswith("ipad"):
+        try:
+            from glassbox.ipados.scene import classify_ipados_scene
+
+            return classify_ipados_scene(scene, viewport_size=_viewport_size(phone))
+        except Exception:
+            pass
+    return classify_ios_scene(scene, viewport_size=_viewport_size(phone))
+
+
 def _matches(text: str, labels: Iterable[str], *, fuzzy: float = 0.72) -> bool:
     for label in labels:
         if texts_match(text, label) or text_contains(text, label):
@@ -765,7 +777,7 @@ def _climb_out_to_target(
         scene = _perceive_after_settle(phone, settle_s)
         if is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
             return False  # climbed past the app to Home — it was the wrong app
-        classified = classify_ios_scene(scene, viewport_size=_viewport_size(phone))
+        classified = _classify_scene_for_phone(phone, scene)
         if classified.kind.startswith("settings_") or _scene_has_target_label(scene, labels):
             return True
     return False
@@ -782,7 +794,7 @@ def _opened_expected_app_or_recover(
     app_labels = tuple(labels)
     if not _requires_post_open_target_label(app_labels):
         return True
-    classified = classify_ios_scene(scene, viewport_size=_viewport_size(phone))
+    classified = _classify_scene_for_phone(phone, scene)
     if classified.kind.startswith("settings_"):
         return True
     # An "unknown" scene may be the target app reopened onto a sub-page whose

@@ -2953,6 +2953,71 @@ def test_return_one_level_falls_back_to_ipad_detail_pane_back_point(monkeypatch)
 
 
 @pytest.mark.smoke
+def test_return_one_level_ipad_root_parent_accepts_visible_sidebar(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    scene = _scene(
+        _el("Bluetooth", 420, 44, w=78),
+        _el("Search", 70, 90, w=54),
+        _el("Wi-Fi", 70, 206, w=46),
+        _el("Bluetooth", 70, 252, w=78),
+        _el("Notifications", 70, 492, w=106),
+    )
+    scene.scene_type = "settings_detail"
+    scene.safe_actions = ("tap_root_row", "scroll", "back")
+
+    class IPadSplitViewPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self):
+            self.keys: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return scene
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def key(self, modifier, keycode):
+            self.keys.append((modifier, keycode))
+            return ActionResult(ok=True, backend="fake", connected=True)
+
+    phone = IPadSplitViewPhone()
+
+    assert _return_one_level(
+        phone,
+        parent_texts=["Settings", "Wi-Fi", "Bluetooth"],
+        parent_title="Settings",
+        parent_is_root=True,
+    )
+    assert phone.keys == []
+
+
+@pytest.mark.smoke
+def test_ensure_settings_root_accepts_ipad_detail_with_root_sidebar(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    scene = _scene(
+        _el("Home Screen & App Library", 420, 44, w=180),
+        _el("Search", 70, 90, w=54),
+        _el("Camera", 70, 118, w=62),
+        _el("Display & Brightness", 70, 206, w=150),
+        _el("Notifications", 70, 492, w=106),
+    )
+    scene.scene_type = "settings_detail"
+    scene.safe_actions = ("tap_root_row", "scroll", "back")
+
+    class IPadSettingsDetailPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return scene
+
+        def invalidate_perceive_cache(self):
+            pass
+
+    assert _ensure_settings_root(IPadSettingsDetailPhone())
+
+
+@pytest.mark.smoke
 def test_return_one_level_ipad_does_not_accept_sidebar_overlap_as_parent(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
     ticks = iter([0.0, 1.0, 4.0, 4.0, 4.0])

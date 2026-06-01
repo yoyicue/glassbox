@@ -1219,3 +1219,35 @@ def test_opened_wrong_app_recovers_home_when_climb_does_not_surface_target():
     assert _opened_expected_app_or_recover(phone, other, ("设置", "Settings"), settle_s=0) is False
     assert phone.home_calls == 1
     assert phone.back_calls == 4  # bounded by max_steps
+
+
+@pytest.mark.smoke
+def test_opened_expected_app_accepts_ipad_settings_split_view_without_recovering_home():
+    scene = _scene(
+        _el("Home Screen & App Library", 318, 44, 180, 20),
+        _el("Search", 56, 90, 54, 18),
+        _el("Camera", 66, 118, 60, 18),
+        _el("Control Centre", 68, 162, 116, 18),
+        _el("Display & Brightness", 68, 206, 150, 18),
+        _el("Notifications", 68, 492, 106, 18),
+    )
+
+    class FakeIPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def __init__(self):
+            self.home_calls = 0
+
+        def home(self):
+            self.home_calls += 1
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def _viewport_size(self):
+            return 640, 989
+
+    phone = FakeIPadPhone()
+
+    assert _opened_expected_app_or_recover(phone, scene, ("设置", "Settings"), settle_s=0) is True
+    assert phone.home_calls == 0

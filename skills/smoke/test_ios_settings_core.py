@@ -264,12 +264,13 @@ def test_scroll_down_confirmed_marks_top_status_bar_boundary_overshoot(monkeypat
     assert outcome == "top-overshoot"
 
 @pytest.mark.smoke
-def test_ipad_settings_wheel_hovers_sidebar_focus_without_clicking_row():
+def test_ipad_settings_scroll_drags_sidebar_instead_of_hover_wheel():
     class IPadWheelPhone:
         device_geometry = SimpleNamespace(model="ipad_mini_7")
 
         def __init__(self) -> None:
             self.calls: list[tuple[int, dict]] = []
+            self.drags: list[tuple[int, int, int, int, dict]] = []
 
         def supports(self, action: str) -> bool:
             return action == "scroll_wheel"
@@ -287,12 +288,16 @@ def test_ipad_settings_wheel_hovers_sidebar_focus_without_clicking_row():
         def scroll_wheel(self, ticks: int, **kwargs) -> None:
             self.calls.append((ticks, kwargs))
 
+        def _page_drag_xy(self, x1, y1, x2, y2, **kwargs) -> None:
+            self.drags.append((x1, y1, x2, y2, kwargs))
+
     phone = IPadWheelPhone()
 
     _wheel_scroll_down(phone, ticks=6)
 
-    assert phone.calls == [
-        (6, {"focus_x": 147, "focus_y": 539, "focus_click": False}),
+    assert phone.calls == []
+    assert phone.drags == [
+        (147, 842, 147, 313, {"via": "settings_sidebar_drag"}),
     ]
 
 
@@ -314,6 +319,7 @@ def test_ipad_root_scroll_down_confirmed_uses_row_tracked_ticks_for_missing_root
 
         def __init__(self) -> None:
             self.calls: list[tuple[int, dict]] = []
+            self.drags: list[tuple[int, int, int, int, dict]] = []
 
         def supports(self, action: str) -> bool:
             return action == "scroll_wheel"
@@ -326,6 +332,9 @@ def test_ipad_root_scroll_down_confirmed_uses_row_tracked_ticks_for_missing_root
 
         def scroll_wheel(self, ticks: int, **kwargs) -> None:
             self.calls.append((ticks, kwargs))
+
+        def _page_drag_xy(self, x1, y1, x2, y2, **kwargs) -> None:
+            self.drags.append((x1, y1, x2, y2, kwargs))
 
         def invalidate_perceive_cache(self) -> None:
             pass
@@ -348,8 +357,9 @@ def test_ipad_root_scroll_down_confirmed_uses_row_tracked_ticks_for_missing_root
     )
 
     assert outcome == "stuck"
-    assert phone.calls == [
-        (4, {"focus_x": 147, "focus_y": 539, "focus_click": False}),
+    assert phone.calls == []
+    assert phone.drags == [
+        (147, 842, 147, 313, {"via": "settings_sidebar_drag"}),
     ]
 
 
