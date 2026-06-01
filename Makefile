@@ -1,4 +1,5 @@
 .PHONY: lint test check regression-gate regression-compare ab-semantic-plan \
+	golden-harvest golden-audit \
 	computer-use-success-rate-ios-settings ipad-settings-state-machine
 
 # CUQ-3.3: the reliability merge gate. `make check` is device-independent (no
@@ -10,7 +11,7 @@ lint:
 test:
 	uv run pytest skills/smoke -q
 
-check: lint test regression-gate
+check: lint test regression-gate golden-audit
 
 ROUNDS ?= 1
 OUT ?= artifacts/computer_use_success_rate/benchmark.json
@@ -37,6 +38,20 @@ RELIABILITY_BASELINE ?= skills/regression/fixtures/reliability_baseline.json
 regression-gate:
 	$(COMPUTER_USE_SUCCESS_RATE) validate "$(RELIABILITY_BASELINE)"
 	uv run pytest skills/smoke/test_computer_use_regression_gate.py -q
+
+# Tier A (log-sim): harvest verifier golden-cases from run ledgers into the
+# committed corpus. Manual/dev target — re-run and commit when ledgers change.
+# The replay+floor guard rides `make test` (skills/smoke/test_golden_ingest.py).
+GOLDEN_INGEST ?= uv run python -m skills.regression.golden_ingest
+HARVESTED_DIR ?= skills/golden/computer_use/_harvested
+golden-harvest:
+	$(GOLDEN_INGEST) harvest --roots artifacts --out "$(HARVESTED_DIR)"
+
+# Fail (rc 1) if the committed harvested corpus drifts from a fresh harvest.
+# No-ops (rc 0) in CI where artifacts/ is gitignored — folded into `make check`
+# so it guards on hosts that have ledgers without breaking hardware-free CI.
+golden-audit:
+	$(GOLDEN_INGEST) audit --roots artifacts --against "$(HARVESTED_DIR)"
 
 # Compare a freshly-produced benchmark ($(CANDIDATE)) against the committed floor,
 # failing (rc 1) on any success-rate regression beyond $(TOLERANCE). This is the
