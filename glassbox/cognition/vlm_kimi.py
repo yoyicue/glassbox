@@ -67,10 +67,6 @@ SF_MODEL = "Pro/moonshotai/Kimi-K2.6"
 MS_BASE_URL = "https://api.moonshot.cn/anthropic"
 MS_MODEL = "kimi-k2.6"   # 262k context + vision, measured ~8.5s/call, 3-4x cheaper than v1
 
-# legacy name compatibility
-DEFAULT_URL = SF_URL
-DEFAULT_MODEL = SF_MODEL
-
 
 def _require_api_key(explicit: str | None, env_name: str) -> str:
     """Get the API key: explicit argument > environment variable. Neither → raise a clear error.
@@ -485,12 +481,6 @@ def make_vlm_client(
     if name in ("siliconflow", "sf", "openai"):
         return SiliconFlowVLM(**kwargs)
     raise ValueError(f"unknown VLM_BACKEND={name} (supported: anthropic / siliconflow)")
-
-
-KimiResponse = VLMResponse
-KimiVL = SiliconFlowVLM
-KimiAnthropic = MoonshotAnthropicVLM
-make_kimi_client = make_vlm_client
 
 
 # ─── prompt: used by describe_scene ──────────────────────────────────

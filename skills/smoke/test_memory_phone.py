@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from glassbox.cognition import KimiResponse
+from glassbox.cognition import VLMResponse
 from glassbox.cognition.base import Box, UIElement
 from glassbox.effector import ActionResult
 from glassbox.memory import UTG, ActionRecord, ScreenMemory
@@ -120,7 +120,7 @@ def test_describe_merges_layer3_fields_into_live_memory(mock_phone):
         model = "fake"
 
         def describe_scene(self, *, frame_image, elements, scene_hint=None):
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="{}",
                 parsed={
                     "scene_type": "login_form",
@@ -162,7 +162,7 @@ def test_describe_reruns_scene_classifiers_before_memory_and_recorder(tmp_path, 
         model = "fake"
 
         def describe_scene(self, *, frame_image, elements, scene_hint=None):
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="{}",
                 parsed={"scene_type": "vlm_login", "elements": []},
                 usage={},

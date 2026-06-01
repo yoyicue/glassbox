@@ -21,25 +21,19 @@ import pytest
 import glassbox.cognition.vlm_kimi as vlm_mod
 from glassbox.cognition import (
     Box,
-    KimiAnthropic,
-    KimiResponse,
-    KimiVL,
-    MoonshotAnthropicVLM,
     Scene,
-    SiliconFlowVLM,
     UIElement,
     VLMRequest,
     VLMResponse,
     VLMResult,
     enrich_scene,
-    make_kimi_client,
     make_vlm_client,
     vlm_stage_outcome_from_result,
 )
 from glassbox.perception.source import Frame
 
 
-# ─── FakeKimi: implements a method named like KimiVL.describe_scene ──
+# ─── FakeKimi: implements a method named like SiliconFlowVLM.describe_scene ──
 @dataclass
 class FakeKimi:
     """Records the elements passed in + returns a preset parsed payload."""
@@ -53,7 +47,7 @@ class FakeKimi:
         self.last_hint = scene_hint
         if self.raise_exc:
             raise self.raise_exc
-        return KimiResponse(
+        return VLMResponse(
             raw_content="(fake)",
             parsed=self.parsed_payload,
             usage={"prompt_tokens": 0, "completion_tokens": 0},
@@ -79,10 +73,6 @@ def _ocr_el(eid: int, text: str, *, type_="text") -> UIElement:
 @pytest.mark.smoke
 def test_vlm_neutral_public_names_keep_legacy_aliases():
     assert VLMResponse is VLMResult
-    assert KimiResponse is VLMResponse
-    assert KimiVL is SiliconFlowVLM
-    assert KimiAnthropic is MoonshotAnthropicVLM
-    assert make_kimi_client is make_vlm_client
 
 
 @pytest.mark.smoke
@@ -192,7 +182,7 @@ def test_enrich_scene_forwards_set_of_mark_when_enabled():
         def describe_scene(self, *, frame_image, elements, scene_hint=None, set_of_mark=False):
             del frame_image, elements, scene_hint
             self.last_set_of_mark = set_of_mark
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="(fake)",
                 parsed={"scene_type": "settings_detail", "elements": []},
                 usage={"prompt_tokens": 0, "completion_tokens": 0},
@@ -232,7 +222,7 @@ def test_enrich_scene_uses_vlm_request_when_frame_is_available():
 
         def describe_scene(self, request):
             self.request = request
-            return KimiResponse(
+            return VLMResponse(
                 raw_content="{}",
                 parsed={"scene_type": "login_form", "elements": []},
                 usage={},
