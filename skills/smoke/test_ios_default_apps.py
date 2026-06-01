@@ -71,6 +71,11 @@ def test_default_app_label_canonicalizes_noisy_home_icon_labels():
     assert canonical_default_app_label("AppStore", platform="ipados").canonical_label == "App Store"
 
 
+def test_default_app_label_does_not_strip_ascii_prefix_before_short_aliases():
+    assert canonical_default_app_label("HGTV", platform="ipados") is None
+    assert canonical_default_app_label("PPTV", platform="ipados") is None
+
+
 def test_app_store_profile_requires_multiple_chrome_markers_not_notes_label():
     profile = default_launch_profile_for_labels(("App Store",))
     assert profile is not None

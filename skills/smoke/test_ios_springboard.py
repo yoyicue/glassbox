@@ -170,6 +170,31 @@ def test_home_icon_canonicalization_populates_intent_labels():
 
 
 @pytest.mark.smoke
+def test_home_icon_lookup_does_not_match_hgtv_as_apple_tv():
+    scene = _scene(
+        _el("HGTV", 760, 700, w=52),
+        _el("PPTV", 870, 700, w=52),
+        _el("Camera", 879, 818, w=52),
+        _el("Settings", 996, 818, w=60),
+        _el("Search", 940, 1010, w=54),
+    )
+    scene.platform_scene_kind = "springboard"
+
+    updated = annotate_springboard_icon_intents(scene, viewport_size=(1920, 1080), platform="ipados")
+    icon = find_springboard_icon(
+        scene,
+        ("Apple TV", "TV", "视频", "Videos", "atv", "stv"),
+        viewport_size=(1920, 1080),
+    )
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 2
+    assert by_text["HGTV"].intent_label is None
+    assert by_text["PPTV"].intent_label is None
+    assert icon is None
+
+
+@pytest.mark.smoke
 def test_ios_home_screen_rejects_settings_list():
     scene = _scene(
         _el("设置", 196, 72, w=48),

@@ -329,7 +329,7 @@ def find_springboard_icon(
         text_candidates = _icon_match_texts(el)
         for label in labels:
             for text in text_candidates:
-                if texts_match(text, label) or text_contains(text, label):
+                if _icon_text_matches_label(text, label):
                     best = el
                     best_ratio = 1.0
                     break
@@ -403,6 +403,19 @@ def _icon_match_texts(element: UIElement) -> tuple[str, ...]:
     if raw:
         texts.append(raw)
     return tuple(dict.fromkeys(texts))
+
+
+def _icon_text_matches_label(text: str, label: str) -> bool:
+    if texts_match(text, label):
+        return True
+    if _unsafe_short_ascii_icon_label(label):
+        return False
+    return text_contains(text, label)
+
+
+def _unsafe_short_ascii_icon_label(label: str) -> bool:
+    compact = "".join(ch for ch in str(label or "") if not ch.isspace())
+    return 0 < len(compact) <= 3 and all(ch.isascii() and ch.isalnum() for ch in compact)
 
 
 def springboard_signature(scene: Scene) -> tuple[tuple[str, int, int], ...]:

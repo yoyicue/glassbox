@@ -431,10 +431,6 @@ def _label_match_key(value: str | None) -> str:
 def _label_match_score(text_key: str, label_key: str) -> float:
     if text_key == label_key:
         return 1.0
-    if text_key.endswith(label_key):
-        prefix = text_key[: len(text_key) - len(label_key)]
-        if 0 < len(prefix) <= 4:
-            return 1.0
     return difflib.SequenceMatcher(None, text_key, label_key).ratio()
 
 
