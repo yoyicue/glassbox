@@ -124,13 +124,18 @@ class Perceptor:
         viewport_size: tuple[int, int] | None,
     ) -> None:
         platform = _platform_key_from_model(getattr(getattr(self._phone, "device_geometry", None), "model", ""))
-        if platform not in {"ios", "ipados"} and not str(scene.platform_scene_kind or "").startswith("springboard"):
+        scene_kind = str(scene.platform_scene_kind or "")
+        if platform not in {"ios", "ipados"} and not (
+            scene_kind.startswith("springboard") or scene_kind.startswith("settings")
+        ):
             return
         try:
+            from glassbox.ios.settings_rows import annotate_settings_root_row_intents
             from glassbox.ios.springboard import annotate_springboard_icon_intents
         except Exception:
             return
         annotate_springboard_icon_intents(scene, viewport_size=viewport_size, platform=platform)
+        annotate_settings_root_row_intents(scene, viewport_size=viewport_size)
 
     def classify_platform_scene_now(
         self,

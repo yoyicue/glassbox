@@ -20,6 +20,16 @@ from glassbox.ios.scene import (
     classify_ios_scene,
     settings_detail_semantic_guess,
 )
+from glassbox.ios.settings_rows import (
+    GREATER_CHINA_EN_ROOT_LABEL_ALIASES,
+    SETTINGS_ROOT_LABEL_ALIASES,
+    SETTINGS_ROOT_LABELS_ZH,
+    annotate_settings_root_row_intent,
+    annotate_settings_root_row_intents,
+    canonical_settings_root_row_label,
+    settings_root_row_label,
+    visible_settings_root_row_label,
+)
 from skills.regression.ios_settings.sections import (
     root_section_for_canonical_label,
     section_vocab_for,
@@ -127,25 +137,7 @@ SAFE_NAV_TEXT = (
     "显示预览", "Show Previews",
 )
 
-EXPECTED_ROOT_NAV_TEXT_ZH = (
-    "无线局域网",
-    "蓝牙",
-    "蜂窝网络",
-    "通知",
-    "声音与触感",
-    "专注模式",
-    "屏幕使用时间",
-    "通用",
-    "辅助功能",
-    "Siri",
-    "操作按钮",
-    "待机显示",
-    "Face ID与密码",
-    "紧急 SOS",
-    "隐私与安全性",
-    "电池",
-    "钱包与 Apple Pay",
-)
+EXPECTED_ROOT_NAV_TEXT_ZH = SETTINGS_ROOT_LABELS_ZH
 
 ROOT_NAV_VISUAL_ORDER_ZH = (
     "无线局域网",
@@ -167,63 +159,13 @@ ROOT_NAV_VISUAL_ORDER_ZH = (
     "钱包与 Apple Pay",
 )
 
-ROOT_LABEL_ALIASES = {
-    "伴机息示": "待机显示",
-    "伴机見示": "待机显示",
-    "伴机貝示": "待机显示",
-    "供机息示": "待机显示",
-    "供机見示": "待机显示",
-    "供机貝示": "待机显示",
-    "待机見示": "待机显示",
-    "待机貝示": "待机显示",
-    "0日": "待机显示",
-    "9日": "待机显示",
-    "O日": "待机显示",
-    "〇日": "待机显示",
-    "0E": "待机显示",
-    "OE": "待机显示",
-    "〇E": "待机显示",
-    "甩池": "电池",
-    "声效与触感反馈": "声音与触感",
-    "声音与触感反馈": "声音与触感",
-    "声音与触感": "声音与触感",
-    "屏幕时间": "屏幕使用时间",
-    "SOS": "紧急 SOS",
-    "SOS紧急联络": "紧急 SOS",
-    "SOS 紧急联络": "紧急 SOS",
-    "紧急联络": "紧急 SOS",
-    "面容ID与密码": "Face ID与密码",
-    "面容 ID与密码": "Face ID与密码",
-    "面容 ID 与密码": "Face ID与密码",
-    "Wi-Fi": "无线局域网",
-    "Bluetooth": "蓝牙",
-    "Cellular": "蜂窝网络",
-    "Notifications": "通知",
-    "Sounds": "声音与触感",
-    "Sounds & Haptics": "声音与触感",
-    "Focus": "专注模式",
-    "Screen Time": "屏幕使用时间",
-    "All Devices": "屏幕使用时间",
-    "General": "通用",
-    "Accessibility": "辅助功能",
-    "Action Button": "操作按钮",
-    "StandBy": "待机显示",
-    "Face ID & Passcode": "Face ID与密码",
-    "Touch ID & Passcode": "Face ID与密码",
-    "Emergency SOS": "紧急 SOS",
-    "Privacy & Security": "隐私与安全性",
-    "Battery": "电池",
-    "Wallet & Apple Pay": "钱包与 Apple Pay",
-}
+ROOT_LABEL_ALIASES = SETTINGS_ROOT_LABEL_ALIASES
 
 # Locale-overlay aliases, applied only when the active resolved PACK KEY matches
 # (NOT folded into the global map). Keyed by language+region pack key, not bare
 # region: greater-China *English* labels (WLAN / Mobile Service) are live-observed
 # in both en-CN and en-HK, but NOT in en-US or any zh pack (zh shows Chinese).
-_GREATER_CHINA_EN_OVERLAY = {
-    "WLAN": "无线局域网",
-    "Mobile Service": "蜂窝网络",
-}
+_GREATER_CHINA_EN_OVERLAY = GREATER_CHINA_EN_ROOT_LABEL_ALIASES
 ROOT_LABEL_LOCALE_ALIASES: dict[str, dict[str, str]] = {
     "en-CN": _GREATER_CHINA_EN_OVERLAY,
     "en-HK": _GREATER_CHINA_EN_OVERLAY,
@@ -321,7 +263,6 @@ ROOT_COVERAGE_ONLY_LABELS = (
     "钱包与 Apple Pay",
     "Wallet & Apple Pay",
 )
-SETTINGS_ROOT_INTENT_SOURCE = "settings_root_lexicon"
 IPAD_DEVICE_PROFILE_UNAVAILABLE_ROOT_LABELS = (
     # These are expected iPhone-oriented roots in the shared Settings vocabulary,
     # but they are unavailable on the current iPad Settings rig profile. Keep the
@@ -986,9 +927,8 @@ class SettingsPolicy:
         aliases = self._active_root_aliases()
         if en_fuzzy:
             aliases = {**_section_vocab_root_aliases(), **aliases}
-        return canonical_label(
+        return canonical_settings_root_row_label(
             text,
-            EXPECTED_ROOT_NAV_TEXT_ZH,
             aliases=aliases,
             fuzzy=0.82,
             max_leading_noise_chars=1,
@@ -1109,44 +1049,14 @@ class SettingsPolicy:
         return candidates
 
     def annotate_root_row_intents(self, scene) -> int:
-        """Attach canonical Settings root labels to row elements in-place."""
-        if not self.scene_is_settings_root(scene):
-            return 0
-        updated = 0
-        for element in scene.elements:
-            if self.annotate_root_row_intent(element):
-                updated += 1
-        return updated
+        return annotate_settings_root_row_intents(scene)
 
     def annotate_root_row_intent(self, element: UIElement) -> bool:
-        label = self.visible_root_row_label(element)
-        if label is None:
-            return False
-        if element.intent_label and element.intent_source != SETTINGS_ROOT_INTENT_SOURCE:
-            return False
-        evidence = list(element.type_evidence)
-        evidence.extend([
-            SETTINGS_ROOT_INTENT_SOURCE,
-            f"settings_root_label:{label}",
-        ])
-        changed = (
-            element.intent_label != label
-            or element.intent_source != SETTINGS_ROOT_INTENT_SOURCE
-            or element.intent_confidence != 1.0
-            or element.type_evidence != list(dict.fromkeys(evidence))
-        )
-        element.intent_label = label
-        element.intent_source = SETTINGS_ROOT_INTENT_SOURCE
-        element.intent_confidence = 1.0
-        element.type_evidence = list(dict.fromkeys(evidence))
-        return changed
+        return annotate_settings_root_row_intent(element)
 
     @staticmethod
     def row_label(element: UIElement) -> str:
-        intent = (element.intent_label or "").strip()
-        if intent and element.intent_source == SETTINGS_ROOT_INTENT_SOURCE:
-            return intent
-        return (element.text or "").strip()
+        return settings_root_row_label(element)
 
     def rejected_candidate_rows(
         self,
@@ -1320,18 +1230,7 @@ class SettingsPolicy:
         return ROOT_SEARCH_QUERIES.get(query_label)
 
     def visible_root_row_label(self, element: UIElement) -> str | None:
-        intent = (element.intent_label or "").strip()
-        if intent and element.intent_source == SETTINGS_ROOT_INTENT_SOURCE:
-            label = self.canonical_expected_root_label(intent)
-            if label is not None:
-                return label
-        text = (element.text or "").strip()
-        if not text:
-            return None
-        cy = element.box.center[1]
-        if cy < 110 or cy > 910:
-            return None
-        return self.canonical_expected_root_label(text)
+        return visible_settings_root_row_label(element)
 
     def should_recover_root_row_ocr(self, element: UIElement) -> bool:
         text = (element.text or "").strip()

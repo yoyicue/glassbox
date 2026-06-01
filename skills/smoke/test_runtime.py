@@ -173,6 +173,36 @@ class FakeSettingsOCR:
         ]
 
 
+class NoisySettingsRootOCR:
+    def recognize(self, _image):
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=198, y=72, w=48, h=20),
+                text="设置",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=300, w=40, h=20),
+                text="蓝牙",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=360, w=86, h=20),
+                text="待机見示",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=420, w=40, h=20),
+                text="S0S",
+                confidence=0.9,
+            ),
+        ]
+
+
 class FakeIPadSource(FakeSource):
     resolution = (744, 1133)
 
@@ -431,6 +461,23 @@ def test_build_phone_activates_app_scene_classifier_by_bundle():
     assert runtime.phone.recovery_provider is not None
     assert scene.scene_type == "settings_root"
     assert scene.platform_scene_kind == "settings_root"
+
+
+@pytest.mark.smoke
+def test_runtime_populates_settings_root_row_intent_labels_from_core_annotator():
+    source = FakeSource()
+    effector = FakeEffector()
+    cfg = AgentConfig(_env_file=None, memory_bundle="com.apple.Preferences")
+
+    runtime = build_phone(source=source, cfg=cfg, ocr=NoisySettingsRootOCR(), effector=effector)
+
+    scene = runtime.phone.perceive()
+
+    by_text = {element.text: element for element in scene.elements}
+    assert scene.platform_scene_kind == "settings_root"
+    assert by_text["待机見示"].intent_label == "待机显示"
+    assert by_text["待机見示"].intent_source == "settings_root_lexicon"
+    assert by_text["S0S"].intent_label == "紧急 SOS"
 
 
 @pytest.mark.smoke

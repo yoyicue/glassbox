@@ -6,6 +6,10 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 
 from glassbox.effector import ActionResult
+from glassbox.ios.settings_rows import (
+    annotate_settings_root_row_intents,
+    canonical_settings_root_row_label,
+)
 from glassbox.memory.element_key import element_key
 from skills.smoke.ios_settings_walkthrough_support import *
 
@@ -158,6 +162,37 @@ def test_tap_settings_row_uses_canonical_root_label_target():
     assert phone.calls[0]["target"] == "待机显示"
     assert phone.calls[0]["intent"] == "settings.row:待机显示"
     assert row.intent_label == "待机显示"
+
+
+@pytest.mark.smoke
+def test_core_settings_root_row_annotator_skips_non_root_settings_detail():
+    scene = _scene(
+        _el("待机見示", 80, 360, w=86),
+        _el("About", 280, 240, w=80),
+    )
+    scene.platform_scene_kind = "settings_detail"
+    scene.safe_actions = ["back", "scroll"]
+
+    updated = annotate_settings_root_row_intents(scene, viewport_size=(448, 973))
+
+    assert updated == 0
+    assert scene.elements[0].intent_label is None
+
+
+@pytest.mark.smoke
+def test_core_settings_root_row_annotator_leaves_unknown_rows_raw():
+    scene = _scene(
+        _el("设置", 198, 72, w=48),
+        _el("多多通用", 80, 360, w=86),
+        _el("HGTV", 80, 420, w=60),
+    )
+    scene.platform_scene_kind = "settings_root"
+
+    updated = annotate_settings_root_row_intents(scene, viewport_size=(448, 973))
+
+    assert updated == 0
+    assert canonical_settings_root_row_label("多多通用") is None
+    assert all(element.intent_label is None for element in scene.elements)
 
 
 @pytest.mark.smoke
