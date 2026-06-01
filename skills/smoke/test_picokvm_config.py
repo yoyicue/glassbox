@@ -40,8 +40,14 @@ def test_picokvm_config_defaults_match_bringup():
     assert cfg.page_slide_start_edge_fraction == 0.92
     assert cfg.page_slide_end_edge_fraction == 0.08
     assert cfg.page_slide_y_fraction == 0.45
+    assert cfg.ipad_page_slide_start_edge_fraction == 0.997
+    assert cfg.ipad_page_slide_end_edge_fraction == 0.003
+    assert cfg.ipad_page_slide_y_fraction == 0.56
+    assert cfg.ipad_page_slide_down_hold_ms == 260
+    assert cfg.ipad_page_slide_up_hold_ms == 260
     assert cfg.preset_drag_down_hold_ms == 350
     assert cfg.preset_drag_up_hold_ms == 150
+    assert cfg.no_video_wake_recovery_enabled is True
     assert cfg.keyboard_shortcut_gap_ms == 500
     assert cfg.semantic_verify_enabled is True
     assert cfg.semantic_verify_delay_ms == 800

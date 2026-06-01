@@ -408,6 +408,12 @@ class PicoKVMEffector:
         except Exception:
             video = {}
         if isinstance(video, dict) and video.get("ready") is False:
+            recovered_video = self._recover_no_video_signal()
+            if isinstance(recovered_video, dict) and recovered_video.get("ready") is True:
+                return PreflightResult(
+                    ok=True,
+                    message=f"PicoKVM {device_id!r} reachable; HDMI video recovered from no_signal",
+                )
             return PreflightResult(
                 ok=True,
                 fatal=False,
@@ -416,6 +422,39 @@ class PicoKVMEffector:
                 config_ref="GLASSBOX_PICOKVM",
             )
         return PreflightResult(ok=True, message=f"PicoKVM {device_id!r} reachable")
+
+    def _recover_no_video_signal(self) -> dict | None:
+        if not self.config.no_video_wake_recovery_enabled:
+            return None
+        try:
+            self._hid_reset_reports()
+            self._call("keyboardReport", {"modifier": 0, "keys": [0x2C]})  # Space
+            self._sleep_ms(80)
+            self._call("keyboardReport", {"modifier": 0, "keys": []})
+            self._sleep_ms(200)
+            self._call("keyboardReport", {"modifier": 0, "keys": [0x28]})  # Enter
+            self._sleep_ms(80)
+            self._call("keyboardReport", {"modifier": 0, "keys": []})
+            self._sleep_ms(200)
+            x1, y1 = self._logical_fraction_point(0.50, 0.93)
+            x2, y2 = self._logical_fraction_point(0.50, 0.42)
+            self._drag_path(
+                x1,
+                y1,
+                x2,
+                y2,
+                steps=20,
+                down_hold_ms=180,
+                up_hold_ms=180,
+                op="no_video_wake_unlock",
+                logical=True,
+                reset_hid=True,
+            )
+            self._sleep_ms(800)
+            return self.rpc.call("getVideoState").result or {}
+        except Exception as exc:
+            logger.warning(f"PicoKVM no-video wake recovery failed: {exc}")
+            return None
 
     def _ok(self, response: PicoKVMRpcResponse, *, op: str) -> ActionResult:
         _ = op
@@ -477,6 +516,21 @@ class PicoKVMEffector:
         x = round(max(0.0, min(1.0, float(x_fraction))) * maxv)
         y = round(max(0.0, min(1.0, float(y_fraction))) * maxv)
         return x, y
+
+    def _hid_reset_reports(self) -> list[PicoKVMRpcResponse]:
+        x, y = self._logical_fraction_point(0.5, 0.5)
+        return [
+            self._call("keyboardReport", {"modifier": 0, "keys": []}),
+            self._abs_logical_report(x, y, 0),
+            self._abs_logical_report(x, y, 0),
+        ]
+
+    def reset_hid_state(self) -> ActionResult:
+        """Release keyboard/mouse state and move the pointer away from edges."""
+        try:
+            return self._multi_result(self._hid_reset_reports(), op="reset_hid_state")
+        except Exception as exc:
+            return self._failed("reset_hid_state", exc)
 
     def _click_at(self, x: int, y: int) -> list[PicoKVMRpcResponse]:
         responses = [
@@ -591,35 +645,42 @@ class PicoKVMEffector:
         )
 
     def page_slide_left(self) -> ActionResult:
-        cfg = self.config
-        x1, y1 = self._logical_fraction_point(cfg.page_slide_start_edge_fraction, cfg.page_slide_y_fraction)
-        x2, y2 = self._logical_fraction_point(cfg.page_slide_end_edge_fraction, cfg.page_slide_y_fraction)
-        return self._drag_path(
-            x1,
-            y1,
-            x2,
-            y2,
-            steps=20,
-            down_hold_ms=cfg.preset_drag_down_hold_ms,
-            up_hold_ms=cfg.preset_drag_up_hold_ms,
-            op="page_slide_left",
-            logical=True,
-        )
+        return self._page_slide_path("left")
 
     def page_slide_right(self) -> ActionResult:
+        return self._page_slide_path("right")
+
+    def _page_slide_path(self, direction: str) -> ActionResult:
         cfg = self.config
-        x1, y1 = self._logical_fraction_point(cfg.page_slide_end_edge_fraction, cfg.page_slide_y_fraction)
-        x2, y2 = self._logical_fraction_point(cfg.page_slide_start_edge_fraction, cfg.page_slide_y_fraction)
+        if self._is_ipad_target():
+            start_fraction = cfg.ipad_page_slide_start_edge_fraction
+            end_fraction = cfg.ipad_page_slide_end_edge_fraction
+            y_fraction = cfg.ipad_page_slide_y_fraction
+            down_hold_ms = cfg.ipad_page_slide_down_hold_ms
+            up_hold_ms = cfg.ipad_page_slide_up_hold_ms
+            reset_hid = True
+        else:
+            start_fraction = cfg.page_slide_start_edge_fraction
+            end_fraction = cfg.page_slide_end_edge_fraction
+            y_fraction = cfg.page_slide_y_fraction
+            down_hold_ms = cfg.preset_drag_down_hold_ms
+            up_hold_ms = cfg.preset_drag_up_hold_ms
+            reset_hid = False
+        if direction == "right":
+            start_fraction, end_fraction = end_fraction, start_fraction
+        x1, y1 = self._logical_fraction_point(start_fraction, y_fraction)
+        x2, y2 = self._logical_fraction_point(end_fraction, y_fraction)
         return self._drag_path(
             x1,
             y1,
             x2,
             y2,
             steps=20,
-            down_hold_ms=cfg.preset_drag_down_hold_ms,
-            up_hold_ms=cfg.preset_drag_up_hold_ms,
-            op="page_slide_right",
+            down_hold_ms=down_hold_ms,
+            up_hold_ms=up_hold_ms,
+            op=f"page_slide_{direction}",
             logical=True,
+            reset_hid=reset_hid,
         )
 
     def _drag_path(
@@ -634,14 +695,18 @@ class PicoKVMEffector:
         up_hold_ms: int,
         op: str,
         logical: bool = False,
+        reset_hid: bool = False,
     ) -> ActionResult:
         try:
             steps = max(1, int(steps))
             report = self._abs_logical_report if logical else self._abs_report
-            responses = [
+            responses: list[PicoKVMRpcResponse] = []
+            if reset_hid:
+                responses.extend(self._hid_reset_reports())
+            responses.extend([
                 report(x1, y1, 0),
                 report(x1, y1, 0),
-            ]
+            ])
             self._sleep_ms(self.config.click_move_settle_ms)
             responses.append(report(x1, y1, 1))
             self._sleep_ms(down_hold_ms)
@@ -653,6 +718,8 @@ class PicoKVMEffector:
                 self._sleep_ms(self.config.rel_settle_ms)
             self._sleep_ms(up_hold_ms)
             responses.append(report(x2, y2, 0))
+            if reset_hid:
+                responses.extend(self._hid_reset_reports())
             return self._multi_result(responses, op=op)
         except Exception as exc:
             return self._failed(op, exc)
