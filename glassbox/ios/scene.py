@@ -204,6 +204,15 @@ def classify_ios_scene(
             evidence=("suggestions_title", "app_category", "bottom_search_chrome"),
         )
 
+    if looks_like_weather_app_surface(scene):
+        return IOSSceneClassification(
+            kind="unknown",
+            confidence=0.30,
+            title=title,
+            safe_actions=("home", "open_app"),
+            evidence=("weather_app_surface",),
+        )
+
     if _looks_like_platform_home_widget_surface(scene, viewport_size=(w, h)):
         return IOSSceneClassification(
             kind="springboard",
@@ -255,15 +264,6 @@ def classify_ios_scene(
             title=title,
             safe_actions=("edge_back", "back", "trace"),
             evidence=("purchase_paywall",),
-        )
-
-    if looks_like_weather_app_surface(scene):
-        return IOSSceneClassification(
-            kind="unknown",
-            confidence=0.30,
-            title=title,
-            safe_actions=("home", "open_app"),
-            evidence=("weather_app_surface",),
         )
 
     if _looks_like_springboard(scene, viewport_size=(w, h)):

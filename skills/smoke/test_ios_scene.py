@@ -699,6 +699,36 @@ def test_ipados_scene_classifier_weather_app_search_is_not_settings_search_resul
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_weather_search_with_platform_springboard_is_not_home():
+    scene = _scene(
+        _el("12:48PM Mon 1 Jun", 16, 14, w=122, h=12),
+        _el("Q search for a city or ai...0", 34, 90, w=190, h=22),
+        _el("Paste", 36, 136, w=36, h=12),
+        _el("AutoFill", 98, 135, w=46, h=13),
+        _el("& Home", 30, 158, w=58, h=14),
+        _el("Wangjing International Resear...", 28, 178, w=208, h=16),
+        _el("Chongqing", 376, 131, w=140, h=32),
+        _el("25°", 394, 162, w=134, h=78),
+        _el("Cloudy", 418, 250, w=58, h=18),
+        _el("H:28° L:23°", 398, 268, w=98, h=19),
+        _el("30 - Excellent", 292, 402, w=114, h=18),
+        _el("Current AQI (CN) is 30.", 294, 520, w=138, h=14),
+        _el("• HOURLY FORECAST", 294, 572, w=126, h=12),
+        _el("Now", 292, 604, w=30, h=12),
+        _el("1PM", 346, 606, w=28, h=10),
+        _el("• 10-DAY FORECAST", 294, 746, w=120, h=12),
+        _el("Today", 290, 784, w=52, h=20),
+        _el("Tue", 292, 832, w=32, h=18),
+    )
+    scene.platform_scene_kind = "springboard"
+
+    classified = classify_ios_scene(scene, viewport_size=(640, 989))
+
+    assert classified.kind == "unknown"
+    assert "weather_app_surface" in classified.evidence
+
+
+@pytest.mark.smoke
 def test_ios_scene_classifier_scrolled_app_settings_detail_without_nav_ocr():
     scene = _scene(
         _el("通讯录", 40, 230, w=66, h=24, ty="button"),
