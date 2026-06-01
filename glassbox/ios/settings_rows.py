@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 from glassbox.cognition.base import Scene, UIElement
 from glassbox.cognition.text_match import canonical_label
@@ -84,6 +85,11 @@ GREATER_CHINA_EN_ROOT_LABEL_ALIASES = {
     "Mobile Service": "蜂窝网络",
 }
 
+SETTINGS_ROOT_LABEL_LOCALE_ALIASES: dict[str, dict[str, str]] = {
+    "en-CN": GREATER_CHINA_EN_ROOT_LABEL_ALIASES,
+    "en-HK": GREATER_CHINA_EN_ROOT_LABEL_ALIASES,
+}
+
 
 def canonical_settings_root_row_label(
     text: str | None,
@@ -97,10 +103,32 @@ def canonical_settings_root_row_label(
     return canonical_label(
         text,
         SETTINGS_ROOT_LABELS_ZH,
-        aliases=aliases or SETTINGS_ROOT_LABEL_ALIASES,
+        aliases=aliases if aliases is not None else SETTINGS_ROOT_LABEL_ALIASES,
         fuzzy=fuzzy,
         max_leading_noise_chars=max_leading_noise_chars,
         fuzzy_aliases=fuzzy_aliases,
+    )
+
+
+def settings_root_label_aliases_for_config(config: Any) -> dict[str, str]:
+    """Return root-row aliases for the active device locale."""
+    aliases = dict(SETTINGS_ROOT_LABEL_ALIASES)
+    try:
+        from glassbox.locale import resolve_locale
+
+        overlay = SETTINGS_ROOT_LABEL_LOCALE_ALIASES.get(resolve_locale(config).code)
+    except Exception:
+        overlay = None
+    if overlay:
+        aliases.update(overlay)
+    return aliases
+
+
+def settings_root_fuzzy_aliases_for_config(config: Any) -> bool:
+    """Whether active-locale Settings aliases should use OCR-tolerant matching."""
+    language = str(getattr(config, "language", "") or "")
+    return bool(getattr(config, "settings_locale_fuzzy_resolution", False)) and not language.startswith(
+        "zh"
     )
 
 
@@ -108,6 +136,8 @@ def annotate_settings_root_row_intents(
     scene: Scene,
     *,
     viewport_size: tuple[int, int] | None = None,
+    aliases: Mapping[str, str] | None = None,
+    fuzzy_aliases: bool = False,
 ) -> int:
     """Attach canonical Settings root-row names to visible row OCR elements."""
     if not _settings_root_rows_visible(scene):
@@ -117,13 +147,29 @@ def annotate_settings_root_row_intents(
     for element in scene.elements:
         if not _is_settings_root_row_region(element, scene=scene, viewport_size=(w, h)):
             continue
-        if annotate_settings_root_row_intent(element):
+        if annotate_settings_root_row_intent(
+            element,
+            viewport_size=(w, h),
+            aliases=aliases,
+            fuzzy_aliases=fuzzy_aliases,
+        ):
             updated += 1
     return updated
 
 
-def annotate_settings_root_row_intent(element: UIElement) -> bool:
-    label = visible_settings_root_row_label(element)
+def annotate_settings_root_row_intent(
+    element: UIElement,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+    aliases: Mapping[str, str] | None = None,
+    fuzzy_aliases: bool = False,
+) -> bool:
+    label = visible_settings_root_row_label(
+        element,
+        viewport_size=viewport_size,
+        aliases=aliases,
+        fuzzy_aliases=fuzzy_aliases,
+    )
     if label is None:
         return False
     if element.intent_label and element.intent_source != SETTINGS_ROOT_INTENT_SOURCE:
@@ -147,19 +193,37 @@ def annotate_settings_root_row_intent(element: UIElement) -> bool:
     return changed
 
 
-def visible_settings_root_row_label(element: UIElement) -> str | None:
+def visible_settings_root_row_label(
+    element: UIElement,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+    aliases: Mapping[str, str] | None = None,
+    fuzzy_aliases: bool = False,
+) -> str | None:
     intent = (element.intent_label or "").strip()
     if intent and element.intent_source == SETTINGS_ROOT_INTENT_SOURCE:
-        label = canonical_settings_root_row_label(intent)
+        label = canonical_settings_root_row_label(
+            intent,
+            aliases=aliases,
+            fuzzy_aliases=fuzzy_aliases,
+        )
         if label is not None:
             return label
     text = (element.text or "").strip()
     if not text:
         return None
     cy = element.box.center[1]
-    if cy < 110 or cy > 910:
+    if viewport_size is not None:
+        _w, h = viewport_size
+        if cy < int(h * 0.10) or cy > int(h * 0.94):
+            return None
+    elif cy < 110 or cy > 910:
         return None
-    return canonical_settings_root_row_label(text)
+    return canonical_settings_root_row_label(
+        text,
+        aliases=aliases,
+        fuzzy_aliases=fuzzy_aliases,
+    )
 
 
 def settings_root_row_label(element: UIElement) -> str:
@@ -207,9 +271,12 @@ __all__ = [
     "SETTINGS_ROOT_INTENT_SOURCE",
     "SETTINGS_ROOT_LABELS_ZH",
     "SETTINGS_ROOT_LABEL_ALIASES",
+    "SETTINGS_ROOT_LABEL_LOCALE_ALIASES",
     "annotate_settings_root_row_intent",
     "annotate_settings_root_row_intents",
     "canonical_settings_root_row_label",
+    "settings_root_fuzzy_aliases_for_config",
+    "settings_root_label_aliases_for_config",
     "settings_root_row_label",
     "visible_settings_root_row_label",
 ]

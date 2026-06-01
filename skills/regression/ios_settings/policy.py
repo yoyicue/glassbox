@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from glassbox.cognition import UIElement
-from glassbox.cognition.text_match import canonical_label, compact_text, fuzzy_ratio
+from glassbox.cognition.text_match import compact_text, fuzzy_ratio
 from glassbox.crawl.policy import CrawlState, NavigationCandidate, PageInfo
 from glassbox.ios.progress import is_time_text, stable_visible_texts
 from glassbox.ios.scene import (
@@ -23,10 +23,13 @@ from glassbox.ios.scene import (
 from glassbox.ios.settings_rows import (
     GREATER_CHINA_EN_ROOT_LABEL_ALIASES,
     SETTINGS_ROOT_LABEL_ALIASES,
+    SETTINGS_ROOT_LABEL_LOCALE_ALIASES,
     SETTINGS_ROOT_LABELS_ZH,
     annotate_settings_root_row_intent,
     annotate_settings_root_row_intents,
     canonical_settings_root_row_label,
+    settings_root_fuzzy_aliases_for_config,
+    settings_root_label_aliases_for_config,
     settings_root_row_label,
     visible_settings_root_row_label,
 )
@@ -166,10 +169,7 @@ ROOT_LABEL_ALIASES = SETTINGS_ROOT_LABEL_ALIASES
 # region: greater-China *English* labels (WLAN / Mobile Service) are live-observed
 # in both en-CN and en-HK, but NOT in en-US or any zh pack (zh shows Chinese).
 _GREATER_CHINA_EN_OVERLAY = GREATER_CHINA_EN_ROOT_LABEL_ALIASES
-ROOT_LABEL_LOCALE_ALIASES: dict[str, dict[str, str]] = {
-    "en-CN": _GREATER_CHINA_EN_OVERLAY,
-    "en-HK": _GREATER_CHINA_EN_OVERLAY,
-}
+ROOT_LABEL_LOCALE_ALIASES = SETTINGS_ROOT_LABEL_LOCALE_ALIASES
 
 ROOT_SEARCH_QUERIES = {
     "无线局域网": "wuxianjuyuwang",
@@ -328,16 +328,17 @@ def static_device_unavailable_root_labels(
         _device_model_key(phone_model)
     )
     if labels is not None and _is_ipad_device_context(platform=platform, phone_model=phone_model):
-        return {
-            canonical_label(
+        out: set[str] = set()
+        for label in labels:
+            canonical = canonical_settings_root_row_label(
                 label,
-                EXPECTED_ROOT_NAV_TEXT_ZH,
                 aliases={**ROOT_LABEL_ALIASES, **_GREATER_CHINA_EN_OVERLAY},
                 fuzzy=0.82,
                 max_leading_noise_chars=1,
             )
-            for label in labels
-        }
+            if canonical is not None:
+                out.add(canonical)
+        return out
     return set()
 
 
@@ -921,9 +922,7 @@ class SettingsPolicy:
         # resolver and flag-off stays byte-identical. Under en, source the alias
         # vocab from the SectionVocab and turn on the OCR-tolerant fuzzy alias
         # tier so a 1-letter OCR garble of a reached required page still credits.
-        en_fuzzy = bool(getattr(cfg, "settings_locale_fuzzy_resolution", False)) and not str(
-            cfg.language or ""
-        ).startswith("zh")
+        en_fuzzy = settings_root_fuzzy_aliases_for_config(cfg)
         aliases = self._active_root_aliases()
         if en_fuzzy:
             aliases = {**_section_vocab_root_aliases(), **aliases}
@@ -947,12 +946,14 @@ class SettingsPolicy:
         (`SettingsPolicy(sections=locale.app("settings").sections)`) is deferred.
         """
         from glassbox.config import get_config
-        from glassbox.locale import resolve_locale
 
-        overlay = ROOT_LABEL_LOCALE_ALIASES.get(resolve_locale(get_config()).code)
-        if not overlay:
-            return ROOT_LABEL_ALIASES
-        return {**ROOT_LABEL_ALIASES, **overlay}
+        return settings_root_label_aliases_for_config(get_config())
+
+    @staticmethod
+    def _active_root_fuzzy_aliases() -> bool:
+        from glassbox.config import get_config
+
+        return settings_root_fuzzy_aliases_for_config(get_config())
 
     def is_safe_known_navigation_label(self, text: str) -> bool:
         if self.canonical_expected_root_label(text) is not None:
@@ -1049,10 +1050,18 @@ class SettingsPolicy:
         return candidates
 
     def annotate_root_row_intents(self, scene) -> int:
-        return annotate_settings_root_row_intents(scene)
+        return annotate_settings_root_row_intents(
+            scene,
+            aliases=self._active_root_aliases(),
+            fuzzy_aliases=self._active_root_fuzzy_aliases(),
+        )
 
     def annotate_root_row_intent(self, element: UIElement) -> bool:
-        return annotate_settings_root_row_intent(element)
+        return annotate_settings_root_row_intent(
+            element,
+            aliases=self._active_root_aliases(),
+            fuzzy_aliases=self._active_root_fuzzy_aliases(),
+        )
 
     @staticmethod
     def row_label(element: UIElement) -> str:
@@ -1230,7 +1239,11 @@ class SettingsPolicy:
         return ROOT_SEARCH_QUERIES.get(query_label)
 
     def visible_root_row_label(self, element: UIElement) -> str | None:
-        return visible_settings_root_row_label(element)
+        return visible_settings_root_row_label(
+            element,
+            aliases=self._active_root_aliases(),
+            fuzzy_aliases=self._active_root_fuzzy_aliases(),
+        )
 
     def should_recover_root_row_ocr(self, element: UIElement) -> bool:
         text = (element.text or "").strip()

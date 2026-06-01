@@ -203,6 +203,36 @@ class NoisySettingsRootOCR:
         ]
 
 
+class GreaterChinaEnglishSettingsRootOCR:
+    def recognize(self, _image):
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=198, y=72, w=72, h=20),
+                text="Settings",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=300, w=64, h=20),
+                text="WLAN",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=360, w=140, h=20),
+                text="Mobile Service",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=420, w=96, h=20),
+                text="Screem Time",
+                confidence=0.9,
+            ),
+        ]
+
+
 class FakeIPadSource(FakeSource):
     resolution = (744, 1133)
 
@@ -478,6 +508,35 @@ def test_runtime_populates_settings_root_row_intent_labels_from_core_annotator()
     assert by_text["待机見示"].intent_label == "待机显示"
     assert by_text["待机見示"].intent_source == "settings_root_lexicon"
     assert by_text["S0S"].intent_label == "紧急 SOS"
+
+
+@pytest.mark.smoke
+def test_runtime_populates_greater_china_english_settings_root_intents_from_core_annotator():
+    source = FakeIPadSource()
+    effector = FakeEffector()
+    cfg = AgentConfig(
+        _env_file=None,
+        phone_model="ipad_mini_7",
+        memory_bundle="com.apple.Preferences",
+        language="en",
+        region="HK",
+        settings_locale_fuzzy_resolution=True,
+    )
+
+    runtime = build_phone(
+        source=source,
+        cfg=cfg,
+        ocr=GreaterChinaEnglishSettingsRootOCR(),
+        effector=effector,
+    )
+
+    scene = runtime.phone.perceive()
+
+    by_text = {element.text: element for element in scene.elements}
+    assert scene.platform_scene_kind == "settings_root"
+    assert by_text["WLAN"].intent_label == "无线局域网"
+    assert by_text["Mobile Service"].intent_label == "蜂窝网络"
+    assert by_text["Screem Time"].intent_label == "屏幕使用时间"
 
 
 @pytest.mark.smoke

@@ -135,7 +135,12 @@ class Perceptor:
         except Exception:
             return
         annotate_springboard_icon_intents(scene, viewport_size=viewport_size, platform=platform)
-        annotate_settings_root_row_intents(scene, viewport_size=viewport_size)
+        annotate_settings_root_row_intents(
+            scene,
+            viewport_size=viewport_size,
+            aliases=getattr(self._phone, "settings_root_label_aliases", None),
+            fuzzy_aliases=bool(getattr(self._phone, "settings_root_fuzzy_aliases", False)),
+        )
 
     def classify_platform_scene_now(
         self,

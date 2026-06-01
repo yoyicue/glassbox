@@ -27,6 +27,10 @@ from glassbox.cognition import HeuristicTyper
 from glassbox.config import AgentConfig, get_config
 from glassbox.effector import NOOP_CAPABILITIES, BackendCapabilities, Effector
 from glassbox.geometry import content_size_for_crop, effector_frame_resolution, make_device_geometry
+from glassbox.ios.settings_rows import (
+    settings_root_fuzzy_aliases_for_config,
+    settings_root_label_aliases_for_config,
+)
 from glassbox.locale import select_locale_code
 from glassbox.memory import save_utg, wrap_with_memory_if_enabled
 from glassbox.obs import open_recorder, wrap_vlm_cache_if_enabled
@@ -706,6 +710,8 @@ def build_phone(
             max_ocr_elements=cfg.max_ocr_elements,
             max_ocr_text_chars=cfg.max_ocr_text_chars,
             ocr_timeout=cfg.ocr_timeout,
+            settings_root_label_aliases=settings_root_label_aliases_for_config(cfg),
+            settings_root_fuzzy_aliases=settings_root_fuzzy_aliases_for_config(cfg),
             ocr_temporal_voting=OcrTemporalVotingConfig(
                 enabled=cfg.ocr_temporal_voting_enabled,
                 frames=cfg.ocr_temporal_voting_frames,

@@ -31,7 +31,7 @@ also instantiate it directly.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -127,6 +127,8 @@ class PhoneObservationConfig:
     ocr_timeout: float = 0.0
     perceive_cache_diff: float = 0.005
     ocr_temporal_voting: OcrTemporalVotingConfig = field(default_factory=OcrTemporalVotingConfig)
+    settings_root_label_aliases: Mapping[str, str] | None = None
+    settings_root_fuzzy_aliases: bool = False
 
 
 # HID modifiers / keycodes used by the keyboard helpers.
@@ -446,6 +448,12 @@ class Phone:
         self._max_ocr_elements = max(0, int(observation_config.max_ocr_elements))
         self._max_ocr_text_chars = max(0, int(observation_config.max_ocr_text_chars))
         self._ocr_timeout = max(0.0, float(observation_config.ocr_timeout))
+        self.settings_root_label_aliases = (
+            dict(observation_config.settings_root_label_aliases)
+            if observation_config.settings_root_label_aliases is not None
+            else None
+        )
+        self.settings_root_fuzzy_aliases = bool(observation_config.settings_root_fuzzy_aliases)
         vote_cfg = observation_config.ocr_temporal_voting
         self._ocr_temporal_voting = OcrTemporalVotingConfig(
             enabled=bool(vote_cfg.enabled),

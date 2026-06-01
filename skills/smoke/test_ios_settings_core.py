@@ -7,6 +7,8 @@ from types import SimpleNamespace
 
 from glassbox.effector import ActionResult
 from glassbox.ios.settings_rows import (
+    GREATER_CHINA_EN_ROOT_LABEL_ALIASES,
+    SETTINGS_ROOT_LABEL_ALIASES,
     annotate_settings_root_row_intents,
     canonical_settings_root_row_label,
 )
@@ -193,6 +195,50 @@ def test_core_settings_root_row_annotator_leaves_unknown_rows_raw():
     assert updated == 0
     assert canonical_settings_root_row_label("多多通用") is None
     assert all(element.intent_label is None for element in scene.elements)
+
+
+@pytest.mark.smoke
+def test_core_settings_root_row_annotator_accepts_injected_greater_china_english_aliases():
+    scene = _scene(
+        _el("Settings", 198, 72, w=72),
+        _el("WLAN", 80, 360, w=64),
+        _el("Mobile Service", 80, 420, w=140),
+    )
+    scene.platform_scene_kind = "settings_root"
+    aliases = {**SETTINGS_ROOT_LABEL_ALIASES, **GREATER_CHINA_EN_ROOT_LABEL_ALIASES}
+
+    updated = annotate_settings_root_row_intents(
+        scene,
+        viewport_size=(448, 973),
+        aliases=aliases,
+        fuzzy_aliases=True,
+    )
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 2
+    assert by_text["WLAN"].intent_label == "无线局域网"
+    assert by_text["Mobile Service"].intent_label == "蜂窝网络"
+
+
+@pytest.mark.smoke
+def test_core_settings_root_row_annotator_uses_viewport_relative_band_for_ipad_sidebar():
+    scene = _scene(
+        _el("Settings", 372, 70, w=72),
+        _el("Mobile Service", 90, 960, w=140),
+    )
+    scene.platform_scene_kind = "settings_detail"
+    scene.classification_evidence = ["ipad_split_view"]
+    aliases = {**SETTINGS_ROOT_LABEL_ALIASES, **GREATER_CHINA_EN_ROOT_LABEL_ALIASES}
+
+    updated = annotate_settings_root_row_intents(
+        scene,
+        viewport_size=(744, 1133),
+        aliases=aliases,
+    )
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 1
+    assert by_text["Mobile Service"].intent_label == "蜂窝网络"
 
 
 @pytest.mark.smoke
