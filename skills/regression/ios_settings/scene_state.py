@@ -172,6 +172,18 @@ def safe_navigation_candidates(
     )
 
 
+def annotate_root_row_intents(scene) -> int:
+    return DEFAULT_SETTINGS_POLICY.annotate_root_row_intents(scene)
+
+
+def annotate_root_row_intent(element: UIElement) -> bool:
+    return DEFAULT_SETTINGS_POLICY.annotate_root_row_intent(element)
+
+
+def row_label(element: UIElement) -> str:
+    return DEFAULT_SETTINGS_POLICY.row_label(element)
+
+
 def potential_navigation_row_text(element: UIElement) -> str | None:
     return DEFAULT_SETTINGS_POLICY.potential_navigation_row_text(element)
 

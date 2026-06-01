@@ -321,6 +321,7 @@ ROOT_COVERAGE_ONLY_LABELS = (
     "钱包与 Apple Pay",
     "Wallet & Apple Pay",
 )
+SETTINGS_ROOT_INTENT_SOURCE = "settings_root_lexicon"
 IPAD_DEVICE_PROFILE_UNAVAILABLE_ROOT_LABELS = (
     # These are expected iPhone-oriented roots in the shared Settings vocabulary,
     # but they are unavailable on the current iPad Settings rig profile. Keep the
@@ -1076,11 +1077,15 @@ class SettingsPolicy:
 
         candidates: list[UIElement] = []
         seen: set[str] = set()
+        annotate_root_rows = self.scene_is_settings_root(scene)
         for element in scene.elements:
+            if annotate_root_rows:
+                self.annotate_root_row_intent(element)
             text = self.potential_navigation_row_text(element)
-            if not text or text in seen:
+            seen_key = self.row_label(element) if annotate_root_rows else text
+            if not text or seen_key in seen:
                 continue
-            seen.add(text)
+            seen.add(seen_key)
             if self.is_settings_section_header(scene, element):
                 continue
             if (
@@ -1102,6 +1107,46 @@ class SettingsPolicy:
             candidates.append(element)
         candidates.sort(key=lambda element: element.box.center[1])
         return candidates
+
+    def annotate_root_row_intents(self, scene) -> int:
+        """Attach canonical Settings root labels to row elements in-place."""
+        if not self.scene_is_settings_root(scene):
+            return 0
+        updated = 0
+        for element in scene.elements:
+            if self.annotate_root_row_intent(element):
+                updated += 1
+        return updated
+
+    def annotate_root_row_intent(self, element: UIElement) -> bool:
+        label = self.visible_root_row_label(element)
+        if label is None:
+            return False
+        if element.intent_label and element.intent_source != SETTINGS_ROOT_INTENT_SOURCE:
+            return False
+        evidence = list(element.type_evidence)
+        evidence.extend([
+            SETTINGS_ROOT_INTENT_SOURCE,
+            f"settings_root_label:{label}",
+        ])
+        changed = (
+            element.intent_label != label
+            or element.intent_source != SETTINGS_ROOT_INTENT_SOURCE
+            or element.intent_confidence != 1.0
+            or element.type_evidence != list(dict.fromkeys(evidence))
+        )
+        element.intent_label = label
+        element.intent_source = SETTINGS_ROOT_INTENT_SOURCE
+        element.intent_confidence = 1.0
+        element.type_evidence = list(dict.fromkeys(evidence))
+        return changed
+
+    @staticmethod
+    def row_label(element: UIElement) -> str:
+        intent = (element.intent_label or "").strip()
+        if intent and element.intent_source == SETTINGS_ROOT_INTENT_SOURCE:
+            return intent
+        return (element.text or "").strip()
 
     def rejected_candidate_rows(
         self,
@@ -1275,6 +1320,11 @@ class SettingsPolicy:
         return ROOT_SEARCH_QUERIES.get(query_label)
 
     def visible_root_row_label(self, element: UIElement) -> str | None:
+        intent = (element.intent_label or "").strip()
+        if intent and element.intent_source == SETTINGS_ROOT_INTENT_SOURCE:
+            label = self.canonical_expected_root_label(intent)
+            if label is not None:
+                return label
         text = (element.text or "").strip()
         if not text:
             return None

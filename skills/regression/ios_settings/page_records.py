@@ -193,6 +193,7 @@ def record_visible_root_row_visits(
 ) -> None:
     if not settings_scene_state.scene_is_settings_root(scene):
         return
+    settings_scene_state.annotate_root_row_intents(scene)
     visited = set(DEFAULT_SETTINGS_POLICY.root_coverage(visits)["visited"])
     rows: list[tuple[int, str, str]] = []
     for element in scene.elements:

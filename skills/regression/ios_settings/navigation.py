@@ -333,7 +333,7 @@ def open_visible_or_scroll_to_row(
     def log_seek_attempt(attempt: int) -> None:
         print(f"[scroll] seek-row attempt={attempt}", flush=True)
 
-    return planner.scroll_to_visible_label(
+    hit = planner.scroll_to_visible_label(
         labels,
         region=region,
         canonicalizer=actions.canonical_expected_root_label,
@@ -347,6 +347,9 @@ def open_visible_or_scroll_to_row(
         settle_s=1.0,
         on_seek_attempt=log_seek_attempt,
     )
+    if hit is not None and actions.canonical_expected_root_label(labels[0]) is not None:
+        settings_scene_state.annotate_root_row_intent(hit)
+    return hit
 
 
 def settings_row_tap_point(phone, row_hit: UIElement) -> tuple[int, int]:
@@ -386,7 +389,7 @@ def settings_row_target_element(phone, scene, row_hit: UIElement) -> UIElement:
 
 
 def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActions) -> bool:
-    label = (row_hit.text or "").strip()
+    label = settings_scene_state.row_label(row_hit)
     tap_element = getattr(phone, "tap_element", None)
     if callable(tap_element):
         # Delegate to glassbox's actuation: same settings-aware first tap, but it
@@ -413,7 +416,7 @@ def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActio
         return accepted
     # Fallback for phones without the actuation path (e.g. MockEffector in tests).
     x, row_y = settings_row_tap_point(phone, row_hit)
-    with actions.action_intent(phone, "settings.tap_row", text=row_hit.text, x=x, y=row_y):
+    with actions.action_intent(phone, "settings.tap_row", text=label, x=x, y=row_y):
         result = phone.tap_xy(x, row_y)
     accepted = actions.record_action_verdict(phone, result)
     if accepted:
