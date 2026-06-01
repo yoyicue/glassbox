@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from glassbox.cognition import Box, Scene, UIElement
+from glassbox.ios.recovery import should_foreground_target_app_instead_of_back
 from glassbox.ios.scene import apply_ios_classification, classify_ios_scene
 from glassbox.ipados.scene import classify_ipados_scene
 
@@ -34,6 +35,22 @@ def _scene_from_ocr_fixture(name: str) -> Scene:
             )
         )
     return Scene(frame_id=0, timestamp=0.0, elements=elements)
+
+
+@pytest.mark.smoke
+def test_ios_recovery_foregrounds_target_from_weather_surface():
+    scene = _scene(
+        _el("Q Search for a city or ai...0", 36, 94, w=188),
+        _el("MY LOCATION", 408, 130, w=80),
+        _el("Daxing", 401, 148, w=92),
+        _el("34°", 402, 184, w=112),
+        _el("Sunny conditions will continue for the rest of the day.", 292, 402, w=280),
+        _el("10-DAY FORECAST", 294, 576, w=120),
+        _el("Today", 290, 614, w=50),
+        _el("Tue", 292, 662, w=32),
+    )
+
+    assert should_foreground_target_app_instead_of_back(scene, viewport_size=(640, 989))
 
 
 @pytest.mark.smoke

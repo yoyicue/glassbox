@@ -14,7 +14,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from glassbox.action.semantics import action_verdict
-from glassbox.ios.recovery import dismiss_system_search
+from glassbox.ios.recovery import (
+    dismiss_system_search,
+    should_foreground_target_app_instead_of_back,
+)
 from skills.regression.ios_settings import context as settings_context
 
 ActionIntent = Callable[..., AbstractContextManager[Any]]
@@ -263,6 +266,20 @@ def return_from_blocked_settings_state(phone, scene, actions: SettingsRecoveryAc
 
 def return_from_unknown_settings_state(phone, scene, actions: SettingsRecoveryActions) -> bool:
     before = scene
+    viewport_size = None
+    viewport = getattr(phone, "viewport_size", None)
+    if callable(viewport):
+        try:
+            viewport_size = viewport()
+        except Exception:
+            viewport_size = None
+    if should_foreground_target_app_instead_of_back(scene, viewport_size=viewport_size):
+        with actions.action_intent(
+            phone,
+            "foreground.open_settings_from_recovery_surface",
+            labels=actions.root_title,
+        ):
+            return bool(actions.open_app_from_springboard(phone, actions.root_title, max_pages=8))
     if actions.try_memory_return_to_settings_root(phone, scene):
         if actions.settle_settings_root_or_exit_search(phone):
             return True

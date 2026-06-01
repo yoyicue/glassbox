@@ -1131,6 +1131,62 @@ def test_return_to_settings_root_uses_edge_back_when_unknown_page_only_has_ocr_n
 
 
 @pytest.mark.smoke
+def test_return_to_settings_root_reopens_settings_from_weather_surface(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    weather = _scene(
+        _el("Q Search for a city or ai...0", 36, 94, w=188),
+        _el("MY LOCATION", 408, 130, w=80),
+        _el("Daxing", 401, 148, w=92),
+        _el("34°", 402, 184, w=112),
+        _el("Sunny conditions will continue for the rest of the day.", 292, 402, w=280),
+        _el("10-DAY FORECAST", 294, 576, w=120),
+        _el("Today", 290, 614, w=50),
+        _el("Tue", 292, 662, w=32),
+    )
+    root = _scene(
+        _el("Settings", 198, 72, w=64),
+        _el("WLAN", 80, 370, w=46),
+        _el("Bluetooth", 80, 424, w=78),
+        _el("General", 80, 725, w=62),
+    )
+
+    class WeatherPhone:
+        def __init__(self):
+            self.scene = weather
+            self.open_calls: list[tuple[str, tuple[str, ...]]] = []
+            self.keys: list[tuple[int, int]] = []
+            self.back_gestures = 0
+
+        def perceive(self):
+            return self.scene
+
+        def open_app(self, label, *, aliases=(), max_pages=8, settle_s=0.8):
+            self.open_calls.append((label, tuple(aliases)))
+            self.scene = root
+            return True
+
+        def key(self, modifier: int, keycode: int):
+            self.keys.append((modifier, keycode))
+
+        def back_gesture(self):
+            self.back_gestures += 1
+
+        def viewport_size(self):
+            return 640, 989
+
+        def invalidate_perceive_cache(self):
+            pass
+
+    phone = WeatherPhone()
+
+    _return_to_settings_root(phone)
+
+    assert phone.open_calls == [("设置", ("Settings",))]
+    assert phone.keys == []
+    assert phone.back_gestures == 0
+
+
+@pytest.mark.smoke
 def test_return_to_settings_root_stops_when_back_shortcut_semantically_fails(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
     unknown = _scene(

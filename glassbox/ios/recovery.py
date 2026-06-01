@@ -14,6 +14,7 @@ from typing import Any, Protocol
 from glassbox.boundaries import RecoverySignal, StepContext
 from glassbox.cognition.base import Scene
 from glassbox.ios.scene import classify_ios_scene
+from glassbox.ios.weather_surface import looks_like_weather_app_surface
 
 
 class _HomeCapable(Protocol):
@@ -59,6 +60,32 @@ def dismiss_system_search(
     if fallback_back is not None:
         return bool(fallback_back())
     return False
+
+
+def should_foreground_target_app_instead_of_back(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+) -> bool:
+    """Return True for iOS surfaces where Back is not a sane app recovery move.
+
+    When a task is trying to re-ground a target app, Home/App Library/global
+    search and known wrong-app surfaces should launch the target again. Pressing
+    Back on these surfaces can reopen an unrelated foreground app or walk deeper
+    into its navigation stack.
+    """
+
+    classified = classify_ios_scene(scene, viewport_size=viewport_size)
+    if classified.kind in {"springboard", "app_library", "springboard_or_app_library", "system_search"}:
+        return True
+    if looks_like_weather_app_surface(scene):
+        return True
+    try:
+        from glassbox.ios.springboard import is_ios_home_screen
+
+        return is_ios_home_screen(scene, viewport_size=viewport_size)
+    except Exception:
+        return False
 
 
 class IOSRecoveryProvider:
