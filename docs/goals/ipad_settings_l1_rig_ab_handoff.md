@@ -232,66 +232,12 @@ GLASSBOX_PHONE_MODEL=ipad_mini_7 GLASSBOX_PLATFORM=ipados GLASSBOX_PICOKVM=1 \
 
 ## 5. Historical task list (completed; see §0 for results)
 
-**T1 — Harden the matrix driver** (the §3 four properties). Starting point:
-
-```bash
-#!/bin/bash
-# iPad Settings L1 rig A/B — single-instance, rc-tolerant, per-run filenames.
-set -u
-cd /Users/biu/glassbox
-AB=artifacts/ios_settings/ab
-LOCK="$AB/.matrix.lock"          # a DIRECTORY (mkdir is atomic; no flock dependency)
-mkdir -p "$AB"
-# single-instance lock. Write our PID + stamp inside so a stale lock is debuggable
-# and a human can see who holds it (and whether that PID is still alive).
-if ! mkdir "$LOCK" 2>/dev/null; then
-  echo "ERROR: matrix lock held: $LOCK"
-  echo "       holder: $(cat "$LOCK/owner" 2>/dev/null || echo unknown)"
-  echo "       if that PID is dead, 'rm -rf $LOCK' and retry."
-  exit 3
-fi
-STAMP=$(date +%Y%m%d_%H%M%S)
-printf 'pid=%s host=%s stamp=%s\n' "$$" "$(hostname)" "$STAMP" > "$LOCK/owner"
-trap 'rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM   # release on normal exit AND on kill
-RESULTS="$AB/results_${STAMP}.jsonl"; : > "$RESULTS"
-ROUNDS=3
-LOCALES="en:HK zh-Hans:CN"
-
-run_one() {
-  local arm="$1" round="$2" lang="$3" region="$4"
-  local tag="${arm}_${lang}${region}_r${round}_${STAMP}"
-  local report="$AB/${tag}.json" log="$AB/${tag}.run.log"
-  if [ "$arm" = "B" ]; then
-    make ipad-settings-state-machine IPAD_SETTINGS_REPORT="$report" \
-      IPAD_SETTINGS_EXTRA_ARGS="--language $lang --region $region" > "$log" 2>&1
-  else
-    make ipad-settings-state-machine IPAD_SETTINGS_ROOT_PROJECTION=0 \
-      IPAD_SETTINGS_ACCEPTANCE= IPAD_SETTINGS_REPORT="$report" \
-      IPAD_SETTINGS_EXTRA_ARGS="--language $lang --region $region" > "$log" 2>&1
-  fi
-  local rc=$?   # rc-tolerant: harvest regardless (report exists via crawler finally).
-  # ab_extract.py MUST always print exactly one JSONL line — even when $report is
-  # missing or corrupt — so RESULTS never silently loses a row (see extractor spec).
-  uv run python skills/regression/ios_settings/ab_extract.py \
-    "$arm" "$round" "$lang-$region" "$rc" "$report" >> "$RESULTS" \
-    || echo "{\"arm\":\"$arm\",\"round\":$round,\"locale\":\"$lang-$region\",\"rc\":$rc,\"extraction_error\":\"ab_extract crashed\"}" >> "$RESULTS"
-}
-
-for loc in $LOCALES; do
-  lang="${loc%%:*}"; region="${loc##*:}"
-  for r in $(seq 1 $ROUNDS); do
-    run_one B "$r" "$lang" "$region"   # interleave to control fling variance
-    run_one A "$r" "$lang" "$region"
-  done
-done
-EXPECTED=$(( ROUNDS * 2 * $(echo $LOCALES | wc -w) ))
-GOT=$(grep -c '"arm"' "$RESULTS")
-echo "MATRIX_DONE $STAMP — rows: $GOT / expected: $EXPECTED"
-[ "$GOT" -eq "$EXPECTED" ] || echo "WARNING: row count mismatch — a run produced no line at all"
-```
-Promote the metrics extractor (the inline python from the first pass) into a committed
-`skills/regression/ios_settings/ab_extract.py` so the driver isn't carrying a heredoc,
-and so it's testable. Required behaviour:
+**T1 — Harden the matrix driver** (the §3 four properties). This driver is now
+committed as `skills/regression/ios_settings/ab_matrix.sh` (single-instance lock,
+rc-tolerant harvest, per-`(arm,round)` filenames, interleaved B/A over
+`en:HK zh-Hans:CN` × 3 rounds, row-count check). The extractor contract it depends
+on is committed alongside as `skills/regression/ios_settings/ab_extract.py`.
+Required extractor behaviour (the invariant that hardening is for):
 - **Always print exactly ONE JSONL line and exit 0**, even when the report file is missing,
   empty, or not valid JSON, or the UTG can't be loaded. On any such failure emit a line
   carrying the call args plus `"extraction_error": "<reason>"` (e.g. `report_missing`,
