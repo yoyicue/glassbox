@@ -30,6 +30,7 @@ class ActionContext:
     last_observation_mode: str = "raw"
     pending_crop_bbox: tuple[int, int, int, int] | None = None
     pending_crop_count: int = 0
+    suppress_ocr_temporal_voting: bool = False
 
 
 __all__ = ["ActionContext"]

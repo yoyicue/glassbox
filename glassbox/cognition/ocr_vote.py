@@ -10,12 +10,15 @@ it to whole Scenes by matching elements across reads by box position.
 """
 from __future__ import annotations
 
+import re
+from collections import Counter
 from collections.abc import Callable
 
 from glassbox.cognition.base import Scene, UIElement
-from glassbox.cognition.text_match import vote_ocr_texts
+from glassbox.cognition.text_match import norm_text
 
 TextNormalizer = Callable[[str | None], str]
+_VOLATILE_TEXT_RE = re.compile(r"^[HLhl:：+\-\d.,°%]+$")
 
 
 def _nearest(elements: list[UIElement], cx: float, cy: float) -> UIElement | None:
@@ -34,10 +37,88 @@ def _distance_to_cluster(cluster: dict, el: UIElement) -> float:
     return abs(float(cluster["cx"]) - cx) + abs(float(cluster["cy"]) - cy)
 
 
+def _dedupe_evidence(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def _scene_presence(members: list[tuple[int, UIElement]]) -> int:
+    return len({scene_index for scene_index, _ in members})
+
+
+def _latest_member(members: list[tuple[int, UIElement]]) -> UIElement:
+    return max(members, key=lambda item: item[0])[1]
+
+
+def _looks_like_volatile_text(text: str | None) -> bool:
+    value = norm_text(text).replace(" ", "")
+    if not value or not any(ch.isdigit() for ch in value):
+        return False
+    if "°" in value or "%" in value or ":" in value or "：" in value:
+        return True
+    return bool(_VOLATILE_TEXT_RE.fullmatch(value))
+
+
+def _volatile_cluster(readings: list[str]) -> bool:
+    if not readings or not any(_looks_like_volatile_text(text) for text in readings):
+        return False
+    values = {norm_text(text) for text in readings if norm_text(text)}
+    return len(values) > 1
+
+
+def _char_consensus(
+    readings: list[str],
+    *,
+    normalizer: TextNormalizer | None,
+) -> tuple[str, bool]:
+    normalize = normalizer or norm_text
+    norms = [text for text in (normalize(reading) for reading in readings) if text]
+    if not norms:
+        return "", False
+    modal_len = Counter(len(text) for text in norms).most_common(1)[0][0]
+    same_len = [text for text in norms if len(text) == modal_len]
+    if not same_len:
+        return Counter(norms).most_common(1)[0][0], False
+    chars: list[str] = []
+    ambiguous = False
+    for index in range(modal_len):
+        counts = Counter(text[index] for text in same_len)
+        ranked = counts.most_common()
+        if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
+            ambiguous = True
+        chars.append(ranked[0][0])
+    return "".join(chars), ambiguous
+
+
+def _decide_text(
+    readings: list[str],
+    *,
+    normalizer: TextNormalizer | None,
+) -> tuple[str, str]:
+    normalize = normalizer or norm_text
+    norms = [text for text in (normalize(reading) for reading in readings) if text]
+    if not norms:
+        return "", "empty"
+    winner, votes = Counter(norms).most_common(1)[0]
+    if votes > len(norms) / 2:
+        return winner, "whole_string_majority"
+    consensus, ambiguous = _char_consensus(readings, normalizer=normalizer)
+    if consensus and not ambiguous:
+        return consensus, "char_consensus"
+    return "", "degraded_latest"
+
+
 def vote_scenes(
     scenes: list[Scene],
     *,
     pos_tol: int = 20,
+    min_presence: int = 2,
     text_normalizer: TextNormalizer | None = None,
 ) -> Scene:
     """Vote element texts across several Scenes of the *same* stable screen.
@@ -90,6 +171,16 @@ def vote_scenes(
             used_clusters.add(best_i)
 
     voted: list[UIElement] = []
+    stats = {
+        "frames": len(valid_scenes),
+        "clusters": len(clusters),
+        "min_presence": max(1, int(min_presence)),
+        "pos_tol": int(pos_tol),
+        "stable_clusters": 0,
+        "transient_clusters": 0,
+        "volatile_clusters": 0,
+        "degraded_clusters": 0,
+    }
     for cluster in clusters:
         members = cluster["elements"]
         representative = next(
@@ -97,7 +188,23 @@ def vote_scenes(
             members[0][1],
         )
         readings = [el.text or "" for _, el in members]
-        consensus = vote_ocr_texts(readings, normalizer=text_normalizer)
+        presence = _scene_presence(members)
+        region_status = "stable" if presence >= max(1, int(min_presence)) else "transient"
+        stats[f"{region_status}_clusters"] += 1
+        volatile = _volatile_cluster(readings)
+        if volatile:
+            representative = _latest_member(members)
+            consensus = representative.text or ""
+            text_status = "volatile_latest"
+            region_status = "volatile_latest"
+            stats["volatile_clusters"] += 1
+        else:
+            consensus, text_status = _decide_text(readings, normalizer=text_normalizer)
+            if not consensus:
+                representative = _latest_member(members)
+                consensus = representative.text or ""
+        if text_status == "degraded_latest":
+            stats["degraded_clusters"] += 1
         confidence = representative.confidence
         if members:
             confidence = min(
@@ -107,14 +214,21 @@ def vote_scenes(
             )
         evidence = [
             *representative.type_evidence,
+            f"ocr_vote_status:{region_status}",
+            f"ocr_vote_text_status:{text_status}",
             f"ocr_vote_frames:{len(valid_scenes)}",
-            f"ocr_vote_samples:{len(members)}",
+            f"ocr_vote_samples:{presence}",
         ]
         updates = {
             "confidence": confidence,
-            "type_evidence": evidence,
+            "type_evidence": _dedupe_evidence(evidence),
         }
         if consensus:
             updates["text"] = consensus
         voted.append(representative.model_copy(update=updates))
-    return base.model_copy(update={"elements": voted})
+    metadata = {
+        **base.ocr_vote_metadata,
+        **stats,
+        "enabled": True,
+    }
+    return base.model_copy(update={"elements": voted, "ocr_vote_metadata": metadata})

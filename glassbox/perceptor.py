@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import threading
+import time
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +31,14 @@ if TYPE_CHECKING:
     from glassbox.perception.source import Frame
 
 _LETTERBOX_BBOX_TOLERANCE_PX = 4
+
+
+def _frame_image_hash(frame: Frame) -> str:
+    img = frame.img
+    digest = hashlib.blake2b(digest_size=8)
+    digest.update(str(getattr(img, "shape", "")).encode("ascii", errors="ignore"))
+    digest.update(img.tobytes())
+    return digest.hexdigest()
 
 
 def _bbox_within_tolerance(
@@ -353,6 +363,22 @@ class Perceptor:
         host = self._phone
         context = self._context
         frame_scope = host.normalize_observation_scope(scope or host.default_observation_scope)
+        vote_cfg = host.ocr_temporal_voting_config
+        if (
+            vote_cfg.enabled
+            and vote_cfg.frames > 1
+            and stable is None
+            and fresh is None
+            and not context.suppress_ocr_temporal_voting
+        ):
+            return self.perceive_voted(
+                n=vote_cfg.frames,
+                text_normalizer=None,
+                scope=frame_scope,
+                pos_tol=vote_cfg.pos_tol,
+                min_presence=vote_cfg.min_presence,
+                sample_spacing_ms=vote_cfg.sample_spacing_ms,
+            )
         frame = self.snapshot(stable=stable, scope=frame_scope, fresh=fresh)
         observation_mode = context.last_observation_mode
         stable_frame = context.last_stable_frame
@@ -501,24 +527,58 @@ class Perceptor:
             )
             next_id += 1
 
-    def perceive_voted(self, n: int = 2, *, text_normalizer=None, scope: str | None = None) -> Scene:
+    def perceive_voted(
+        self,
+        n: int = 2,
+        *,
+        text_normalizer=None,
+        scope: str | None = None,
+        pos_tol: int | None = None,
+        min_presence: int | None = None,
+        sample_spacing_ms: int | None = None,
+    ) -> Scene:
         host = self._phone
         context = self._context
         if n <= 1:
-            return self.perceive(scope=scope)
+            previous = context.suppress_ocr_temporal_voting
+            context.suppress_ocr_temporal_voting = True
+            try:
+                return self.perceive(scope=scope)
+            finally:
+                context.suppress_ocr_temporal_voting = previous
         frame_scope = host.normalize_observation_scope(scope or host.default_observation_scope)
         from glassbox.cognition.ocr_vote import vote_scenes
 
+        vote_cfg = host.ocr_temporal_voting_config
+        pos_tol = vote_cfg.pos_tol if pos_tol is None else max(1, int(pos_tol))
+        min_presence = vote_cfg.min_presence if min_presence is None else max(1, int(min_presence))
+        sample_spacing_ms = (
+            vote_cfg.sample_spacing_ms
+            if sample_spacing_ms is None
+            else max(0, int(sample_spacing_ms))
+        )
         scenes: list[Scene] = []
         last_frame = None
         source_frame_ids: list[int] = []
         source_timestamps: list[float] = []
-        for _ in range(n):
+        source_frame_hashes: list[str] = []
+        started = time.monotonic()
+        stopped_by_outer_timeout = False
+        for sample_index in range(n):
+            if sample_index > 0 and sample_spacing_ms > 0:
+                time.sleep(sample_spacing_ms / 1000.0)
+            if sample_index > 0 and vote_cfg.outer_timeout > 0 and time.monotonic() - started > vote_cfg.outer_timeout:
+                stopped_by_outer_timeout = True
+                break
             frame = self.snapshot(scope=frame_scope)
             last_frame = frame
             frame_id = int(frame.ts * 1000)
             source_frame_ids.append(frame_id)
             source_timestamps.append(frame.ts)
+            try:
+                source_frame_hashes.append(_frame_image_hash(frame))
+            except Exception:
+                source_frame_hashes.append("")
             elements = self.recognize_elements(frame)
             scene = Scene(
                 frame_id=frame_id,
@@ -533,7 +593,37 @@ class Perceptor:
             if host.typer is not None:
                 host.typer.upgrade(scene, frame_img=frame.img)
             scenes.append(scene)
-        scene = vote_scenes(scenes, text_normalizer=text_normalizer)
+        scene = vote_scenes(
+            scenes,
+            pos_tol=pos_tol,
+            min_presence=min_presence,
+            text_normalizer=text_normalizer,
+        )
+        metadata = {
+            **scene.ocr_vote_metadata,
+            "samples_requested": int(n),
+            "samples_used": len(scenes),
+            "distinct_frames": len({item for item in source_frame_hashes if item}),
+            "duplicate_frames": max(0, len(source_frame_hashes) - len({item for item in source_frame_hashes if item})),
+            "sample_spacing_ms": int(sample_spacing_ms),
+            "outer_timeout": float(vote_cfg.outer_timeout),
+            "outer_timeout_hit": stopped_by_outer_timeout,
+        }
+        if vote_cfg.keep_raw_samples:
+            metadata["source_frame_hashes"] = source_frame_hashes
+            metadata["raw_samples"] = [
+                [
+                    {
+                        "text": element.text,
+                        "type": element.type,
+                        "box": element.box.model_dump(mode="json"),
+                        "confidence": element.confidence,
+                    }
+                    for element in sample.elements
+                ]
+                for sample in scenes
+            ]
+        scene = scene.model_copy(update={"ocr_vote_metadata": metadata})
         if last_frame is not None:
             scene = scene.model_copy(
                 update={

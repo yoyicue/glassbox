@@ -67,4 +67,56 @@ def test_vote_scenes_includes_element_missing_from_first_frame():
     assert "无线局域网" in by_text
     assert "ocr_vote_frames:3" in by_text["无线局域网"].type_evidence
     assert "ocr_vote_samples:2" in by_text["无线局域网"].type_evidence
+    assert "ocr_vote_status:stable" in by_text["无线局域网"].type_evidence
     assert by_text["无线局域网"].confidence < 0.9
+
+
+@pytest.mark.smoke
+def test_vote_scenes_marks_transient_without_dropping_text():
+    s1 = _scene(_el("通用", 80, 360))
+    s2 = _scene(_el("弹窗", 80, 420), _el("通用", 81, 361))
+    s3 = _scene(_el("通用", 80, 361))
+
+    voted = vote_scenes([s1, s2, s3], min_presence=2)
+
+    popup = next(element for element in voted.elements if element.text == "弹窗")
+    assert "ocr_vote_status:transient" in popup.type_evidence
+    assert "ocr_vote_samples:1" in popup.type_evidence
+
+
+@pytest.mark.smoke
+def test_vote_scenes_volatile_numeric_cluster_prefers_latest_not_frankenstein():
+    s1 = _scene(_el("330", 80, 300))
+    s2 = _scene(_el("33°", 81, 301))
+    s3 = _scene(_el("34°", 80, 302))
+
+    voted = vote_scenes([s1, s2, s3])
+
+    assert voted.elements[0].text == "34°"
+    assert "ocr_vote_status:volatile_latest" in voted.elements[0].type_evidence
+    assert "ocr_vote_text_status:volatile_latest" in voted.elements[0].type_evidence
+
+
+@pytest.mark.smoke
+def test_vote_scenes_does_not_claim_leading_cjk_noise_was_voted_fixed():
+    s1 = _scene(_el("口 Notes", 80, 300))
+    s2 = _scene(_el("日 Notes", 81, 301))
+    s3 = _scene(_el("Notes", 80, 302))
+
+    voted = vote_scenes([s1, s2, s3])
+
+    assert voted.elements[0].text == "Notes"
+    assert "ocr_vote_text_status:degraded_latest" in voted.elements[0].type_evidence
+
+
+@pytest.mark.smoke
+def test_vote_scenes_writes_metadata_on_explicit_scene_field():
+    s1 = _scene(_el("待机見示", 80, 300))
+    s2 = _scene(_el("待机显示", 81, 301))
+    s3 = _scene(_el("侍机昰示", 80, 302))
+
+    voted = vote_scenes([s1, s2, s3], text_normalizer=confusion_compact)
+
+    assert voted.ocr_vote_metadata["enabled"] is True
+    assert voted.ocr_vote_metadata["frames"] == 3
+    assert voted.ocr_vote_metadata["stable_clusters"] == 1

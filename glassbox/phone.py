@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -110,11 +110,23 @@ class PhoneRuntimeOptions:
 
 
 @dataclass(frozen=True)
+class OcrTemporalVotingConfig:
+    enabled: bool = False
+    frames: int = 3
+    min_presence: int = 2
+    pos_tol: int = 20
+    sample_spacing_ms: int = 0
+    outer_timeout: float = 0.0
+    keep_raw_samples: bool = False
+
+
+@dataclass(frozen=True)
 class PhoneObservationConfig:
     max_ocr_elements: int = 800
     max_ocr_text_chars: int = 1024
     ocr_timeout: float = 0.0
     perceive_cache_diff: float = 0.005
+    ocr_temporal_voting: OcrTemporalVotingConfig = field(default_factory=OcrTemporalVotingConfig)
 
 
 # HID modifiers / keycodes used by the keyboard helpers.
@@ -434,6 +446,16 @@ class Phone:
         self._max_ocr_elements = max(0, int(observation_config.max_ocr_elements))
         self._max_ocr_text_chars = max(0, int(observation_config.max_ocr_text_chars))
         self._ocr_timeout = max(0.0, float(observation_config.ocr_timeout))
+        vote_cfg = observation_config.ocr_temporal_voting
+        self._ocr_temporal_voting = OcrTemporalVotingConfig(
+            enabled=bool(vote_cfg.enabled),
+            frames=max(1, int(vote_cfg.frames)),
+            min_presence=max(1, int(vote_cfg.min_presence)),
+            pos_tol=max(1, int(vote_cfg.pos_tol)),
+            sample_spacing_ms=max(0, int(vote_cfg.sample_spacing_ms)),
+            outer_timeout=max(0.0, float(vote_cfg.outer_timeout)),
+            keep_raw_samples=bool(vote_cfg.keep_raw_samples),
+        )
         # CUQ-1.5: ambiguity-aware find_text (closest-length substring + fuzzy
         # margin). Flag-gated (default off) — changes which element a tap hits.
         self._strict_target_matching = bool(feature_flags.strict_target_matching)
@@ -789,6 +811,14 @@ class Phone:
     @property
     def ocr_timeout(self) -> float:
         return self._ocr_timeout
+
+    @property
+    def ocr_temporal_voting_config(self) -> OcrTemporalVotingConfig:
+        return self._ocr_temporal_voting
+
+    @property
+    def ocr_temporal_voting_enabled(self) -> bool:
+        return self._ocr_temporal_voting.enabled
 
     @property
     def letterbox_refresh_consecutive(self) -> int:
@@ -1279,7 +1309,16 @@ class Phone:
         best-effort (never breaks perceive)."""
         _perceptor_for(self).maybe_detect_icons(scene, frame_img)
 
-    def perceive_voted(self, n: int = 2, *, text_normalizer=None, scope: str | None = None) -> Scene:
+    def perceive_voted(
+        self,
+        n: int = 2,
+        *,
+        text_normalizer=None,
+        scope: str | None = None,
+        pos_tol: int | None = None,
+        min_presence: int | None = None,
+        sample_spacing_ms: int | None = None,
+    ) -> Scene:
         """Perceive a STABLE screen `n` times and vote per-row text (D).
 
         For accuracy-critical reads where the screen is not moving — OCR
@@ -1287,7 +1326,14 @@ class Phone:
         Costs ~n× OCR; bypasses the frame-diff cache by design. n<=1 falls
         back to a single perceive().
         """
-        return _perceptor_for(self).perceive_voted(n=n, text_normalizer=text_normalizer, scope=scope)
+        return _perceptor_for(self).perceive_voted(
+            n=n,
+            text_normalizer=text_normalizer,
+            scope=scope,
+            pos_tol=pos_tol,
+            min_presence=min_presence,
+            sample_spacing_ms=sample_spacing_ms,
+        )
 
     def describe(self, *, scene_hint: str | None = None, set_of_mark: bool | None = None) -> Scene:
         return _element_selector_for(self).describe(scene_hint=scene_hint, set_of_mark=set_of_mark)

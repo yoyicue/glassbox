@@ -194,6 +194,40 @@ class AgentConfig(BaseSettings):
     (default path byte-identical; spawns no watchdog thread); enable on the live
     rig where the camera-preview hang exists. env GLASSBOX_OCR_TIMEOUT."""
 
+    ocr_temporal_voting_enabled: bool = False
+    """CUQ-OCR-TV: enable temporal OCR voting on validated perception paths only.
+    Default off because it adds N x OCR cost and changes element text. Promote
+    only after on-rig A/B shows task-level improvement. Env
+    GLASSBOX_OCR_TEMPORAL_VOTING_ENABLED."""
+
+    ocr_temporal_voting_frames: int = 3
+    """CUQ-OCR-TV: number of OCR frames requested when temporal voting is enabled.
+    Env GLASSBOX_OCR_TEMPORAL_VOTING_FRAMES."""
+
+    ocr_temporal_voting_min_presence: int = 2
+    """CUQ-OCR-TV: minimum distinct sampled frames a region must appear in before
+    it is marked stable rather than transient. Env
+    GLASSBOX_OCR_TEMPORAL_VOTING_MIN_PRESENCE."""
+
+    ocr_temporal_voting_pos_tol: int = 20
+    """CUQ-OCR-TV: pixel tolerance for the existing vote_scenes geometry matcher.
+    Env GLASSBOX_OCR_TEMPORAL_VOTING_POS_TOL."""
+
+    ocr_temporal_voting_sample_spacing_ms: int = 0
+    """CUQ-OCR-TV: optional delay between voting samples. Default 0 preserves the
+    existing back-to-back perceive_voted behavior. Env
+    GLASSBOX_OCR_TEMPORAL_VOTING_SAMPLE_SPACING_MS."""
+
+    ocr_temporal_voting_outer_timeout: float = 0.0
+    """CUQ-OCR-TV: optional wall-clock budget for the full voting sample loop.
+    Per-frame OCR cancellation still uses GLASSBOX_OCR_TIMEOUT. 0 disables the
+    outer budget. Env GLASSBOX_OCR_TEMPORAL_VOTING_OUTER_TIMEOUT."""
+
+    ocr_temporal_voting_keep_raw_samples: bool = False
+    """CUQ-OCR-TV: retain raw per-frame OCR samples in vote metadata/artifacts for
+    diagnostics. Default off to avoid hot-path IO/large scene payloads. Env
+    GLASSBOX_OCR_TEMPORAL_VOTING_KEEP_RAW_SAMPLES."""
+
     icon_detector: str = "classical"
     """Icon detector backend selector."""
 

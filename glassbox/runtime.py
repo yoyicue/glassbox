@@ -33,6 +33,7 @@ from glassbox.obs import open_recorder, wrap_vlm_cache_if_enabled
 from glassbox.perception.letterbox import LetterboxCrop
 from glassbox.perception.stable import StabilityPolicy
 from glassbox.phone import (
+    OcrTemporalVotingConfig,
     Phone,
     PhoneFeatureFlags,
     PhoneGestureConfig,
@@ -705,6 +706,15 @@ def build_phone(
             max_ocr_elements=cfg.max_ocr_elements,
             max_ocr_text_chars=cfg.max_ocr_text_chars,
             ocr_timeout=cfg.ocr_timeout,
+            ocr_temporal_voting=OcrTemporalVotingConfig(
+                enabled=cfg.ocr_temporal_voting_enabled,
+                frames=cfg.ocr_temporal_voting_frames,
+                min_presence=cfg.ocr_temporal_voting_min_presence,
+                pos_tol=cfg.ocr_temporal_voting_pos_tol,
+                sample_spacing_ms=cfg.ocr_temporal_voting_sample_spacing_ms,
+                outer_timeout=cfg.ocr_temporal_voting_outer_timeout,
+                keep_raw_samples=cfg.ocr_temporal_voting_keep_raw_samples,
+            ),
         ),
         feature_flags=PhoneFeatureFlags(
             detect_icons_in_perceive=cfg.detect_icons_in_perceive,

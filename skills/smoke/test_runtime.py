@@ -61,6 +61,24 @@ class FakeOCR:
         ]
 
 
+class CountingVotingOCR:
+    def __init__(self):
+        self.calls = 0
+        self.readings = ["待机見示", "待机显示", "侍机昰示"]
+
+    def recognize(self, _image):
+        text = self.readings[min(self.calls, len(self.readings) - 1)]
+        self.calls += 1
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=20, y=100, w=120, h=40),
+                text=text,
+                confidence=0.9,
+            )
+        ]
+
+
 class ShapeOCR:
     def __init__(self):
         self.shapes: list[tuple[int, int]] = []
@@ -700,3 +718,46 @@ def test_build_phone_freshens_source_after_effector_connect(monkeypatch):
     assert isinstance(runtime.effector, ConnectingEffector)
     assert runtime.effector.connected is True
     assert source.fresh_snapshots == 1
+
+
+@pytest.mark.smoke
+def test_runtime_wires_ocr_temporal_voting_config_into_perceive():
+    ocr = CountingVotingOCR()
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(
+            _env_file=None,
+            ocr_temporal_voting_enabled=True,
+            ocr_temporal_voting_frames=3,
+            ocr_temporal_voting_min_presence=2,
+        ),
+        ocr=ocr,
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert ocr.calls == 3
+    assert scene.observation_mode == "voted"
+    assert scene.ocr_vote_metadata["samples_requested"] == 3
+    assert scene.ocr_vote_metadata["samples_used"] == 3
+    assert runtime.phone.ocr_temporal_voting_config.enabled is True
+
+
+@pytest.mark.smoke
+def test_perceive_voted_n_one_bypasses_enabled_global_voting():
+    ocr = CountingVotingOCR()
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(
+            _env_file=None,
+            ocr_temporal_voting_enabled=True,
+            ocr_temporal_voting_frames=3,
+        ),
+        ocr=ocr,
+    )
+
+    scene = runtime.phone.perceive_voted(n=1)
+
+    assert ocr.calls == 1
+    assert scene.observation_mode == "raw"
+    assert scene.ocr_vote_metadata == {}
