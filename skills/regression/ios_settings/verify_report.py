@@ -98,6 +98,7 @@ CONFIG_INT_KEYS = frozenset({
     "max_candidates_per_page",
 })
 CONFIG_BOOL_KEYS = frozenset({
+    "en_ocr_correction",
     "root_coverage_mode",
     "child_navigation_enabled",
     "strict_child_candidate_audit",

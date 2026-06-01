@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from glassbox.config import get_config
 from skills.regression.ios_settings.config import SettingsRunConfig
 from skills.regression.ios_settings.policy import (
     EXPECTED_ROOT_NAV_TEXT_ZH,
@@ -195,6 +196,36 @@ def test_report_payload_uses_ipad_device_context_for_unavailable_roots(monkeypat
     assert payload["metrics"]["root_required_expected_count"] == 0
 
 
+@pytest.mark.smoke
+def test_report_payload_records_active_en_ocr_correction_switch(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_EN_OCR_CORRECTION", "1")
+    get_config.cache_clear()
+
+    try:
+        run_config = SettingsRunConfig.for_child_audit(
+            max_depth=1,
+            max_pages=4,
+            max_child_scrolls_per_page=1,
+            max_candidates_per_page=0,
+            strict_child_candidate_audit=False,
+        )
+
+        payload = build_report_payload(
+            run_config=run_config,
+            visits=[PageVisit(("Settings",), "Settings", ("Settings",))],
+            limits_hit=set(),
+            blocked_pages=[],
+            rejected_candidates=[],
+            navigation_failures=[],
+            root_coverage={"expected": [], "visited": [], "missing": []},
+            trace_payload=None,
+        )
+    finally:
+        get_config.cache_clear()
+
+    assert payload["config"]["en_ocr_correction"] is True
+
+
 def _report(*, limits=None, visits=None, missing=None):
     visits = visits if visits is not None else [
         {"path": ["Settings"], "title": "设置", "texts": ["设置"]},
@@ -225,6 +256,7 @@ def _report(*, limits=None, visits=None, missing=None):
             "child_navigation_enabled": False,
             "strict_child_candidate_audit": False,
             "max_candidates_per_page": 0,
+            "en_ocr_correction": False,
             "trace_actions": True,
             "save_view_snapshots": False,
             "artifact_dir": None,
@@ -666,6 +698,7 @@ def test_ios_settings_report_verifier_rejects_non_exhaustive_config_in_strict_mo
 @pytest.mark.smoke
 def test_ios_settings_report_verifier_requires_full_config_schema():
     report = _report()
+    report["config"].pop("en_ocr_correction")
     report["config"].pop("root_coverage_mode")
     report["config"]["max_depth"] = True
     report["config"]["memory_reuse"] = "0"
@@ -673,6 +706,7 @@ def test_ios_settings_report_verifier_requires_full_config_schema():
 
     errors = validate_report(report)
 
+    assert any("config.en_ocr_correction must be a boolean" in error for error in errors)
     assert any("config.root_coverage_mode must be a boolean" in error for error in errors)
     assert any("config.max_depth must be an integer" in error for error in errors)
     assert any("config.memory_reuse must be a boolean" in error for error in errors)

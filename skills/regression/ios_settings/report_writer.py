@@ -162,7 +162,7 @@ def add_trace_metrics(metrics: dict[str, object], trace_payload: dict[str, Any])
     settings_reporting.add_trace_metrics(metrics, trace_payload)
 
 
-def _active_device_report_config() -> dict[str, str]:
+def _active_device_report_config() -> dict[str, object]:
     from glassbox.config import get_config
     from glassbox.platforms import select_platform_backend
 
@@ -170,6 +170,7 @@ def _active_device_report_config() -> dict[str, str]:
     return {
         "phone_model": str(getattr(cfg, "phone_model", "") or ""),
         "platform": select_platform_backend(cfg),
+        "en_ocr_correction": bool(getattr(cfg, "en_ocr_correction", False)),
     }
 
 

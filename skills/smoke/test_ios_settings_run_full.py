@@ -86,6 +86,7 @@ def _state_machine_report(memory_dir):
             "child_navigation_enabled": True,
             "strict_child_candidate_audit": False,
             "max_candidates_per_page": 0,
+            "en_ocr_correction": False,
             "trace_actions": True,
             "save_view_snapshots": False,
             "artifact_dir": None,
