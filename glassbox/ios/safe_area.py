@@ -8,9 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from glassbox.boundaries import Insets
-from glassbox.cognition.base import Scene
-
 
 @dataclass(frozen=True)
 class IOSSafeArea:
@@ -49,10 +46,6 @@ class IOSSafeArea:
 
 class IOSSafeAreaProvider:
     """iOS Platform safe-area sub-capability."""
-
-    def insets(self, scene: Scene) -> Insets:
-        _ = scene
-        return Insets()
 
     def bottom_hit_point(
         self,

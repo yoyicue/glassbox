@@ -2,15 +2,13 @@
 
 Settings regression supplies the app-specific policy (which rows are safe,
 which pages count as root/detail). This module owns reusable control contracts:
-read/settle policy, scroll outcome/retry, navigation candidate/result records,
-and report metric shape. Generic action tracing lives in glassbox.crawl.trace
-and is re-exported here for compatibility.
+scroll outcome/retry and report metric shape. Generic action tracing lives in
+glassbox.crawl.trace and is re-exported here for compatibility.
 """
 
 from __future__ import annotations
 
 import inspect
-import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
@@ -23,33 +21,10 @@ _ACTION_TRACE_REEXPORTS = (ActionTraceEvent, ActionTraceObserver)
 
 
 @dataclass(frozen=True)
-class ReadPolicy:
-    settle_seconds: float = 0.8
-    voted_root_reads: bool = True
-    root_vote_frames: int = 2
-
-
-@dataclass(frozen=True)
 class ScrollResult:
     outcome: str
     retry_outcome: str | None = None
     attempts: int = 1
-
-
-@dataclass(frozen=True)
-class NavigationCandidate:
-    label: str
-    page_id: str | None = None
-    safe: bool = True
-    reason: str | None = None
-
-
-@dataclass(frozen=True)
-class NavigationResult:
-    candidate: NavigationCandidate
-    status: str
-    returned_to_origin: bool = False
-    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -111,13 +86,3 @@ def classify_scroll_attempt(
     if retry_outcome == "stuck":
         return ScrollResult(outcome="stuck", retry_outcome=retry_outcome, attempts=2)
     return ScrollResult(outcome="progress", retry_outcome=retry_outcome, attempts=2)
-
-
-def settle_then_read(phone, *, policy: ReadPolicy, root: bool = False):
-    time.sleep(max(0.0, policy.settle_seconds))
-    invalidate = getattr(phone, "invalidate_perceive_cache", None)
-    if callable(invalidate):
-        invalidate()
-    if root and policy.voted_root_reads and hasattr(phone, "perceive_voted"):
-        return phone.perceive_voted(policy.root_vote_frames)
-    return phone.perceive()
