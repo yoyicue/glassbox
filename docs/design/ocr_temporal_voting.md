@@ -6,7 +6,7 @@ This is not a greenfield feature. The repository already has multi-frame OCR
 voting:
 
 - `glassbox.cognition.ocr_vote.vote_scenes(scenes, ...)`
-- `Phone.perceive_voted(n=2, ...)`
+- `Phone.perceive_voted(n=3, ...)`
 - `Perceptor.perceive_voted(...)`
 
 The existing path already samples multiple frames, OCRs each frame, clusters
@@ -403,13 +403,17 @@ Add a tool or helper around `perceive_voted` that records all raw samples,
 cluster decisions, frame deltas, and OCR timing without changing runtime
 behavior.
 
-Possible location:
+Current helper:
 
 ```text
-glassbox/cognition/ocr_vote.py
-skills/regression/ios_settings diagnostics
-skills/regression/ios_gestures diagnostics
+python -m skills.regression.ocr_temporal_spike --samples 10 --spacing-ms 100
 ```
+
+It samples raw single-frame OCR with temporal voting explicitly suppressed,
+deduplicates by image hash, and reports distinct-frame count, duplicate-frame
+count, per-region variants, and majority-change candidates. If it cannot
+produce enough distinct frames, that is a capture-path finding, not a successful
+fusion run.
 
 ### 2. Stable vs Transient Classification
 

@@ -812,7 +812,11 @@ def _launch_profile(labels: Iterable[str], *, phone=None) -> DefaultAppLaunchPro
 
 def _requires_post_open_target_label(labels: Iterable[str], *, phone=None) -> bool:
     profile = _launch_profile(labels, phone=phone)
-    return bool(profile and profile.require_post_open_verification)
+    # Keep the default recovery behavior at the pre-profile scope: Settings only.
+    # Other default-app launch profiles provide labels/queries, but their
+    # post-open "verify or recover Home" semantics need per-app validation
+    # before they can be enabled on the hot launch path.
+    return bool(profile and profile.key == "settings" and profile.require_post_open_verification)
 
 
 def _climb_out_to_target(

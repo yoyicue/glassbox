@@ -1365,7 +1365,7 @@ def test_opened_expected_app_accepts_ipad_settings_split_view_without_recovering
 
 
 @pytest.mark.smoke
-def test_opened_app_store_requires_app_store_chrome_after_leaving_home():
+def test_opened_app_store_does_not_use_unvalidated_post_open_recovery_by_default():
     notes = _scene(
         _el("Notes", 180, 72, 72, 20),
         _el("No Notes", 160, 280, 92, 20),
@@ -1386,8 +1386,8 @@ def test_opened_app_store_requires_app_store_chrome_after_leaving_home():
 
     phone = FakePhone()
 
-    assert _opened_expected_app_or_recover(phone, notes, ("App Store", "AppStore"), settle_s=0) is False
-    assert phone.home_calls == 1
+    assert _opened_expected_app_or_recover(phone, notes, ("App Store", "AppStore"), settle_s=0) is True
+    assert phone.home_calls == 0
 
 
 @pytest.mark.smoke
@@ -1431,19 +1431,25 @@ def test_vlm_icon_map_skips_non_strict_home_scenes(monkeypatch):
     class FakePhone:
         kimi = object()
 
+        def __init__(self):
+            self.snapshot_calls = 0
+
         def _viewport_size(self):
             return 640, 989
 
         def snapshot(self):
-            raise AssertionError("snapshot should not be called for non-Home icon-map scenes")
+            self.snapshot_calls += 1
+            return None
 
     class FakeIconMap:
         pass
 
+    phone = FakePhone()
     assert not _tap_icon_via_map_if_visible(
-        FakePhone(),
+        phone,
         settings_like,
         ("App Store",),
         icon_map=FakeIconMap(),
         settle_s=0,
     )
+    assert phone.snapshot_calls == 0

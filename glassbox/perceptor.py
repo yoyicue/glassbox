@@ -367,6 +367,7 @@ class Perceptor:
         if (
             vote_cfg.enabled
             and vote_cfg.frames > 1
+            and context.ocr_temporal_voting_opt_in
             and stable is None
             and fresh is None
             and not context.suppress_ocr_temporal_voting
@@ -446,6 +447,7 @@ class Perceptor:
 
     def run_ocr(self, frame: Frame) -> list[UIElement]:
         host = self._phone
+        self._context.last_ocr_timeout_hit = False
 
         def _recognize() -> list[UIElement]:
             if getattr(host.ocr, "contract", None) == "TextRegionOCR":
@@ -472,6 +474,7 @@ class Perceptor:
                 "OCR recognize() exceeded {}s watchdog; treating frame as empty "
                 "(scene will classify unknown → recovery)", host.ocr_timeout,
             )
+            self._context.last_ocr_timeout_hit = True
             return []
         if error:
             raise error[0]
@@ -529,7 +532,7 @@ class Perceptor:
 
     def perceive_voted(
         self,
-        n: int = 2,
+        n: int = 3,
         *,
         text_normalizer=None,
         scope: str | None = None,
@@ -562,6 +565,7 @@ class Perceptor:
         source_frame_ids: list[int] = []
         source_timestamps: list[float] = []
         source_frame_hashes: list[str] = []
+        ocr_timeout_samples: list[int] = []
         started = time.monotonic()
         stopped_by_outer_timeout = False
         for sample_index in range(n):
@@ -580,6 +584,8 @@ class Perceptor:
             except Exception:
                 source_frame_hashes.append("")
             elements = self.recognize_elements(frame)
+            if context.last_ocr_timeout_hit:
+                ocr_timeout_samples.append(sample_index)
             scene = Scene(
                 frame_id=frame_id,
                 timestamp=frame.ts,
@@ -593,21 +599,38 @@ class Perceptor:
             if host.typer is not None:
                 host.typer.upgrade(scene, frame_img=frame.img)
             scenes.append(scene)
-        scene = vote_scenes(
-            scenes,
-            pos_tol=pos_tol,
-            min_presence=min_presence,
-            text_normalizer=text_normalizer,
-        )
+        source_frame_hashes_present = {item for item in source_frame_hashes if item}
+        distinct_frames = len(source_frame_hashes_present)
+        duplicate_frames = max(0, len(source_frame_hashes) - distinct_frames)
+        degrade_reason: str | None = None
+        if len(scenes) < 2:
+            degrade_reason = "insufficient_samples"
+        elif distinct_frames < 2:
+            degrade_reason = "duplicate_frames" if source_frame_hashes else "frame_hash_unavailable"
+        if degrade_reason is None:
+            scene = vote_scenes(
+                scenes,
+                pos_tol=pos_tol,
+                min_presence=min_presence,
+                text_normalizer=text_normalizer,
+            )
+        elif scenes:
+            scene = scenes[-1].model_copy(deep=True)
+        else:
+            scene = Scene(frame_id=0, timestamp=time.monotonic(), elements=[])
         metadata = {
             **scene.ocr_vote_metadata,
+            "enabled": True,
             "samples_requested": int(n),
             "samples_used": len(scenes),
-            "distinct_frames": len({item for item in source_frame_hashes if item}),
-            "duplicate_frames": max(0, len(source_frame_hashes) - len({item for item in source_frame_hashes if item})),
+            "distinct_frames": distinct_frames,
+            "duplicate_frames": duplicate_frames,
             "sample_spacing_ms": int(sample_spacing_ms),
             "outer_timeout": float(vote_cfg.outer_timeout),
             "outer_timeout_hit": stopped_by_outer_timeout,
+            "timeouts": len(ocr_timeout_samples),
+            "ocr_timeout_samples": ocr_timeout_samples,
+            "degrade_reason": degrade_reason,
         }
         if vote_cfg.keep_raw_samples:
             metadata["source_frame_hashes"] = source_frame_hashes
@@ -631,7 +654,7 @@ class Perceptor:
                     "timestamp": last_frame.ts,
                     "source_frame_ids": source_frame_ids,
                     "source_timestamps": source_timestamps,
-                    "observation_mode": "voted",
+                    "observation_mode": "voted" if degrade_reason is None else "voted_degraded",
                     "stable_frame": any(item.stable_frame is True for item in scenes),
                     "viewport_size": (
                         int(last_frame.img.shape[1]),

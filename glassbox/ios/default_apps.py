@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -227,7 +228,8 @@ DEFAULT_APP_LAUNCH_PROFILES: tuple[DefaultAppLaunchProfile, ...] = (
         spotlight_query="home",
         require_post_open_verification=True,
         verify_markers=("Home", "家庭", "Rooms", "Automation", "Discover", "房间", "自动化"),
-        min_verify_markers=1,
+        min_verify_markers=2,
+        accepts_exact_label=False,
     ),
     DefaultAppLaunchProfile(
         key="health",
@@ -344,7 +346,26 @@ def _scene_has_marker(texts: Iterable[str], marker: str) -> bool:
     key = _normalize(marker)
     if not key:
         return False
+    if len(key) <= 2:
+        return any(key == _normalize(text) for text in texts)
+    if _ascii_words(marker):
+        return any(_contains_ascii_phrase(text, marker) for text in texts)
     return any(key in _normalize(text) for text in texts)
+
+
+def _ascii_words(value: str) -> bool:
+    return bool(value.strip()) and all(ch.isascii() and (ch.isalnum() or ch.isspace() or ch in {"-", "&"}) for ch in value)
+
+
+def _contains_ascii_phrase(text: str, marker: str) -> bool:
+    words = re.findall(r"[A-Za-z0-9]+", marker.casefold())
+    if not words:
+        return False
+    haystack = re.findall(r"[A-Za-z0-9]+", str(text or "").casefold())
+    if len(words) == 1:
+        return words[0] in haystack
+    width = len(words)
+    return any(tuple(haystack[index:index + width]) == tuple(words) for index in range(len(haystack) - width + 1))
 
 
 def _normalize(value: str) -> str:

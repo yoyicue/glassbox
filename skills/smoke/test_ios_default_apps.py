@@ -82,3 +82,16 @@ def test_settings_profile_uses_scene_kind_not_bare_label():
         labels=("Settings",),
         classified_kind="settings_root",
     )
+
+
+def test_default_app_verifier_rejects_shared_short_substrings():
+    find_my = default_launch_profile_for_labels(("Find My",))
+    home = default_launch_profile_for_labels(("Home",))
+    weather = default_launch_profile_for_labels(("Weather",))
+    assert find_my is not None
+    assert home is not None
+    assert weather is not None
+
+    assert not verify_default_app_opened(find_my, _scene("Some", "Time"), labels=("Find My",))
+    assert not verify_default_app_opened(home, _scene("Home", "Library"), labels=("Home",))
+    assert not verify_default_app_opened(weather, _scene("34°", "Daxing"), labels=("Weather",))

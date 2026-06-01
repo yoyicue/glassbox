@@ -28,9 +28,11 @@ class ActionContext:
     last_stability_score: float | None = None
     last_stability_policy: dict[str, Any] | None = None
     last_observation_mode: str = "raw"
+    last_ocr_timeout_hit: bool = False
     pending_crop_bbox: tuple[int, int, int, int] | None = None
     pending_crop_count: int = 0
     suppress_ocr_temporal_voting: bool = False
+    ocr_temporal_voting_opt_in: bool = False
 
 
 __all__ = ["ActionContext"]

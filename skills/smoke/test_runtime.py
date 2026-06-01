@@ -721,7 +721,7 @@ def test_build_phone_freshens_source_after_effector_connect(monkeypatch):
 
 
 @pytest.mark.smoke
-def test_runtime_wires_ocr_temporal_voting_config_into_perceive():
+def test_runtime_wires_ocr_temporal_voting_config_without_global_perceive_side_effect():
     ocr = CountingVotingOCR()
     runtime = build_phone(
         source=FakeSource(),
@@ -736,11 +736,19 @@ def test_runtime_wires_ocr_temporal_voting_config_into_perceive():
 
     scene = runtime.phone.perceive()
 
-    assert ocr.calls == 3
-    assert scene.observation_mode == "voted"
+    assert ocr.calls == 1
+    assert scene.observation_mode == "raw"
+    assert scene.ocr_vote_metadata == {}
+    assert runtime.phone.ocr_temporal_voting_config.enabled is True
+
+    runtime.phone.action_context.ocr_temporal_voting_opt_in = True
+    scene = runtime.phone.perceive()
+
+    assert ocr.calls == 4
+    assert scene.observation_mode == "voted_degraded"
     assert scene.ocr_vote_metadata["samples_requested"] == 3
     assert scene.ocr_vote_metadata["samples_used"] == 3
-    assert runtime.phone.ocr_temporal_voting_config.enabled is True
+    assert scene.ocr_vote_metadata["degrade_reason"] == "duplicate_frames"
 
 
 @pytest.mark.smoke

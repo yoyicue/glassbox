@@ -1311,7 +1311,7 @@ class Phone:
 
     def perceive_voted(
         self,
-        n: int = 2,
+        n: int = 3,
         *,
         text_normalizer=None,
         scope: str | None = None,
