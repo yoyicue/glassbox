@@ -176,11 +176,26 @@ def _ocr_languages(cfg: AgentConfig) -> tuple[str, ...]:
 
 
 def _ocrmac_factory(*, cfg: AgentConfig):
+    # Legacy ocrmac path: AppleVisionOCR exposes no language-correction /
+    # custom-words knobs, so the en_ocr_correction overlay is a no-op here by
+    # construction (vision is the default backend that honors it).
     return LegacyUIElementOCRAdapter(AppleVisionOCR(languages=list(_ocr_languages(cfg))))
 
 
 def _vision_ocr_factory(*, cfg: AgentConfig):
-    return LegacyUIElementOCRAdapter(VisionOCR(languages=_ocr_languages(cfg)))
+    # resolve_ocr_locale applies the flag-gated English correction overlay; for
+    # zh (and en with the flag off) these knobs equal the VisionOCR.__init__
+    # defaults, so the call is byte-identical to the previous languages-only one.
+    from glassbox.locale import resolve_ocr_locale
+
+    loc = resolve_ocr_locale(cfg)
+    return LegacyUIElementOCRAdapter(
+        VisionOCR(
+            languages=loc.ocr_languages,
+            uses_language_correction=loc.uses_language_correction,
+            custom_words=loc.custom_words,
+        )
+    )
 
 
 def select_ocr_backend(cfg: AgentConfig) -> str:

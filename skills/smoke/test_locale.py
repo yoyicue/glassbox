@@ -12,6 +12,7 @@ from glassbox.locale import (
     DEFAULT_LOCALE_REGISTRY,
     Locale,
     resolve_locale,
+    resolve_ocr_locale,
     select_locale_code,
 )
 
@@ -27,6 +28,102 @@ def test_default_locale_is_zh_and_matches_current_globals():
     assert loc.region is None
     assert loc.ocr_languages == ("zh-Hans", "en-US")
     assert loc.confusion_classes == DEFAULT_CONFUSION_CLASSES
+
+
+@pytest.mark.smoke
+def test_zh_ocr_engine_params_byte_identical_to_vision_defaults():
+    """zh non-regression hinge: every OCR-engine knob the vision factory forwards
+    for the default (zh) locale must equal the live VisionOCR.__init__ default, so
+    the resolved call is byte-identical to today's languages-only call. Reading the
+    defaults off the signature (not re-typed literals) makes a drift on EITHER side
+    fail — the allow-list-over-hand-count discipline.
+    """
+    import inspect
+
+    from glassbox.cognition.ocr_vision import VisionOCR
+
+    sig = inspect.signature(VisionOCR.__init__).parameters
+    loc = resolve_ocr_locale(AgentConfig(_env_file=None))  # zh-Hans default, flag off
+    assert tuple(loc.ocr_languages) == tuple(sig["languages"].default)
+    assert loc.uses_language_correction is sig["uses_language_correction"].default
+    assert tuple(loc.custom_words) == tuple(sig["custom_words"].default)
+
+
+@pytest.mark.smoke
+def test_en_ocr_correction_off_by_default():
+    # English with the flag off keeps the engine defaults (today's behavior).
+    cfg = AgentConfig(_env_file=None, language="en", region="HK")
+    loc = resolve_ocr_locale(cfg)
+    assert loc.uses_language_correction is False
+    assert tuple(loc.custom_words) == ("+", "-")
+
+
+@pytest.mark.smoke
+def test_en_ocr_correction_on_with_flag():
+    # Flag ON: English gains NL correction + the proper-noun whitelist.
+    cfg = AgentConfig(_env_file=None, language="en", region="HK", en_ocr_correction=True)
+    loc = resolve_ocr_locale(cfg)
+    assert loc.uses_language_correction is True
+    assert {"WLAN", "Siri", "iCloud"}.issubset(set(loc.custom_words))
+    # Whitelist keeps the walkthrough +/- seeds.
+    assert loc.custom_words[:2] == ("+", "-")
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("region", ["US", "CN", "HK"])
+def test_en_ocr_correction_covers_every_english_region(region):
+    """The overlay keys on language=="en", so it must apply to ALL English packs
+    — en-US, en-CN AND en-HK (the iPad mini 7 rig locale) — not just en-US."""
+    off = resolve_ocr_locale(AgentConfig(_env_file=None, language="en", region=region))
+    assert off.uses_language_correction is False  # default behavior unchanged
+    on = resolve_ocr_locale(
+        AgentConfig(_env_file=None, language="en", region=region, en_ocr_correction=True)
+    )
+    assert on.code == f"en-{region}"
+    assert on.uses_language_correction is True
+    assert "WLAN" in on.custom_words  # the en-HK / en-CN Wi-Fi label
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("region", [None, "CN"])
+def test_en_ocr_correction_flag_never_touches_zh(region):
+    # The overlay is English-only: every zh pack stays byte-identical even with
+    # the flag set.
+    cfg = AgentConfig(_env_file=None, language="zh-Hans", region=region, en_ocr_correction=True)
+    loc = resolve_ocr_locale(cfg)
+    assert loc.language == "zh-Hans"
+    assert loc.uses_language_correction is False
+    assert tuple(loc.custom_words) == ("+", "-")
+
+
+@pytest.mark.smoke
+def test_vision_factory_forwards_locale_ocr_params(monkeypatch):
+    """The vision OCR factory must forward the resolved per-locale knobs. Patches
+    VisionOCR with a recorder so this runs offline (no pyobjc)."""
+    import glassbox.backend_registry as br
+
+    captured: dict = {}
+
+    class _FakeVisionOCR:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(br, "VisionOCR", _FakeVisionOCR)
+
+    # zh default → engine-default knobs (byte-identical call).
+    br._vision_ocr_factory(cfg=AgentConfig(_env_file=None))
+    assert tuple(captured["languages"]) == ("zh-Hans", "en-US")
+    assert captured["uses_language_correction"] is False
+    assert tuple(captured["custom_words"]) == ("+", "-")
+
+    # en + flag → correction on + whitelist forwarded.
+    captured.clear()
+    br._vision_ocr_factory(
+        cfg=AgentConfig(_env_file=None, language="en", region="HK", en_ocr_correction=True)
+    )
+    assert tuple(captured["languages"]) == ("en-US",)
+    assert captured["uses_language_correction"] is True
+    assert "WLAN" in captured["custom_words"]
 
 
 @pytest.mark.smoke

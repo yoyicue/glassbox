@@ -14,7 +14,7 @@ English is the last migration step.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from glassbox.cognition.text_match import DEFAULT_CONFUSION_CLASSES
 from glassbox.config import AgentConfig
@@ -33,6 +33,12 @@ class Locale:
     region: str | None
     ocr_languages: tuple[str, ...]
     confusion_classes: tuple[str, ...]
+    # OCR-engine knobs that vary by language. Both default to the exact
+    # VisionOCR.__init__ literals so a pack that omits them (every built-in pack
+    # below) resolves byte-identically to today's single-kwarg engine call —
+    # this is the zh non-regression hinge, locked by test_locale.py.
+    uses_language_correction: bool = False
+    custom_words: tuple[str, ...] = ("+", "-")
 
     @property
     def code(self) -> str:
@@ -46,6 +52,29 @@ class Locale:
 #   confusion folds == text_match.DEFAULT_CONFUSION_CLASSES
 _ZH_OCR_LANGUAGES = ("zh-Hans", "en-US")
 _EN_OCR_LANGUAGES = ("en-US",)
+
+# iOS proper nouns that NL language correction must NOT "fix" into dictionary
+# words. Seeded with the walkthrough "+"/"-" then the brand tokens that actually
+# appear in the en/HK Settings corpus (occurrence counts, snapshot 2026-06-01:
+# WLAN 1107×, Siri 1684×, iCloud 1080×, VoiceOver 428×, FaceTime 134×, AirDrop
+# 27×, AppleCare 27×). Only consumed when uses_language_correction=True, which is
+# the flag-gated English path (`resolve_ocr_locale`); zh keeps the ("+","-")
+# default and is unaffected.
+_EN_CUSTOM_WORDS = (
+    "+",
+    "-",
+    "WLAN",
+    "AirDrop",
+    "iCloud",
+    "FaceTime",
+    "VoiceOver",
+    "AirPlay",
+    "AirPods",
+    "AppleCare",
+    "Siri",
+    "iPadOS",
+    "Bluetooth",
+)
 
 _BUILTIN_LOCALES: tuple[Locale, ...] = (
     Locale("zh-Hans", None, _ZH_OCR_LANGUAGES, DEFAULT_CONFUSION_CLASSES),
@@ -106,8 +135,33 @@ def select_locale_code(cfg: AgentConfig) -> str:
 
 
 def resolve_locale(cfg: AgentConfig, *, registry: LocaleRegistry | None = None) -> Locale:
-    """Resolve the active `Locale` for this config."""
+    """Resolve the active `Locale` for this config.
+
+    Pure registry lookup — the OCR-engine knobs (`uses_language_correction`,
+    `custom_words`) come back at their pack defaults. Use `resolve_ocr_locale`
+    where those knobs feed the OCR engine, so the flag-gated English overlay is
+    applied.
+    """
     return (registry or DEFAULT_LOCALE_REGISTRY).resolve(select_locale_code(cfg))
+
+
+def resolve_ocr_locale(cfg: AgentConfig, *, registry: LocaleRegistry | None = None) -> Locale:
+    """Locale for OCR-engine config: `resolve_locale` + the flag-gated English
+    language-correction overlay.
+
+    The overlay is English-only and OFF by default (`cfg.en_ocr_correction`,
+    env GLASSBOX_EN_OCR_CORRECTION), so:
+      * zh (and any non-English locale) is returned untouched — its OCR-engine
+        knobs stay at the byte-identical defaults regardless of the flag;
+      * English with the flag OFF is also untouched (today's behavior);
+      * English with the flag ON gains NL correction + the proper-noun
+        `_EN_CUSTOM_WORDS` whitelist. This path is net-negative on offline OCR
+        coverage and MUST clear an on-rig task_completion A/B before defaulting on.
+    """
+    loc = resolve_locale(cfg, registry=registry)
+    if loc.language == "en" and getattr(cfg, "en_ocr_correction", False):
+        return replace(loc, uses_language_correction=True, custom_words=_EN_CUSTOM_WORDS)
+    return loc
 
 
 __all__ = [
@@ -115,5 +169,6 @@ __all__ = [
     "Locale",
     "LocaleRegistry",
     "resolve_locale",
+    "resolve_ocr_locale",
     "select_locale_code",
 ]

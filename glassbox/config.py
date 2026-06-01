@@ -167,6 +167,15 @@ class AgentConfig(BaseSettings):
     ocr: Literal["vision", "ocrmac"] = "vision"
     """OCR engine: vision = direct PyObjC call (default) / ocrmac = legacy fallback path."""
 
+    en_ocr_correction: bool = False
+    """EXPERIMENTAL, rig-gated, default OFF. When set, English locales feed Apple
+    Vision's NL language correction + an iOS proper-noun custom-word whitelist
+    (see glassbox/locale.py `_EN_CUSTOM_WORDS`). Offline OCR-replay over the en/HK
+    corpus showed correction is net-negative on raw coverage (it re-spaces
+    status-bar / timestamp text); ship only after an on-rig task_completion A/B.
+    zh is NEVER affected — the overlay is English-only. env
+    GLASSBOX_EN_OCR_CORRECTION."""
+
     # CUQ — live-camera OCR hardening. A live camera preview (e.g. the 操作按钮
     # Action-Button carousel) makes OCR emit chaotic, high-volume text; feeding
     # that pathological set to every downstream scene/text regex is what once
