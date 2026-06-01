@@ -18,6 +18,33 @@ with open_phone(app="com.apple.Preferences", run_name="settings-about") as phone
 Do not import `glassbox.phone.Phone`, runtime assembly, or effector modules in
 ordinary AI-authored scripts. Those remain advanced/internal surfaces.
 
+## Configuration
+
+`open_phone()` is the only configuration surface for ordinary scripts. Its
+optional kwargs:
+
+- `record=True` / `memory=True` — toggle artifact recording and UTG memory.
+- `profile_bundle=<bundle-id>` — opt in to app-specific whitebox/profile
+  enrichment (not auto-read from env).
+- `run_name=...`, `wait=False`, `timeout_s=None`.
+
+Everything else is process-level config read from `.env` / `GLASSBOX_*` by
+`glassbox.config` at `open_phone()` time — set it before you open the phone, not
+per call. The switches most likely to change what your script observes:
+
+- `GLASSBOX_LANGUAGE` / `GLASSBOX_REGION` — device locale; affects every label
+  your script matches (default `zh-Hans`).
+- `GLASSBOX_STABLE_AFTER_ACTION` / `GLASSBOX_STABLE_TIMEOUT` /
+  `GLASSBOX_STABLE_CONSECUTIVE` — post-action settle. The facade enables
+  stable-after-action by default so you do not reason from a too-early frame.
+- VLM is opt-in, env-configured, experimental, and billed: set
+  `GLASSBOX_ENABLE_VLM=1` before `open_phone()`. It is not exposed as a facade
+  param or method; observations carry its results transparently when enabled.
+
+`glassbox/config.py` is the canonical, complete switch list (each field
+documents its `GLASSBOX_*` env var and default); `.env.example` carries the
+common ones.
+
 ## Author Loop
 
 1. Write a small deterministic Python script using `glassbox.ai`.
