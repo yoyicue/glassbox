@@ -16,6 +16,8 @@ from glassbox.cognition.contracts import (
     SceneClassification,
 )
 from glassbox.cognition.text_match import (
+    confusion_compact,
+    fuzzy_ratio,
     text_contains,
 )
 from glassbox.ios._scene_common import (
@@ -1103,7 +1105,7 @@ def _looks_like_app_library(scene: Scene, *, viewport_size: tuple[int, int]) -> 
 def _app_library_evidence(scene: Scene, *, viewport_size: tuple[int, int]) -> tuple[str, ...] | None:
     w, h = viewport_size
     has_title = any(
-        _matches(_text(el), APP_LIBRARY_LABELS, fuzzy=0.80)
+        _matches_app_library_title(_text(el))
         and el.box.center[1] <= h * 0.18
         for el in scene.elements
     )
@@ -1132,6 +1134,27 @@ def _app_library_evidence(scene: Scene, *, viewport_size: tuple[int, int]) -> tu
     if bottom_home_search:
         return None
     return ("app_library_categories",)
+
+
+def _matches_app_library_title(text: str) -> bool:
+    """Match only the App Library chrome label, not Settings rows mentioning it."""
+    compact = confusion_compact(text)
+    candidates = [compact]
+    # OCR/search-bar prefixes often make the title look like "Q App Library" or
+    # "• App Library"; strip one short leading prefix but reject longer copy like
+    # "Home Screen & App Library" or "Show App Library in Dock".
+    if len(compact) > 1 and compact[0].casefold() in {"q", "o", "0", "•"}:
+        candidates.append(compact[1:])
+    for label in APP_LIBRARY_LABELS:
+        label_compact = confusion_compact(label)
+        for candidate in candidates:
+            if not candidate:
+                continue
+            if candidate == label_compact:
+                return True
+            if abs(len(candidate) - len(label_compact)) <= 2 and fuzzy_ratio(candidate, label_compact) >= 0.82:
+                return True
+    return False
 
 
 # In-app purchase / subscription paywalls (a foreign app's, e.g. a drifted-into
