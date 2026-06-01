@@ -6,14 +6,15 @@ benchmark aggregated from a recorded iOS-Settings rig run, with the provenance
 fields (`run_id` / `started_at` / `git_sha`) pinned so the fixture is
 deterministic and reviewable.
 
-Current floor: a **failed** real iPad mini 7 (en/HK) Settings drill-down with the
-P2 strategy ladder default-on (2026-05-29): `task_completion_rate = 0.0` and
-`tasks[0].outcome = "failed"`. The high `action_success_rate ≈ 0.955` is a
-scroll-excluded, back-heavy task-action ACK proxy, not the reliability headline.
-`unknown_rate ≈ 0.036`, `strategy_switches = 5` (the ladder switched primitives
-5× in production), and VLM did not fire. It is a **single round**, so it must be
-replaced by a completed multi-round floor before it can serve as the ratcheting
-baseline.
+Current floor: a **successful** real iPad mini 7 (en/HK) full Settings read-only
+drill-down, 5 rounds, captured on 2026-06-01 at `git_sha=15d592c`.
+`task_completion_rate = 1.0`, `task_completion_variance = 0.0`, every task
+outcome is `succeeded`, and `root_pages_coverage = 1.0`. `action_success_rate =
+1.0` and `unknown_rate = 0.0` are secondary task-action ACK metrics, not the
+reliability headline. VLM and expected-state row verification did not fire on
+this crawler path (`vlm_action_coverage = 0.0`, `expected_state_coverage = 0.0`),
+so future work should still route row entry through the semantic/expected-state
+path before attributing wins to those gates.
 
 It is load-bearing in two places:
 
@@ -29,8 +30,8 @@ It is load-bearing in two places:
 
 ## Raising the floor
 
-`vlm_enabled=false` here (the win is the OCR + P2 ladder path, not VLM). After an
-on-rig A/B validates a further reliability flag (per
+`vlm_enabled=false` here (the current floor is the deterministic OCR/sidebar
+Settings crawler path, not VLM). After an on-rig A/B validates a further reliability flag (per
 `docs/goals/computer_use_quality_rig_validation.md` — e.g. `make ab-semantic-plan`),
 regenerate and overwrite this fixture from the better run so the floor ratchets
 up and future regressions below the new level are caught:
@@ -40,14 +41,6 @@ uv run python -m skills.regression.computer_use_success_rate aggregate \
   --run-dir <the validated artifact run dir> \
   --task settings_readonly_walkthrough \
   --out skills/regression/fixtures/reliability_baseline.json
-# then re-pin run_id/started_at/git_sha (and trim config to {phone_model,
-# language, region, vlm_enabled, semantic_plan_ops, note}) for determinism,
+# then re-pin run_id/started_at/git_sha/config.note for reviewability,
 # and `make regression-gate`.
 ```
-
-> Note on the en device: `make computer-use-success-rate-ios-settings` hard-checks
-> coverage against a **zh** expected-root list, so on an English iPad it fails the
-> final verification even though navigation succeeds. Aggregate the artifact run
-> dir directly (as above) — `aggregate` does not enforce that zh list — or run
-> `python -m skills.regression.ios_settings.run_full --language en --region HK
-> --drill-down` and aggregate its run dir.

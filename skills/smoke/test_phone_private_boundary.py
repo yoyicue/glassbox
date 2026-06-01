@@ -8,6 +8,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ALLOWED_PHONE_PRIVATE_REACHES: dict[str, set[str]] = {
+    "skills/regression/ios_settings/scrolling.py": {
+        "_page_drag_xy",
+    },
     "skills/regression/ios_settings/trace.py": {
         "_trace",
     },

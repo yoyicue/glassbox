@@ -1,12 +1,12 @@
 # Goal — Honest-gate-first redirection (fix the compass before the engine)
 
-Status: **in progress (2026-06-01).** Phase-0 implementation has started: the
-offline smoke gate now rejects a committed floor with zero task completion, and
-the fixture headline text no longer treats `action_success_rate` as the
-reliability number. A real iPad quick n=5 smoke now emits an aggregate with
-`task_completion_rate=1.0` / variance `0.0`, but the full drill-down n=5 still
-fails before it can replace the committed floor. The remaining blocker is a
-completed multi-round full drill-down floor. This doc is the trackable
+Status: **implemented and verified (2026-06-01).**
+Phase 0 and the first Phase-1 floor replacement have landed in-tree: the offline
+smoke gate rejects a zero-completion committed floor, the fixture headline leads
+with `task_completion_rate`, and the committed baseline has been replaced with a
+real iPad mini 7 en/HK full Settings read-only drill-down n=5 run with
+`task_completion_rate=1.0`, variance `0.0`, and `root_pages_coverage=1.0`.
+Final verification passed with `make check`. This doc is the trackable
 redirection plan; it is a strategic companion to
 [`computer_use_quality_roadmap.md`](computer_use_quality_roadmap.md) (which says
 *what reliability machinery to build/wire*) and
@@ -21,26 +21,29 @@ utility, and the order to fix it in.**
 > is real; the compass is broken. Fix the compass first, then narrow the domain,
 > then let the real number decide which complexity to keep.
 
-The single committed end-to-end floor
-(`skills/regression/fixtures/reliability_baseline.json`) finished `outcome:
-"failed"`, sitting in the **Weather app**, with `task_completion_rate = 0.0` — yet
-its published headline is `action_success_rate = 0.955`, and that fixture passes
-`make check` **green**.
+The original committed end-to-end floor
+(`skills/regression/fixtures/reliability_baseline.json` before this work)
+finished `outcome: "failed"`, sitting in the **Weather app**, with
+`task_completion_rate = 0.0` — yet its published headline was
+`action_success_rate = 0.955`, and that fixture passed `make check` **green**.
+That was the compass failure. The current committed floor is now a successful
+multi-round task-completion floor.
 
-## 1. The mechanism (re-verified 2026-06-01)
+## 1. The original mechanism (re-verified 2026-06-01)
 
 | Fact | Evidence (personally verified this session) |
 |------|---------|
-| The floor is a *failed* run | `reliability_baseline.json`: `task_completion_rate=0.0`, `tasks[0].outcome="failed"`, `final_state.page_id=null`, final `visible_texts` are Weather ("MY LOCATION", "10-DAY FORECAST") |
-| The 0.955 headline is a back-dominated per-tap ACK | op breakdown in the fixture: **back 59, tap 48, scroll_wheel 9, home 2, type 1, open_app 1, long_press 1** (121 actions; the 112 denominator drops the 9 scroll "fillers"). `action_success_rate=0.9553571` |
-| The load-bearing primitive is failing | `scroll_success_rate=0.2222` (2/9 succeed, 7 unknown) — the mechanical reason the run never reached lower sections / root |
-| Key verification stages never fired | `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`, `vlm_calls=0`; `strategy_switches=5`, so the ladder did switch, but not with expected-state or VLM coverage |
-| The task-completion gate cannot fail on this floor | `compare` gate at `computer_use_success_rate.py:1184` trips only on `delta < -tolerance` for `{task_completion_rate, action_success_rate, root_pages_coverage}`. A floor pinned at `task_completion_rate=0.0` cannot reject another zero-completion candidate on task completion |
-| …and `make check` doesn't even run that gate | `regression-gate` (`Makefile:36-38`) runs `validate` (schema-only) + `test_computer_use_regression_gate.py`, whose floor test (`test_committed_baseline_fixture_is_schema_valid`) checks **schema only**. `compare` runs only in `regression-compare`/`ab-semantic-plan` (`Makefile:45,64`), which need a live rig. **So the failed floor passes offline CI green.** |
+| The old floor was a *failed* run | old `reliability_baseline.json`: `task_completion_rate=0.0`, `tasks[0].outcome="failed"`, `final_state.page_id=null`, final `visible_texts` were Weather ("MY LOCATION", "10-DAY FORECAST") |
+| The old 0.955 headline was a back-dominated per-tap ACK | old op breakdown: **back 59, tap 48, scroll_wheel 9, home 2, type 1, open_app 1, long_press 1** (121 actions; the 112 denominator dropped the 9 scroll "fillers"). `action_success_rate=0.9553571` |
+| The load-bearing primitive was failing | old `scroll_success_rate=0.2222` (2/9 succeed, 7 unknown) — the mechanical reason that run never reached lower sections / root |
+| Key verification stages never fired | old `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`, `vlm_calls=0`; `strategy_switches=5`, so the ladder switched, but not with expected-state or VLM coverage |
+| The old task-completion gate could not fail on this floor | `compare` gate at `computer_use_success_rate.py:1184` tripped only on `delta < -tolerance` for `{task_completion_rate, action_success_rate, root_pages_coverage}`. A floor pinned at `task_completion_rate=0.0` could not reject another zero-completion candidate on task completion |
+| …and `make check` did not run that gate | `regression-gate` (`Makefile:36-38`) ran `validate` (schema-only) + `test_computer_use_regression_gate.py`, whose floor test (`test_committed_baseline_fixture_is_schema_valid`) checked **schema only**. `compare` ran only in `regression-compare`/`ab-semantic-plan` (`Makefile:45,64`), which need a live rig. **So the failed floor passed offline CI green.** |
 
-**Net:** the number being optimized and ratcheted (`action_success_rate`) does not
-measure task success and structurally masks failure; the gate guarding it cannot
-go red offline. That is the precise, mechanical source of "complex but low utility."
+**Net:** the number being optimized and ratcheted (`action_success_rate`) did not
+measure task success and structurally masked failure; the gate guarding it could
+not go red offline. That was the precise, mechanical source of "complex but low
+utility."
 
 ## 2. The four convergent root causes
 
@@ -83,17 +86,16 @@ ordered: do not start a phase before the prior one's gate is real.
 
 ### Phase 0 — Fix the compass (this week · no hardware · fully reversible)
 
-- **0.1 Make the failed floor go red offline.** **Implemented in code.** Add a one-line assertion to
-  `skills/smoke/test_computer_use_regression_gate.py` (or to `validate`) that the
+- **0.1 Make the failed floor go red offline.** **Implemented in code.**
+  `skills/smoke/test_computer_use_regression_gate.py` now asserts that the
   committed floor's own `metrics.task_completion_rate > 0` **and** every
-  `tasks[*].outcome != "failed"`. *This — not a `compare` edit — is what makes
-  `make check` red on the current Weather-app floor, with zero hardware.* (The
-  `compare`/`--min-task-completion` change is still worth adding, but it only
-  hardens the nightly rig path.)
-- **0.2 Re-headline.** **Implemented in prose/fixture metadata.** In `skills/regression/fixtures/README.md` and the fixture's
-  `config.note`, lead with `task_completion_rate` (currently 0.0) and stop calling
-  `action_success_rate=0.955` "the reliability number"; label it a
-  scroll-excluded, back-dominated per-tap ACK proxy.
+  `tasks[*].outcome != "failed"`. *This — not a `compare` edit — is what made
+  `make check` red on the Weather-app floor, with zero hardware.* (The
+  `compare`/`--min-task-completion` change still hardens the nightly rig path.)
+- **0.2 Re-headline.** **Implemented in prose/fixture metadata.** In
+  `skills/regression/fixtures/README.md` and the fixture's `config.note`, the
+  headline is now `task_completion_rate=1.0` / variance `0.0`; `action_success_rate`
+  is explicitly secondary task-action ACK telemetry.
 - **0.3 Branch-protect `main`** (one `gh api -X PUT …/branches/main/protection`
   requiring `check`, with an admin bypass). Otherwise a red gate is theater on a
   191-commit/9-day history.
@@ -101,8 +103,8 @@ ordered: do not start a phase before the prior one's gate is real.
   Phase-0 goal is only "a failed run can no longer pass." Ratchet later, from real
   data.
 
-**Phase-0 done-bar:** `make check` is RED on the current committed floor; the
-headline number everyone quotes is `task_completion_rate`.
+**Phase-0 done-bar:** the old failed committed floor goes red offline; the
+headline number everyone quotes is `task_completion_rate`. Implemented.
 
 ### Phase 1 — Move the number off 0 (next 1–2 weeks · iPad rig)
 
@@ -115,8 +117,8 @@ headline number everyone quotes is `task_completion_rate`.
   `--language en --region HK` into each round, can keep going after a failed
   round, and emits `task_completion_variance`. Run **n ≥ 5** and emit the
   aggregate benchmark plus the per-round reports/artifacts. **First honest
-  milestone: `task_completion > 0 at n=5` with per-round evidence — quick mode
-  now shows this; the full drill-down has not yet.**
+  milestone achieved:** full drill-down n=5 now reports
+  `task_completion_rate=1.0`, variance `0.0`, and `root_pages_coverage=1.0`.
 - **1.3 Move the number with the right lever, in the right order.** `entered_graph`
   is **L1's** signal (the virtual `settings/root` projection), *not L4's*:
   `ipad_settings_l1_rig_ab_handoff.md` shows `entered_graph` 0→7 only when L1 is ON.
@@ -131,27 +133,42 @@ headline number everyone quotes is `task_completion_rate`.
     resolve through `canonical_expected_root_label` before trusting any en
     `entered_graph` count.
 
-**Phase-1 done-bar:** the en/HK drill-down reports a real `task_completion` mean +
-variance at n≥5, and the chosen lever moves it measurably above 0 across rounds.
+**Phase-1 first floor done-bar:** the en/HK drill-down reports a real
+`task_completion` mean + variance at n≥5, and the committed fixture ratchets from
+the old failed run to that floor. Implemented for the deterministic Settings
+crawler path; semantic expected-state/VLM row-entry wiring remains future work.
 
 **Current rig evidence (2026-06-01):**
 
-- Full drill-down n=5, default path:
+- Historical failing attempts before the root-credit fix:
+  - Full drill-down n=5, default path:
   `artifacts/computer_use_success_rate/honest_gate_en_hk_n5_v2.json` was not
   produced. Round 0 verified `OK`; round 1 failed report verification with
   `required_missing=["隐私与安全性"]` and `navigation candidate did not open:
   Settings > 隐私与安全性`.
-- Full drill-down n=5 with
+  - Full drill-down n=5 with
   `GLASSBOX_SETTINGS_SEARCH_ROOT_FALLBACK_SIDEBAR=1` also did not complete; round
   0 crashed with `SettingsRootUnreachable` while returning to root during the
   scroll loop.
-- Quick drill-down n=5 with keep-going and skipped per-round exhaustive verify
+  - Quick drill-down n=5 with keep-going and skipped per-round exhaustive verify
   did complete:
   `artifacts/computer_use_success_rate/honest_gate_quick_n5.json` validated with
   `task_completion_rate=1.0`, `task_completion_variance=0.0`,
   `root_pages_coverage=0.2353`, `expected_state_coverage=0.0`, and
-  `vlm_action_coverage=0.0`. This is useful smoke evidence, but it is not the
-  full floor required to replace `reliability_baseline.json`.
+  `vlm_action_coverage=0.0`. This was useful smoke evidence, but not the full
+  floor required to replace `reliability_baseline.json`.
+- Successful replacement floor after the iPad split-view/root-credit fixes:
+  `artifacts/computer_use_success_rate/honest_gate_full_n5_after_root_credit_fix.json`
+  validated with `rounds=5`, all five task outcomes `succeeded`,
+  `task_completion_rate=1.0`, `task_completion_variance=0.0`,
+  `action_success_rate=1.0`, `unknown_rate=0.0`, `root_pages_coverage=1.0`,
+  `recoveries=0`, `retries=0`, and `strategy_switches=0`. Every per-round report
+  had `required_missing=[]`. The only recurring report issue was
+  `ios-settings-scroll-overshoot`; missing optional/unavailable rows were
+  `蜂窝网络`, `操作按钮`, `待机显示`, `紧急 SOS`, and `钱包与 Apple Pay`.
+  `vlm_action_coverage=0.0` and `expected_state_coverage=0.0` remain explicit
+  caveats: this floor proves the deterministic crawler can complete the task, not
+  that VLM/expected-state row verification is carrying it.
 
 ### Phase 2 — Prune complexity (only after the number moves)
 
@@ -185,15 +202,26 @@ number past 90% → then let that number tell you which complexity to keep or cu
 
 ## 6. Verification ledger (what is solid vs relayed)
 
-**Personally re-verified against the tree this session** (2026-06-01): the floor's
-`outcome="failed"` / `task_completion_rate=0.0` / `expected_state_coverage=0` /
-`vlm_calls=0` / **`strategy_switches=5`** / `scroll_success_rate=0.2222` /
-`action_success_rate=0.9553`; the op breakdown (back 59 / tap 48 / scroll 9 / …);
-the gate logic at `computer_use_success_rate.py:1184`; that `regression-gate` runs
-`validate` + a schema-only smoke test and **not** `compare` (`Makefile:36-38`); the
-crawler's `tap_xy` path (`navigation.py:163,254,455` → `phone.py:1613`); the floor
-fixture has **0** `entered_graph` fields; `config.py` has **26** `bool = False` vs
-**3** `bool = True`; the L1 A/B median table (`ipad_settings_l1_rig_ab_handoff.md:39-46`).
+**Personally re-verified against the tree this session** (2026-06-01): the old
+floor's `outcome="failed"` / `task_completion_rate=0.0` /
+`expected_state_coverage=0` / `vlm_calls=0` / **`strategy_switches=5`** /
+`scroll_success_rate=0.2222` / `action_success_rate=0.9553`; the old op
+breakdown (back 59 / tap 48 / scroll 9 / …); the gate logic at
+`computer_use_success_rate.py:1184`; that `regression-gate` previously ran
+`validate` + a schema-only smoke test and **not** `compare` (`Makefile:36-38`);
+the crawler's `tap_xy` path (`navigation.py:163,254,455` → `phone.py:1613`);
+the fixture has **0** `entered_graph` fields; `config.py` has **26** `bool = False`
+vs **3** `bool = True`; the L1 A/B median table
+(`ipad_settings_l1_rig_ab_handoff.md:39-46`).
+
+**Current committed floor evidence** (2026-06-01): `reliability_baseline.json`
+is replaced from
+`artifacts/computer_use_success_rate/honest_gate_full_n5_after_root_credit_fix.json`;
+it validates successfully and reports `task_completion_rate=1.0`,
+`task_completion_variance=0.0`, five `succeeded` task outcomes,
+`root_pages_coverage=1.0`, `action_success_rate=1.0`, and `unknown_rate=0.0`.
+The fixture still has `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`,
+and `vlm_calls=0`, so expected-state/VLM row-entry claims remain unproven.
 
 **Relayed, re-confirm before acting:** `main` branch-protection status (a live `gh`
 check timed out on network; `code_health_roadmap.md:83` records it as unprotected —
