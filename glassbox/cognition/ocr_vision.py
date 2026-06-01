@@ -261,38 +261,3 @@ class VisionOCR:
         # Vision: ny is the distance from the bbox bottom edge to the image bottom → bbox top edge to image top = 1 - ny - nh
         py = round((1.0 - ny - nh) * img_h)
         return Box(x=px, y=py, w=pw, h=ph)
-
-
-# ─── convenience function: same origin as ocr.py's find_text (shares text_match normalization) ───
-def find_text(
-    elements: list[UIElement],
-    target: str,
-    *,
-    fuzzy_ratio: float = 0.8,
-    exact_first: bool = True,
-) -> UIElement | None:
-    """Find the element matching target in OCR results. Minus glyph aliases are normalized automatically."""
-    from glassbox.cognition.text_match import (
-        fuzzy_ratio as _fr,
-    )
-    from glassbox.cognition.text_match import (
-        text_contains,
-        texts_match,
-    )
-
-    if exact_first:
-        for el in elements:
-            if el.text and texts_match(el.text, target):
-                return el
-    for el in elements:
-        if el.text and text_contains(el.text, target):
-            return el
-    best: UIElement | None = None
-    best_ratio = fuzzy_ratio
-    for el in elements:
-        if not el.text:
-            continue
-        r = _fr(target, el.text)
-        if r >= best_ratio:
-            best, best_ratio = el, r
-    return best

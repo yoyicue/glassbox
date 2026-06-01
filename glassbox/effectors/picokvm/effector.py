@@ -28,8 +28,6 @@ from glassbox.effectors.picokvm.rpc import (
 _MOD_META_LEFT = 0x08
 _KEY_H = 0x0B
 _KEY_LEFT_BRACKET = 0x2F
-_KEY_UP_ARROW = 0x52
-_KEY_V = 0x19
 _PICOKVM_DIRECT_ACTIONS = frozenset({
     "tap",
     "long_press",
