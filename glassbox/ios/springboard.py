@@ -18,6 +18,7 @@ from glassbox.cognition.base import Scene, UIElement
 from glassbox.cognition.text_match import fuzzy_ratio, text_contains, texts_match
 from glassbox.ios.default_apps import (
     DefaultAppLaunchProfile,
+    canonical_default_app_label,
     default_launch_profile_for_labels,
     verify_default_app_opened,
 )
@@ -321,19 +322,23 @@ def find_springboard_icon(
         return None
 
     w, h = _scene_size(scene, viewport_size)
+    annotate_springboard_icon_intents(scene, viewport_size=(w, h))
     best: UIElement | None = None
     best_ratio = fuzzy
     for el in _icon_label_candidates(scene, viewport_size=(w, h)):
-        text = _text(el)
+        text_candidates = _icon_match_texts(el)
         for label in labels:
-            if texts_match(text, label) or text_contains(text, label):
-                best = el
-                best_ratio = 1.0
+            for text in text_candidates:
+                if texts_match(text, label) or text_contains(text, label):
+                    best = el
+                    best_ratio = 1.0
+                    break
+                ratio = fuzzy_ratio(text, label)
+                if ratio >= best_ratio:
+                    best = el
+                    best_ratio = ratio
+            if best is el and best_ratio >= 1.0:
                 break
-            ratio = fuzzy_ratio(text, label)
-            if ratio >= best_ratio:
-                best = el
-                best_ratio = ratio
         if best is el and best_ratio >= 1.0:
             break
     if best is None:
@@ -348,6 +353,56 @@ def find_springboard_icon(
     tap_y = max(int(h * 0.05), best.box.y - offset)
     tap_x = min(max(cx, int(w * 0.05)), int(w * 0.95))
     return SpringboardIcon(element=best, tap_point=(tap_x, tap_y))
+
+
+def annotate_springboard_icon_intents(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+    platform: str | None = None,
+) -> int:
+    """Attach canonical built-in app names to Home icon OCR elements."""
+    w, h = _scene_size(scene, viewport_size)
+    labels = _icon_label_candidates(scene, viewport_size=(w, h))
+    if not labels:
+        return 0
+    platform_kind = str(getattr(scene, "platform_scene_kind", "") or "")
+    home_like = (
+        platform_kind == "springboard"
+        or _has_strong_icon_grid(labels, viewport_size=(w, h))
+        or _looks_like_ipad_home_widget_page(scene, viewport_size=(w, h))
+    )
+    if not home_like:
+        return 0
+    updated = 0
+    for element in labels:
+        if element.intent_label and element.intent_source != "springboard_lexicon":
+            continue
+        match = canonical_default_app_label(_text(element), platform=platform)
+        if match is None:
+            continue
+        evidence = list(element.type_evidence)
+        evidence.extend([
+            "springboard_lexicon",
+            f"springboard_app:{match.profile.key}",
+            f"springboard_label:{match.label}",
+        ])
+        element.intent_label = match.canonical_label
+        element.intent_source = "springboard_lexicon"
+        element.intent_confidence = min(1.0, max(0.0, match.score))
+        element.type_evidence = list(dict.fromkeys(evidence))
+        updated += 1
+    return updated
+
+
+def _icon_match_texts(element: UIElement) -> tuple[str, ...]:
+    texts: list[str] = []
+    if element.intent_label and element.intent_source == "springboard_lexicon":
+        texts.append(str(element.intent_label))
+    raw = _text(element)
+    if raw:
+        texts.append(raw)
+    return tuple(dict.fromkeys(texts))
 
 
 def springboard_signature(scene: Scene) -> tuple[tuple[str, int, int], ...]:

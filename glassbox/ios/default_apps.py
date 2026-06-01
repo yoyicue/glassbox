@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import difflib
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
 from glassbox.cognition.base import Scene
+from glassbox.cognition.text_match import confusion_compact
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,14 @@ class DefaultAppLaunchProfile:
     @property
     def all_labels(self) -> tuple[str, ...]:
         return (*self.labels, *self.aliases)
+
+
+@dataclass(frozen=True)
+class DefaultAppLabelMatch:
+    profile: DefaultAppLaunchProfile
+    label: str
+    canonical_label: str
+    score: float
 
 
 DEFAULT_APP_LAUNCH_PROFILES: tuple[DefaultAppLaunchProfile, ...] = (
@@ -176,7 +186,8 @@ DEFAULT_APP_LAUNCH_PROFILES: tuple[DefaultAppLaunchProfile, ...] = (
     ),
     DefaultAppLaunchProfile(
         key="tv",
-        labels=("TV", "Apple TV", "视频"),
+        labels=("Apple TV", "TV", "视频"),
+        aliases=("Videos", "atv", "stv"),
         spotlight_query="tv",
         require_post_open_verification=True,
         verify_markers=("Apple TV", "TV", "Watch Now", "Library", "Store", "体育", "资料库"),
@@ -318,6 +329,47 @@ def default_launch_profile_for_labels(
     return None
 
 
+def canonical_default_app_label(
+    text: str | None,
+    *,
+    platform: str | None = None,
+    min_score: float = 0.78,
+    margin: float = 0.10,
+) -> DefaultAppLabelMatch | None:
+    """Map a noisy Home icon label to one unambiguous built-in app label."""
+    text_key = _label_match_key(text)
+    if not text_key:
+        return None
+    by_profile: dict[str, DefaultAppLabelMatch] = {}
+    for profile in DEFAULT_APP_LAUNCH_PROFILES:
+        if platform is not None and platform not in profile.platforms:
+            continue
+        for label in profile.all_labels:
+            label_key = _label_match_key(label)
+            if not label_key:
+                continue
+            score = _label_match_score(text_key, label_key)
+            if score >= min_score:
+                match = DefaultAppLabelMatch(
+                    profile=profile,
+                    label=label,
+                    canonical_label=profile.labels[0],
+                    score=score,
+                )
+                current = by_profile.get(profile.key)
+                if current is None or match.score > current.score:
+                    by_profile[profile.key] = match
+    scored = list(by_profile.values())
+    if not scored:
+        return None
+    scored.sort(key=lambda item: item.score, reverse=True)
+    best = scored[0]
+    second = scored[1].score if len(scored) > 1 else 0.0
+    if best.score - second < margin:
+        return None
+    return best
+
+
 def verify_default_app_opened(
     profile: DefaultAppLaunchProfile,
     scene: Scene,
@@ -372,9 +424,25 @@ def _normalize(value: str) -> str:
     return str(value or "").strip().casefold().replace(" ", "")
 
 
+def _label_match_key(value: str | None) -> str:
+    return confusion_compact(value).casefold().replace(" ", "")
+
+
+def _label_match_score(text_key: str, label_key: str) -> float:
+    if text_key == label_key:
+        return 1.0
+    if text_key.endswith(label_key):
+        prefix = text_key[: len(text_key) - len(label_key)]
+        if 0 < len(prefix) <= 4:
+            return 1.0
+    return difflib.SequenceMatcher(None, text_key, label_key).ratio()
+
+
 __all__ = [
     "DEFAULT_APP_LAUNCH_PROFILES",
+    "DefaultAppLabelMatch",
     "DefaultAppLaunchProfile",
+    "canonical_default_app_label",
     "default_launch_profile_for_labels",
     "verify_default_app_opened",
 ]

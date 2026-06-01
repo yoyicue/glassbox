@@ -76,6 +76,27 @@ class FakeOCR:
         ]
 
 
+class HomeIconOCR:
+    def recognize(self, _image):
+        def el(text: str, x: int, y: int, w: int = 60):
+            return UIElement(
+                type="text",
+                box=Box(x=x, y=y, w=w, h=20),
+                text=text,
+                confidence=0.9,
+            )
+
+        return [
+            el("日 Notes", 42, 176),
+            el("Facefime", 154, 176),
+            el("App Store", 252, 176, 82),
+            el("camera", 42, 316),
+            el("Settings", 154, 316),
+            el("Books", 252, 316),
+            el("Search", 196, 892),
+        ]
+
+
 class CountingVotingOCR:
     def __init__(self):
         self.calls = 0
@@ -783,6 +804,25 @@ def test_runtime_wires_ocr_temporal_voting_config_without_global_perceive_side_e
     assert scene.ocr_vote_metadata["samples_requested"] == 3
     assert scene.ocr_vote_metadata["samples_used"] == 3
     assert scene.ocr_vote_metadata["degrade_reason"] == "duplicate_frames"
+
+
+@pytest.mark.smoke
+def test_runtime_populates_springboard_icon_intent_labels_from_lexicon():
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(_env_file=None),
+        ocr=HomeIconOCR(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    by_text = {element.text: element for element in scene.elements}
+    assert scene.platform_scene_kind == "springboard"
+    assert by_text["日 Notes"].intent_label == "Notes"
+    assert by_text["Facefime"].intent_label == "FaceTime"
+    assert by_text["App Store"].intent_label == "App Store"
+    assert by_text["camera"].intent_label == "Camera"
+    assert by_text["Settings"].intent_source == "springboard_lexicon"
 
 
 @pytest.mark.smoke

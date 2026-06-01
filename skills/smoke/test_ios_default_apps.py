@@ -3,6 +3,7 @@ from __future__ import annotations
 from glassbox.cognition import Box, Scene, UIElement
 from glassbox.ios.default_apps import (
     DEFAULT_APP_LAUNCH_PROFILES,
+    canonical_default_app_label,
     default_launch_profile_for_labels,
     verify_default_app_opened,
 )
@@ -61,6 +62,13 @@ def test_default_app_profile_lookup_handles_aliases_and_platforms():
     assert default_launch_profile_for_labels(("Phone",), platform="ios").key == "phone"
     assert default_launch_profile_for_labels(("Phone",), platform="ipados") is None
     assert default_launch_profile_for_labels(("Health",), platform="ipados") is None
+
+
+def test_default_app_label_canonicalizes_noisy_home_icon_labels():
+    assert canonical_default_app_label("日 Notes", platform="ipados").canonical_label == "Notes"
+    assert canonical_default_app_label("Facefime", platform="ipados").canonical_label == "FaceTime"
+    assert canonical_default_app_label("stv", platform="ipados").canonical_label == "Apple TV"
+    assert canonical_default_app_label("AppStore", platform="ipados").canonical_label == "App Store"
 
 
 def test_app_store_profile_requires_multiple_chrome_markers_not_notes_label():

@@ -51,6 +51,15 @@ def _bbox_within_tolerance(
     return all(abs(int(a[i]) - int(b[i])) <= tol for i in range(4))
 
 
+def _platform_key_from_model(model: object) -> str | None:
+    value = str(model or "").lower().replace("-", "_")
+    if value.startswith("ipad"):
+        return "ipados"
+    if value:
+        return "ios"
+    return None
+
+
 class Perceptor:
     """Owns Phone's perception pipeline while Phone keeps the public facade."""
 
@@ -96,17 +105,32 @@ class Perceptor:
 
     def apply_scene_classifiers(self, scene: Scene, frame_img: np.ndarray | None) -> None:
         host = self._phone
-        if not host.scene_classifiers:
-            return
         viewport_size = None
         if frame_img is not None and getattr(frame_img, "ndim", 0) >= 2:
             viewport_size = (int(frame_img.shape[1]), int(frame_img.shape[0]))
-        classifications: list[SceneClassification] = []
-        for classify in host.scene_classifiers:
-            result = classify(scene, viewport_size)
-            if result is not None:
-                classifications.append(result)
-        DEFAULT_SCENE_CLASSIFICATION_PROJECTOR.project(scene, classifications)
+        if host.scene_classifiers:
+            classifications: list[SceneClassification] = []
+            for classify in host.scene_classifiers:
+                result = classify(scene, viewport_size)
+                if result is not None:
+                    classifications.append(result)
+            DEFAULT_SCENE_CLASSIFICATION_PROJECTOR.project(scene, classifications)
+        self.apply_scene_annotations(scene, viewport_size=viewport_size)
+
+    def apply_scene_annotations(
+        self,
+        scene: Scene,
+        *,
+        viewport_size: tuple[int, int] | None,
+    ) -> None:
+        platform = _platform_key_from_model(getattr(getattr(self._phone, "device_geometry", None), "model", ""))
+        if platform not in {"ios", "ipados"} and not str(scene.platform_scene_kind or "").startswith("springboard"):
+            return
+        try:
+            from glassbox.ios.springboard import annotate_springboard_icon_intents
+        except Exception:
+            return
+        annotate_springboard_icon_intents(scene, viewport_size=viewport_size, platform=platform)
 
     def classify_platform_scene_now(
         self,

@@ -11,6 +11,7 @@ from glassbox.ios.springboard import (
     _opened_expected_app_or_recover,
     _strict_home,
     _tap_icon_via_map_if_visible,
+    annotate_springboard_icon_intents,
     find_springboard_icon,
     is_ios_home_screen,
     open_app_from_springboard,
@@ -139,6 +140,33 @@ def test_home_icon_lookup_uses_lexicon_for_deterministic_noisy_label():
 
     assert icon is not None
     assert icon.element.text == "口 Notes"
+    assert icon.element.intent_label == "Notes"
+    assert icon.element.intent_source == "springboard_lexicon"
+
+
+@pytest.mark.smoke
+def test_home_icon_canonicalization_populates_intent_labels():
+    scene = _scene(
+        _el("日 Notes", 860, 142, w=64),
+        _el("Facefime", 760, 700, w=72),
+        _el("stv", 870, 770, w=50),
+        _el("camera", 879, 698, w=42),
+        _el("App Store", 382, 615, w=82),
+        _el("Settings", 996, 820, w=60),
+        _el("Search", 940, 1010, w=54),
+    )
+    scene.platform_scene_kind = "springboard"
+
+    updated = annotate_springboard_icon_intents(scene, viewport_size=(1920, 1080), platform="ipados")
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 6
+    assert by_text["日 Notes"].intent_label == "Notes"
+    assert by_text["Facefime"].intent_label == "FaceTime"
+    assert by_text["stv"].intent_label == "Apple TV"
+    assert by_text["camera"].intent_label == "Camera"
+    assert by_text["App Store"].intent_label == "App Store"
+    assert by_text["Settings"].intent_source == "springboard_lexicon"
 
 
 @pytest.mark.smoke
