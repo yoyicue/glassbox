@@ -24,6 +24,7 @@ from glassbox.ios._scene_common import (
     matches_label,
     scene_size_with_default,
 )
+from glassbox.ios.weather_surface import looks_like_weather_app_surface
 
 SETTINGS_TITLE_LABELS = ("设置", "Settings")
 SETTINGS_ROOT_MARKERS = (
@@ -245,6 +246,15 @@ def classify_ios_scene(
             title=title,
             safe_actions=("edge_back", "back", "trace"),
             evidence=("purchase_paywall",),
+        )
+
+    if looks_like_weather_app_surface(scene):
+        return IOSSceneClassification(
+            kind="unknown",
+            confidence=0.30,
+            title=title,
+            safe_actions=("home", "open_app"),
+            evidence=("weather_app_surface",),
         )
 
     if _looks_like_springboard(scene, viewport_size=(w, h)):

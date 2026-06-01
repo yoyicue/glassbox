@@ -809,6 +809,7 @@ def test_weather_forecast_text_does_not_form_icon_grid():
     labels = [el.text for el in _icon_label_candidates(scene, viewport_size=(640, 989))]
 
     assert _looks_like_today_widget_surface(scene, viewport_size=(640, 989))
+    assert not is_ios_home_screen(scene, viewport_size=(640, 989))
     assert "Today" not in labels
     assert "Tue" not in labels
     assert "40%" not in labels

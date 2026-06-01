@@ -650,6 +650,8 @@ def test_ipados_scene_classifier_weather_app_search_is_not_settings_search_resul
 
     classified = classify_ipados_scene(scene)
 
+    assert classified.kind == "unknown"
+    assert "weather_app_surface" in classified.evidence
     assert classified.kind != "settings_search_results"
     assert "ipad_settings_top_search" not in classified.evidence
 

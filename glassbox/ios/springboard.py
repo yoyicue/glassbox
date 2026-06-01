@@ -17,6 +17,7 @@ from glassbox.boundaries import AppLaunchTarget
 from glassbox.cognition.base import Scene, UIElement
 from glassbox.cognition.text_match import fuzzy_ratio, text_contains, texts_match
 from glassbox.ios.scene import classify_ios_scene
+from glassbox.ios.weather_surface import looks_like_weather_app_surface
 
 HOME_SEARCH_LABELS = ("搜索", "Search")
 HOME_FOLDER_LABELS = ("其他", "工具", "实用工具", "Utilities", "Other")
@@ -206,6 +207,8 @@ def is_ios_home_screen(
     if any(el.type == "nav_back" for el in scene.elements):
         return False
     if any(_matches(_text(el), NON_HOME_APP_MARKERS, fuzzy=0.78) for el in scene.elements):
+        return False
+    if looks_like_weather_app_surface(scene):
         return False
     platform_kind = str(getattr(scene, "platform_scene_kind", "") or "")
     if platform_kind == "app_library":
