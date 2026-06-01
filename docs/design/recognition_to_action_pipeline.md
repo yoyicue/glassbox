@@ -202,6 +202,44 @@ pure logic.
 5. Was the in-flight floor-honesty assertion meant to land with a regenerated
    completed-floor fixture? `make check` is RED until the floor is replaced.
 
+## 7. Entropy-reduction summary (熵减) — this cleanup
+
+What the `chore/recognition-pipeline-prunes` branch actually reduced, by *kind*
+of disorder (not just line count):
+
+**Code entropy — less "exists but unreachable".** Net −149 lines (25 files;
++239/−388, most of the `+` being this doc). Every deletion was dead on all
+paths: de-duplication (`ocr_vision.find_text`), collapsing a parallel mechanism
+(the IconDetect registry vs the live `active_icon_backend()` path), de-aliasing
+(6 legacy Kimi names → one canonical set across 8 files), and pure dead leaves
+(keycodes, AT helpers + an unimported shim, `observe_and_recover`, the `Insets`
+stub, the superseded `ios.crawl` read/settle contract).
+
+**Information entropy — a wrong map made right.** The bigger win: this audit's
+own §4 list had **5 mis-classifications** (a live return type, a name
+conflation, a decoupling seam, a capability slot, and a unit-tested pure engine
+all labelled "redundant"). A list that tells a future reader "safe to delete"
+when it isn't is high-entropy; the "Prune outcome" subsection above corrects it
+and records *why* each kept item stays.
+
+**Process entropy — no new mess.** All work isolated in a worktree/branch (main
+left untouched for the colleague's concurrent rig/gate edits → no merge tangle);
+five atomic commits, each `ruff`-clean and full-smoke-green before landing.
+
+**Refusing false cleanup.** Deleting things that *look* redundant often *raises*
+entropy (more coupling, more fragility). The four skipped items are exactly
+that: removing `PicoKVMVideoConfig` would re-couple perception→effector;
+removing `IOSRecoveryProvider` would tear out a Platform boundary contract;
+removing `SemanticActionPlan.run()` would turn clean unit tests into brittle
+integration tests. Restraint is also entropy reduction.
+
+**Honest scope — what was *not* reduced.** The structural disorder is untouched
+and lives in §3: the two-default-path fork (orchestrator vs crawl, one flag
+apart), the reliability machinery bypassed on the headline workload, and the
+always-red floor gate. Those are blocked on the colleague's rig/gate work and a
+real-rig run. This branch is local, low-risk denoising (dead code + a corrected
+record + clean process); the structural entropy reduction is still ahead.
+
 ---
 
 *Provenance: 11-layer agent map + 116 adversarial verdicts, `add96d0`,
