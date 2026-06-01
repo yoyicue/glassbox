@@ -6,18 +6,21 @@ benchmark aggregated from a recorded iOS-Settings rig run, with the provenance
 fields (`run_id` / `started_at` / `git_sha`) pinned so the fixture is
 deterministic and reviewable.
 
-Current floor: a **real iPad mini 7 (en/HK) Settings drill-down with the P2
-strategy ladder default-on** (2026-05-29) — `action_success_rate ≈ 0.955`,
+Current floor: a **failed** real iPad mini 7 (en/HK) Settings drill-down with the
+P2 strategy ladder default-on (2026-05-29): `task_completion_rate = 0.0` and
+`tasks[0].outcome = "failed"`. The high `action_success_rate ≈ 0.955` is a
+scroll-excluded, back-heavy task-action ACK proxy, not the reliability headline.
 `unknown_rate ≈ 0.036`, `strategy_switches = 5` (the ladder switched primitives
-5× in production), VLM not firing. It is a **single round**, so run the nightly
-with a small `TOLERANCE` to absorb run-to-run noise rather than gating at 0.0.
+5× in production), and VLM did not fire. It is a **single round**, so it must be
+replaced by a completed multi-round floor before it can serve as the ratcheting
+baseline.
 
 It is load-bearing in two places:
 
 - **Offline (CI, every PR):** `make regression-gate` validates that this fixture
-  is still schema-valid and that `compare_benchmarks` catches a regression
-  (rc 1) and rejects a malformed candidate (rc 2). Pinned by
-  `skills/smoke/test_computer_use_regression_gate.py`. No hardware needed.
+  is a completed floor, is still schema-valid, and that `compare_benchmarks`
+  catches a regression (rc 1) and rejects a malformed candidate (rc 2). Pinned
+  by `skills/smoke/test_computer_use_regression_gate.py`. No hardware needed.
 - **On-rig (nightly, self-hosted):** `.github/workflows/rig-nightly.yml` runs the
   canonical primitives and the Settings drill-down on a real device, then
   `make regression-compare CANDIDATE=<fresh benchmark>` fails the run on any drop

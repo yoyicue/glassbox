@@ -8,10 +8,11 @@ baseline fixture — must hold offline, or a silent change to the comparator (or
 schema drift that quietly invalidates the floor) would let a regression through
 unnoticed.
 
-These tests pin three things without any device:
-  1. the committed baseline fixture stays schema-valid as the harness evolves,
-  2. the comparator passes parity / improvement and fails a real regression, and
-  3. an unparseable/invalid candidate is rejected (rc 2), never silently passed.
+These tests pin four things without any device:
+  1. the committed baseline fixture is an honest floor with completed work,
+  2. the committed baseline fixture stays schema-valid as the harness evolves,
+  3. the comparator passes parity / improvement and fails a real regression, and
+  4. an unparseable/invalid candidate is rejected (rc 2), never silently passed.
 
 A degraded/regressed benchmark is derived at runtime from the fixture (flip
 non-scroll task-action verdicts, then recompute metrics with the harness's own
@@ -68,6 +69,18 @@ def _flip_task_action_verdicts(
     )
     out["metrics"] = _metrics(out["tasks"])
     return out
+
+
+@pytest.mark.smoke
+def test_committed_baseline_floor_completed_a_task():
+    """The committed floor must prove at least one end-to-end task completed.
+
+    Schema validity is not enough: a failed run with a high low-level action ACK
+    rate is not a reliability floor.
+    """
+    baseline = _baseline()
+    assert baseline["metrics"]["task_completion_rate"] > 0
+    assert all(task.get("outcome") != "failed" for task in baseline["tasks"])
 
 
 @pytest.mark.smoke

@@ -10,7 +10,7 @@
     "region": "HK",
     "task_set": "ios_settings",
     "semantic_plan_ops": "back,scroll,tap",
-    "note": "committed regression floor — real iPad mini 7 (en/HK) drill-down with the P2 ladder default-on (strategy_switches=5, action_success=0.955); single round, use TOLERANCE in the nightly. Re-aggregate to ratchet (see README)."
+    "note": "committed regression floor candidate — failed real iPad mini 7 (en/HK) drill-down with task_completion=0.0 and outcome=failed; action_success=0.955 is a scroll-excluded task-action ACK proxy, not the reliability headline. Replace with a completed multi-round floor before ratcheting."
   },
   "tasks": [
     {
@@ -7244,6 +7244,7 @@
   ],
   "metrics": {
     "task_completion_rate": 0.0,
+    "task_completion_variance": 0.0,
     "action_success_rate": 0.9553571428571429,
     "unknown_rate": 0.03571428571428571,
     "task_action_count": 112,

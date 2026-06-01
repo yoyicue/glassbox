@@ -636,7 +636,11 @@ def crawl_current_page(
 ) -> None:
     scene = phone.perceive()
     if depth == 0 and not actions.scene_is_settings_root(scene):
-        actions.return_to_settings_root(phone)
+        try:
+            actions.return_to_settings_root(phone)
+        except SettingsRootUnreachable:
+            limits_hit.add("return_to_root_failed")
+            return
         scene = phone.perceive()
     actions.record_visible_page(scene=scene, path=path, visits=visits, seen_sigs=seen_sigs, depth=depth)
     if depth == 0:
@@ -675,7 +679,11 @@ def crawl_current_page(
     for scroll_idx in range(scroll_budget):
         scene = actions.root_coverage_perceive(phone, depth)
         if depth == 0 and not actions.scene_is_settings_root(scene):
-            actions.return_to_settings_root(phone)
+            try:
+                actions.return_to_settings_root(phone)
+            except SettingsRootUnreachable:
+                limits_hit.add("return_to_root_failed")
+                return
             scene = actions.root_coverage_perceive(phone, depth)
         actions.record_visible_page(scene=scene, path=path, visits=visits, seen_sigs=seen_sigs, depth=depth)
         if depth == 0:

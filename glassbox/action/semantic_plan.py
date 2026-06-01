@@ -697,6 +697,15 @@ def _call_phone_method(target: Any, method_name: str, op: str, strategy: str) ->
 
 
 def _unsupported(phone: Any, op: str, strategy: str) -> ActionResult:
+    failed = getattr(phone, "failed_action_result", None)
+    record = getattr(phone, "record_action", None)
+    if callable(failed) and callable(record):
+        result = failed(
+            error=f"unsupported semantic strategy: {op}.{strategy}",
+            unsupported=True,
+        )
+        record(op, result=result, strategy=strategy)
+        return result
     method = getattr(phone, "unsupported_action", None)
     if callable(method):
         return method(op, strategy=strategy)

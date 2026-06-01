@@ -3521,3 +3521,46 @@ def test_memory_return_skips_non_replayable_edge():
     )
     phone = SimpleNamespace(memory=memory, back_gesture=lambda: pytest.fail("tap edge is not replayable"))
     assert walkthrough._try_memory_return_to_settings_root(phone, object()) is False
+
+
+@pytest.mark.smoke
+def test_root_scroll_loop_records_return_to_root_failure_instead_of_crashing():
+    from skills.regression.ios_settings.recovery import SettingsRootUnreachable
+
+    limits_hit: set[str] = set()
+    actions = SimpleNamespace(
+        scene_is_settings_root=lambda scene: scene == "root",
+        root_coverage_perceive=lambda _phone, _depth: "detail",
+        return_to_settings_root=lambda _phone: (_ for _ in ()).throw(SettingsRootUnreachable("flake")),
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        record_blocked_page=lambda *_args, **_kwargs: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda **_kwargs: None,
+        should_traverse_candidates=lambda _depth: False,
+        safe_navigation_candidates=lambda *_args, **_kwargs: [],
+        max_candidates_per_page=0,
+        max_pages_visited=10_000,
+        scroll_budget_for_depth=lambda _depth: 1,
+        child_sampling_mode=lambda _depth: False,
+        scroll_down_confirmed=lambda **_kwargs: ("stuck", "detail"),
+        texts=lambda scene: [str(scene)],
+    )
+    phone = SimpleNamespace(perceive=lambda: "root")
+
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=limits_hit,
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert limits_hit == {"return_to_root_failed"}

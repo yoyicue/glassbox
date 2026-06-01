@@ -804,6 +804,30 @@ def test_back_gesture_flag_routes_through_strategy_ladder(tmp_path):
 
 
 @pytest.mark.smoke
+def test_semantic_plan_unsupported_strategy_does_not_fail_fast_before_fallback(tmp_path):
+    """An unsupported strategy is a ladder attempt failure, not a transport
+    exception that prevents later strategies from running under fail-fast."""
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store)
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR([["A"], ["B"], ["C"], ["D"]]),
+        effector=MockEffector(),
+        action_orchestrator=orchestrator,
+        action_fail_fast=True,
+        semantic_plan_ops=frozenset({"back"}),
+    )
+
+    phone.back_gesture()
+    orchestrator.close()
+
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(event["type"] == "semantic_plan.strategy_failed" for event in audit)
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert len(actions) >= 2
+
+
+@pytest.mark.smoke
 def test_back_gesture_without_flag_uses_legacy_single_shot_path(tmp_path):
     """Default (flag off) preserves the legacy back path -- no SemanticActionPlan."""
     store = ArtifactStore(tmp_path, run_id="run")

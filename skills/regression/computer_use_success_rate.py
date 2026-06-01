@@ -649,6 +649,16 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     )
     task_count = len(tasks)
     task_success = sum(1 for task in tasks if task.get("outcome") == "succeeded")
+    task_completion_rate = task_success / task_count if task_count else 0.0
+    task_completion_variance = (
+        sum(
+            ((1.0 if task.get("outcome") == "succeeded" else 0.0) - task_completion_rate) ** 2
+            for task in tasks
+        )
+        / task_count
+        if task_count
+        else 0.0
+    )
     recoveries = sum(_task_recovery_count(task) for task in tasks)
     # Coverage = entered ÷ reachable, where reachable = expected − blocked
     # (deliberately-blocked pages are unreachable and must not penalize coverage).
@@ -671,7 +681,8 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         for action in all_actions
     )
     return {
-        "task_completion_rate": task_success / task_count if task_count else 0.0,
+        "task_completion_rate": task_completion_rate,
+        "task_completion_variance": task_completion_variance,
         "action_success_rate": succeeded / denominator if denominator else 0.0,
         "unknown_rate": unknown / denominator if denominator else 0.0,
         "task_action_count": len(task_actions),
@@ -1160,6 +1171,7 @@ def compare_benchmarks(
     rc = 0
     for key in (
         "task_completion_rate",
+        "task_completion_variance",
         "action_success_rate",
         "unknown_rate",
         "task_action_count",
@@ -1250,15 +1262,23 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
             cmd.append("--skip-diagnose")
         if args.drill_down:
             cmd.append("--drill-down")
+        if args.skip_round_verify:
+            cmd.append("--skip-verify")
+        if args.language:
+            cmd.extend(("--language", args.language))
+        if args.region:
+            cmd.extend(("--region", args.region))
         env = dict(os.environ)
         env["GLASSBOX_COMPUTER_USE_ARTIFACT_DIR"] = str(artifact_root)
         result = subprocess.run(cmd, cwd=Path(__file__).resolve().parents[2], env=env)
-        if result.returncode != 0:
+        if result.returncode != 0 and not args.keep_going:
             return result.returncode
         new_dirs = _find_new_run_dirs(artifact_root, before)
         if not new_dirs:
             print(f"ERROR: round {index} wrote no computer-use artifact run under {artifact_root}")
-            return 1
+            if not args.keep_going:
+                return 1
+            continue
         run_dirs.append(new_dirs[-1])
         report_payload = _read_json(report) if report.exists() else {}
         coverage = report_payload.get("root_coverage")
@@ -1271,7 +1291,12 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
             run_dirs,
             task="settings_readonly_walkthrough",
             terminal_expected_state=terminal,
-            config={"rounds": args.rounds, "task_set": "ios_settings"},
+            config={
+                "rounds": args.rounds,
+                "task_set": "ios_settings",
+                "language": args.language,
+                "region": args.region,
+            },
             expected_root_pages=EXPECTED_ROOT_NAV_TEXT_ZH,
             root_coverages=root_coverages,
         )
@@ -1286,6 +1311,14 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
     for warning in coverage_warnings(payload):
         print(f"WARNING: {warning}")
     _write_json(args.out.expanduser().resolve(), payload)
+    if args.min_task_completion is not None:
+        task_completion = float(payload["metrics"].get("task_completion_rate", 0.0) or 0.0)
+        if task_completion < args.min_task_completion:
+            print(
+                f"ERROR: task_completion_rate {task_completion:.6g} "
+                f"< required {args.min_task_completion:.6g}"
+            )
+            return 1
     print(args.out.expanduser().resolve())
     return 0
 
@@ -1364,8 +1397,13 @@ def main(argv: list[str] | None = None) -> int:
     run_settings.add_argument("--artifact-root", type=Path, required=True)
     run_settings.add_argument("--report-dir", type=Path, default=Path("/tmp/glassbox-ios-settings-benchmark"))
     run_settings.add_argument("--terminal-expected-state", default=None)
+    run_settings.add_argument("--language", default=None)
+    run_settings.add_argument("--region", default=None)
     run_settings.add_argument("--quick", action="store_true")
     run_settings.add_argument("--skip-diagnose", action="store_true")
+    run_settings.add_argument("--skip-round-verify", action="store_true")
+    run_settings.add_argument("--keep-going", action="store_true")
+    run_settings.add_argument("--min-task-completion", type=float, default=None)
     run_settings.add_argument(
         "--drill-down",
         action="store_true",

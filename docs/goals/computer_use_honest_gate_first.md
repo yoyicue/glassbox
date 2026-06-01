@@ -1,8 +1,13 @@
 # Goal — Honest-gate-first redirection (fix the compass before the engine)
 
-Status: **proposed (2026-06-01).** Diagnosis is grounded and the load-bearing
-claims are re-verified against the tree (see **§6**). No code changed yet. This
-doc is the trackable redirection plan; it is a strategic companion to
+Status: **in progress (2026-06-01).** Phase-0 implementation has started: the
+offline smoke gate now rejects a committed floor with zero task completion, and
+the fixture headline text no longer treats `action_success_rate` as the
+reliability number. A real iPad quick n=5 smoke now emits an aggregate with
+`task_completion_rate=1.0` / variance `0.0`, but the full drill-down n=5 still
+fails before it can replace the committed floor. The remaining blocker is a
+completed multi-round full drill-down floor. This doc is the trackable
+redirection plan; it is a strategic companion to
 [`computer_use_quality_roadmap.md`](computer_use_quality_roadmap.md) (which says
 *what reliability machinery to build/wire*) and
 [`../design/ipad_settings_state_machine.md`](../design/ipad_settings_state_machine.md)
@@ -29,8 +34,8 @@ its published headline is `action_success_rate = 0.955`, and that fixture passes
 | The floor is a *failed* run | `reliability_baseline.json`: `task_completion_rate=0.0`, `tasks[0].outcome="failed"`, `final_state.page_id=null`, final `visible_texts` are Weather ("MY LOCATION", "10-DAY FORECAST") |
 | The 0.955 headline is a back-dominated per-tap ACK | op breakdown in the fixture: **back 59, tap 48, scroll_wheel 9, home 2, type 1, open_app 1, long_press 1** (121 actions; the 112 denominator drops the 9 scroll "fillers"). `action_success_rate=0.9553571` |
 | The load-bearing primitive is failing | `scroll_success_rate=0.2222` (2/9 succeed, 7 unknown) — the mechanical reason the run never reached lower sections / root |
-| The credited reliability stages never fired | `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`, `vlm_calls=0`, **`strategy_switches=0`** — the strategy ladder did not switch even once |
-| The gate cannot fail on this | `compare` gate at `computer_use_success_rate.py:1184` trips only on `delta < -tolerance` for `{task_completion_rate, action_success_rate, root_pages_coverage}`. A floor pinned at `0.0` → candidate ≥ 0 → delta ≥ 0 → **never red** |
+| Key verification stages never fired | `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`, `vlm_calls=0`; `strategy_switches=5`, so the ladder did switch, but not with expected-state or VLM coverage |
+| The task-completion gate cannot fail on this floor | `compare` gate at `computer_use_success_rate.py:1184` trips only on `delta < -tolerance` for `{task_completion_rate, action_success_rate, root_pages_coverage}`. A floor pinned at `task_completion_rate=0.0` cannot reject another zero-completion candidate on task completion |
 | …and `make check` doesn't even run that gate | `regression-gate` (`Makefile:36-38`) runs `validate` (schema-only) + `test_computer_use_regression_gate.py`, whose floor test (`test_committed_baseline_fixture_is_schema_valid`) checks **schema only**. `compare` runs only in `regression-compare`/`ab-semantic-plan` (`Makefile:45,64`), which need a live rig. **So the failed floor passes offline CI green.** |
 
 **Net:** the number being optimized and ratcheted (`action_success_rate`) does not
@@ -48,10 +53,11 @@ physical-ceiling / scope) plus 4 adversarial verdicts converged on:
    the orchestrator entirely.** The Settings crawler navigates via
    `phone.tap_xy(cx,cy)` (`skills/regression/ios_settings/navigation.py:163,254,455`
    → `glassbox/phone.py:1613` → gesture executor), **bypassing**
-   `default_semantic_action_plan`, the strategy ladder, **and** expected-state
-   verification. That is why the floor shows `vlm_calls=0` / `expected_state_coverage=0`
-   / `strategy_switches=0`. Much of the recovery/strategy/VLM machinery is *not on
-   the path that actually runs.* Of 29 bool config flags, **26 default False**
+   `default_semantic_action_plan` and expected-state verification for those row
+   taps. That is why the floor shows `vlm_calls=0` / `expected_state_coverage=0`,
+   even though `strategy_switches=5` on other primitives. Much of the
+   recovery/strategy/VLM machinery is *not on the path that actually matters for
+   row entry.* Of 29 bool config flags, **26 default False**
    (`glassbox/config.py`). This is the same root cause named in
    [`../design/computer_use_success_rate.md`](../design/computer_use_success_rate.md):
    "the strongest capabilities are not on the default path."
@@ -77,21 +83,21 @@ ordered: do not start a phase before the prior one's gate is real.
 
 ### Phase 0 — Fix the compass (this week · no hardware · fully reversible)
 
-- **0.1 Make the failed floor go red offline.** Add a one-line assertion to
+- **0.1 Make the failed floor go red offline.** **Implemented in code.** Add a one-line assertion to
   `skills/smoke/test_computer_use_regression_gate.py` (or to `validate`) that the
   committed floor's own `metrics.task_completion_rate > 0` **and** every
   `tasks[*].outcome != "failed"`. *This — not a `compare` edit — is what makes
   `make check` red on the current Weather-app floor, with zero hardware.* (The
   `compare`/`--min-task-completion` change is still worth adding, but it only
   hardens the nightly rig path.)
-- **0.2 Re-headline.** In `skills/regression/fixtures/README.md` and the fixture's
+- **0.2 Re-headline.** **Implemented in prose/fixture metadata.** In `skills/regression/fixtures/README.md` and the fixture's
   `config.note`, lead with `task_completion_rate` (currently 0.0) and stop calling
   `action_success_rate=0.955` "the reliability number"; label it a
   scroll-excluded, back-dominated per-tap ACK proxy.
 - **0.3 Branch-protect `main`** (one `gh api -X PUT …/branches/main/protection`
   requiring `check`, with an admin bypass). Otherwise a red gate is theater on a
   191-commit/9-day history.
-- **0.4 Set the absolute bar to `> 0`** (e.g. 0.01), not an aspirational 0.34. The
+- **0.4 Set the absolute bar to `> 0`** **Implemented in the smoke assertion.** Set the bar to `> 0`, not an aspirational 0.34. The
   Phase-0 goal is only "a failed run can no longer pass." Ratchet later, from real
   data.
 
@@ -104,10 +110,13 @@ headline number everyone quotes is `task_completion_rate`.
   Settings read-only drill-down. Drop the zh-iPhone `make
   computer-use-success-rate-ios-settings` target from the gate (iPhone fights
   physics — root cause #3).
-- **1.2 Make `n` visible.** Add a `--rounds N` outer loop to the iPad `run_full`
-  path, run **n ≥ 5**, emit per-round `task_completion` + variance to `artifacts/`
-  (currently empty). **First honest milestone: `task_completion > 0 at n=5 with
-  variance` — never actually shown before.**
+- **1.2 Make `n` visible.** `computer_use_success_rate run-ios-settings` now
+  exposes the outer `--rounds N` loop on the iPad `run_full` path, can pass
+  `--language en --region HK` into each round, can keep going after a failed
+  round, and emits `task_completion_variance`. Run **n ≥ 5** and emit the
+  aggregate benchmark plus the per-round reports/artifacts. **First honest
+  milestone: `task_completion > 0 at n=5` with per-round evidence — quick mode
+  now shows this; the full drill-down has not yet.**
 - **1.3 Move the number with the right lever, in the right order.** `entered_graph`
   is **L1's** signal (the virtual `settings/root` projection), *not L4's*:
   `ipad_settings_l1_rig_ab_handoff.md` shows `entered_graph` 0→7 only when L1 is ON.
@@ -125,18 +134,37 @@ headline number everyone quotes is `task_completion_rate`.
 **Phase-1 done-bar:** the en/HK drill-down reports a real `task_completion` mean +
 variance at n≥5, and the chosen lever moves it measurably above 0 across rounds.
 
+**Current rig evidence (2026-06-01):**
+
+- Full drill-down n=5, default path:
+  `artifacts/computer_use_success_rate/honest_gate_en_hk_n5_v2.json` was not
+  produced. Round 0 verified `OK`; round 1 failed report verification with
+  `required_missing=["隐私与安全性"]` and `navigation candidate did not open:
+  Settings > 隐私与安全性`.
+- Full drill-down n=5 with
+  `GLASSBOX_SETTINGS_SEARCH_ROOT_FALLBACK_SIDEBAR=1` also did not complete; round
+  0 crashed with `SettingsRootUnreachable` while returning to root during the
+  scroll loop.
+- Quick drill-down n=5 with keep-going and skipped per-round exhaustive verify
+  did complete:
+  `artifacts/computer_use_success_rate/honest_gate_quick_n5.json` validated with
+  `task_completion_rate=1.0`, `task_completion_variance=0.0`,
+  `root_pages_coverage=0.2353`, `expected_state_coverage=0.0`, and
+  `vlm_action_coverage=0.0`. This is useful smoke evidence, but it is not the
+  full floor required to replace `reliability_baseline.json`.
+
 ### Phase 2 — Prune complexity (only after the number moves)
 
 - **2.1 Let the real per-task number decide.** Now — and only now — judge the
   recovery/strategy/VLM machinery by whether it moves *this task's* number. To make
-  it count at all, the crawler must route row taps through `phone.semantic` instead
+  expected-state/VLM verification count for row entry, the crawler must route row taps through `phone.semantic` instead
   of `tap_xy` — **a real architecture change, not a flag flip** (root cause #2).
   Whatever doesn't earn its place gets deleted.
-- **2.2 Delete for maintenance, not for determinism.** Removing the near-dormant
-  ladder (`strategy_switches=0` on the floor) reduces drag but will **not** collapse
+- **2.2 Delete for maintenance, not for determinism.** Removing dormant or
+  low-yield branches may reduce drag, but will **not** by itself collapse
   run-to-run variance — that lives in the OCR/hardware substrate (22% scroll,
-  false-positive scene classification), not the ladder. Do not sell deletion as
-  determinism.
+  false-positive scene classification), not only in the ladder. Do not sell
+  deletion as determinism.
 
 ## 4. What to stop doing
 
@@ -159,7 +187,7 @@ number past 90% → then let that number tell you which complexity to keep or cu
 
 **Personally re-verified against the tree this session** (2026-06-01): the floor's
 `outcome="failed"` / `task_completion_rate=0.0` / `expected_state_coverage=0` /
-`vlm_calls=0` / **`strategy_switches=0`** / `scroll_success_rate=0.2222` /
+`vlm_calls=0` / **`strategy_switches=5`** / `scroll_success_rate=0.2222` /
 `action_success_rate=0.9553`; the op breakdown (back 59 / tap 48 / scroll 9 / …);
 the gate logic at `computer_use_success_rate.py:1184`; that `regression-gate` runs
 `validate` + a schema-only smoke test and **not** `compare` (`Makefile:36-38`); the
