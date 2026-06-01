@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import pytest
 
@@ -39,6 +41,19 @@ class FakeSource:
         self.closed = True
 
 
+class AdvancingSource(FakeSource):
+    def __init__(self):
+        super().__init__()
+        self.index = 0
+
+    def snapshot(self):
+        image = np.zeros((956, 440, 3), dtype=np.uint8)
+        image[0, 0, 0] = self.index
+        ts = float(self.index + 1)
+        self.index += 1
+        return Frame(img=image, ts=ts)
+
+
 class FreshSource(FakeSource):
     def __init__(self):
         super().__init__()
@@ -74,6 +89,25 @@ class CountingVotingOCR:
                 type="text",
                 box=Box(x=20, y=100, w=120, h=40),
                 text=text,
+                confidence=0.9,
+            )
+        ]
+
+
+class TimeoutOnceOCR:
+    def __init__(self):
+        self.calls = 0
+
+    def recognize(self, _image):
+        call_index = self.calls
+        self.calls += 1
+        if call_index == 0:
+            time.sleep(0.05)
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=20, y=100, w=120, h=40),
+                text=f"frame-{call_index}",
                 confidence=0.9,
             )
         ]
@@ -769,3 +803,20 @@ def test_perceive_voted_n_one_bypasses_enabled_global_voting():
     assert ocr.calls == 1
     assert scene.observation_mode == "raw"
     assert scene.ocr_vote_metadata == {}
+
+
+@pytest.mark.smoke
+def test_perceive_voted_degrades_when_timeouts_leave_too_few_usable_samples():
+    runtime = build_phone(
+        source=AdvancingSource(),
+        cfg=AgentConfig(_env_file=None, ocr_timeout=0.001),
+        ocr=TimeoutOnceOCR(),
+    )
+
+    scene = runtime.phone.perceive_voted(n=2)
+
+    assert scene.observation_mode == "voted_degraded"
+    assert scene.ocr_vote_metadata["samples_used"] == 2
+    assert scene.ocr_vote_metadata["distinct_frames"] == 2
+    assert scene.ocr_vote_metadata["timeouts"] == 1
+    assert scene.ocr_vote_metadata["degrade_reason"] == "ocr_timeouts"

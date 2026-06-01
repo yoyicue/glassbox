@@ -602,9 +602,12 @@ class Perceptor:
         source_frame_hashes_present = {item for item in source_frame_hashes if item}
         distinct_frames = len(source_frame_hashes_present)
         duplicate_frames = max(0, len(source_frame_hashes) - distinct_frames)
+        usable_samples = len(scenes) - len(ocr_timeout_samples)
         degrade_reason: str | None = None
         if len(scenes) < 2:
             degrade_reason = "insufficient_samples"
+        elif usable_samples < 2:
+            degrade_reason = "ocr_timeouts"
         elif distinct_frames < 2:
             degrade_reason = "duplicate_frames" if source_frame_hashes else "frame_hash_unavailable"
         if degrade_reason is None:

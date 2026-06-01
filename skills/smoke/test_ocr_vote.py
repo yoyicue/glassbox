@@ -47,6 +47,30 @@ def test_vote_scenes_default_preserves_generic_app_text():
 
 
 @pytest.mark.smoke
+def test_vote_scenes_normalized_majority_writes_back_representative_raw_text():
+    s1 = _scene(_el("Game Center", 80, 300))
+    s2 = _scene(_el("GameCenter", 81, 301))
+    s3 = _scene(_el("Game Center", 80, 302))
+
+    voted = vote_scenes([s1, s2, s3], text_normalizer=confusion_compact)
+
+    assert voted.elements[0].text == "Game Center"
+    assert "ocr_vote_text_status:whole_string_majority" in voted.elements[0].type_evidence
+
+
+@pytest.mark.smoke
+def test_vote_scenes_char_consensus_path_recovers_text():
+    s1 = _scene(_el("Xbc", 80, 300))
+    s2 = _scene(_el("aYc", 81, 301))
+    s3 = _scene(_el("abZ", 80, 302))
+
+    voted = vote_scenes([s1, s2, s3])
+
+    assert voted.elements[0].text == "abc"
+    assert "ocr_vote_text_status:char_consensus" in voted.elements[0].type_evidence
+
+
+@pytest.mark.smoke
 def test_vote_scenes_keeps_element_when_no_consensus_change():
     """投票结果与原文一致时保留原 element(不无谓替换)。"""
     s1 = _scene(_el("通用", 80, 360))
@@ -95,6 +119,8 @@ def test_vote_scenes_volatile_numeric_cluster_prefers_latest_not_frankenstein():
     assert voted.elements[0].text == "34°"
     assert "ocr_vote_status:volatile_latest" in voted.elements[0].type_evidence
     assert "ocr_vote_text_status:volatile_latest" in voted.elements[0].type_evidence
+    assert voted.ocr_vote_metadata["stable_clusters"] == 0
+    assert voted.ocr_vote_metadata["volatile_clusters"] == 1
 
 
 @pytest.mark.smoke

@@ -1,12 +1,13 @@
-"""Multi-frame OCR voting (D) — stabilise row text across repeated reads.
+"""Multi-frame OCR voting (D) — stabilize row text across repeated reads.
 
 A scrolling list OCRs slightly differently every frame; the same row reads
 `待机見示` in one frame and `待机显示` in the next. Reading a *stable* screen
 several times and voting per row turns that frame-to-frame jitter into a
 consensus instead of betting on whichever frame was sampled.
 
-Pairs with text_match.vote_ocr_texts (per-row char voting); this module lifts
-it to whole Scenes by matching elements across reads by box position.
+The module clusters whole-Scene OCR elements by box position, then decides each
+cluster with whole-string majority, character consensus, or latest-sample
+degradation.
 """
 from __future__ import annotations
 
@@ -19,17 +20,6 @@ from glassbox.cognition.text_match import norm_text
 
 TextNormalizer = Callable[[str | None], str]
 _VOLATILE_TEXT_RE = re.compile(r"^[HLhl:：+\-\d.,°%]+$")
-
-
-def _nearest(elements: list[UIElement], cx: float, cy: float) -> UIElement | None:
-    best: UIElement | None = None
-    best_d = 1e18
-    for el in elements:
-        ex, ey = el.box.center
-        d = abs(ex - cx) + abs(ey - cy)
-        if d < best_d:
-            best, best_d = el, d
-    return best
 
 
 def _distance_to_cluster(cluster: dict, el: UIElement) -> float:
@@ -81,13 +71,10 @@ def _char_consensus(
     norms = [text for text in (normalize(reading) for reading in readings) if text]
     if not norms:
         return "", False
-    modal_len = Counter(len(text) for text in norms).most_common(1)[0][0]
-    same_len = [text for text in norms if len(text) == modal_len]
-    if not same_len:
-        return Counter(norms).most_common(1)[0][0], False
+    same_len = _modal_length_values(norms)
     chars: list[str] = []
     ambiguous = False
-    for index in range(modal_len):
+    for index in range(len(same_len[0])):
         counts = Counter(text[index] for text in same_len)
         ranked = counts.most_common()
         if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
@@ -107,11 +94,31 @@ def _decide_text(
         return "", "empty"
     winner, votes = Counter(norms).most_common(1)[0]
     if votes > len(norms) / 2:
-        return winner, "whole_string_majority"
+        return _best_raw_for_normalized(readings, winner, normalizer=normalizer), "whole_string_majority"
     consensus, ambiguous = _char_consensus(readings, normalizer=normalizer)
     if consensus and not ambiguous:
-        return consensus, "char_consensus"
+        return _best_raw_for_normalized(readings, consensus, normalizer=normalizer), "char_consensus"
     return "", "degraded_latest"
+
+
+def _modal_length_values(values: list[str]) -> list[str]:
+    modal_len = Counter(len(text) for text in values).most_common(1)[0][0]
+    return [text for text in values if len(text) == modal_len]
+
+
+def _best_raw_for_normalized(
+    readings: list[str],
+    normalized: str,
+    *,
+    normalizer: TextNormalizer | None,
+) -> str:
+    normalize = normalizer or norm_text
+    if not normalized.isascii():
+        return normalized
+    matches = [reading for reading in readings if normalize(reading) == normalized]
+    if matches:
+        return Counter(matches).most_common(1)[0][0]
+    return normalized
 
 
 def vote_scenes(
@@ -123,8 +130,9 @@ def vote_scenes(
 ) -> Scene:
     """Vote element texts across several Scenes of the *same* stable screen.
 
-    Elements from all sampled scenes are clustered by position. The group's
-    text is decided by `vote_ocr_texts`. Returns a copy of the first scene with
+    Elements from all sampled scenes are clustered by position. Each cluster
+    text is decided by whole-string majority first, then character consensus,
+    then latest-sample degradation. Returns a copy of the first scene with
     voted texts, including elements that were missed in the first frame but
     recovered in later frames. Pass `text_normalizer` only for closed-set flows
     that need domain-specific OCR folding.
@@ -193,6 +201,7 @@ def vote_scenes(
         stats[f"{region_status}_clusters"] += 1
         volatile = _volatile_cluster(readings)
         if volatile:
+            stats[f"{region_status}_clusters"] -= 1
             representative = _latest_member(members)
             consensus = representative.text or ""
             text_status = "volatile_latest"
