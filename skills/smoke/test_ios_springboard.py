@@ -7,6 +7,7 @@ import pytest
 from glassbox.cognition import Box, Scene, UIElement
 from glassbox.ios.springboard import (
     _icon_label_candidates,
+    _looks_like_today_widget_surface,
     _opened_expected_app_or_recover,
     _strict_home,
     find_springboard_icon,
@@ -772,6 +773,45 @@ def test_open_app_from_springboard_uses_spotlight_from_widget_surface(monkeypatc
     assert calls == [("spotlight", ("设置", "Settings"))]
     assert "swipe_right" not in phone.actions
     assert "swipe_left" not in phone.actions
+
+
+@pytest.mark.smoke
+def test_weather_forecast_text_does_not_form_icon_grid():
+    scene = _scene(
+        _el("Q Search for a city or ai... 0", 36, 94, w=188),
+        _el("SUGGESTED", 28, 138, w=70, h=10),
+        _el("Daxing", 402, 148, w=90, h=30),
+        _el("33°", 392, 176, w=136, h=78),
+        _el("Sunny", 420, 264, w=58, h=18),
+        _el("Sunny conditions will continue all day.", 292, 402, w=250, h=16),
+        _el("are up to 19 km/h.", 292, 420, w=108, h=14),
+        _el("Now", 292, 458, w=30, h=14),
+        _el("12PM", 342, 458, w=36, h=12),
+        _el("1PM", 400, 458, w=26, h=12),
+        _el("2PM", 448, 458, w=28, h=12),
+        _el("3PM", 498, 458, w=28, h=12),
+        _el("4PM", 546, 458, w=28, h=12),
+        _el("10-DAY FORECAST", 294, 576, w=120, h=12),
+        _el("Today", 290, 614, w=50, h=20),
+        _el("Tue", 292, 662, w=32, h=16),
+        _el("Wed", 290, 710, w=40, h=16),
+        _el("40%", 378, 724, w=28, h=10),
+        _el("Thu", 292, 756, w=34, h=18),
+        _el("35%", 378, 770, w=28, h=12),
+        _el("Fri", 292, 804, w=22, h=18),
+        _el("Sat", 292, 852, w=30, h=18),
+        _el("Sun", 292, 900, w=32, h=16),
+        _el("Mon", 290, 948, w=38, h=16),
+    )
+    scene.viewport_size = (640, 989)
+    scene.platform_scene_kind = "springboard"
+
+    labels = [el.text for el in _icon_label_candidates(scene, viewport_size=(640, 989))]
+
+    assert _looks_like_today_widget_surface(scene, viewport_size=(640, 989))
+    assert "Today" not in labels
+    assert "Tue" not in labels
+    assert "40%" not in labels
 
 
 @pytest.mark.smoke

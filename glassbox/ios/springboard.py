@@ -140,7 +140,15 @@ def _looks_like_home_widget_text(text: str, *, viewport_width: int) -> bool:
     compact = stripped.replace(" ", "")
     if compact.replace(":", "").isdigit():
         return True
+    if compact.rstrip("%").isdigit() and "%" in compact:
+        return True
     if "°" in stripped:
+        return True
+    if "km/h" in stripped:
+        return True
+    if stripped in {"Sunny", "Cloudy", "Drizzle", "Rain", "Showers", "Windy", "Now"}:
+        return True
+    if stripped in {"Today", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}:
         return True
     if stripped.upper() in {"AM", "PM", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"}:
         return True
@@ -153,10 +161,6 @@ def _looks_like_today_widget_surface(
     viewport_size: tuple[int, int] | None,
 ) -> bool:
     """Return True for iPad Today/widget pages that are Home but not icon pages."""
-    w, h = _scene_size(scene, viewport_size)
-    labels = _icon_label_candidates(scene, viewport_size=(w, h))
-    if _has_strong_icon_grid(labels, viewport_size=(w, h)):
-        return False
     texts = [_text(el) for el in scene.elements if _text(el)]
     if any(text in {"SUGGESTED", "Suggested"} for text in texts):
         return True
