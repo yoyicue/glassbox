@@ -861,6 +861,13 @@ def crawl_current_page(
             canonical_expected_root_label=actions.canonical_expected_root_label,
             scroll_metadata=scroll_metadata,
         )
+        if depth == 0 and not actions.scene_is_settings_root(_after_scroll):
+            try:
+                actions.return_to_settings_root(phone)
+            except SettingsRootUnreachable:
+                limits_hit.add("return_to_root_failed")
+                return
+            continue
         if outcome in {"overshoot", "top-overshoot"}:
             limits_hit.add("scroll_overshoot")
         elif outcome == "stuck":

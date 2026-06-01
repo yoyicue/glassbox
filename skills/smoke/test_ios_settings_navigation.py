@@ -3568,7 +3568,7 @@ def test_root_scroll_loop_records_return_to_root_failure_instead_of_crashing():
         max_pages_visited=10_000,
         scroll_budget_for_depth=lambda _depth: 1,
         child_sampling_mode=lambda _depth: False,
-        scroll_down_confirmed=lambda **_kwargs: ("stuck", "detail"),
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", "detail"),
         texts=lambda scene: [str(scene)],
     )
     phone = SimpleNamespace(perceive=lambda: "root")
@@ -3588,3 +3588,55 @@ def test_root_scroll_loop_records_return_to_root_failure_instead_of_crashing():
     )
 
     assert limits_hit == {"return_to_root_failed"}
+
+
+@pytest.mark.smoke
+def test_root_scroll_loop_regrounds_if_scroll_leaves_settings_root():
+    limits_hit: set[str] = set()
+    calls: list[str] = []
+
+    actions = SimpleNamespace(
+        scene_is_settings_root=lambda scene: scene == "root",
+        root_coverage_perceive=lambda _phone, _depth: "root",
+        return_to_settings_root=lambda _phone: calls.append("return_to_root"),
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        record_blocked_page=lambda *_args, **_kwargs: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda **_kwargs: None,
+        should_traverse_candidates=lambda _depth: False,
+        safe_navigation_candidates=lambda *_args, **_kwargs: [],
+        max_candidates_per_page=0,
+        max_pages_visited=10_000,
+        scroll_budget_for_depth=lambda _depth: 1,
+        child_sampling_mode=lambda _depth: False,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", "detail"),
+        scroll_to_top=lambda _phone: calls.append("scroll_to_top"),
+        max_root_scroll_resets=1,
+        texts=lambda scene: [str(scene)],
+        canonical_expected_root_label=lambda label: label,
+        root_coverage=lambda _visits, phone=None: {"missing": ["Notifications"]},
+        expected_root_labels=["Notifications"],
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        open_root_label_via_search=lambda _phone, _label: False,
+        crawl_missing_root_pages_via_search=lambda _phone, **_kwargs: None,
+    )
+    phone = SimpleNamespace(perceive=lambda: "root")
+
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=limits_hit,
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert calls == ["return_to_root"]
+    assert not limits_hit
