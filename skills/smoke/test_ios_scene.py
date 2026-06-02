@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from glassbox.action.context import ActionContext
 from glassbox.cognition import Box, Scene, UIElement
+from glassbox.element_selector import ElementSelector
+from glassbox.ios.app_store import annotate_app_store_search_intents
 from glassbox.ios.recovery import should_foreground_target_app_instead_of_back
 from glassbox.ios.scene import apply_ios_classification, classify_ios_scene
 from glassbox.ipados.scene import classify_ipados_scene
+from glassbox.perceptor import Perceptor
 
 _GOLDEN_IOS_SCENE_DIR = Path(__file__).parents[1] / "golden" / "ios_scene" / "drill_aftersim"
 
@@ -384,6 +389,88 @@ def test_ios_scene_classifier_generic_detail_shape_without_settings_anchor_absta
     assert "edge_back" not in classified.safe_actions
     assert "settings_detail_abstain" in classified.evidence
     assert "missing_settings_anchor" in classified.evidence
+
+
+def _app_store_home_scene(*, ui_layout_icon: bool) -> Scene:
+    elements = [
+        _el("2:54PM Tue 2Jun", 650, 59, w=117, h=17),
+        _el("Today", 812, 95, w=45, h=14),
+        _el("Games", 879, 95, w=53, h=14),
+        _el("Apps", 952, 95, w=42, h=14),
+        _el("Arcade", 1016, 95, w=53, h=14),
+        _el("Tuesday, June 2", 848, 145, w=220, h=31),
+        _el("NOW AVAILABLE", 982, 215, w=109, h=14),
+        _el("WORLD PREMIERE", 684, 360, w=106, h=14),
+        _el("Hit the Streets in", 684, 382, w=193, h=23),
+        _el("Neverness to", 684, 407, w=151, h=26),
+        _el("This urban adventure's full of hidden wonders.", 684, 466, w=246, h=14),
+        _el("Get", 882, 519, w=28, h=17),
+        _el("I-Aop Purchaies", 862, 541, w=67, h=14),
+    ]
+    if ui_layout_icon:
+        elements.insert(2, _el("", 868, 82, w=72, h=35, ty="image"))
+    return _scene(*elements)
+
+
+@pytest.mark.smoke
+def test_app_store_search_intent_requires_ui_layout_icon_candidate():
+    baseline = _app_store_home_scene(ui_layout_icon=False)
+    apply_ios_classification(baseline, viewport_size=(1920, 1080))
+
+    assert annotate_app_store_search_intents(baseline, viewport_size=(1920, 1080)) == 0
+    assert [element.intent_label for element in baseline.elements if element.intent_label] == []
+
+    ui_layout = _app_store_home_scene(ui_layout_icon=True)
+    apply_ios_classification(ui_layout, viewport_size=(1920, 1080))
+
+    assert annotate_app_store_search_intents(ui_layout, viewport_size=(1920, 1080)) == 1
+    search = [element for element in ui_layout.elements if element.intent_label == "Search"]
+    assert len(search) == 1
+    assert search[0].intent_source == "appstore_chrome"
+    assert search[0].type == "button"
+    assert "tap" in search[0].suggested_actions
+    assert "appstore_search_icon" in search[0].type_evidence
+
+
+@pytest.mark.smoke
+def test_app_store_search_intent_is_wired_through_scene_annotations():
+    scene = _app_store_home_scene(ui_layout_icon=True)
+    apply_ios_classification(scene, viewport_size=(1920, 1080))
+    phone = SimpleNamespace(
+        action_context=ActionContext(),
+        device_geometry=SimpleNamespace(model="ipad_mini_7"),
+        ios_closed_set_canonicalization_enabled=True,
+        settings_root_label_aliases=None,
+        settings_root_fuzzy_aliases=False,
+    )
+
+    Perceptor(phone).apply_scene_annotations(scene, viewport_size=(1920, 1080))
+
+    assert [element.intent_label for element in scene.elements if element.intent_label] == ["Search"]
+
+
+@pytest.mark.smoke
+def test_app_store_search_intent_is_consumed_by_element_selector():
+    scene = _app_store_home_scene(ui_layout_icon=True)
+    apply_ios_classification(scene, viewport_size=(1920, 1080))
+    annotate_app_store_search_intents(scene, viewport_size=(1920, 1080))
+
+    class FakePhone:
+        strict_target_matching_enabled = False
+
+        def perceive(self):
+            return scene
+
+        def viewport_size(self):
+            return (1920, 1080)
+
+    hit = ElementSelector(FakePhone()).find_text("Search")
+
+    assert hit is not None
+    assert not (hit.text or "").strip()
+    assert hit.intent_label == "Search"
+    assert hit.intent_source == "appstore_chrome"
+    assert hit.type == "button"
 
 
 @pytest.mark.smoke
