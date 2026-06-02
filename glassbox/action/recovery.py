@@ -60,6 +60,30 @@ class NavigationMeasurementOrigin:
         }
 
 
+@dataclass(frozen=True)
+class MemoryPathNavigationResult:
+    """Result of a proactive UTG path replay toward a remembered page."""
+
+    attempted: bool
+    reached: bool
+    reason: str
+    target_page: str
+    from_id: str | None = None
+    edge_count: int = 0
+    replayed_ops: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "attempted": self.attempted,
+            "reached": self.reached,
+            "reason": self.reason,
+            "target_page": self.target_page,
+            "from_id": self.from_id,
+            "edge_count": self.edge_count,
+            "replayed_ops": list(self.replayed_ops),
+        }
+
+
 def prepare_navigation_measurement_origin(phone: object) -> NavigationMeasurementOrigin:
     """Reset to Home and verify it before a navigation metric starts.
 
@@ -111,6 +135,97 @@ def prepare_navigation_measurement_origin(phone: object) -> NavigationMeasuremen
         semantic_status=semantic_status,
         semantic_verifier=semantic_verifier,
         error=getattr(result, "error", None),
+    )
+
+
+def navigate_via_memory_path(
+    phone: object,
+    target_page: str,
+    *,
+    scene_type: str | None = None,
+    allowed_actions: set[str] | None = None,
+    min_success_rate: float = 0.5,
+) -> MemoryPathNavigationResult:
+    """Replay a learned UTG path as a normal navigation decision.
+
+    Unlike the recovery hook, this does not fall back to Home. It is the A1
+    "navigation in the loop" primitive: recognize the current screen, ask
+    memory for a safe-enough path to a semantic page, replay only known generic
+    edges, and verify arrival by recognizing the final page.
+    """
+    page = str(target_page or "").strip()
+    if not page:
+        return MemoryPathNavigationResult(False, False, "missing_target_page", page)
+    memory = getattr(phone, "memory", None)
+    recognize = getattr(memory, "recognize", None) if memory is not None else None
+    path_to_page = getattr(memory, "path_to_page", None) if memory is not None else None
+    if not callable(recognize) or not callable(path_to_page):
+        return MemoryPathNavigationResult(False, False, "memory_unavailable", page)
+    scene = _current_scene(phone)
+    if scene is None:
+        return MemoryPathNavigationResult(True, False, "current_scene_unavailable", page)
+    node = recognize(scene, _current_frame_img(phone))
+    if node is None:
+        return MemoryPathNavigationResult(True, False, "current_screen_unrecognized", page)
+    from_id = str(getattr(node, "screen_id", "") or "")
+    allowed = set(allowed_actions) if allowed_actions else {"home", "back"}
+    try:
+        path = path_to_page(
+            from_id,
+            page,
+            scene_type=scene_type,
+            allowed_actions=allowed,
+            min_success_rate=min_success_rate,
+        )
+    except Exception:
+        return MemoryPathNavigationResult(True, False, "path_lookup_failed", page, from_id=from_id)
+    if path is None:
+        return MemoryPathNavigationResult(True, False, "no_path", page, from_id=from_id)
+    if not path:
+        return MemoryPathNavigationResult(
+            True,
+            True,
+            "already_at_target",
+            page,
+            from_id=from_id,
+            edge_count=0,
+        )
+    replayed: list[str] = []
+    with _recovery_guard(phone):
+        for edge in path:
+            op = str(getattr(edge, "action_op", "") or "")
+            if not _replay_edge(phone, edge):
+                return MemoryPathNavigationResult(
+                    True,
+                    False,
+                    "replay_failed",
+                    page,
+                    from_id=from_id,
+                    edge_count=len(path),
+                    replayed_ops=tuple(replayed),
+                )
+            replayed.append(op)
+    after = _current_scene(phone)
+    if after is None:
+        return MemoryPathNavigationResult(
+            True,
+            False,
+            "arrival_scene_unavailable",
+            page,
+            from_id=from_id,
+            edge_count=len(path),
+            replayed_ops=tuple(replayed),
+        )
+    arrived = recognize(after, _current_frame_img(phone))
+    reached = arrived is not None and getattr(arrived, "page_id", None) == page
+    return MemoryPathNavigationResult(
+        True,
+        reached,
+        "reached" if reached else "arrival_unconfirmed",
+        page,
+        from_id=from_id,
+        edge_count=len(path),
+        replayed_ops=tuple(replayed),
     )
 
 
@@ -258,16 +373,14 @@ def make_try_memory_path_hook(
         path_to_page = getattr(memory, "path_to_page", None) if memory is not None else None
         recovered = False
         if page and callable(recognize) and callable(path_to_page):
-            with _recovery_guard(phone):
-                recovered = _attempt_memory_path(
-                    phone,
-                    page,
-                    recognize=recognize,
-                    path_to_page=path_to_page,
-                    scene_type=scene_type,
-                    allowed=allowed,
-                    min_success_rate=min_success_rate,
-                )
+            result = navigate_via_memory_path(
+                phone,
+                page,
+                scene_type=scene_type,
+                allowed_actions=allowed,
+                min_success_rate=min_success_rate,
+            )
+            recovered = result.reached
         if recovered:
             return True
         # The fallback sets its own re-entrancy guard, so it must run only after
@@ -275,46 +388,6 @@ def make_try_memory_path_hook(
         return _delegate_fallback(fallback, phone, reason, payload)
 
     return hook
-
-
-def _attempt_memory_path(
-    phone: object,
-    page: str,
-    *,
-    recognize: Callable[..., Any],
-    path_to_page: Callable[..., Any],
-    scene_type: str | None,
-    allowed: set[str],
-    min_success_rate: float,
-) -> bool:
-    scene = _current_scene(phone)
-    if scene is None:
-        return False
-    node = recognize(scene, _current_frame_img(phone))
-    if node is None:
-        return False
-    try:
-        path = path_to_page(
-            node.screen_id,
-            page,
-            scene_type=scene_type,
-            allowed_actions=allowed,
-            min_success_rate=min_success_rate,
-        )
-    except Exception:
-        return False
-    if path is None:
-        return False
-    if not path:
-        return True  # already on the target page
-    for edge in path:
-        if not _replay_edge(phone, edge):
-            return False
-    after = _current_scene(phone)
-    if after is None:
-        return False
-    arrived = recognize(after, _current_frame_img(phone))
-    return arrived is not None and getattr(arrived, "page_id", None) == page
 
 
 @dataclass(frozen=True)

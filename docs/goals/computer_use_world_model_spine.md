@@ -2,12 +2,11 @@
 
 Status: **THESIS + ACTION ROADMAP, with an initial implementation slice —
 updated 2026-06-03.** Distilled from an architecture review
-(autonomous-driving analogy → glassbox). This branch implements the first
-offline-verifiable slice: **0b** (verified Home as the navigation-measurement
-origin) and **B1 infrastructure** (scene classifiers may receive a
-`SceneClassificationPrior` built from recognized screen memory + last action).
-The full roadmap is not complete. Every `file:line` anchor is a **snapshot as of
-`1d75ee9`** — regenerate with the command in [Anchors](#anchors-regenerate-before-trusting-line-numbers)
+(autonomous-driving analogy → glassbox). This branch implements offline-
+verifiable primitives for **0b**, **B1**, **B2**, **A1**, and **B3**. These are
+contracts / entrypoints / guards, not a claim that the task-level roadmap is
+complete. Every `file:line` anchor is a **snapshot as of `1d75ee9`** —
+regenerate with the command in [Anchors](#anchors-regenerate-before-trusting-line-numbers)
 before trusting a number.
 
 ## Thesis
@@ -70,18 +69,24 @@ task-level compass on the *default* path. See `computer_use_honest_gate_first.md
 - **B2 Authoritative scene arbitration by VLM.** The projector copies
   `platform_scene_kind` from the platform source and lets the VLM write only
   `semantic_scene_type` (`contracts.py:126-127` vs `:142-162`). The VLM can
-  *think* but not *steer* scene identity. Endgame: System-2 may arbitrate the
-  authoritative kind under uncertainty.
+  *think* but not *steer* scene identity. Initial slice: VLM output may now
+  include `platform_scene_kind`; `unknown` explicitly clears stale `page_id` and
+  `safe_actions` so System-2 can safely veto a bad platform read. Endgame:
+  System-2 may arbitrate the authoritative kind under uncertainty.
 - **B3 Live capability model.** `BackendCapabilities` is a static declaration
   (`effector.py:166-202`), not validated/updated from action outcomes at runtime.
+  Initial slice: current-run `ActuationProfile.record_attempt()` feedback is
+  locked by smoke as a live de-advertise signal for failed methods.
 
 **A — Wiring (capabilities exist, not load-bearing; fix THIRD, once the compass
 can prove them).**
 - **A1 Proactive navigation.** `graph.path()` / `path_to_page()`
   (`graph.py:228` / `:257`) are BFS-ready but only called reactively by
   `recover_to_home_then_renavigate` after stuck-recovery (`recovery.py:71-77`;
-  installed default-on at `runtime.py:631-637`). Promote to a normal decision
-  step, and extend the UTG beyond Settings to generic apps.
+  installed default-on at `runtime.py:631-637`). Initial slice:
+  `navigate_via_memory_path()` promotes the same safe replay machinery into a
+  normal decision entrypoint without Home fallback. Remaining work: call it from
+  a real planner and extend the UTG beyond Settings to generic apps.
 - **A2 Decision brain.** No owned/learned `observe→decide→act→verify` loop;
   decisions are hand-scripted in skills, and `tap_xy` (`phone.py:1714`) bypasses
   the orchestrator entirely. The realistic "policy" is VLM-as-System-2, **not** a
@@ -167,6 +172,15 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
 - `Perceptor.apply_scene_classifiers()` computes that prior before projection and
   passes it to classifiers that declare `prior=`, while old
   `(scene, viewport_size)` classifiers stay compatible.
+- VLM describe output may now carry `platform_scene_kind` and optional `page_id`.
+  When System-2 returns `platform_scene_kind="unknown"`, stale page IDs and safe
+  actions are cleared instead of leaving a dangerous platform-classifier residue.
+- `navigate_via_memory_path(phone, target_page, ...)` is the proactive A1
+  primitive: recognize current node, ask `path_to_page`, replay only allowed
+  generic edges, and verify arrival without falling back to Home.
+- Current-run actuation feedback is covered as a live B3 de-advertise signal:
+  once a method crosses the unactuatable gate, `should_skip_bucket()` flips
+  immediately for the next decision in the same run.
 - Smoke coverage: `skills/smoke/test_world_model_spine.py`.
 
 ## Non-goals / honest posture

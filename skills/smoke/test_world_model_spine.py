@@ -3,7 +3,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from glassbox.action import prepare_navigation_measurement_origin
+from glassbox.action import (
+    ActuationProfile,
+    navigate_via_memory_path,
+    prepare_navigation_measurement_origin,
+)
 from glassbox.cognition import Box, Scene, SceneClassification, SceneClassificationPrior, UIElement
 from glassbox.effector import ActionResult
 from glassbox.memory import UTG, ActionRecord, ScreenMemory
@@ -107,6 +111,131 @@ class _HomePhone:
         if isinstance(self.result, BaseException):
             raise self.result
         return self.result
+
+
+class _Edge:
+    def __init__(self, action_op: str):
+        self.action_op = action_op
+
+
+class _MemoryNavPhone:
+    def __init__(self, *, path, arrive_page: str):
+        self.memory = self
+        self.path = path
+        self.arrive_page = arrive_page
+        self.replayed = 0
+        self.back_calls = 0
+        self.home_calls = 0
+        self.path_queries: list[dict] = []
+
+    def perceive(self, *, fresh=None):
+        del fresh
+        return object()
+
+    def recognize(self, scene, frame_img=None):
+        del scene, frame_img
+        if self.path is None:
+            return None
+        if self.replayed >= len(self.path):
+            return type("Node", (), {"screen_id": "target", "page_id": self.arrive_page})()
+        return type("Node", (), {"screen_id": "start", "page_id": "app/detail"})()
+
+    def path_to_page(self, from_id, page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.0):
+        self.path_queries.append(
+            {
+                "from_id": from_id,
+                "page_id": page_id,
+                "scene_type": scene_type,
+                "allowed_actions": set(allowed_actions or ()),
+                "min_success_rate": min_success_rate,
+            }
+        )
+        return self.path
+
+    def back_gesture(self):
+        self.back_calls += 1
+        self.replayed += 1
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+    def home(self):
+        self.home_calls += 1
+        self.replayed += 1
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+
+@pytest.mark.smoke
+def test_navigate_via_memory_path_replays_learned_path_without_home_fallback():
+    phone = _MemoryNavPhone(path=[_Edge("back"), _Edge("back")], arrive_page="app/root")
+
+    result = navigate_via_memory_path(phone, "app/root", min_success_rate=0.75)
+
+    assert result.reached is True
+    assert result.reason == "reached"
+    assert result.from_id == "start"
+    assert result.edge_count == 2
+    assert result.replayed_ops == ("back", "back")
+    assert phone.back_calls == 2
+    assert phone.home_calls == 0
+    assert phone.path_queries == [
+        {
+            "from_id": "start",
+            "page_id": "app/root",
+            "scene_type": None,
+            "allowed_actions": {"home", "back"},
+            "min_success_rate": 0.75,
+        }
+    ]
+
+
+@pytest.mark.smoke
+def test_navigate_via_memory_path_is_proactive_not_home_recovery():
+    phone = _MemoryNavPhone(path=None, arrive_page="app/root")
+
+    result = navigate_via_memory_path(phone, "app/root")
+
+    assert result.reached is False
+    assert result.reason == "current_screen_unrecognized"
+    assert phone.home_calls == 0
+
+
+@pytest.mark.smoke
+def test_navigate_via_memory_path_requires_arrival_confirmation():
+    phone = _MemoryNavPhone(path=[_Edge("back")], arrive_page="app/elsewhere")
+
+    result = navigate_via_memory_path(phone, "app/root")
+
+    assert result.reached is False
+    assert result.reason == "arrival_unconfirmed"
+    assert result.replayed_ops == ("back",)
+    assert phone.home_calls == 0
+
+
+@pytest.mark.smoke
+def test_actuation_profile_live_feedback_deadvertises_failed_method_within_run():
+    profile = ActuationProfile()
+    bucket = {"control_role": "button", "size_bucket": "small", "region_zone": "center"}
+
+    for index in range(4):
+        profile.record_attempt(
+            control_bucket=bucket,
+            method="mouse_tap",
+            landing_signal="missed",
+            label="missed",
+            target_identity={"intent": f"control_{index % 2}"},
+        )
+        skip, reason = profile.should_skip_bucket(bucket, method="mouse_tap")
+        assert (skip, reason) == (False, None)
+
+    profile.record_attempt(
+        control_bucket=bucket,
+        method="mouse_tap",
+        landing_signal="missed",
+        label="missed",
+        target_identity={"intent": "control_2"},
+    )
+
+    skip, reason = profile.should_skip_bucket(bucket, method="mouse_tap")
+    assert (skip, reason) == (True, "unactuatable")
 
 
 @pytest.mark.smoke

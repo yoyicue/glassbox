@@ -125,6 +125,55 @@ def test_vlm_stage_outcome_is_typed_boundary_product():
 
 
 @pytest.mark.smoke
+def test_vlm_stage_outcome_can_arbitrate_platform_scene_kind():
+    outcome = vlm_stage_outcome_from_result(
+        VLMResult(
+            raw_content="{}",
+            parsed={
+                "scene_type": "settings",
+                "platform_scene_kind": " settings_detail ",
+                "elements": [],
+            },
+            usage={},
+            model="fake",
+            elapsed_ms=1,
+        )
+    )
+
+    assert outcome.classification is not None
+    assert outcome.classification.source == "vlm"
+    assert outcome.classification.semantic_scene_type == "settings"
+    assert outcome.classification.platform_scene_kind == "settings_detail"
+    assert outcome.classification.clear_page_id is False
+    assert outcome.classification.evidence == ("vlm_platform_scene_kind",)
+
+
+@pytest.mark.smoke
+def test_enrich_scene_vlm_platform_kind_updates_authoritative_scene_identity():
+    scene = _scene_with(_ocr_el(0, "Apps"))
+    scene.platform_scene_kind = "settings_detail"
+    scene.page_id = "settings/Apps"
+    scene.safe_actions = ["back", "edge_back"]
+    kimi = FakeKimi(
+        parsed_payload={
+            "scene_type": "app_store",
+            "platform_scene_kind": "unknown",
+            "elements": [{"id": 0, "intent_label": ""}],
+        }
+    )
+
+    enrich_scene(scene, b"<png>", kimi)
+
+    assert scene.scene_type == "app_store"
+    assert scene.semantic_scene_type == "app_store"
+    assert scene.platform_scene_kind == "unknown"
+    assert scene.page_id is None
+    assert scene.safe_actions == []
+    assert scene.classification_source == "vlm"
+    assert scene.classification_evidence == ["vlm_platform_scene_kind"]
+
+
+@pytest.mark.smoke
 def test_vlm_stage_outcome_reports_parse_error():
     outcome = vlm_stage_outcome_from_result(
         VLMResult(raw_content="null", parsed=None, usage={}, model="fake", elapsed_ms=1)

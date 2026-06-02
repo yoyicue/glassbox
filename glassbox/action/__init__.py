@@ -5,10 +5,12 @@ from glassbox.action.actuation_profile import ActuationProfile, MethodStats
 from glassbox.action.orchestrator import ActionOrchestrator
 from glassbox.action.policy import RiskDecision, RiskPolicy
 from glassbox.action.recovery import (
+    MemoryPathNavigationResult,
     NavigationMeasurementOrigin,
     RecoveryResult,
     RuntimeRecoveryPolicy,
     make_try_memory_path_hook,
+    navigate_via_memory_path,
     prepare_navigation_measurement_origin,
     recover_to_home_then_renavigate,
 )
@@ -35,6 +37,7 @@ __all__ = [
     "BoundStrategy",
     "CandidatePointGenerator",
     "ExpectedState",
+    "MemoryPathNavigationResult",
     "MethodStats",
     "NavigationMeasurementOrigin",
     "RecoveryResult",
@@ -55,6 +58,7 @@ __all__ = [
     "default_semantic_action_plan",
     "default_semantic_action_spec",
     "make_try_memory_path_hook",
+    "navigate_via_memory_path",
     "prepare_navigation_measurement_origin",
     "recover_to_home_then_renavigate",
     "verify_expected_state",

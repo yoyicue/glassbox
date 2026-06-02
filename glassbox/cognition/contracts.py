@@ -48,6 +48,8 @@ class SceneClassification:
     source: ClassificationSource = "app"
     safe_actions: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
+    clear_page_id: bool = False
+    clear_safe_actions: bool = False
 
 
 @dataclass(frozen=True)
@@ -143,8 +145,12 @@ class SceneClassificationProjector:
         for item in classifications:
             if item.platform_scene_kind:
                 scene.platform_scene_kind = item.platform_scene_kind
+            if item.clear_page_id:
+                scene.page_id = None
             if item.page_id:
                 scene.page_id = item.page_id
+            if item.clear_safe_actions:
+                scene.safe_actions = []
             if item.safe_actions:
                 scene.safe_actions = list(item.safe_actions)
             if item.evidence:
