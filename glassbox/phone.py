@@ -88,6 +88,7 @@ class PhoneGestureConfig:
 @dataclass(frozen=True)
 class PhoneFeatureFlags:
     detect_icons_in_perceive: bool = False
+    ui_layout_segmentation: bool = False
     strict_target_matching: bool = False
     require_home_icon_grid: bool = False
     reverify_fresh_frame: bool = False
@@ -239,6 +240,7 @@ class Phone:
         letterbox_refresh_consecutive: int = 1,
         semantic_plan_ops: frozenset[str] | None = None,
         detect_icons_in_perceive: bool = False,
+        ui_layout_segmentation: bool = False,
         max_ocr_elements: int = 800,
         max_ocr_text_chars: int = 1024,
         ocr_timeout: float = 0.0,
@@ -268,6 +270,7 @@ class Phone:
             ocr_timeout=ocr_timeout,
             perceive_cache_diff=perceive_cache_diff,
             detect_icons_in_perceive=detect_icons_in_perceive,
+            ui_layout_segmentation=ui_layout_segmentation,
             strict_target_matching=strict_target_matching,
             require_home_icon_grid=require_home_icon_grid,
             reverify_fresh_frame=reverify_fresh_frame,
@@ -334,6 +337,7 @@ class Phone:
         ocr_timeout: float,
         perceive_cache_diff: float,
         detect_icons_in_perceive: bool,
+        ui_layout_segmentation: bool,
         strict_target_matching: bool,
         require_home_icon_grid: bool,
         reverify_fresh_frame: bool,
@@ -360,6 +364,7 @@ class Phone:
         )
         feature_flags = feature_flags or PhoneFeatureFlags(
             detect_icons_in_perceive=detect_icons_in_perceive,
+            ui_layout_segmentation=ui_layout_segmentation,
             strict_target_matching=strict_target_matching,
             require_home_icon_grid=require_home_icon_grid,
             reverify_fresh_frame=reverify_fresh_frame,
@@ -453,6 +458,10 @@ class Phone:
         # CUQ-2.1: inject no-text icon regions into perceive() so icon-only
         # controls become tap candidates. Flag-gated (default off).
         self._detect_icons_in_perceive = bool(feature_flags.detect_icons_in_perceive)
+        # CUQ-UI-LAYOUT: default-off Tier-A geometric UI graph builder. When
+        # enabled it also needs icon regions, so perceptor lets it trigger icon
+        # detection even if the older icon-only flag is off.
+        self._ui_layout_segmentation = bool(feature_flags.ui_layout_segmentation)
         # Live-camera OCR hardening: cap OCR output volume (default-on, generous
         # — only a chaotic camera-preview frame ever exceeds it) and an opt-in
         # recognize() watchdog (default off; enable on the live rig).
@@ -827,6 +836,10 @@ class Phone:
     @property
     def detect_icons_in_perceive_enabled(self) -> bool:
         return self._detect_icons_in_perceive
+
+    @property
+    def ui_layout_segmentation_enabled(self) -> bool:
+        return self._ui_layout_segmentation
 
     @property
     def max_ocr_elements(self) -> int:

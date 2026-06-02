@@ -464,6 +464,7 @@ class Perceptor:
         self.apply_profile(scene, frame.img)
         self.apply_scene_classifiers(scene, frame.img)
         self.maybe_detect_icons(scene, frame.img)
+        self.maybe_segment_layout(scene, frame.img)
         host.perceive_cache_stats["misses"] += 1
         self.observe_memory(scene, frame.img)
         context.cache_frame = frame
@@ -555,7 +556,10 @@ class Perceptor:
 
     def maybe_detect_icons(self, scene: Scene, frame_img) -> None:
         host = self._phone
-        if not host.detect_icons_in_perceive_enabled or frame_img is None:
+        if (
+            not host.detect_icons_in_perceive_enabled
+            and not host.ui_layout_segmentation_enabled
+        ) or frame_img is None:
             return
         try:
             from glassbox.cognition.icon_detect import detect_icons
@@ -586,6 +590,20 @@ class Perceptor:
                 )
             )
             next_id += 1
+
+    def maybe_segment_layout(self, scene: Scene, frame_img) -> None:
+        host = self._phone
+        if not host.ui_layout_segmentation_enabled:
+            return
+        try:
+            from glassbox.cognition.layout_segment import segment_layout
+
+            viewport_size = scene.viewport_size
+            if viewport_size is None and frame_img is not None:
+                viewport_size = (int(frame_img.shape[1]), int(frame_img.shape[0]))
+            segment_layout(scene, viewport_size=viewport_size)
+        except Exception as exc:
+            logger.warning(f"layout segmentation failed: {exc}")
 
     def perceive_voted(
         self,
@@ -726,6 +744,8 @@ class Perceptor:
         frame_img = last_frame.img if last_frame is not None else None
         self.apply_profile(scene, frame_img)
         self.apply_scene_classifiers(scene, frame_img)
+        self.maybe_detect_icons(scene, frame_img)
+        self.maybe_segment_layout(scene, frame_img)
         context.cache_frame = None
         context.cache_scene = None
         context.cache_scope = frame_scope

@@ -733,6 +733,7 @@ def build_phone(
         ),
         feature_flags=PhoneFeatureFlags(
             detect_icons_in_perceive=cfg.detect_icons_in_perceive,
+            ui_layout_segmentation=cfg.ui_layout_segmentation_enabled,
             strict_target_matching=cfg.strict_target_matching,
             require_home_icon_grid=cfg.require_home_icon_grid,
             reverify_fresh_frame=cfg.reverify_fresh_frame,

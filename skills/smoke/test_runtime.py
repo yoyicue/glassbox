@@ -144,6 +144,23 @@ class ShapeOCR:
         return []
 
 
+class LayoutRowOCR:
+    def recognize(self, image):
+        height, width = image.shape[:2]
+        icon = max(22, int(width * 0.055))
+        x = int(width * 0.08)
+        y = int(height * 0.22)
+        gap = max(10, int(width * 0.025))
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=x + icon + gap, y=y + 2, w=max(52, int(width * 0.15)), h=20),
+                text="WLAN",
+                confidence=0.9,
+            )
+        ]
+
+
 class TileOnlyTextRegionOCR:
     contract = "TextRegionOCR"
 
@@ -637,6 +654,78 @@ def test_ocr_tiling_opt_in_recovers_tile_only_text_regions_on_iphone_and_ipad(
     tile_calls = [call for call in ocr.calls if call[1] is not None]
     assert len(tile_calls) == 4
     assert all(native_roi is False for _, _, native_roi in tile_calls)
+
+
+@pytest.mark.smoke
+def test_ui_layout_segmentation_is_default_off_and_does_not_run_icon_detector(monkeypatch):
+    calls = 0
+
+    def fake_detect_icons(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return []
+
+    monkeypatch.setattr("glassbox.cognition.icon_detect.detect_icons", fake_detect_icons)
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(_env_file=None),
+        ocr=LayoutRowOCR(),
+        effector=FakeEffector(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert calls == 0
+    assert [(element.type, element.text) for element in scene.elements] == [("text", "WLAN")]
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("source_cls", "phone_model"),
+    [
+        (FakeSource, "iphone_17_pro_max"),
+        (FakeIPadSource, "ipad_mini_7"),
+    ],
+)
+def test_ui_layout_segmentation_opt_in_groups_icon_labels_on_iphone_and_ipad(
+    monkeypatch,
+    source_cls,
+    phone_model,
+):
+    from glassbox.cognition.icon_detect import IconRegion
+
+    calls = 0
+
+    def fake_detect_icons(frame_img, *, text_boxes=(), **_kwargs):
+        nonlocal calls
+        calls += 1
+        height, width = frame_img.shape[:2]
+        icon = max(22, int(width * 0.055))
+        return [IconRegion(box=(int(width * 0.08), int(height * 0.22), icon, icon))]
+
+    monkeypatch.setattr("glassbox.cognition.icon_detect.detect_icons", fake_detect_icons)
+    runtime = build_phone(
+        source=source_cls(),
+        cfg=AgentConfig(
+            _env_file=None,
+            phone_model=phone_model,
+            ui_layout_segmentation_enabled=True,
+        ),
+        ocr=LayoutRowOCR(),
+        effector=FakeEffector(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert calls == 1
+    assert len(scene.elements) == 1
+    row = scene.elements[0]
+    assert row.type == "list_item"
+    assert row.text == "WLAN"
+    assert row.element_id == 0
+    assert row.suggested_actions == ["tap"]
+    assert row.type_source == "layout_segmenter"
+    assert "layout_segment:icon_label" in row.type_evidence
 
 
 @pytest.mark.smoke

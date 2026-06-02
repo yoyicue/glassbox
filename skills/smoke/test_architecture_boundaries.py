@@ -148,6 +148,7 @@ def test_phone_accepts_grouped_runtime_feature_and_observation_config():
         ),
         feature_flags=PhoneFeatureFlags(
             detect_icons_in_perceive=True,
+            ui_layout_segmentation=True,
             strict_target_matching=True,
             require_home_icon_grid=True,
             reverify_fresh_frame=True,
@@ -171,6 +172,7 @@ def test_phone_accepts_grouped_runtime_feature_and_observation_config():
     assert phone.max_ocr_text_chars == 11
     assert phone.ocr_timeout == 0.25
     assert phone.detect_icons_in_perceive_enabled is True
+    assert phone.ui_layout_segmentation_enabled is True
     assert phone.strict_target_matching_enabled is True
     assert phone.require_home_icon_grid_enabled is True
     assert phone.reverify_fresh_frame_enabled is True
