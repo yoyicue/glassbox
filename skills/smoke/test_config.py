@@ -42,6 +42,17 @@ def test_defaults():
     assert cfg.ocr_temporal_voting_sample_spacing_ms == 0
     assert cfg.ocr_temporal_voting_outer_timeout == 0.0
     assert cfg.ocr_temporal_voting_keep_raw_samples is False
+    assert cfg.ocr_minimum_text_height is None
+    assert cfg.ocr_confidence_threshold is None
+    assert cfg.ocr_unsharp_mask is None
+    assert cfg.ocr_unsharp_sigma is None
+    assert cfg.ocr_unsharp_amount is None
+    assert cfg.ocr_tiling_enabled is False
+    assert cfg.ocr_tiling_rows == 2
+    assert cfg.ocr_tiling_cols == 2
+    assert cfg.ocr_tiling_overlap == 0.15
+    assert cfg.ocr_tiling_include_full_frame is True
+    assert cfg.ocr_tiling_nms_iou == 0.55
 
 
 @pytest.mark.smoke
@@ -57,6 +68,14 @@ def test_env_override_int(monkeypatch):
     monkeypatch.setenv("GLASSBOX_DEFAULT_OBSERVATION_SCOPE", "app")
     monkeypatch.setenv("GLASSBOX_OCR_TEMPORAL_VOTING_FRAMES", "4")
     monkeypatch.setenv("GLASSBOX_OCR_TEMPORAL_VOTING_MIN_PRESENCE", "3")
+    monkeypatch.setenv("GLASSBOX_OCR_MINIMUM_TEXT_HEIGHT", "0.0")
+    monkeypatch.setenv("GLASSBOX_OCR_CONFIDENCE_THRESHOLD", "0.2")
+    monkeypatch.setenv("GLASSBOX_OCR_UNSHARP_SIGMA", "0.8")
+    monkeypatch.setenv("GLASSBOX_OCR_UNSHARP_AMOUNT", "1.2")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_ROWS", "3")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_COLS", "4")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_OVERLAP", "0.2")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_NMS_IOU", "0.6")
 
     cfg = AgentConfig(_env_file=None)
 
@@ -71,6 +90,14 @@ def test_env_override_int(monkeypatch):
     assert cfg.default_observation_scope == "app"
     assert cfg.ocr_temporal_voting_frames == 4
     assert cfg.ocr_temporal_voting_min_presence == 3
+    assert cfg.ocr_minimum_text_height == 0.0
+    assert cfg.ocr_confidence_threshold == 0.2
+    assert cfg.ocr_unsharp_sigma == 0.8
+    assert cfg.ocr_unsharp_amount == 1.2
+    assert cfg.ocr_tiling_rows == 3
+    assert cfg.ocr_tiling_cols == 4
+    assert cfg.ocr_tiling_overlap == 0.2
+    assert cfg.ocr_tiling_nms_iou == 0.6
 
 
 @pytest.mark.smoke
@@ -78,11 +105,14 @@ def test_env_override_bool(monkeypatch):
     monkeypatch.setenv("GLASSBOX_NO_HDMI", "1")
     monkeypatch.setenv("GLASSBOX_AUTO_RECOVER_CAPTURE", "1")
     monkeypatch.setenv("GLASSBOX_PICOKVM", "true")
+    monkeypatch.setenv("GLASSBOX_OCR_UNSHARP_MASK", "0")
     monkeypatch.setenv("GLASSBOX_WHEEL_INVERT", "true")
     monkeypatch.setenv("GLASSBOX_ALLOW_NOOP_FALLBACK", "true")
     monkeypatch.setenv("GLASSBOX_ACTION_FAIL_FAST", "false")
     monkeypatch.setenv("GLASSBOX_OCR_TEMPORAL_VOTING_ENABLED", "true")
     monkeypatch.setenv("GLASSBOX_OCR_TEMPORAL_VOTING_KEEP_RAW_SAMPLES", "true")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_ENABLED", "true")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_INCLUDE_FULL_FRAME", "false")
 
     cfg = AgentConfig(_env_file=None)
 
@@ -94,6 +124,9 @@ def test_env_override_bool(monkeypatch):
     assert cfg.action_fail_fast is False
     assert cfg.ocr_temporal_voting_enabled is True
     assert cfg.ocr_temporal_voting_keep_raw_samples is True
+    assert cfg.ocr_unsharp_mask is False
+    assert cfg.ocr_tiling_enabled is True
+    assert cfg.ocr_tiling_include_full_frame is False
 
 
 @pytest.mark.smoke

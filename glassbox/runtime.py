@@ -38,6 +38,7 @@ from glassbox.perception.letterbox import LetterboxCrop
 from glassbox.perception.stable import StabilityPolicy
 from glassbox.phone import (
     OcrTemporalVotingConfig,
+    OcrTilingConfig,
     Phone,
     PhoneFeatureFlags,
     PhoneGestureConfig,
@@ -712,6 +713,14 @@ def build_phone(
             ocr_timeout=cfg.ocr_timeout,
             settings_root_label_aliases=settings_root_label_aliases_for_config(cfg),
             settings_root_fuzzy_aliases=settings_root_fuzzy_aliases_for_config(cfg),
+            ocr_tiling=OcrTilingConfig(
+                enabled=cfg.ocr_tiling_enabled,
+                rows=cfg.ocr_tiling_rows,
+                cols=cfg.ocr_tiling_cols,
+                overlap=cfg.ocr_tiling_overlap,
+                include_full_frame=cfg.ocr_tiling_include_full_frame,
+                nms_iou=cfg.ocr_tiling_nms_iou,
+            ),
             ocr_temporal_voting=OcrTemporalVotingConfig(
                 enabled=cfg.ocr_temporal_voting_enabled,
                 frames=cfg.ocr_temporal_voting_frames,

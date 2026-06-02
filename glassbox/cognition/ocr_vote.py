@@ -27,6 +27,67 @@ def _distance_to_cluster(cluster: dict, el: UIElement) -> float:
     return abs(float(cluster["cx"]) - cx) + abs(float(cluster["cy"]) - cy)
 
 
+def _box_iou(a, b) -> float:
+    x1 = max(a.x, b.x)
+    y1 = max(a.y, b.y)
+    x2 = min(a.x2, b.x2)
+    y2 = min(a.y2, b.y2)
+    inter = max(0, x2 - x1) * max(0, y2 - y1)
+    if inter <= 0:
+        return 0.0
+    area_a = max(0, a.w) * max(0, a.h)
+    area_b = max(0, b.w) * max(0, b.h)
+    denom = area_a + area_b - inter
+    return float(inter) / float(denom) if denom > 0 else 0.0
+
+
+def _overlap_ratio(a1: float, a2: float, b1: float, b2: float) -> float:
+    overlap = max(0.0, min(a2, b2) - max(a1, b1))
+    denom = max(1.0, min(abs(a2 - a1), abs(b2 - b1)))
+    return overlap / denom
+
+
+def _cluster_tolerance(cluster: dict, el: UIElement, *, pos_tol: int) -> tuple[float, float]:
+    widths = [float(member.box.w) for _, member in cluster["elements"]]
+    heights = [float(member.box.h) for _, member in cluster["elements"]]
+    widths.append(float(el.box.w))
+    heights.append(float(el.box.h))
+    widths.sort()
+    heights.sort()
+    median_w = widths[len(widths) // 2]
+    median_h = heights[len(heights) // 2]
+    cap = max(1.0, float(pos_tol))
+    tol_x = min(cap, max(2.0, median_w * 0.35))
+    tol_y = min(cap, max(2.0, median_h * 0.25))
+    return tol_x, tol_y
+
+
+def _horizontally_compatible(a: UIElement, b: UIElement, *, tol_x: float) -> bool:
+    if abs(float(a.box.x) - float(b.box.x)) <= tol_x:
+        return True
+    if abs(float(a.box.center[0]) - float(b.box.center[0])) <= tol_x:
+        return True
+    return _overlap_ratio(a.box.x, a.box.x2, b.box.x, b.box.x2) >= 0.5
+
+
+def _row_compatible(a: UIElement, b: UIElement, *, tol_y: float) -> bool:
+    if abs(float(a.box.center[1]) - float(b.box.center[1])) <= tol_y:
+        return True
+    return _overlap_ratio(a.box.y, a.box.y2, b.box.y, b.box.y2) >= 0.5
+
+
+def _matches_cluster(cluster: dict, el: UIElement, *, pos_tol: int) -> bool:
+    tol_x, tol_y = _cluster_tolerance(cluster, el, pos_tol=pos_tol)
+    for _, member in cluster["elements"]:
+        if _box_iou(member.box, el.box) >= 0.35:
+            continue
+        if not _row_compatible(member, el, tol_y=tol_y):
+            return False
+        if not _horizontally_compatible(member, el, tol_x=tol_x):
+            return False
+    return True
+
+
 def _dedupe_evidence(items: list[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -157,8 +218,10 @@ def vote_scenes(
                     continue
                 if cluster["type"] != el.type:
                     continue
+                if not _matches_cluster(cluster, el, pos_tol=pos_tol):
+                    continue
                 d = _distance_to_cluster(cluster, el)
-                if d <= pos_tol and d < best_d:
+                if d < best_d:
                     best_i, best_d = i, d
             if best_i is None:
                 cx, cy = el.box.center
@@ -184,6 +247,7 @@ def vote_scenes(
         "clusters": len(clusters),
         "min_presence": max(1, int(min_presence)),
         "pos_tol": int(pos_tol),
+        "geometry": "row_relative",
         "stable_clusters": 0,
         "transient_clusters": 0,
         "volatile_clusters": 0,

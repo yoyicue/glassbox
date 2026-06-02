@@ -48,9 +48,22 @@ class LegacyUIElementOCRAdapter:
     inner: Any
     contract: str = "TextRegionOCR"
 
-    def recognize(self, image: Frame, *, roi: Box | None = None) -> list[TextRegion]:
-        frame, offset = _frame_for_roi(image, roi)
-        elements = self.inner.recognize(frame.img)
+    def recognize(
+        self,
+        image: Frame,
+        *,
+        roi: Box | None = None,
+        native_roi: bool = True,
+    ) -> list[TextRegion]:
+        if roi is not None and native_roi and getattr(self.inner, "supports_region_of_interest", False):
+            elements = self.inner.recognize(
+                image.img,
+                region_of_interest=_vision_roi_for_box(image, roi),
+            )
+            offset = (0, 0)
+        else:
+            frame, offset = _frame_for_roi(image, roi)
+            elements = self.inner.recognize(frame.img)
         regions = []
         for item in elements:
             if isinstance(item, TextRegion):
@@ -79,6 +92,28 @@ def _frame_for_roi(frame: Frame, roi: Box | None) -> tuple[Frame, tuple[int, int
     y2 = min(frame.img.shape[0], y + h)
     x2 = min(frame.img.shape[1], x + w)
     return Frame(img=frame.img[y:y2, x:x2], ts=frame.ts, context=frame.context), (x, y)
+
+
+def _vision_roi_for_box(frame: Frame, roi: Box) -> tuple[float, float, float, float]:
+    img_h, img_w = frame.img.shape[:2]
+    x = max(0.0, float(roi.x))
+    y = max(0.0, float(roi.y))
+    w = max(0.0, float(roi.w))
+    h = max(0.0, float(roi.h))
+    x2 = min(float(img_w), x + w)
+    y2 = min(float(img_h), y + h)
+    x = min(float(img_w), x)
+    y = min(float(img_h), y)
+    w = max(0.0, x2 - x)
+    h = max(0.0, y2 - y)
+    if img_w <= 0 or img_h <= 0:
+        return (0.0, 0.0, 0.0, 0.0)
+    return (
+        x / float(img_w),
+        1.0 - ((y + h) / float(img_h)),
+        w / float(img_w),
+        h / float(img_h),
+    )
 
 
 def _offset_region(region: TextRegion, offset: tuple[int, int]) -> TextRegion:

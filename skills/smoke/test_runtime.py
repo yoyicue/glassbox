@@ -17,6 +17,7 @@ from glassbox.backend_registry import (
     select_vlm_backend,
 )
 from glassbox.cognition.base import Box, Scene, UIElement
+from glassbox.cognition.contracts import TextRegion
 from glassbox.config import AgentConfig
 from glassbox.effector import ActionResult, BackendCapabilities, PreflightResult
 from glassbox.geometry import make_device_geometry
@@ -140,6 +141,34 @@ class ShapeOCR:
 
     def recognize(self, image):
         self.shapes.append((image.shape[1], image.shape[0]))
+        return []
+
+
+class TileOnlyTextRegionOCR:
+    contract = "TextRegionOCR"
+
+    def __init__(self):
+        self.calls: list[tuple[str, tuple[int, int, int, int] | None, bool | None]] = []
+
+    def recognize(self, frame, *, roi=None, native_roi=None):
+        roi_tuple = None if roi is None else (roi.x, roi.y, roi.w, roi.h)
+        self.calls.append(("frame", roi_tuple, native_roi))
+        if roi is None:
+            return [
+                TextRegion(
+                    text="Full",
+                    box=Box(x=5, y=5, w=20, h=10),
+                    confidence=0.9,
+                )
+            ]
+        if roi.x == 0 and roi.y == 0:
+            return [
+                TextRegion(
+                    text="Tiny",
+                    box=Box(x=roi.x + 8, y=roi.y + 8, w=16, h=8),
+                    confidence=0.8,
+                )
+            ]
         return []
 
 
@@ -557,6 +586,57 @@ def test_build_phone_threads_configured_app_viewport_into_default_observation_sc
     assert scene.viewport_size == (50, 70)
     assert runtime.phone.app_viewport is not None
     assert runtime.phone.app_viewport.bbox == (10, 20, 50, 70)
+
+
+@pytest.mark.smoke
+def test_ocr_tiling_is_default_off_for_text_region_ocr():
+    ocr = TileOnlyTextRegionOCR()
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(_env_file=None),
+        ocr=ocr,
+        effector=FakeEffector(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert [element.text for element in scene.elements] == ["Full"]
+    assert ocr.calls == [("frame", None, None)]
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("source_cls", "phone_model"),
+    [
+        (FakeSource, "iphone_17_pro_max"),
+        (FakeIPadSource, "ipad_mini_7"),
+    ],
+)
+def test_ocr_tiling_opt_in_recovers_tile_only_text_regions_on_iphone_and_ipad(
+    source_cls,
+    phone_model,
+):
+    ocr = TileOnlyTextRegionOCR()
+    runtime = build_phone(
+        source=source_cls(),
+        cfg=AgentConfig(
+            _env_file=None,
+            phone_model=phone_model,
+            ocr_tiling_enabled=True,
+            ocr_tiling_rows=2,
+            ocr_tiling_cols=2,
+            ocr_tiling_overlap=0.0,
+        ),
+        ocr=ocr,
+        effector=FakeEffector(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert [element.text for element in scene.elements] == ["Full", "Tiny"]
+    tile_calls = [call for call in ocr.calls if call[1] is not None]
+    assert len(tile_calls) == 4
+    assert all(native_roi is False for _, _, native_roi in tile_calls)
 
 
 @pytest.mark.smoke

@@ -179,6 +179,35 @@ class AgentConfig(BaseSettings):
     that runs). zh is NEVER affected — the overlay is English-only. env
     GLASSBOX_EN_OCR_CORRECTION."""
 
+    ocr_minimum_text_height: float | None = None
+    """CUQ-OCR-VISION: Apple Vision `minimumTextHeight` passthrough for dense /
+    tiny UI text experiments. None means "do not call setMinimumTextHeight_"
+    and preserves Apple's library default byte-for-byte; set 0.0 explicitly to
+    ask Vision for no minimum-height filtering. Vision backend only; ocrmac
+    ignores it. Default None until on-rig A/B proves task-level benefit. Env
+    GLASSBOX_OCR_MINIMUM_TEXT_HEIGHT."""
+
+    ocr_confidence_threshold: float | None = None
+    """CUQ-OCR-VISION: Apple Vision OCR confidence threshold passthrough. None
+    leaves `VisionOCR` at its constructor default; explicit values are
+    experimental and must clear on-rig A/B before becoming the default. Vision
+    backend only. Env GLASSBOX_OCR_CONFIDENCE_THRESHOLD."""
+
+    ocr_unsharp_mask: bool | None = None
+    """CUQ-OCR-VISION: Apple Vision OCR unsharp-mask toggle passthrough. None
+    leaves `VisionOCR` at its constructor default; explicit values are
+    experimental. Vision backend only. Env GLASSBOX_OCR_UNSHARP_MASK."""
+
+    ocr_unsharp_sigma: float | None = None
+    """CUQ-OCR-VISION: Apple Vision OCR unsharp-mask sigma passthrough. None
+    leaves `VisionOCR` at its constructor default. Vision backend only. Env
+    GLASSBOX_OCR_UNSHARP_SIGMA."""
+
+    ocr_unsharp_amount: float | None = None
+    """CUQ-OCR-VISION: Apple Vision OCR unsharp-mask amount passthrough. None
+    leaves `VisionOCR` at its constructor default. Vision backend only. Env
+    GLASSBOX_OCR_UNSHARP_AMOUNT."""
+
     # CUQ — live-camera OCR hardening. A live camera preview (e.g. the 操作按钮
     # Action-Button carousel) makes OCR emit chaotic, high-volume text; feeding
     # that pathological set to every downstream scene/text regex is what once
@@ -205,6 +234,33 @@ class AgentConfig(BaseSettings):
     element/char caps above are the defense for that). Default 0 = disabled
     (default path byte-identical; spawns no watchdog thread); enable on the live
     rig where the camera-preview hang exists. env GLASSBOX_OCR_TIMEOUT."""
+
+    ocr_tiling_enabled: bool = False
+    """CUQ-OCR-VISION: opt-in OCR tiling pass for dense/tiny UI text. When on,
+    perceive runs the normal full-frame OCR plus overlapping cropped tile OCR
+    and deduplicates seam duplicates. Default off because it multiplies OCR
+    cost and changes the element set; promote only after on-rig A/B shows
+    task-level benefit at acceptable latency. Env GLASSBOX_OCR_TILING_ENABLED."""
+
+    ocr_tiling_rows: int = 2
+    """CUQ-OCR-VISION: row count for the opt-in OCR tiling pass. Env
+    GLASSBOX_OCR_TILING_ROWS."""
+
+    ocr_tiling_cols: int = 2
+    """CUQ-OCR-VISION: column count for the opt-in OCR tiling pass. Env
+    GLASSBOX_OCR_TILING_COLS."""
+
+    ocr_tiling_overlap: float = 0.15
+    """CUQ-OCR-VISION: fractional tile overlap for seam recall/dedup. Env
+    GLASSBOX_OCR_TILING_OVERLAP."""
+
+    ocr_tiling_include_full_frame: bool = True
+    """CUQ-OCR-VISION: include the normal full-frame OCR sample before tile OCR
+    in the opt-in tiling pass. Env GLASSBOX_OCR_TILING_INCLUDE_FULL_FRAME."""
+
+    ocr_tiling_nms_iou: float = 0.55
+    """CUQ-OCR-VISION: IoU threshold for deduplicating OCR regions recovered by
+    overlapping tiles. Env GLASSBOX_OCR_TILING_NMS_IOU."""
 
     ocr_temporal_voting_enabled: bool = False
     """CUQ-OCR-TV: enable temporal OCR voting on validated perception paths only.

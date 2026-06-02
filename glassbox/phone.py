@@ -121,11 +121,22 @@ class OcrTemporalVotingConfig:
 
 
 @dataclass(frozen=True)
+class OcrTilingConfig:
+    enabled: bool = False
+    rows: int = 2
+    cols: int = 2
+    overlap: float = 0.15
+    include_full_frame: bool = True
+    nms_iou: float = 0.55
+
+
+@dataclass(frozen=True)
 class PhoneObservationConfig:
     max_ocr_elements: int = 800
     max_ocr_text_chars: int = 1024
     ocr_timeout: float = 0.0
     perceive_cache_diff: float = 0.005
+    ocr_tiling: OcrTilingConfig = field(default_factory=OcrTilingConfig)
     ocr_temporal_voting: OcrTemporalVotingConfig = field(default_factory=OcrTemporalVotingConfig)
     settings_root_label_aliases: Mapping[str, str] | None = None
     settings_root_fuzzy_aliases: bool = False
@@ -454,6 +465,15 @@ class Phone:
             else None
         )
         self.settings_root_fuzzy_aliases = bool(observation_config.settings_root_fuzzy_aliases)
+        tiling_cfg = observation_config.ocr_tiling
+        self._ocr_tiling = OcrTilingConfig(
+            enabled=bool(tiling_cfg.enabled),
+            rows=max(1, int(tiling_cfg.rows)),
+            cols=max(1, int(tiling_cfg.cols)),
+            overlap=min(0.8, max(0.0, float(tiling_cfg.overlap))),
+            include_full_frame=bool(tiling_cfg.include_full_frame),
+            nms_iou=min(1.0, max(0.0, float(tiling_cfg.nms_iou))),
+        )
         vote_cfg = observation_config.ocr_temporal_voting
         self._ocr_temporal_voting = OcrTemporalVotingConfig(
             enabled=bool(vote_cfg.enabled),
@@ -823,6 +843,10 @@ class Phone:
     @property
     def ocr_temporal_voting_config(self) -> OcrTemporalVotingConfig:
         return self._ocr_temporal_voting
+
+    @property
+    def ocr_tiling_config(self) -> OcrTilingConfig:
+        return self._ocr_tiling
 
     @property
     def ocr_temporal_voting_enabled(self) -> bool:

@@ -727,6 +727,40 @@ def test_legacy_ocr_adapter_returns_text_regions_and_offsets_roi():
     ]
 
 
+def test_legacy_ocr_adapter_routes_supported_roi_to_native_vision_coordinates():
+    class NativeRoiOCR:
+        supports_region_of_interest = True
+
+        def __init__(self):
+            self.calls = []
+
+        def recognize(self, image, *, region_of_interest=None):
+            self.calls.append((image.shape, region_of_interest))
+            return [
+                UIElement(
+                    type="text",
+                    box=Box(x=10, y=20, w=30, h=10),
+                    text="Native",
+                    confidence=0.8,
+                )
+            ]
+
+    native = NativeRoiOCR()
+    adapter = LegacyUIElementOCRAdapter(native)
+    frame = Frame(img=np.zeros((80, 100, 3), dtype=np.uint8), ts=1.0)
+
+    regions = adapter.recognize(frame, roi=Box(x=10, y=20, w=30, h=40))
+
+    assert native.calls == [((80, 100, 3), (0.1, 0.25, 0.3, 0.5))]
+    assert regions == [
+        TextRegion(
+            text="Native",
+            box=Box(x=10, y=20, w=30, h=10),
+            confidence=0.8,
+        )
+    ]
+
+
 def test_phone_ocr_stage_converts_text_regions_to_ui_elements():
     class TextRegionOCR:
         contract = "TextRegionOCR"

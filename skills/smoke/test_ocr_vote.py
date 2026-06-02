@@ -124,6 +124,19 @@ def test_vote_scenes_volatile_numeric_cluster_prefers_latest_not_frankenstein():
 
 
 @pytest.mark.smoke
+def test_vote_scenes_does_not_swap_dense_adjacent_rows_during_scroll_drift():
+    s1 = _scene(_el("Notifications", 80, 300), _el("Sounds & Haptics", 80, 318))
+    s2 = _scene(_el("Notifications", 80, 312), _el("Sounds & Haptics", 80, 330))
+
+    voted = vote_scenes([s1, s2], pos_tol=30)
+
+    by_y = {element.box.y: element.text for element in voted.elements}
+    assert by_y[300] == "Notifications"
+    assert by_y[318] == "Sounds & Haptics"
+    assert voted.ocr_vote_metadata["geometry"] == "row_relative"
+
+
+@pytest.mark.smoke
 def test_vote_scenes_does_not_claim_leading_cjk_noise_was_voted_fixed():
     s1 = _scene(_el("口 Notes", 80, 300))
     s2 = _scene(_el("日 Notes", 81, 301))

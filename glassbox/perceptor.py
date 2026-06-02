@@ -485,6 +485,8 @@ class Perceptor:
 
         def _recognize() -> list[UIElement]:
             if getattr(host.ocr, "contract", None) == "TextRegionOCR":
+                if host.ocr_tiling_config.enabled:
+                    return ocr_results_to_elements(self.recognize_tiled_regions(frame))
                 return ocr_results_to_elements(host.ocr.recognize(frame))
             return ocr_results_to_elements(host.ocr.recognize(frame.img))
 
@@ -513,6 +515,27 @@ class Perceptor:
         if error:
             raise error[0]
         return result[0] if result else []
+
+    def recognize_tiled_regions(self, frame: Frame):
+        host = self._phone
+        cfg = host.ocr_tiling_config
+        from glassbox.cognition.ocr_tiling import merge_text_regions, tile_boxes
+
+        regions = []
+        if cfg.include_full_frame:
+            regions.extend(host.ocr.recognize(frame))
+        for roi in tile_boxes(
+            int(frame.img.shape[1]),
+            int(frame.img.shape[0]),
+            rows=cfg.rows,
+            cols=cfg.cols,
+            overlap=cfg.overlap,
+        ):
+            try:
+                regions.extend(host.ocr.recognize(frame, roi=roi, native_roi=False))
+            except TypeError:
+                regions.extend(host.ocr.recognize(frame, roi=roi))
+        return merge_text_regions(regions, iou_threshold=cfg.nms_iou)
 
     def bound_ocr_elements(self, elements: list[UIElement]) -> list[UIElement]:
         host = self._phone
