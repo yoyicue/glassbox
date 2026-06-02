@@ -1,6 +1,6 @@
 .PHONY: lint test check regression-gate regression-compare ab-semantic-plan \
 	golden-harvest golden-audit \
-	computer-use-success-rate-ios-settings ipad-settings-state-machine
+	computer-use-success-rate-ios-settings ipad-settings-state-machine ipad-settings-ab-matrix
 
 # CUQ-3.3: the reliability merge gate. `make check` is device-independent (no
 # PicoKVM/HDMI rig needed) and is what CI runs on every PR so a reliability
@@ -107,3 +107,11 @@ ipad-settings-state-machine:
 		--drill-down \
 		$(IPAD_SETTINGS_ACCEPTANCE) \
 		$(IPAD_SETTINGS_EXTRA_ARGS)
+
+# Interleaved on-rig matrix for the default-off OCR/layout switches from
+# docs/goals/ocr_max_out_vision_levers.md and
+# docs/goals/ui_element_layout_segmentation.md. Override arms/rounds/locales via
+# IPAD_SETTINGS_AB_* env vars; the script writes JSONL rows with the tested
+# config switches copied from each report.
+ipad-settings-ab-matrix:
+	skills/regression/ios_settings/ab_matrix.sh

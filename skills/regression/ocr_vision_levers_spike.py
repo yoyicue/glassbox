@@ -24,7 +24,7 @@ from glassbox.cognition.base import Box, UIElement
 from glassbox.cognition.contracts import TextRegion
 from glassbox.cognition.ocr_contract import LegacyUIElementOCRAdapter
 from glassbox.cognition.ocr_tiling import merge_text_regions, tile_boxes
-from glassbox.cognition.text_match import norm_text
+from glassbox.cognition.text_match import compact_text, norm_text
 from glassbox.perception.source import Frame
 
 OcrFactory = Callable[..., Any]
@@ -50,6 +50,8 @@ class OcrVisionArmReport:
     elapsed_ms_p90: float
     elapsed_ms_total: float
     texts: dict[str, int]
+    expected_texts_found: list[str] = field(default_factory=list)
+    expected_texts_missing: list[str] = field(default_factory=list)
     regions: list[OcrRegionSummary] = field(default_factory=list)
 
 
@@ -59,9 +61,14 @@ class OcrVisionArmComparison:
     candidate: str
     recovered_texts: dict[str, int]
     lost_texts: dict[str, int]
+    expected_recovered_texts: list[str]
+    expected_lost_texts: list[str]
+    unexpected_recovered_texts: dict[str, int]
     region_delta: int
     small_region_delta: int
     elapsed_ms_total_delta: float
+    offline_decision: str
+    decision_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -89,6 +96,10 @@ def collect_ocr_vision_levers_spike(
     tiling_include_full_frame: bool = True,
     tiling_nms_iou: float = 0.55,
     small_height_ratio: float = 0.035,
+    expected_texts: Sequence[str] = (),
+    min_expected_recovered_texts: int = 1,
+    max_unexpected_recovered_texts: int | None = None,
+    max_latency_delta_ms: float | None = None,
     keep_regions: bool = True,
 ) -> OcrVisionLeversSpikeReport:
     """Run captured frames through baseline and opt-in OCR lever arms."""
@@ -104,6 +115,7 @@ def collect_ocr_vision_levers_spike(
         names,
         lambda frame: _recognize_full(factory(), frame),
         small_height_ratio=small_height_ratio,
+        expected_texts=expected_texts,
         keep_regions=keep_regions,
     )
     arms.append(baseline)
@@ -119,6 +131,7 @@ def collect_ocr_vision_levers_spike(
                     frame,
                 ),
                 small_height_ratio=small_height_ratio,
+                expected_texts=expected_texts,
                 keep_regions=keep_regions,
             )
         )
@@ -142,11 +155,22 @@ def collect_ocr_vision_levers_spike(
                     nms_iou=tiling_nms_iou,
                 ),
                 small_height_ratio=small_height_ratio,
+                expected_texts=expected_texts,
                 keep_regions=keep_regions,
             )
         )
 
-    comparisons = [_compare_arms(baseline, arm) for arm in arms[1:]]
+    comparisons = [
+        _compare_arms(
+            baseline,
+            arm,
+            expected_texts=expected_texts,
+            min_expected_recovered_texts=min_expected_recovered_texts,
+            max_unexpected_recovered_texts=max_unexpected_recovered_texts,
+            max_latency_delta_ms=max_latency_delta_ms,
+        )
+        for arm in arms[1:]
+    ]
     return OcrVisionLeversSpikeReport(
         frames=names,
         small_height_ratio=float(small_height_ratio),
@@ -186,6 +210,21 @@ def expand_frame_paths(frames: Sequence[Path], frame_dirs: Sequence[Path]) -> li
     return unique
 
 
+def load_expected_texts(paths: Sequence[Path], inline: Sequence[str]) -> list[str]:
+    expected = [item for item in (str(value).strip() for value in inline) if item]
+    for path in paths:
+        expected.extend(_read_expected_texts(path))
+    unique: list[str] = []
+    seen: set[str] = set()
+    for item in expected:
+        key = compact_text(item)
+        if not key or key in seen:
+            continue
+        unique.append(item)
+        seen.add(key)
+    return unique
+
+
 def _default_vision_factory() -> OcrFactory:
     from glassbox.cognition.ocr_vision import VisionOCR
 
@@ -199,6 +238,7 @@ def _run_arm(
     recognizer: Callable[[Frame], list[TextRegion]],
     *,
     small_height_ratio: float,
+    expected_texts: Sequence[str],
     keep_regions: bool,
 ) -> OcrVisionArmReport:
     regions: list[OcrRegionSummary] = []
@@ -232,6 +272,7 @@ def _run_arm(
                         small=small,
                     )
                 )
+    found, missing = _expected_text_result(text_counts, expected_texts)
     return OcrVisionArmReport(
         name=name,
         frame_count=len(frames),
@@ -242,6 +283,8 @@ def _run_arm(
         elapsed_ms_p90=_percentile(elapsed, 90),
         elapsed_ms_total=sum(elapsed),
         texts=dict(sorted(text_counts.items())),
+        expected_texts_found=found,
+        expected_texts_missing=missing,
         regions=regions,
     )
 
@@ -289,6 +332,11 @@ def _as_text_regions(results: Sequence[TextRegion | UIElement]) -> list[TextRegi
 def _compare_arms(
     baseline: OcrVisionArmReport,
     candidate: OcrVisionArmReport,
+    *,
+    expected_texts: Sequence[str],
+    min_expected_recovered_texts: int,
+    max_unexpected_recovered_texts: int | None,
+    max_latency_delta_ms: float | None,
 ) -> OcrVisionArmComparison:
     baseline_counts = Counter(baseline.texts)
     candidate_counts = Counter(candidate.texts)
@@ -302,15 +350,121 @@ def _compare_arms(
         for text in sorted(baseline_counts)
         if baseline_counts[text] > candidate_counts.get(text, 0)
     }
+    expected_recovered = sorted(
+        set(candidate.expected_texts_found) - set(baseline.expected_texts_found),
+        key=compact_text,
+    )
+    expected_lost = sorted(
+        set(baseline.expected_texts_found) - set(candidate.expected_texts_found),
+        key=compact_text,
+    )
+    unexpected_recovered = _unexpected_recovered_texts(recovered, expected_texts)
+    latency_delta = candidate.elapsed_ms_total - baseline.elapsed_ms_total
+    decision, reasons = _offline_decision(
+        expected_texts=expected_texts,
+        expected_recovered=expected_recovered,
+        expected_lost=expected_lost,
+        unexpected_recovered=unexpected_recovered,
+        latency_delta_ms=latency_delta,
+        min_expected_recovered_texts=min_expected_recovered_texts,
+        max_unexpected_recovered_texts=max_unexpected_recovered_texts,
+        max_latency_delta_ms=max_latency_delta_ms,
+    )
     return OcrVisionArmComparison(
         baseline=baseline.name,
         candidate=candidate.name,
         recovered_texts=recovered,
         lost_texts=lost,
+        expected_recovered_texts=expected_recovered,
+        expected_lost_texts=expected_lost,
+        unexpected_recovered_texts=unexpected_recovered,
         region_delta=candidate.region_count - baseline.region_count,
         small_region_delta=candidate.small_region_count - baseline.small_region_count,
-        elapsed_ms_total_delta=candidate.elapsed_ms_total - baseline.elapsed_ms_total,
+        elapsed_ms_total_delta=latency_delta,
+        offline_decision=decision,
+        decision_reasons=reasons,
     )
+
+
+def _expected_text_result(text_counts: Counter[str], expected_texts: Sequence[str]) -> tuple[list[str], list[str]]:
+    if not expected_texts:
+        return [], []
+    observed = {compact_text(text) for text in text_counts}
+    found: list[str] = []
+    missing: list[str] = []
+    for expected in expected_texts:
+        if compact_text(expected) in observed:
+            found.append(expected)
+        else:
+            missing.append(expected)
+    return found, missing
+
+
+def _unexpected_recovered_texts(
+    recovered: dict[str, int],
+    expected_texts: Sequence[str],
+) -> dict[str, int]:
+    expected_keys = {compact_text(text) for text in expected_texts}
+    if not expected_keys:
+        return dict(recovered)
+    return {
+        text: count
+        for text, count in recovered.items()
+        if compact_text(text) not in expected_keys
+    }
+
+
+def _offline_decision(
+    *,
+    expected_texts: Sequence[str],
+    expected_recovered: Sequence[str],
+    expected_lost: Sequence[str],
+    unexpected_recovered: dict[str, int],
+    latency_delta_ms: float,
+    min_expected_recovered_texts: int,
+    max_unexpected_recovered_texts: int | None,
+    max_latency_delta_ms: float | None,
+) -> tuple[str, list[str]]:
+    reasons: list[str] = []
+    if not expected_texts:
+        return "census_only", ["no_expected_texts"]
+    if expected_lost:
+        reasons.append("lost_expected_texts")
+    if len(expected_recovered) < max(1, int(min_expected_recovered_texts)):
+        reasons.append("insufficient_expected_recovery")
+    unexpected_count = sum(unexpected_recovered.values())
+    if max_unexpected_recovered_texts is not None and unexpected_count > max_unexpected_recovered_texts:
+        reasons.append("too_many_unexpected_recoveries")
+    if max_latency_delta_ms is not None and latency_delta_ms > max_latency_delta_ms:
+        reasons.append("latency_delta_too_high")
+    blocking = {
+        "lost_expected_texts",
+        "too_many_unexpected_recoveries",
+        "latency_delta_too_high",
+    }
+    if any(reason in blocking for reason in reasons):
+        return "reject_offline", reasons
+    if "insufficient_expected_recovery" in reasons:
+        return "no_offline_signal", reasons
+    return "promote_to_rig", ["expected_texts_recovered"]
+
+
+def _read_expected_texts(path: Path) -> list[str]:
+    raw = path.expanduser().read_text(encoding="utf-8")
+    if path.suffix.lower() == ".json":
+        payload = json.loads(raw)
+        if isinstance(payload, list):
+            return [str(item).strip() for item in payload if str(item).strip()]
+        if isinstance(payload, dict):
+            values = payload.get("expected_texts") or payload.get("texts") or []
+            if isinstance(values, list):
+                return [str(item).strip() for item in values if str(item).strip()]
+        raise ValueError(f"Expected-text JSON must be a list or object with expected_texts/texts: {path}")
+    return [
+        line.strip()
+        for line in raw.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
 
 
 def _frame_names(frames: Sequence[Frame], names: Sequence[str] | None) -> list[str]:
@@ -346,6 +500,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-tiling-full-frame", action="store_true")
     parser.add_argument("--tiling-nms-iou", type=float, default=0.55)
     parser.add_argument("--small-height-ratio", type=float, default=0.035)
+    parser.add_argument("--expect-text", action="append", default=[])
+    parser.add_argument("--expect-file", action="append", default=[], type=Path)
+    parser.add_argument("--min-expected-recovered", type=int, default=1)
+    parser.add_argument("--max-unexpected-recovered", type=int)
+    parser.add_argument("--max-latency-delta-ms", type=float)
     parser.add_argument("--no-regions", action="store_true")
     args = parser.parse_args(argv)
 
@@ -353,6 +512,7 @@ def main(argv: list[str] | None = None) -> int:
     if not paths:
         parser.error("pass at least one --frame or --frame-dir")
     frames = load_frames(paths)
+    expected_texts = load_expected_texts(args.expect_file, args.expect_text)
     report = collect_ocr_vision_levers_spike(
         frames,
         frame_names=[str(path) for path in paths],
@@ -364,6 +524,10 @@ def main(argv: list[str] | None = None) -> int:
         tiling_include_full_frame=not args.no_tiling_full_frame,
         tiling_nms_iou=args.tiling_nms_iou,
         small_height_ratio=args.small_height_ratio,
+        expected_texts=expected_texts,
+        min_expected_recovered_texts=args.min_expected_recovered,
+        max_unexpected_recovered_texts=args.max_unexpected_recovered,
+        max_latency_delta_ms=args.max_latency_delta_ms,
         keep_regions=not args.no_regions,
     )
     payload = json.dumps(report.to_dict(), ensure_ascii=False, indent=2)

@@ -8,6 +8,7 @@ from glassbox.cognition import Box, UIElement
 from glassbox.perception.source import Frame
 from skills.regression.ocr_vision_levers_spike import (
     collect_ocr_vision_levers_spike,
+    load_expected_texts,
 )
 
 
@@ -58,13 +59,22 @@ def test_ocr_vision_levers_spike_reports_minheight_recovery_and_json_payload():
         frame_names=["settings_dense.png"],
         ocr_factory=_factory,
         include_tiling_arm=False,
+        expected_texts=["WLAN", "Tiny"],
     )
 
     assert [arm.name for arm in report.arms] == ["baseline", "minimum_text_height=0"]
     comparison = report.comparisons[0]
     assert comparison.recovered_texts == {"Tiny": 1}
     assert comparison.lost_texts == {}
+    assert comparison.expected_recovered_texts == ["Tiny"]
+    assert comparison.expected_lost_texts == []
+    assert comparison.unexpected_recovered_texts == {}
+    assert comparison.offline_decision == "promote_to_rig"
+    assert comparison.decision_reasons == ["expected_texts_recovered"]
     assert comparison.small_region_delta == 1
+    assert report.arms[0].expected_texts_found == ["WLAN"]
+    assert report.arms[0].expected_texts_missing == ["Tiny"]
+    assert report.arms[1].expected_texts_found == ["WLAN", "Tiny"]
     assert report.arms[0].texts == {"WLAN": 1}
     assert report.arms[1].texts == {"Tiny": 1, "WLAN": 1}
     assert json.loads(json.dumps(report.to_dict()))["frames"] == ["settings_dense.png"]
@@ -82,6 +92,8 @@ def test_ocr_vision_levers_spike_reports_tiling_recovery():
         tiling_cols=2,
         tiling_overlap=0.0,
         tiling_include_full_frame=False,
+        expected_texts=["Tile"],
+        max_unexpected_recovered_texts=0,
     )
 
     assert [arm.name for arm in report.arms] == [
@@ -91,4 +103,19 @@ def test_ocr_vision_levers_spike_reports_tiling_recovery():
     comparison = report.comparisons[0]
     assert comparison.recovered_texts["Tile"] == 4
     assert comparison.recovered_texts["Tiny"] == 4
+    assert comparison.expected_recovered_texts == ["Tile"]
+    assert comparison.unexpected_recovered_texts["Tiny"] == 4
+    assert comparison.offline_decision == "reject_offline"
+    assert "too_many_unexpected_recoveries" in comparison.decision_reasons
     assert comparison.region_delta == 11
+
+
+def test_ocr_vision_levers_spike_loads_expected_text_files(tmp_path):
+    text_file = tmp_path / "expected.txt"
+    text_file.write_text("# comment\nWLAN\nTiny\n", encoding="utf-8")
+    json_file = tmp_path / "expected.json"
+    json_file.write_text(json.dumps({"expected_texts": ["Tiny", "Tile"]}), encoding="utf-8")
+
+    expected = load_expected_texts([text_file, json_file], ["WLAN"])
+
+    assert expected == ["WLAN", "Tiny", "Tile"]

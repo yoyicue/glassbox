@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -67,7 +69,25 @@ def _write_good_report(tmp_path):
                 "run_id": "run-1",
                 "locale": "en-HK",
                 "visit_count": 3,
-                "config": {"memory_dir": str(memory_dir)},
+                "config": {
+                    "memory_dir": str(memory_dir),
+                    "phone_model": "ipad_mini_7",
+                    "platform": "ipados",
+                    "language": "en",
+                    "region": "HK",
+                    "ocr": "vision",
+                    "text_detector": "vision",
+                    "en_ocr_correction": False,
+                    "ocr_minimum_text_height": 0.0,
+                    "ocr_tiling_enabled": True,
+                    "ocr_tiling_rows": 2,
+                    "ocr_tiling_cols": 2,
+                    "ocr_tiling_overlap": 0.15,
+                    "ocr_tiling_include_full_frame": True,
+                    "ocr_tiling_nms_iou": 0.55,
+                    "ui_layout_segmentation_enabled": True,
+                    "detect_icons_in_perceive": False,
+                },
                 "metrics": {
                     "exception_hit": False,
                     "navigation_success_proxy_rate": 1.0,
@@ -122,6 +142,22 @@ def test_ab_extract_emits_one_complete_line_for_good_report(tmp_path, capsys):
     assert row["root_sigs"] == 1
     assert row["root_to_detail"] == 1
     assert row["detail_to_root"] == 1
+    assert row["cfg_phone_model"] == "ipad_mini_7"
+    assert row["cfg_platform"] == "ipados"
+    assert row["cfg_language"] == "en"
+    assert row["cfg_region"] == "HK"
+    assert row["cfg_ocr"] == "vision"
+    assert row["cfg_text_detector"] == "vision"
+    assert row["cfg_en_ocr_correction"] is False
+    assert row["cfg_ocr_minimum_text_height"] == 0.0
+    assert row["cfg_ocr_tiling_enabled"] is True
+    assert row["cfg_ocr_tiling_rows"] == 2
+    assert row["cfg_ocr_tiling_cols"] == 2
+    assert row["cfg_ocr_tiling_overlap"] == 0.15
+    assert row["cfg_ocr_tiling_include_full_frame"] is True
+    assert row["cfg_ocr_tiling_nms_iou"] == 0.55
+    assert row["cfg_ui_layout_segmentation_enabled"] is True
+    assert row["cfg_detect_icons_in_perceive"] is False
 
 
 @pytest.mark.smoke
@@ -149,3 +185,12 @@ def test_ab_extract_emits_one_error_line_for_truncated_json(tmp_path, capsys):
     assert row["round"] == 3
     assert row["locale"] == "en-HK"
     assert row["extraction_error"] == "json_decode_error"
+
+
+@pytest.mark.smoke
+def test_ab_matrix_shell_syntax_is_valid():
+    script = Path("skills/regression/ios_settings/ab_matrix.sh")
+
+    result = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, result.stderr

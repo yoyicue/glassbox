@@ -680,6 +680,40 @@ def test_ios_settings_report_verifier_requires_full_config_schema():
 
 
 @pytest.mark.smoke
+def test_ios_settings_report_verifier_checks_optional_ab_switch_config_types():
+    report = _report()
+    report["config"].update(
+        {
+            "language": 123,
+            "region": 456,
+            "ocr": False,
+            "text_detector": None,
+            "en_ocr_correction": "0",
+            "ocr_minimum_text_height": "0",
+            "ocr_unsharp_mask": "1",
+            "ocr_tiling_enabled": "1",
+            "ocr_tiling_rows": True,
+            "ocr_tiling_overlap": "0.15",
+            "ui_layout_segmentation_enabled": "1",
+        }
+    )
+
+    errors = validate_report(report)
+
+    assert any("config.language must be a string" in error for error in errors)
+    assert any("config.region must be null or string" in error for error in errors)
+    assert any("config.ocr must be a string" in error for error in errors)
+    assert any("config.text_detector must be a string" in error for error in errors)
+    assert any("config.en_ocr_correction must be a boolean" in error for error in errors)
+    assert any("config.ocr_minimum_text_height must be null or number" in error for error in errors)
+    assert any("config.ocr_unsharp_mask must be null or boolean" in error for error in errors)
+    assert any("config.ocr_tiling_enabled must be a boolean" in error for error in errors)
+    assert any("config.ocr_tiling_rows must be an integer" in error for error in errors)
+    assert any("config.ocr_tiling_overlap must be a number" in error for error in errors)
+    assert any("config.ui_layout_segmentation_enabled must be a boolean" in error for error in errors)
+
+
+@pytest.mark.smoke
 def test_ios_settings_report_verifier_requires_root_coverage_shape_in_strict_mode():
     report = _report()
     report["config"]["root_coverage_mode"] = False

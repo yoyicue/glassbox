@@ -108,6 +108,24 @@ CONFIG_BOOL_KEYS = frozenset({
 })
 CONFIG_OPTIONAL_STRING_KEYS = frozenset({"artifact_dir", "memory_dir"})
 CONFIG_DEVICE_STRING_KEYS = frozenset({"phone_model", "platform"})
+CONFIG_EXPERIMENT_STRING_KEYS = frozenset({"language", "ocr", "text_detector"})
+CONFIG_EXPERIMENT_OPTIONAL_STRING_KEYS = frozenset({"region"})
+CONFIG_EXPERIMENT_BOOL_KEYS = frozenset({
+    "detect_icons_in_perceive",
+    "en_ocr_correction",
+    "ocr_tiling_enabled",
+    "ocr_tiling_include_full_frame",
+    "ui_layout_segmentation_enabled",
+})
+CONFIG_EXPERIMENT_OPTIONAL_BOOL_KEYS = frozenset({"ocr_unsharp_mask"})
+CONFIG_EXPERIMENT_INT_KEYS = frozenset({"ocr_tiling_rows", "ocr_tiling_cols"})
+CONFIG_EXPERIMENT_FLOAT_KEYS = frozenset({"ocr_tiling_overlap", "ocr_tiling_nms_iou"})
+CONFIG_EXPERIMENT_OPTIONAL_FLOAT_KEYS = frozenset({
+    "ocr_confidence_threshold",
+    "ocr_minimum_text_height",
+    "ocr_unsharp_amount",
+    "ocr_unsharp_sigma",
+})
 
 
 
@@ -526,6 +544,32 @@ def _validate_config_schema(config: dict[str, Any], *, errors: list[str]) -> Non
     for key in sorted(CONFIG_DEVICE_STRING_KEYS):
         if key in config and not isinstance(config.get(key), str):
             errors.append(f"config.{key} must be a string")
+    for key in sorted(CONFIG_EXPERIMENT_STRING_KEYS):
+        if key in config and not isinstance(config.get(key), str):
+            errors.append(f"config.{key} must be a string")
+    for key in sorted(CONFIG_EXPERIMENT_OPTIONAL_STRING_KEYS):
+        value = config.get(key)
+        if value is not None and not isinstance(value, str):
+            errors.append(f"config.{key} must be null or string")
+    for key in sorted(CONFIG_EXPERIMENT_BOOL_KEYS):
+        if key in config and not isinstance(config.get(key), bool):
+            errors.append(f"config.{key} must be a boolean")
+    for key in sorted(CONFIG_EXPERIMENT_OPTIONAL_BOOL_KEYS):
+        value = config.get(key)
+        if value is not None and not isinstance(value, bool):
+            errors.append(f"config.{key} must be null or boolean")
+    for key in sorted(CONFIG_EXPERIMENT_INT_KEYS):
+        value = config.get(key)
+        if key in config and (not isinstance(value, int) or isinstance(value, bool)):
+            errors.append(f"config.{key} must be an integer")
+    for key in sorted(CONFIG_EXPERIMENT_FLOAT_KEYS):
+        value = config.get(key)
+        if key in config and (not isinstance(value, (int, float)) or isinstance(value, bool)):
+            errors.append(f"config.{key} must be a number")
+    for key in sorted(CONFIG_EXPERIMENT_OPTIONAL_FLOAT_KEYS):
+        value = config.get(key)
+        if value is not None and (not isinstance(value, (int, float)) or isinstance(value, bool)):
+            errors.append(f"config.{key} must be null or number")
 
 
 def _optional_config_str(value: Any) -> str | None:

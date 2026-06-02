@@ -162,7 +162,7 @@ def add_trace_metrics(metrics: dict[str, object], trace_payload: dict[str, Any])
     settings_reporting.add_trace_metrics(metrics, trace_payload)
 
 
-def _active_device_report_config() -> dict[str, str]:
+def _active_device_report_config() -> dict[str, object]:
     from glassbox.config import get_config
     from glassbox.platforms import select_platform_backend
 
@@ -170,6 +170,24 @@ def _active_device_report_config() -> dict[str, str]:
     return {
         "phone_model": str(getattr(cfg, "phone_model", "") or ""),
         "platform": select_platform_backend(cfg),
+        "language": str(getattr(cfg, "language", "") or ""),
+        "region": getattr(cfg, "region", None),
+        "ocr": str(getattr(cfg, "ocr", "") or ""),
+        "text_detector": str(getattr(cfg, "text_detector", "") or ""),
+        "en_ocr_correction": bool(getattr(cfg, "en_ocr_correction", False)),
+        "ocr_minimum_text_height": getattr(cfg, "ocr_minimum_text_height", None),
+        "ocr_confidence_threshold": getattr(cfg, "ocr_confidence_threshold", None),
+        "ocr_unsharp_mask": getattr(cfg, "ocr_unsharp_mask", None),
+        "ocr_unsharp_sigma": getattr(cfg, "ocr_unsharp_sigma", None),
+        "ocr_unsharp_amount": getattr(cfg, "ocr_unsharp_amount", None),
+        "ocr_tiling_enabled": bool(getattr(cfg, "ocr_tiling_enabled", False)),
+        "ocr_tiling_rows": int(getattr(cfg, "ocr_tiling_rows", 0)),
+        "ocr_tiling_cols": int(getattr(cfg, "ocr_tiling_cols", 0)),
+        "ocr_tiling_overlap": float(getattr(cfg, "ocr_tiling_overlap", 0.0)),
+        "ocr_tiling_include_full_frame": bool(getattr(cfg, "ocr_tiling_include_full_frame", False)),
+        "ocr_tiling_nms_iou": float(getattr(cfg, "ocr_tiling_nms_iou", 0.0)),
+        "ui_layout_segmentation_enabled": bool(getattr(cfg, "ui_layout_segmentation_enabled", False)),
+        "detect_icons_in_perceive": bool(getattr(cfg, "detect_icons_in_perceive", False)),
     }
 
 
