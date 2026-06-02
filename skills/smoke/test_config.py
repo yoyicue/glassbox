@@ -54,7 +54,7 @@ def test_defaults():
     assert cfg.ocr_tiling_overlap == 0.15
     assert cfg.ocr_tiling_include_full_frame is True
     assert cfg.ocr_tiling_nms_iou == 0.55
-    assert cfg.ui_layout_segmentation_enabled is False
+    assert cfg.ui_layout_segmentation_enabled is True
 
 
 @pytest.mark.smoke
@@ -133,6 +133,15 @@ def test_env_override_bool(monkeypatch):
     assert cfg.ocr_tiling_enabled is True
     assert cfg.ocr_tiling_include_full_frame is False
     assert cfg.ui_layout_segmentation_enabled is True
+
+
+@pytest.mark.smoke
+def test_ui_layout_segmentation_env_can_disable_default_on(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED", "false")
+
+    cfg = AgentConfig(_env_file=None)
+
+    assert cfg.ui_layout_segmentation_enabled is False
 
 
 @pytest.mark.smoke

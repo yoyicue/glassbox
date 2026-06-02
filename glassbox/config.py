@@ -362,16 +362,14 @@ class AgentConfig(BaseSettings):
     perceive and changes the candidate set); validate on-rig before enabling.
     Scene classification is unaffected (icons are injected after classifiers)."""
 
-    ui_layout_segmentation_enabled: bool = False
-    """CUQ-UI-LAYOUT: EXPERIMENTAL, default OFF. When enabled, perceive() builds
+    ui_layout_segmentation_enabled: bool = True
+    """CUQ-UI-LAYOUT: default ON. perceive() builds
     a geometric Tier-A element graph from OCR text plus icon regions: reading
     order is normalized, icon+label affordances are grouped into one tappable
     element, and icon-only controls are promoted to typed tap targets. No VLM
-    captioning is invoked. Enabling this implicitly runs the no-text icon
-    detector even when GLASSBOX_DETECT_ICONS_IN_PERCEIVE is off, because icon
-    regions are the grouping input. Promote only after on-rig iPhone+iPad A/B
-    shows grounding improvement at acceptable latency. Env
-    GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED."""
+    captioning is invoked. This implicitly runs the no-text icon detector even
+    when GLASSBOX_DETECT_ICONS_IN_PERCEIVE is off, because icon regions are the
+    grouping input. Set GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED=0 to disable."""
 
     ios_closed_set_canonicalization_enabled: bool = True
     """CUQ-OCR-POSTPROCESS: keep iOS/iPadOS closed-set Home/Settings

@@ -463,9 +463,9 @@ class Phone:
         # CUQ-2.1: inject no-text icon regions into perceive() so icon-only
         # controls become tap candidates. Flag-gated (default off).
         self._detect_icons_in_perceive = bool(feature_flags.detect_icons_in_perceive)
-        # CUQ-UI-LAYOUT: default-off Tier-A geometric UI graph builder. When
-        # enabled it also needs icon regions, so perceptor lets it trigger icon
-        # detection even if the older icon-only flag is off.
+        # CUQ-UI-LAYOUT: default-on Tier-A geometric UI graph builder. It needs
+        # icon regions, so perceptor lets it trigger icon detection even if the
+        # older icon-only flag is off.
         self._ui_layout_segmentation = bool(feature_flags.ui_layout_segmentation)
         self._ios_closed_set_canonicalization = bool(feature_flags.ios_closed_set_canonicalization)
         # Live-camera OCR hardening: cap OCR output volume (default-on, generous

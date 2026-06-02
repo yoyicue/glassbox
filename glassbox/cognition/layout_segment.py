@@ -1,4 +1,4 @@
-"""Default-off UI layout segmentation helpers.
+"""UI layout segmentation helpers.
 
 This module builds a lightweight, geometric element graph from the existing
 OCR text elements plus optional icon detections. It deliberately avoids model
@@ -36,7 +36,8 @@ def segment_layout(
     """Group icon/text affordances and rewrite element ids into reading order.
 
     The function mutates and returns ``scene`` to match the rest of the
-    perception pipeline. It is only called behind a default-off runtime flag.
+    perception pipeline. The runtime may still disable it via config/env for
+    rollback.
     """
     elements = list(scene.elements)
     if not elements:

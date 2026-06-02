@@ -61,13 +61,34 @@ class ElementSelector:
         return host.last_scene
 
     def find_text(self, target: str, *, fuzzy_ratio: float = 0.8) -> UIElement | None:
+        element, _source = self._find_text_or_intent(target, fuzzy_ratio=fuzzy_ratio)
+        return element
+
+    def _find_text_or_intent(
+        self,
+        target: str,
+        *,
+        fuzzy_ratio: float = 0.8,
+    ) -> tuple[UIElement | None, str | None]:
         scene = self._phone.perceive()
-        return find_text(
-            self.rows_before_nav_title(scene.elements),
+        elements = self.rows_before_nav_title(scene.elements)
+        hit = find_text(
+            elements,
             target,
             fuzzy_ratio=fuzzy_ratio,
             ambiguity_guard=self._phone.strict_target_matching_enabled,
         )
+        if hit is not None:
+            return hit, "ocr"
+        hit = find_by_intent(
+            elements,
+            target,
+            fuzzy_ratio=fuzzy_ratio,
+            ambiguity_guard=self._phone.strict_target_matching_enabled,
+        )
+        if hit is not None:
+            return hit, hit.intent_source or "intent"
+        return None, None
 
     def vlm_reground_selection(self, target: str, *, fuzzy_ratio: float) -> UIElement | None:
         host = self._phone
@@ -149,9 +170,9 @@ class ElementSelector:
         deadline = time.monotonic() + timeout
         last_seen_texts: list[str] = []
         while time.monotonic() < deadline:
-            element = self.find_text(target, fuzzy_ratio=fuzzy_ratio)
+            element, selection_source = self._find_text_or_intent(target, fuzzy_ratio=fuzzy_ratio)
             if element is not None:
-                host.set_last_selection_source("ocr")
+                host.set_last_selection_source(selection_source or "ocr")
                 if host.recorder is not None:
                     host.recorder.verdict(f"expect_text({target!r})", passed=True)
                 return element

@@ -180,6 +180,9 @@ def _looks_like_today_widget_surface(
     viewport_size: tuple[int, int] | None,
 ) -> bool:
     """Return True for iPad Today/widget pages that are Home but not icon pages."""
+    w, h = _scene_size(scene, viewport_size)
+    if _looks_like_ipad_home_widget_page(scene, viewport_size=(w, h)):
+        return False
     texts = [_text(el) for el in scene.elements if _text(el)]
     if any(text in {"SUGGESTED", "Suggested"} for text in texts):
         return True

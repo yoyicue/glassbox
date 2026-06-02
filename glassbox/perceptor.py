@@ -128,10 +128,13 @@ class Perceptor:
         if not bool(getattr(self._phone, "ios_closed_set_canonicalization_enabled", True)):
             return
         if platform not in {"ios", "ipados"} and not (
-            scene_kind.startswith("springboard") or scene_kind.startswith("settings")
+            scene_kind.startswith("springboard")
+            or scene_kind.startswith("settings")
+            or "appstore_chrome" in set(scene.classification_evidence or ())
         ):
             return
         try:
+            from glassbox.ios.app_store import annotate_app_store_search_intents
             from glassbox.ios.settings_rows import annotate_settings_root_row_intents
             from glassbox.ios.springboard import annotate_springboard_icon_intents
         except Exception:
@@ -143,6 +146,7 @@ class Perceptor:
             aliases=getattr(self._phone, "settings_root_label_aliases", None),
             fuzzy_aliases=bool(getattr(self._phone, "settings_root_fuzzy_aliases", False)),
         )
+        annotate_app_store_search_intents(scene, viewport_size=viewport_size)
 
     def classify_platform_scene_now(
         self,
