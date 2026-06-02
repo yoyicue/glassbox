@@ -42,7 +42,8 @@ if [ "$#" -ne 0 ]; then
   exit 2
 fi
 
-cd /Users/biu/glassbox || exit 2
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || exit 2
+cd "$SCRIPT_DIR/../../.." || exit 2
 
 AB=${IPAD_SETTINGS_AB_DIR:-artifacts/ios_settings/ab}
 LOCK="$AB/.matrix.lock"
