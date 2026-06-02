@@ -51,6 +51,24 @@ class SceneClassification:
 
 
 @dataclass(frozen=True)
+class SceneClassificationPrior:
+    """Belief-state hint supplied before scene classification.
+
+    This is intentionally a thin cognition contract rather than a memory object:
+    classifiers may use it to break ties, but they cannot mutate the UTG.
+    """
+
+    screen_id: str | None = None
+    page_id: str | None = None
+    scene_type: str | None = None
+    semantic_scene_type: str | None = None
+    platform_scene_kind: str | None = None
+    last_action_op: str | None = None
+    last_action_target: str | None = None
+    last_action_via: str | None = None
+
+
+@dataclass(frozen=True)
 class VLMRequest:
     CONTRACT_VERSION: ClassVar[int] = COGNITION_CONTRACT_VERSION
 

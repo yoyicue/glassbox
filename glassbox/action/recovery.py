@@ -31,6 +31,89 @@ def _recovery_guard(phone: object):
             _RECOVERY_GUARD_BY_ID.pop(key, None)
 
 
+@dataclass(frozen=True)
+class NavigationMeasurementOrigin:
+    """Verified task-entry anchor for measuring navigation from Home."""
+
+    attempted: bool
+    home_reached: bool
+    reason: str
+    action_ok: bool | None = None
+    semantic_status: str | None = None
+    semantic_verifier: str | None = None
+    error: str | None = None
+
+    @property
+    def can_start_clock(self) -> bool:
+        return self.attempted and self.home_reached
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "attempted": self.attempted,
+            "home_reached": self.home_reached,
+            "can_start_clock": self.can_start_clock,
+            "reason": self.reason,
+            "action_ok": self.action_ok,
+            "semantic_status": self.semantic_status,
+            "semantic_verifier": self.semantic_verifier,
+            "error": self.error,
+        }
+
+
+def prepare_navigation_measurement_origin(phone: object) -> NavigationMeasurementOrigin:
+    """Reset to Home and verify it before a navigation metric starts.
+
+    This is the harness/navigation-task entry discipline from
+    `docs/goals/computer_use_world_model_spine.md`: a failed or unverified Home
+    reset is its own precondition failure, never part of the measured `Home→X`
+    trajectory.
+    """
+    home = getattr(phone, "home", None)
+    if not callable(home):
+        return NavigationMeasurementOrigin(
+            attempted=False,
+            home_reached=False,
+            reason="home_unavailable",
+        )
+    with _recovery_guard(phone):
+        try:
+            result = home()
+        except Exception as exc:
+            return NavigationMeasurementOrigin(
+                attempted=True,
+                home_reached=False,
+                reason="home_exception",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+    action_ok = bool(getattr(result, "ok", False))
+    semantic_status = getattr(result, "semantic_status", None)
+    semantic_verifier = getattr(result, "semantic_verifier", None)
+    if action_ok and semantic_status == "succeeded":
+        return NavigationMeasurementOrigin(
+            attempted=True,
+            home_reached=True,
+            reason="verified_home_reached",
+            action_ok=action_ok,
+            semantic_status=semantic_status,
+            semantic_verifier=semantic_verifier,
+        )
+    if not action_ok:
+        reason = "home_action_failed"
+    elif semantic_status is None:
+        reason = "home_unverified"
+    else:
+        reason = f"home_semantic_{semantic_status}"
+    return NavigationMeasurementOrigin(
+        attempted=True,
+        home_reached=False,
+        reason=reason,
+        action_ok=action_ok,
+        semantic_status=semantic_status,
+        semantic_verifier=semantic_verifier,
+        error=getattr(result, "error", None),
+    )
+
+
 def recover_to_home_then_renavigate(phone: object, reason: str, payload: dict[str, Any]) -> bool:
     """Default universal recovery hook (invariant #4 / P3).
 

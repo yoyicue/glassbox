@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import threading
 import time
 from dataclasses import replace
@@ -15,6 +16,7 @@ from glassbox.cognition import (
     Box,
     Scene,
     SceneClassification,
+    SceneClassificationPrior,
     UIElement,
 )
 from glassbox.cognition.coldstart import apply_annotation_to_scene
@@ -103,19 +105,90 @@ class Perceptor:
             return False
         return action.params.get("action_synthetic") is not True
 
+    def scene_classification_prior(
+        self,
+        scene: Scene,
+        frame_img: np.ndarray | None,
+    ) -> SceneClassificationPrior | None:
+        host = self._phone
+        context = self._context
+        actions = [
+            action for action in context.pending_actions_for_memory
+            if self.memory_action_candidate(action)
+        ]
+        last_action = actions[0] if len(actions) == 1 else None
+        node = None
+        memory = getattr(host, "memory", None)
+        recognize = getattr(memory, "recognize", None) if memory is not None else None
+        if callable(recognize):
+            try:
+                node = recognize(scene, frame_img)
+            except Exception as exc:
+                logger.warning(f"screen-memory prior recognition failed: {exc}")
+        if node is None and last_action is None:
+            return None
+        return SceneClassificationPrior(
+            screen_id=getattr(node, "screen_id", None),
+            page_id=getattr(node, "page_id", None),
+            scene_type=getattr(node, "scene_type", None),
+            semantic_scene_type=getattr(node, "semantic_scene_type", None),
+            platform_scene_kind=getattr(node, "platform_scene_kind", None),
+            last_action_op=getattr(last_action, "op", None),
+            last_action_target=getattr(last_action, "target", None),
+            last_action_via=getattr(last_action, "via", None),
+        )
+
     def apply_scene_classifiers(self, scene: Scene, frame_img: np.ndarray | None) -> None:
         host = self._phone
         viewport_size = None
         if frame_img is not None and getattr(frame_img, "ndim", 0) >= 2:
             viewport_size = (int(frame_img.shape[1]), int(frame_img.shape[0]))
+        prior = self.scene_classification_prior(scene, frame_img)
         if host.scene_classifiers:
             classifications: list[SceneClassification] = []
             for classify in host.scene_classifiers:
-                result = classify(scene, viewport_size)
+                result = self.call_scene_classifier(
+                    classify,
+                    scene,
+                    viewport_size=viewport_size,
+                    prior=prior,
+                )
                 if result is not None:
                     classifications.append(result)
             DEFAULT_SCENE_CLASSIFICATION_PROJECTOR.project(scene, classifications)
         self.apply_scene_annotations(scene, viewport_size=viewport_size)
+
+    @staticmethod
+    def call_scene_classifier(
+        classify,
+        scene: Scene,
+        *,
+        viewport_size: tuple[int, int] | None,
+        prior: SceneClassificationPrior | None,
+    ) -> SceneClassification | None:
+        try:
+            signature = inspect.signature(classify)
+        except (TypeError, ValueError):
+            return classify(scene, viewport_size)
+        params = signature.parameters
+        accepts_varkw = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in params.values())
+        accepts_prior = accepts_varkw or "prior" in params
+        viewport = params.get("viewport_size")
+        accepts_viewport_kw = accepts_varkw or (
+            viewport is not None
+            and viewport.kind
+            in {
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            }
+        )
+        if accepts_prior:
+            if accepts_viewport_kw:
+                return classify(scene, viewport_size=viewport_size, prior=prior)
+            return classify(scene, viewport_size, prior=prior)
+        if accepts_viewport_kw:
+            return classify(scene, viewport_size=viewport_size)
+        return classify(scene, viewport_size)
 
     def apply_scene_annotations(
         self,
