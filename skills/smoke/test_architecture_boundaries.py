@@ -45,6 +45,7 @@ from glassbox.cognition import (
     VLMRequest,
     VLMResult,
     VLMStageOutcome,
+    select_text_detector_backend,
 )
 from glassbox.cognition.ocr_contract import LegacyUIElementOCRAdapter
 from glassbox.crawl_policies import (
@@ -204,6 +205,12 @@ def test_phone_legacy_constructor_flags_still_work_with_bucket_api():
     assert phone.perceive_cache_diff == 0.2
     assert phone.max_ocr_elements == 3
     assert phone.strict_target_matching_enabled is True
+
+
+def test_text_detector_selector_is_vision_only_until_conditional_goal_triggers():
+    from glassbox.config import AgentConfig
+
+    assert select_text_detector_backend(AgentConfig(_env_file=None)) == "vision"
 
 
 def test_boundary_contract_types_expose_stable_versions():

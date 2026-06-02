@@ -28,6 +28,7 @@ def test_defaults():
     assert cfg.effector_crop_retries == 3
     assert cfg.phone_model == "iphone_17_pro_max"
     assert cfg.ocr == "vision"
+    assert cfg.text_detector == "vision"
     assert cfg.crawl_policy == "generic"
     assert cfg.enable_vlm is None
     assert cfg.enable_kimi is False
@@ -64,6 +65,7 @@ def test_env_override_int(monkeypatch):
     monkeypatch.setenv("GLASSBOX_ENABLE_VLM", "1")
     monkeypatch.setenv("GLASSBOX_VLM_CACHE_DIR", "/tmp/vlm-cache")
     monkeypatch.setenv("GLASSBOX_CRAWL_POLICY", "ios_settings")
+    monkeypatch.setenv("GLASSBOX_TEXT_DETECTOR", "vision")
     monkeypatch.setenv("GLASSBOX_APP_VIEWPORT_BBOX", "10,20,300,600")
     monkeypatch.setenv("GLASSBOX_APP_VIEWPORT_MODE", "iphone_compat")
     monkeypatch.setenv("GLASSBOX_DEFAULT_OBSERVATION_SCOPE", "app")
@@ -86,6 +88,7 @@ def test_env_override_int(monkeypatch):
     assert cfg.enable_vlm is True
     assert cfg.vlm_cache_dir == "/tmp/vlm-cache"
     assert cfg.crawl_policy == "ios_settings"
+    assert cfg.text_detector == "vision"
     assert cfg.app_viewport_bbox == (10, 20, 300, 600)
     assert cfg.app_viewport_mode == "iphone_compat"
     assert cfg.default_observation_scope == "app"
@@ -149,6 +152,14 @@ def test_invalid_ocr_config_is_rejected():
 
     with pytest.raises(ValidationError):
         AgentConfig(_env_file=None, ocr="paddle")
+
+
+@pytest.mark.smoke
+def test_untriggered_text_detector_backends_are_rejected():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        AgentConfig(_env_file=None, text_detector="dbnet")
 
 
 @pytest.mark.smoke

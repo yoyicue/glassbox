@@ -167,6 +167,13 @@ class AgentConfig(BaseSettings):
     ocr: Literal["vision", "ocrmac"] = "vision"
     """OCR engine: vision = direct PyObjC call (default) / ocrmac = legacy fallback path."""
 
+    text_detector: Literal["vision"] = "vision"
+    """CUQ-TEXT-DETECTOR: conditional text-detection seam selector. Only
+    ``vision`` is accepted until docs/goals/text_detector_dbnet_craft.md's
+    on-rig trigger fires; DBNet/CRAFT must not enter the default install or
+    runtime path before Vision knobs/tiling prove insufficient. Env
+    GLASSBOX_TEXT_DETECTOR."""
+
     en_ocr_correction: bool = False
     """CUQ-OCR-EN: EXPERIMENTAL, rig-gated, default OFF (vision backend only — a
     no-op on ocr=ocrmac, whose AppleVisionOCR has no correction knobs). When set,
