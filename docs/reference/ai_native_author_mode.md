@@ -58,6 +58,46 @@ common ones.
    `phone.save_path_as(...)`, and convert that path back into deterministic
    `goto` / `expect_visible` steps.
 
+## Where Tests Go: smoke vs regression
+
+`skills/smoke/` is the offline unit/contract suite (`make test` → `pytest
+skills/smoke -q`); it runs in CI on every PR with no rig. `skills/regression/`
+is the on-rig measurement harness, its committed baselines, and the few
+acceptance tests that drive a real device. Decide top-down — first match wins:
+
+1. Needs a real rig (PicoKVM/HDMI, a physical iPad/iPhone)? → `regression`.
+   This is the hard line: `crawler.crawl_readonly_settings(...,
+   require_real_effector=True)` raises `SettingsCrawlerUnavailable` when
+   `phone.has_real_effector()` is false.
+2. Needs a live device or network to run at all? → `regression`.
+3. A runnable harness, collection script, or CLI that validates rig artifacts
+   (has `main()` / argparse)? → `regression` (e.g. `run_full.py`,
+   `canonical_primitives.py`, `computer_use_success_rate.py`,
+   `state_machine_acceptance.py`).
+4. Produces or compares a reliability baseline? → the artifact goes in
+   `skills/regression/fixtures/` (e.g. `reliability_baseline.json`); the
+   measurement code stays in `regression`.
+5. Otherwise — asserts offline with `mock_phone` + a static fixture, marks
+   `@pytest.mark.smoke`, finishes inside `make test`? → `skills/smoke`.
+
+Harness code and its unit test live apart: the harness goes in `regression`,
+its fast offline test goes in `smoke`. Adding a Settings-crawler feature means
+code in `skills/regression/ios_settings/` plus a mocked test in
+`skills/smoke/test_ios_settings_crawler.py` (it monkeypatches `_run_core_crawl`
+and passes `require_real_effector=False`). A smoke test importing regression
+harness code to exercise it offline is the normal, one-way dependency.
+
+Signals: the `phone` / `_frame_source` fixtures `pytest.skip` on
+`RuntimeUnavailable`, so any test depending on them is rig-bound — think
+`regression`. `@pytest.mark.smoke` marks the offline suite; `@pytest.mark.regression`
+marks an on-rig acceptance test (e.g. `test_readonly_walkthrough.py`). Naming
+trap: `make regression-gate` runs only the *offline* half (baseline `validate`
+plus the `test_computer_use_regression_gate.py` smoke test) and is part of `make
+check`. The real on-rig suite runs via direct CLI (`run_full`) or the
+`rig-nightly.yml` workflow; `make regression-compare` is **not** a device run —
+it's the JSON-to-JSON gate that fails on a success-rate regression once a real
+run has produced a candidate benchmark.
+
 ## Defaults
 
 Prefer:
