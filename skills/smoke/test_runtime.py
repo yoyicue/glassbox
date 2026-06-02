@@ -700,7 +700,7 @@ def test_ocr_tiling_opt_in_recovers_tile_only_text_regions_on_iphone_and_ipad(
 
 
 @pytest.mark.smoke
-def test_ui_layout_segmentation_is_default_off_and_does_not_run_icon_detector(monkeypatch):
+def test_ui_layout_segmentation_can_be_disabled_and_does_not_run_icon_detector(monkeypatch):
     calls = 0
 
     def fake_detect_icons(*_args, **_kwargs):
@@ -711,7 +711,7 @@ def test_ui_layout_segmentation_is_default_off_and_does_not_run_icon_detector(mo
     monkeypatch.setattr("glassbox.cognition.icon_detect.detect_icons", fake_detect_icons)
     runtime = build_phone(
         source=FakeSource(),
-        cfg=AgentConfig(_env_file=None),
+        cfg=AgentConfig(_env_file=None, ui_layout_segmentation_enabled=False),
         ocr=LayoutRowOCR(),
         effector=FakeEffector(),
     )
@@ -730,7 +730,7 @@ def test_ui_layout_segmentation_is_default_off_and_does_not_run_icon_detector(mo
         (FakeIPadSource, "ipad_mini_7"),
     ],
 )
-def test_ui_layout_segmentation_opt_in_groups_icon_labels_on_iphone_and_ipad(
+def test_ui_layout_segmentation_default_groups_icon_labels_on_iphone_and_ipad(
     monkeypatch,
     source_cls,
     phone_model,
@@ -752,7 +752,6 @@ def test_ui_layout_segmentation_opt_in_groups_icon_labels_on_iphone_and_ipad(
         cfg=AgentConfig(
             _env_file=None,
             phone_model=phone_model,
-            ui_layout_segmentation_enabled=True,
         ),
         ocr=LayoutRowOCR(),
         effector=FakeEffector(),

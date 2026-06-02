@@ -1,4 +1,4 @@
-"""Offline A/B helper for the default-off UI layout segmentation seam.
+"""Offline A/B helper for the UI layout segmentation seam.
 
 This is a pre-rig screen: it compares a captured Scene against the same Scene
 after icon injection + layout segmentation. It does not prove task success; it

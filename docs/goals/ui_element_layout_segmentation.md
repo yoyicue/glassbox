@@ -1,12 +1,15 @@
 # Goal — UI element & layout segmentation (icon caption + typed, reading-ordered element graph)
 
-Status: **Tier A implemented default-off / no promotion — 2026-06-02.** The
+Status: **Tier A implemented and promoted default-on — 2026-06-02.** The
 classical reading-order, icon+label grouping, element typing, Settings sidebar
-text-row promotion, and A/B reporting plumbing have landed in core. A true iPad
+text-row promotion, and A/B reporting plumbing have landed in core. The iPad
 Settings `raw_no_canonical` vs `raw_no_canonical_ui_layout` n=1 did not show a
-task-level win, so Tier A remains opt-in and default-off. Tier B semantic icon
-captioning was not implemented; it remains a separate opt-in/billed or
-model-dependent follow-up. Line numbers are a snapshot as of `18ce14a` (the
+task-level win, but the App Store Search affordance comparison did show a
+concrete action-candidate win: OCR-only had no tappable Search, while ui-layout
+produced a consumable `Search` button intent. Tier A is now default-on with
+`GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED=0` as the rollback switch. Tier B
+semantic icon captioning was not implemented; it remains a separate
+opt-in/billed or model-dependent follow-up. Line numbers are a snapshot as of `18ce14a` (the
 cited cognition files are byte-identical on this branch's `main` base —
 `git diff --name-only main 18ce14a` touches only
 `skills/regression/ios_settings/`); reference by symbol. Re-verify with:
@@ -37,7 +40,8 @@ tappable affordance and exposes parent/child + order. That graph is what makes
   remainder") and **dedups by containment** ("drop a region whose center sits
   inside a larger kept region", `icon_detect.py:253`). This is OmniParser's
   "merge OCR ∪ icon, drop the overlap" exclusion half — already implemented,
-  default-off behind `detect_icons_in_perceive` (`config.py:294`), injected in
+  behind `detect_icons_in_perceive` (`config.py:294`) and also run by default
+  when ui-layout segmentation is enabled, injected in
   `perceptor.py` (`detect_icons(text_boxes=...)`, ~`:545`).
 - **Element ids + a Set-of-Mark renderer exist** — `render_set_of_mark`
   (`glassbox/cognition/som.py:24`) draws a numbered box per element `id`, and
@@ -63,8 +67,8 @@ tappable affordance and exposes parent/child + order. That graph is what makes
 **Tier A — MIT, free, classical (the bulk of the grounding value).**
 Reading-order (geometric row-band sort) + icon+label grouping + element typing.
 **No model.** Builds directly on the existing anti-conflation geometry. Can
-become default-on **after** an on-rig A/B. This alone lets the agent tap the
-right row / the right icon-only control.
+is now default-on, with an env rollback switch. This alone lets the agent tap
+the right row / the right icon-only control.
 
 **Tier B — heavy / opt-in (semantic icon caption).** Give icons a functional
 label. Two routes, neither on the free default path:
@@ -85,17 +89,19 @@ validate it does not merge discrete rows).
 - On-rig A/B (iPad mini 7 en/HK, n≥5) shows a grounding improvement —
   `entered_graph`, `required_rows_entered` up, `wrong_row_tapped` down — at
   acceptable latency. Promote Tier A default-on only on that win.
-- Default path byte-identical until promoted.
+- `GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED=0` disables the promoted default.
 
 ## Close-out evidence (2026-06-02)
 
 - Tier A is implemented as `glassbox.cognition.layout_segment.segment_layout`
-  behind `GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED`.
-- Default path is unchanged: layout segmentation is default-off and does not run
-  the icon detector unless explicitly enabled.
+  and controlled by `GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED`.
+- Default path now runs layout segmentation and the icon detector that feeds it;
+  set `GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED=0` to restore the previous
+  OCR-only element graph.
 - Offline raw/no-canonical comparison showed structural/actionability value, but
   the true iPad Settings n=1 A/B did not show task-level improvement. The feature
-  therefore remains opt-in; expanding to n>=5 was intentionally stopped.
+  was promoted on the App Store Search action-candidate win rather than a global
+  task-completion win; expanding Settings to n>=5 was intentionally stopped.
 - iPad Settings graph instability found during A/B was fixed separately by
   stabilizing projected root identity and verifier/state-machine acceptance.
   That makes the A/B apples-to-apples but does not create a UI-layout win.
@@ -110,7 +116,7 @@ validate it does not merge discrete rows).
 - **MIT / no-AGPL** — Tier A is classical/MIT; the OmniParser YOLO + any
   Florence-2 captioner stay git-ignored drop-ins, **never** `pyproject` deps; VLM
   caption stays opt-in/billed.
-- **Default-off / identity-default** until the A/B; new flags `GLASSBOX_`-prefixed
+- **Default-on with rollback** for Tier A; new flags remain `GLASSBOX_`-prefixed
   with CUQ docstrings.
 - **Locale-neutral** — reading-order and grouping are geometric/structural; do
   not bake in English/Chinese string assumptions (locale seam,
