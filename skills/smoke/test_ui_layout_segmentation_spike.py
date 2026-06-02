@@ -34,6 +34,22 @@ def _text(
     )
 
 
+def _image(
+    *,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    confidence: float = 0.9,
+) -> UIElement:
+    return UIElement(
+        type="image",
+        box=Box(x=x, y=y, w=w, h=h),
+        text=None,
+        confidence=confidence,
+    )
+
+
 def test_ui_layout_segmentation_spike_promotes_clean_actionable_recovery():
     frame = np.zeros((956, 440, 3), dtype=np.uint8)
     case = UiLayoutSpikeCase(
@@ -66,6 +82,34 @@ def test_ui_layout_segmentation_spike_rejects_no_text_actionable_noise():
     frame = np.zeros((956, 440, 3), dtype=np.uint8)
     case = UiLayoutSpikeCase(
         name="settings_row_with_noise",
+        scene=_scene(
+            _text("WLAN"),
+            _image(x=340, y=620, w=28, h=28, confidence=0.9),
+        ),
+        frame_img=frame,
+    )
+
+    report = collect_ui_layout_segmentation_spike(
+        [case],
+        expected_texts=["WLAN"],
+        icon_detector=lambda _img, **_kwargs: [
+            IconRegion(box=(52, 250, 24, 24)),
+        ],
+        max_no_text_actionables=0,
+        max_unexpected_actionable_texts=0,
+    )
+
+    result = report.cases[0]
+    assert result.candidate.expected_actionable_texts_found == ["WLAN"]
+    assert result.candidate.no_text_actionable_count == 1
+    assert result.offline_decision == "reject_offline"
+    assert "too_many_no_text_actionables" in result.decision_reasons
+
+
+def test_ui_layout_segmentation_spike_suppresses_unpaired_low_confidence_detector_icons():
+    frame = np.zeros((956, 440, 3), dtype=np.uint8)
+    case = UiLayoutSpikeCase(
+        name="settings_row_with_detector_noise",
         scene=_scene(_text("WLAN")),
         frame_img=frame,
     )
@@ -83,9 +127,8 @@ def test_ui_layout_segmentation_spike_rejects_no_text_actionable_noise():
 
     result = report.cases[0]
     assert result.candidate.expected_actionable_texts_found == ["WLAN"]
-    assert result.candidate.no_text_actionable_count == 1
-    assert result.offline_decision == "reject_offline"
-    assert "too_many_no_text_actionables" in result.decision_reasons
+    assert result.candidate.no_text_actionable_count == 0
+    assert result.offline_decision == "promote_to_rig"
 
 
 def test_ui_layout_segmentation_spike_loads_expected_texts_and_derives_frame_path(tmp_path):

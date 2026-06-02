@@ -15,6 +15,7 @@ from glassbox.cognition.base import Box, Scene, UIElement
 _LAYOUT_SOURCE = "layout_segmenter"
 _GROUP_EVIDENCE = "layout_segment:icon_label"
 _ICON_ONLY_EVIDENCE = "layout_segment:icon_only"
+_ICON_ONLY_MIN_CONFIDENCE = 0.65
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,9 @@ def segment_layout(
             trailing_group = _find_trailing_group_for_icon(element, grouped, width=width, height=height)
             if trailing_group is not None:
                 grouped[trailing_group] = _merge_trailing_icon(grouped[trailing_group], element, width=width)
+                continue
+            if not _should_promote_icon_only(element):
+                grouped.append(element.model_copy(deep=True))
                 continue
             grouped.append(_promote_icon_only(element, width=width, height=height))
         else:
@@ -264,6 +268,13 @@ def _promote_icon_only(element: UIElement, *, width: int, height: int) -> UIElem
         },
         deep=True,
     )
+
+
+def _should_promote_icon_only(element: UIElement) -> bool:
+    # Classical icon detection is a low-confidence geometry prior. It can help
+    # pair icon+label rows, but an unpaired candidate is not enough evidence to
+    # expose a new no-text tap target to planners.
+    return float(element.confidence) >= _ICON_ONLY_MIN_CONFIDENCE
 
 
 def _find_trailing_group_for_icon(

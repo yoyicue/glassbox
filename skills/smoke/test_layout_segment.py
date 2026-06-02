@@ -99,6 +99,21 @@ def test_layout_segmentation_promotes_icon_only_control_without_captioning():
 
 
 @pytest.mark.smoke
+def test_layout_segmentation_does_not_promote_low_confidence_unpaired_icon_candidate():
+    icon = _el("image", x=360, y=300, w=32, h=32, element_id=7)
+    icon.confidence = 0.3
+    scene = _scene(icon, size=(440, 956))
+
+    segment_layout(scene, viewport_size=(440, 956))
+
+    assert len(scene.elements) == 1
+    assert scene.elements[0].type == "image"
+    assert scene.elements[0].suggested_actions == []
+    assert scene.elements[0].type_source is None
+    assert "layout_segment:icon_only" not in scene.elements[0].type_evidence
+
+
+@pytest.mark.smoke
 def test_layout_segmentation_merges_trailing_accessory_into_leading_row():
     scene = _scene(
         _el("image", x=52, y=250, w=24, h=24, element_id=1),

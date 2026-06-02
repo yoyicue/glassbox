@@ -197,7 +197,11 @@ def _run_case(
         set(baseline.expected_texts_found) - set(candidate.expected_texts_found),
         key=compact_text,
     )
-    unexpected_actionable = _unexpected_actionable_texts(candidate.actionable_texts, expected_texts)
+    unexpected_actionable = _unexpected_actionable_texts(
+        candidate.actionable_texts,
+        expected_texts,
+        baseline_texts=_scene_texts(baseline_scene),
+    )
     decision, reasons = _offline_decision(
         expected_texts=expected_texts,
         expected_actionable_recovered=expected_actionable_recovered,
@@ -244,7 +248,7 @@ def _inject_icons(
                 type="image",
                 box=Box(x=x, y=y, w=w, h=h),
                 text=None,
-                confidence=0.5,
+                confidence=0.3,
                 element_id=next_id + index,
             )
         )
@@ -296,14 +300,21 @@ def _expected_matches(elements: Sequence[UIElement], expected_texts: Sequence[st
 def _unexpected_actionable_texts(
     actionable_texts: dict[str, int],
     expected_texts: Sequence[str],
+    *,
+    baseline_texts: Sequence[str],
 ) -> dict[str, int]:
-    if not expected_texts:
-        return dict(actionable_texts)
+    baseline_keys = {compact_text(text) for text in baseline_texts if compact_text(text)}
+    expected_keys = {compact_text(text) for text in expected_texts if compact_text(text)}
     return {
         text: count
         for text, count in actionable_texts.items()
-        if not any(_text_matches(text, expected) for expected in expected_texts)
+        if compact_text(text) not in baseline_keys
+        and compact_text(text) not in expected_keys
     }
+
+
+def _scene_texts(scene: Scene) -> list[str]:
+    return [_clean_text(element.text) for element in scene.elements if _clean_text(element.text)]
 
 
 def _offline_decision(
