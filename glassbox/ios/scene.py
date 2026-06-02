@@ -268,6 +268,16 @@ def classify_ios_scene(
             evidence=("purchase_paywall",),
         )
 
+    appstore_evidence = _app_store_chrome_evidence(scene, viewport_size=(w, h))
+    if appstore_evidence is not None:
+        return IOSSceneClassification(
+            kind="unknown",
+            confidence=0.34,
+            title=title,
+            safe_actions=("trace", "vlm_on_uncertain"),
+            evidence=appstore_evidence,
+        )
+
     if _looks_like_springboard(scene, viewport_size=(w, h)):
         return IOSSceneClassification(
             kind="springboard",
@@ -784,7 +794,7 @@ def _looks_like_settings_detail(
         and (
             el.box.w >= w * 0.45
             or len(_text(el)) >= 18
-            or any(marker in _text(el) for marker in ("iPhone", "Apple", "Siri", "隐私", "默认", "App"))
+            or any(marker in _text(el) for marker in ("iPhone", "Apple", "Siri", "隐私", "默认"))
         )
         for el in scene.elements
     )
@@ -1182,6 +1192,20 @@ _PAYWALL_LEGAL = (
     "terms of use", "terms of service", "terms & conditions", "privacy policy",
     "auto-renew", "auto renew", "cancel anytime", "subscription",
 )
+_APP_STORE_TAB_LABELS = {
+    "today",
+    "games",
+    "apps",
+    "arcade",
+    "search",
+}
+_APP_STORE_PRICE_RE = re.compile(r"[$¥€£₩]\s?\d")
+_APP_STORE_COMMERCE_LABELS = {
+    "get",
+    "open",
+    "inapppurchases",
+    "inapppurchase",
+}
 
 
 def _looks_like_purchase_paywall(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:
@@ -1197,6 +1221,44 @@ def _looks_like_purchase_paywall(scene: Scene, *, viewport_size: tuple[int, int]
     # Require ≥2 distinct commerce signals so a lone word (e.g. a Settings page
     # mentioning "Privacy") can never veto a real Home screen.
     return sum(categories) >= 2
+
+
+def _app_store_chrome_evidence(scene: Scene, *, viewport_size: tuple[int, int]) -> tuple[str, ...] | None:
+    w, h = viewport_size
+    top_tabs: dict[str, UIElement] = {}
+    bottom_tabs: dict[str, UIElement] = {}
+    commerce_hits = 0
+
+    for el in scene.elements:
+        text = _text(el)
+        if not text:
+            continue
+        compact = re.sub(r"[^0-9a-z]+", "", text.casefold())
+        if not compact:
+            continue
+        cx, cy = el.box.center
+        if compact in _APP_STORE_TAB_LABELS:
+            if h * 0.04 <= cy <= h * 0.18 and w * 0.20 <= cx <= w * 0.82:
+                top_tabs[compact] = el
+            if cy >= h * 0.78:
+                bottom_tabs[compact] = el
+        if _APP_STORE_PRICE_RE.search(text) or compact in _APP_STORE_COMMERCE_LABELS:
+            commerce_hits += 1
+
+    evidence: list[str] = []
+    for label, tabs in (("appstore_top_tabs", top_tabs), ("appstore_bottom_tabs", bottom_tabs)):
+        if len(tabs) < 3:
+            continue
+        centers = [el.box.center for el in tabs.values()]
+        spread_x = max(x for x, _ in centers) - min(x for x, _ in centers)
+        spread_y = max(y for _, y in centers) - min(y for _, y in centers)
+        if spread_x >= w * 0.08 and spread_y <= h * 0.06:
+            evidence.append(label)
+    if not evidence:
+        return None
+    if commerce_hits >= 2:
+        evidence.append("appstore_commerce")
+    return ("appstore_chrome", *evidence)
 
 
 def _looks_like_springboard(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:

@@ -336,6 +336,36 @@ def test_ios_scene_classifier_app_paywall_is_unknown_not_springboard():
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_app_store_home_is_not_settings_detail():
+    # Regression: App Store Home on the iPad/PicoKVM rig has top App Store tabs
+    # plus card/list copy. The generic Settings-detail fallback used to take the
+    # "Games/Apps" tab as a title and attach the dangerous back license.
+    scene = _scene(
+        _el("Games", 797, 80, w=204, h=37, ty="list_item"),
+        _el("Today", 812, 95, w=45, h=14),
+        _el("Apps", 952, 80, w=127, h=38, ty="list_item"),
+        _el("Arcade", 1016, 81, w=100, h=38, ty="list_item"),
+        _el("Tuesday, June 2", 848, 145, w=220, h=31),
+        _el("NOW AVAILABLE", 982, 215, w=109, h=14),
+        _el("Hit the Streets in", 684, 382, w=193, h=23),
+        _el("Neverness to", 684, 407, w=151, h=26),
+        _el("This urban adventure's full of hidden wonders.", 684, 466, w=246, h=14),
+        _el("Meet Mortenax Blade", 988, 393, w=243, h=23, ty="button"),
+        _el("Apple Arcade has more to discover", 988, 449, w=300, h=17),
+        _el("Get", 882, 519, w=28, h=17),
+        _el("I-Aop Purchaies", 862, 541, w=67, h=14),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(1920, 1080))
+
+    assert classified.kind == "unknown"
+    assert classified.page_id is None
+    assert "back" not in classified.safe_actions
+    assert "edge_back" not in classified.safe_actions
+    assert "appstore_chrome" in classified.evidence
+
+
+@pytest.mark.smoke
 def test_ios_scene_classifier_single_commerce_word_is_not_paywall():
     # Guard the >=2-signal rule so a real Settings-ish surface that merely
     # mentions one commerce-adjacent word is never vetoed as a paywall.
