@@ -25,9 +25,11 @@ uv run ruff check glassbox skills     # lint (line-length 100, target py311)
 
 - `make check` is **device-independent** (no PicoKVM/rig) and is what CI runs on
   every PR. Run it before you push.
-- `main` is not strictly branch-protected — treat a green `make check` as your
-  own responsibility, branch for non-trivial work, and don't push to `main`
-  without the user's go-ahead.
+- `main` is branch-protected: merging needs a PR whose `check` status check (the
+  CI job that runs `make check`) is green, with the branch up to date with `main`
+  first (strict). The rule is enforced for admins too and requires no review
+  approvals. So keep `make check` green locally, branch for non-trivial work, and
+  still get the user's go-ahead before merging to `main`.
 
 ## Repository map
 
