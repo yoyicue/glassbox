@@ -104,6 +104,11 @@ SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS = (
     "屏幕使用时间", "Screen Time", "通用", "General", "辅助功能", "Accessibility",
     "操作按钮", "Action Button", "静音模式", "Silent Mode",
     "面容ID", "Face ID", "Passcode", "密码", "隐私", "Privacy",
+    "音频与视觉", "Audio & Visual", "音量控制", "耳机", "联系人", "通讯录",
+    "储存空间", "Storage", "系统数据", "卸载未使用", "Offload Unused Apps",
+    "电池", "Battery", "电池健康", "充电", "电量模式",
+    "屏幕时间", "使用限制", "停用时间", "App限额", "始终允许", "屏幕距离",
+    "健康数据", "Health Data", "医疗详细信息", "Medical Details", "医疗急救卡",
     "Location Services", "Tracking", "Calendars", "Contacts", "Files & Folders",
     "Devices", "iPhone Unlock", "Password AutoFill",
 )
@@ -297,6 +302,14 @@ def classify_ios_scene(
         )
 
     if _looks_like_settings_detail(scene, viewport_size=(w, h), strict_body=strict_settings_detail):
+        if not _has_settings_distinguishing_signal(scene):
+            return IOSSceneClassification(
+                kind="unknown",
+                confidence=0.24,
+                title=title,
+                safe_actions=("trace", "vlm_on_uncertain"),
+                evidence=("settings_detail_abstain", "missing_settings_anchor"),
+            )
         return IOSSceneClassification(
             kind="settings_detail",
             confidence=0.78,

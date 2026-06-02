@@ -366,6 +366,27 @@ def test_ios_scene_classifier_app_store_home_is_not_settings_detail():
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_generic_detail_shape_without_settings_anchor_abstains():
+    scene = _scene(
+        _el("Articles", 190, 78, w=78),
+        _el("Explore the latest stories selected for you today.", 42, 150, w=330),
+        _el("Recommended collections and saved items appear here.", 42, 220, w=330),
+        _el("Featured", 70, 300, w=74, ty="button"),
+        _el("Saved", 70, 360, w=50, ty="button"),
+        _el("History", 70, 420, w=58, ty="button"),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 973))
+
+    assert classified.kind == "unknown"
+    assert classified.page_id is None
+    assert "back" not in classified.safe_actions
+    assert "edge_back" not in classified.safe_actions
+    assert "settings_detail_abstain" in classified.evidence
+    assert "missing_settings_anchor" in classified.evidence
+
+
+@pytest.mark.smoke
 def test_ios_scene_classifier_single_commerce_word_is_not_paywall():
     # Guard the >=2-signal rule so a real Settings-ish surface that merely
     # mentions one commerce-adjacent word is never vetoed as a paywall.

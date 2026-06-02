@@ -1,9 +1,12 @@
 # Design — `settings_detail` false positives: arbitration, veto & abstain
 
-Status: **analysis + proposal (not yet implemented), 2026-06-02.** Captures the
-diagnosis of the App-Store-HOME-→-`settings_detail` misclassification surfaced on
-the en-HK iPad rig, plus the verdict on three candidate levers (deterministic
-arbitration, screen-memory prior, async VLM). No code changed yet.
+Status: **implemented for Step 0/1, 2026-06-02.** Captures the diagnosis of the
+App-Store-HOME-→-`settings_detail` misclassification surfaced on the en-HK iPad
+rig, plus the verdict on three candidate levers (deterministic arbitration,
+screen-memory prior, async VLM). The default-on implementation now covers the
+load-bearing path in §5: an offline smoke, App Store chrome veto, removal of the
+bare `"App"` Settings-copy anchor, and generic-fallback abstain when no
+Settings-specific anchor is present. Step 2/3 remain optional rig-gated follow-up.
 
 This is the **dual** of `docs/goals/scene_detail_misclassification.md`: that goal
 fixed the *false negative* (a real Settings detail page read as
@@ -38,8 +41,8 @@ arbitration. App Store HOME falls through every earlier gate to the **generic
 Settings-detail fallback** `_looks_like_settings_detail` (returned at
 `scene.py:289-297`).
 
-That fallback's `has_settings_copy` check (`scene.py:782-790`) accepts the **bare
-token `"App"`** (and `"Apple"`) as Settings evidence:
+Before the fix, that fallback's `has_settings_copy` check (`scene.py:782-790`)
+accepted the **bare token `"App"`** (and `"Apple"`) as Settings evidence:
 
 ```python
 or any(marker in _text(el) for marker in ("iPhone", "Apple", "Siri", "隐私", "默认", "App"))  # scene.py:787
@@ -148,7 +151,8 @@ no added benefit — they enter via the *earlier* `semantic_guess` branch, not t
 buggy fallback, so a **targeted** fix has near-zero recall risk.
 
 Minimal, in-core, default-on sequence (all OCR-only / free / deterministic —
-"fix the core, not the skill"):
+"fix the core, not the skill"). Steps 0/1 are now implemented; Steps 2/3 remain
+optional and rig-gated:
 
 - **Step 0 (proof first).** Add the offline smoke assertion in §6 *before*
   touching the classifier. Without it, `make check` proves nothing here (§6).
@@ -262,7 +266,8 @@ per new screen) and resolving the layout-seg signature-instability hazard first.
 
 ```bash
 # Root token + fallback branch
-rg -n 'marker in _text\(el\) for marker in' glassbox/ios/scene.py        # the bare-"App" line
+rg -n 'appstore_chrome|settings_detail_abstain|missing_settings_anchor' glassbox/ios/scene.py skills/smoke/test_ios_scene.py
+rg -n 'marker in _text\(el\) for marker in' glassbox/ios/scene.py        # expect: no bare "App" in has_settings_copy
 rg -n 'center_title_or_back|_looks_like_settings_detail|strict_settings_detail' glassbox/ios/scene.py
 rg -n 'strict_settings_detail' glassbox/config.py                        # default False
 
@@ -279,6 +284,6 @@ rg -n 'def compute_signature|stable_texts|type_histogram|phash' glassbox/memory/
 rg -n '_merge_scene_fields|_node_scope_matches' glassbox/memory/graph.py
 
 # Offline proof + corpus
-rg -n 'app_paywall_is_unknown|strict_settings_detail|_scene_from_ocr_fixture' skills/smoke/test_ios_scene.py
+rg -n 'app_store_home_is_not_settings_detail|generic_detail_shape_without_settings_anchor|app_paywall_is_unknown|strict_settings_detail|_scene_from_ocr_fixture' skills/smoke/test_ios_scene.py
 ls artifacts/run_2026_06_01_16_31_30_695846/scenes/ | wc -l            # the 17-scene corpus
 ```
