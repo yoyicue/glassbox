@@ -752,6 +752,37 @@ def test_ui_layout_segmentation_opt_in_groups_icon_labels_on_iphone_and_ipad(
 
 
 @pytest.mark.smoke
+def test_perceive_voted_preserves_detect_icons_in_perceive_path(monkeypatch):
+    from glassbox.cognition.icon_detect import IconRegion
+
+    calls = 0
+
+    def fake_detect_icons(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return [IconRegion(box=(320, 220, 28, 28))]
+
+    monkeypatch.setattr("glassbox.cognition.icon_detect.detect_icons", fake_detect_icons)
+    runtime = build_phone(
+        source=AdvancingSource(),
+        cfg=AgentConfig(
+            _env_file=None,
+            detect_icons_in_perceive=True,
+            ocr_temporal_voting_enabled=True,
+            ocr_temporal_voting_frames=2,
+        ),
+        ocr=FakeOCR(),
+        effector=FakeEffector(),
+    )
+
+    runtime.phone.action_context.ocr_temporal_voting_opt_in = True
+    scene = runtime.phone.perceive()
+
+    assert calls == 1
+    assert any(element.type == "image" and element.text is None for element in scene.elements)
+
+
+@pytest.mark.smoke
 def test_build_phone_uses_ipados_settings_app_classifier_for_home_widgets():
     cfg = AgentConfig(
         _env_file=None,

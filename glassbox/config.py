@@ -367,8 +367,10 @@ class AgentConfig(BaseSettings):
     a geometric Tier-A element graph from OCR text plus icon regions: reading
     order is normalized, icon+label affordances are grouped into one tappable
     element, and icon-only controls are promoted to typed tap targets. No VLM
-    captioning is invoked. Promote only after on-rig iPhone+iPad A/B shows
-    grounding improvement at acceptable latency. Env
+    captioning is invoked. Enabling this implicitly runs the no-text icon
+    detector even when GLASSBOX_DETECT_ICONS_IN_PERCEIVE is off, because icon
+    regions are the grouping input. Promote only after on-rig iPhone+iPad A/B
+    shows grounding improvement at acceptable latency. Env
     GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED."""
 
     strict_target_matching: bool = False

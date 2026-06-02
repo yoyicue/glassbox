@@ -65,6 +65,10 @@ def segment_layout(
         if index in consumed:
             continue
         if element.type == "image":
+            trailing_group = _find_trailing_group_for_icon(element, grouped, width=width, height=height)
+            if trailing_group is not None:
+                grouped[trailing_group] = _merge_trailing_icon(grouped[trailing_group], element, width=width)
+                continue
             grouped.append(_promote_icon_only(element, width=width, height=height))
         else:
             grouped.append(element.model_copy(deep=True))
@@ -123,7 +127,7 @@ def _score_icon_label_pair(
     # Row style: leading icon then label.
     leading_gap = text.box.x - image.box.x2
     row_tol = max(8.0, min(height * 0.045, max(image.box.h, text.box.h) * 0.75))
-    row_gap = max(18.0, min(width * 0.18, max(image.box.w, text.box.h) * 3.5))
+    row_gap = max(18.0, min(width * 0.18, max(image.box.w, text.box.w) * 3.5))
     row_dy = abs(text_cy - image_cy)
     if -8 <= leading_gap <= row_gap and row_dy <= row_tol:
         scores.append((
@@ -257,6 +261,59 @@ def _promote_icon_only(element: UIElement, *, width: int, height: int) -> UIElem
             "type_source": _LAYOUT_SOURCE,
             "type_evidence": _merged_evidence(element, _ICON_ONLY_EVIDENCE),
             "preferred_tap_point": element.preferred_tap_point or element.box.center,
+        },
+        deep=True,
+    )
+
+
+def _find_trailing_group_for_icon(
+    icon: UIElement,
+    grouped: list[UIElement],
+    *,
+    width: int,
+    height: int,
+) -> int | None:
+    best_index = None
+    best_score = float("inf")
+    for index, group in enumerate(grouped):
+        if "layout_orientation:leading" not in group.type_evidence:
+            continue
+        if not group.text:
+            continue
+        if icon.box.center[0] <= group.box.center[0]:
+            continue
+        if icon.box.x < group.box.x2 - max(8, icon.box.w // 2):
+            continue
+        tolerance = max(8.0, min(height * 0.045, max(icon.box.h, group.box.h) * 0.55))
+        row_delta = abs(float(icon.box.center[1]) - float(group.box.center[1]))
+        if row_delta > tolerance:
+            continue
+        # Accessories can sit at the far edge of a Settings row, but should not
+        # cross columns into an unrelated pane.
+        if icon.box.center[0] - group.box.center[0] > width * 0.85:
+            continue
+        score = row_delta + max(0, icon.box.x - group.box.x2) / max(1, width)
+        if score < best_score:
+            best_index = index
+            best_score = score
+    return best_index
+
+
+def _merge_trailing_icon(group: UIElement, icon: UIElement, *, width: int) -> UIElement:
+    box = _union_boxes(group.box, icon.box)
+    element_type = "switch" if _looks_like_switch(icon, width=width) else group.type
+    tap_point = icon.box.center if element_type == "switch" else box.center
+    return group.model_copy(
+        update={
+            "type": element_type,
+            "box": box,
+            "suggested_actions": _suggested_actions(element_type),
+            "preferred_tap_point": tap_point,
+            "type_evidence": _merged_evidence(
+                group,
+                f"layout_accessory:{icon.element_id}",
+                "layout_accessory_orientation:trailing",
+            ),
         },
         deep=True,
     )
