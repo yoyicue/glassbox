@@ -727,10 +727,15 @@ def crawl_current_page(
                 # (notably under English OCR) — the cascade this re-ground exists
                 # to prevent.
                 candidate_canon = actions.canonical_expected_root_label(label)
+                live_root_candidates = actions.safe_navigation_candidates(
+                    current,
+                    allow_sensitive_root_labels=True,
+                    allow_known_without_affordance=True,
+                )
                 relocated = None
-                for element in current.elements:
+                for element in live_root_candidates:
                     etext = (element.text or "").strip()
-                    if not etext or actions.is_settings_section_header(current, element):
+                    if not etext:
                         continue
                     if etext == label or (
                         candidate_canon is not None
@@ -739,12 +744,7 @@ def crawl_current_page(
                         relocated = element
                         break
                 if relocated is None:
-                    rows = [
-                        e for e in current.elements
-                        if (e.text or "").strip()
-                        and not actions.is_settings_section_header(current, e)
-                    ]
-                    relocated = actions.match_any(rows, [label])
+                    relocated = actions.match_any(live_root_candidates, [label])
                 if relocated is None:
                     relocated = actions.vlm_point_for_label(
                         phone,
@@ -925,12 +925,12 @@ def crawl_current_page(
                 continue
             if (
                 depth == 0
-                and required_missing
                 and scroll_metadata.get("row_tracked") is True
                 and _is_ipad_target(phone)
             ):
                 settings_context.mark_root_sidebar_exhaustive(phone)
-                settings_context.record_sidebar_absent_root_labels(phone, required_missing)
+                if required_missing:
+                    settings_context.record_sidebar_absent_root_labels(phone, required_missing)
             break
     else:
         if depth > 0 and not actions.child_sampling_mode(depth):

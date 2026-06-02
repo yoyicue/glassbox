@@ -580,6 +580,26 @@ def test_runtime_populates_settings_root_row_intent_labels_from_core_annotator()
 
 
 @pytest.mark.smoke
+def test_runtime_can_disable_ios_closed_set_canonicalization_for_raw_ocr_measurement():
+    source = FakeSource()
+    effector = FakeEffector()
+    cfg = AgentConfig(
+        _env_file=None,
+        memory_bundle="com.apple.Preferences",
+        ios_closed_set_canonicalization_enabled=False,
+    )
+
+    runtime = build_phone(source=source, cfg=cfg, ocr=NoisySettingsRootOCR(), effector=effector)
+
+    scene = runtime.phone.perceive()
+
+    by_text = {element.text: element for element in scene.elements}
+    assert scene.platform_scene_kind == "settings_root"
+    assert by_text["待机見示"].intent_label is None
+    assert by_text["S0S"].intent_label is None
+
+
+@pytest.mark.smoke
 def test_runtime_populates_greater_china_english_settings_root_intents_from_core_annotator():
     source = FakeIPadSource()
     effector = FakeEffector()

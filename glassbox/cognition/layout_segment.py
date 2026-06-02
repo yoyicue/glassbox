@@ -15,6 +15,7 @@ from glassbox.cognition.base import Box, Scene, UIElement
 _LAYOUT_SOURCE = "layout_segmenter"
 _GROUP_EVIDENCE = "layout_segment:icon_label"
 _ICON_ONLY_EVIDENCE = "layout_segment:icon_only"
+_TEXT_ROW_EVIDENCE = "layout_segment:text_row"
 _ICON_ONLY_MIN_CONFIDENCE = 0.65
 
 
@@ -41,6 +42,7 @@ def segment_layout(
     if not elements:
         return scene
     width, height = _resolve_viewport(scene, viewport_size)
+    settings_like = _is_settings_like_scene(scene)
     pairings = _select_icon_label_pairs(elements, width=width, height=height)
     consumed: set[int] = set()
     grouped: list[UIElement] = []
@@ -74,6 +76,8 @@ def segment_layout(
                 grouped.append(element.model_copy(deep=True))
                 continue
             grouped.append(_promote_icon_only(element, width=width, height=height))
+        elif settings_like and _should_promote_settings_sidebar_text_row(element, width=width, height=height):
+            grouped.append(_promote_settings_sidebar_text_row(element, width=width, height=height))
         else:
             grouped.append(element.model_copy(deep=True))
 
@@ -116,13 +120,19 @@ def _score_icon_label_pair(
     scores: list[tuple[float, str]] = []
     image_cx, image_cy = image.box.center
     text_cx, text_cy = text.box.center
+    primary_label = _is_primary_label_text(text.text, width=width)
 
     # Home / tab-bar style: icon above its label, horizontally centered.
     vertical_gap = text.box.y - image.box.y2
     vertical_max_gap = max(18.0, min(height * 0.09, max(image.box.h * 1.8, text.box.h * 2.2)))
     vertical_dx = abs(text_cx - image_cx)
     vertical_max_dx = max(12.0, min(width * 0.12, max(image.box.w, text.box.w) * 0.8))
-    if -text.box.h * 0.35 <= vertical_gap <= vertical_max_gap and vertical_dx <= vertical_max_dx:
+    if (
+        primary_label
+        and _is_compact_vertical_anchor(image, width=width, height=height)
+        and -text.box.h * 0.35 <= vertical_gap <= vertical_max_gap
+        and vertical_dx <= vertical_max_dx
+    ):
         scores.append((
             (vertical_dx / vertical_max_dx) + (max(0.0, vertical_gap) / vertical_max_gap),
             "vertical",
@@ -133,7 +143,12 @@ def _score_icon_label_pair(
     row_tol = max(8.0, min(height * 0.045, max(image.box.h, text.box.h) * 0.75))
     row_gap = max(18.0, min(width * 0.18, max(image.box.w, text.box.w) * 3.5))
     row_dy = abs(text_cy - image_cy)
-    if -8 <= leading_gap <= row_gap and row_dy <= row_tol:
+    if (
+        primary_label
+        and _is_compact_row_anchor(image, width=width, height=height)
+        and -8 <= leading_gap <= row_gap
+        and row_dy <= row_tol
+    ):
         scores.append((
             (row_dy / row_tol) + (max(0.0, leading_gap) / row_gap),
             "leading",
@@ -141,7 +156,13 @@ def _score_icon_label_pair(
 
     # Row style: label then trailing affordance (chevron, switch, info icon).
     trailing_gap = image.box.x - text.box.x2
-    if -8 <= trailing_gap <= row_gap and row_dy <= row_tol and image_cx > text_cx:
+    if (
+        primary_label
+        and _is_compact_row_anchor(image, width=width, height=height)
+        and -8 <= trailing_gap <= row_gap
+        and row_dy <= row_tol
+        and image_cx > text_cx
+    ):
         scores.append((
             (row_dy / row_tol) + (max(0.0, trailing_gap) / row_gap) + 0.1,
             "trailing",
@@ -277,6 +298,121 @@ def _should_promote_icon_only(element: UIElement) -> bool:
     return float(element.confidence) >= _ICON_ONLY_MIN_CONFIDENCE
 
 
+def _is_settings_like_scene(scene: Scene) -> bool:
+    markers = (
+        scene.platform_scene_kind,
+        scene.scene_type,
+        scene.page_id,
+        " ".join(scene.safe_actions or ()),
+    )
+    return any("settings" in str(marker or "").lower() for marker in markers)
+
+
+def _is_primary_label_text(text: str | None, *, width: int) -> bool:
+    stripped = str(text or "").strip()
+    if not stripped:
+        return False
+    compact = "".join(ch for ch in stripped if ch.isalnum())
+    if len(compact) < 2:
+        return False
+    if stripped.casefold() in {"on", "off"}:
+        return False
+    if len(stripped) > 48:
+        return False
+    # Values/subtitles/descriptions are often visually near an icon, but they
+    # are not the primary label that should inherit the icon's tap target.
+    if stripped.endswith((">", "|")):
+        return False
+    if "." in stripped and len(stripped) > 10:
+        return False
+    if "," in stripped and len(stripped) > 16:
+        return False
+    return len(stripped.split()) < 7
+
+
+def _is_compact_vertical_anchor(element: UIElement, *, width: int, height: int) -> bool:
+    if element.box.w <= 0 or element.box.h <= 0:
+        return False
+    if element.box.w > max(96.0, width * 0.18):
+        return False
+    if element.box.h > max(96.0, height * 0.14):
+        return False
+    aspect = element.box.w / max(1, element.box.h)
+    return 0.45 <= aspect <= 1.85
+
+
+def _is_compact_row_anchor(element: UIElement, *, width: int, height: int) -> bool:
+    if element.box.w <= 0 or element.box.h <= 0:
+        return False
+    if _looks_like_switch(element, width=width):
+        return True
+    if element.box.w > max(96.0, width * 0.20):
+        return False
+    if element.box.h > max(72.0, height * 0.10):
+        return False
+    aspect = element.box.w / max(1, element.box.h)
+    return 0.45 <= aspect <= 2.4
+
+
+def _should_promote_settings_sidebar_text_row(
+    element: UIElement,
+    *,
+    width: int,
+    height: int,
+) -> bool:
+    if element.type != "text" or element.suggested_actions:
+        return False
+    if not _is_label_candidate(element, width=width, height=height):
+        return False
+    if not _is_primary_label_text(element.text, width=width):
+        return False
+    if _is_lowercase_ascii_text(element.text):
+        return False
+    compact = "".join(ch for ch in str(element.text or "") if ch.isalnum())
+    if len(compact) < 3:
+        return False
+    left_min = width * 0.07
+    left_max = width * 0.42
+    if not (left_min <= element.box.x <= left_max):
+        return False
+    if element.box.w > width * 0.38:
+        return False
+    return height * 0.07 <= element.box.center[1] <= height * 0.96
+
+
+def _is_lowercase_ascii_text(text: str | None) -> bool:
+    stripped = str(text or "").strip()
+    if not stripped or not stripped.isascii():
+        return False
+    letters = [char for char in stripped if char.isalpha()]
+    return bool(letters) and not any(char.isupper() for char in letters)
+
+
+def _promote_settings_sidebar_text_row(
+    element: UIElement,
+    *,
+    width: int,
+    height: int,
+) -> UIElement:
+    row_h = max(element.box.h, min(52, max(40, int(height * 0.045))))
+    center_y = element.box.center[1]
+    y = max(0, min(height - row_h, center_y - row_h // 2))
+    x2 = max(element.box.x2 + 12, int(width * 0.39)) if width >= 600 else width
+    box = Box(x=0, y=int(y), w=max(1, min(width, x2)), h=max(1, int(row_h)))
+    return element.model_copy(
+        update={
+            "type": "list_item",
+            "box": box,
+            "suggested_actions": ["tap"],
+            "type_confidence": max(element.type_confidence or 0.0, 0.66),
+            "type_source": _LAYOUT_SOURCE,
+            "type_evidence": _merged_evidence(element, _TEXT_ROW_EVIDENCE),
+            "preferred_tap_point": element.preferred_tap_point or box.center,
+        },
+        deep=True,
+    )
+
+
 def _find_trailing_group_for_icon(
     icon: UIElement,
     grouped: list[UIElement],
@@ -341,7 +477,13 @@ def _icon_only_type(element: UIElement, *, width: int, height: int) -> str:
 
 def _looks_like_switch(element: UIElement, *, width: int) -> bool:
     center_x, _ = element.box.center
-    return element.box.w >= element.box.h * 1.45 and center_x > width * 0.55
+    aspect = element.box.w / max(1, element.box.h)
+    return (
+        1.45 <= aspect <= 2.9
+        and 28 <= element.box.w <= 96
+        and 16 <= element.box.h <= 48
+        and center_x > width * 0.55
+    )
 
 
 def _suggested_actions(element_type: str) -> list[str]:

@@ -373,6 +373,16 @@ class AgentConfig(BaseSettings):
     shows grounding improvement at acceptable latency. Env
     GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED."""
 
+    ios_closed_set_canonicalization_enabled: bool = True
+    """CUQ-OCR-POSTPROCESS: keep iOS/iPadOS closed-set Home/Settings
+    canonicalization on the runtime perception + memory path. This is the
+    current default intelligence: SpringBoard app labels and Settings root rows
+    may write canonical intent_label values, and screen memory may use those
+    labels for stable element keys. Set to 0 only for measurement arms such as
+    raw_no_canonical that need to compare raw OCR against the current baseline;
+    report/evaluator canonical scoring remains independent. Env
+    GLASSBOX_IOS_CLOSED_SET_CANONICALIZATION_ENABLED."""
+
     strict_target_matching: bool = False
     """CUQ-1.5: make find_text ambiguity-aware — the substring tier prefers the
     closest-length containing row (not the first), and the fuzzy tier returns no

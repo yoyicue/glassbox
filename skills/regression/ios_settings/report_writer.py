@@ -74,6 +74,10 @@ def build_report_payload(
 ) -> dict[str, Any]:
     report_config = run_config.to_report_config()
     report_config.update(_active_device_report_config())
+    navigation_failures = settings_reporting.unresolved_navigation_failures(
+        navigation_failures,
+        visits,
+    )
     root_coverage = settings_reporting.classify_root_coverage(
         root_coverage,
         visits,
@@ -187,6 +191,9 @@ def _active_device_report_config() -> dict[str, object]:
         "ocr_tiling_include_full_frame": bool(getattr(cfg, "ocr_tiling_include_full_frame", False)),
         "ocr_tiling_nms_iou": float(getattr(cfg, "ocr_tiling_nms_iou", 0.0)),
         "ui_layout_segmentation_enabled": bool(getattr(cfg, "ui_layout_segmentation_enabled", False)),
+        "ios_closed_set_canonicalization_enabled": bool(
+            getattr(cfg, "ios_closed_set_canonicalization_enabled", True)
+        ),
         "detect_icons_in_perceive": bool(getattr(cfg, "detect_icons_in_perceive", False)),
     }
 

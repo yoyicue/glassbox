@@ -22,6 +22,7 @@ RETURN_ACTIONS = {"back", "home"}
 AB_CONFIG_KEYS = (
     "detect_icons_in_perceive",
     "en_ocr_correction",
+    "ios_closed_set_canonicalization_enabled",
     "language",
     "ocr",
     "ocr_confidence_threshold",

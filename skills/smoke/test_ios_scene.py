@@ -669,6 +669,34 @@ def test_ipados_scene_classifier_weather_settings_search_detail_is_not_springboa
 
 
 @pytest.mark.smoke
+def test_ipados_split_detail_title_ignores_cross_pane_layout_control():
+    scene = _scene(
+        _el("4 Search 11:09AM Tue 2 Jun", 16, 12, w=176, h=12, ty="status_bar"),
+        _el("Q Search", 36, 90, w=70, h=14),
+        _el("Da Li", 20, 76, w=215, h=82, ty="button"),
+        _el("Apple Account, iCloud", 94, 91, w=531, h=159, ty="switch"),
+        _el("WLAN", 64, 268, w=46, h=16),
+        _el("Bluetooth", 22, 251, w=214, h=75, ty="button"),
+        _el("General", 66, 313, w=58, h=14),
+        _el("Accessibility", 66, 358, w=92, h=14),
+        _el("Siri", 64, 823, w=24, h=16),
+        _el("Search and Look Up", 280, 106, w=138, h=14),
+        _el("Show Recent Searches", 280, 142, w=152, h=12),
+        _el("About Search & Privacy...", 280, 252, w=134, h=12),
+        _el("Search Engine", 280, 301, w=96, h=17),
+        _el("Help Apple Improve Search", 280, 378, w=180, h=14),
+        _el("Help improve Search by allowing Apple to store the searches", 280, 414, w=318, h=14),
+    )
+    scene.viewport_size = (640, 989)
+
+    classified = classify_ipados_scene(scene)
+
+    assert classified.kind == "settings_detail"
+    assert classified.title == "Search and Look Up"
+    assert classified.page_id == "settings/Search and Look Up"
+
+
+@pytest.mark.smoke
 def test_ipados_scene_classifier_weather_app_search_is_not_settings_search_results():
     scene = _scene(
         _el("11:04AM Mon 1 Jun", 16, 14, w=120, h=12),

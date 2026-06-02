@@ -282,6 +282,7 @@ def _detail_pane_title(
 ) -> str | None:
     w, h = viewport_size
     left = sidebar_right_x(w)
+    left_slop = max(24, int(w * 0.04))
     candidates: list[UIElement] = []
     repeatable: list[UIElement] = []
     ignored = {
@@ -302,7 +303,7 @@ def _detail_pane_title(
         ):
             continue
         cx, cy = el.box.center
-        if cx <= left or cy < h * 0.04 or cy > h * 0.96:
+        if cx <= left or el.box.x < left - left_slop or cy < h * 0.04 or cy > h * 0.96:
             continue
         if top_detail_back_y is not None and cy < top_detail_back_y - h * 0.02:
             continue
@@ -478,10 +479,12 @@ def _detail_pane_evidence(
 ) -> tuple[str, ...]:
     w, h = viewport_size
     left = sidebar_right_x(w)
+    left_slop = max(24, int(w * 0.04))
     visible = [
         el for el in scene.elements
         if _text(el)
         and el.type != "status_bar"
+        and el.box.x >= left - left_slop
         and el.box.center[0] > left
         and h * 0.10 <= el.box.center[1] <= h * 0.97
     ]
@@ -489,6 +492,7 @@ def _detail_pane_evidence(
         el for el in scene.elements
         if _text(el)
         and el.type != "status_bar"
+        and el.box.x >= left - left_slop
         and el.box.center[0] > left
         and h * 0.04 <= el.box.center[1] <= h * 0.97
     ]

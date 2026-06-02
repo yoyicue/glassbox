@@ -35,6 +35,7 @@ from skills.regression.ios_settings.reporting import (
     computed_root_coverage,
     path_has_root_label_evidence,
     texts_support_blocked_reason,
+    unresolved_navigation_failures,
 )
 from skills.regression.ios_settings.sections import root_section_ids_for_canonical_labels
 
@@ -113,6 +114,7 @@ CONFIG_EXPERIMENT_OPTIONAL_STRING_KEYS = frozenset({"region"})
 CONFIG_EXPERIMENT_BOOL_KEYS = frozenset({
     "detect_icons_in_perceive",
     "en_ocr_correction",
+    "ios_closed_set_canonicalization_enabled",
     "ocr_tiling_enabled",
     "ocr_tiling_include_full_frame",
     "ui_layout_segmentation_enabled",
@@ -256,6 +258,8 @@ def validate_report(
     if not isinstance(navigation_failures, list):
         errors.append("missing or invalid navigation_failures list")
         navigation_failures = []
+    else:
+        navigation_failures = unresolved_navigation_failures(navigation_failures, visits)
 
     metrics = report.get("metrics")
     if not isinstance(metrics, dict):
@@ -396,6 +400,11 @@ def validate_report(
                 f"{' > '.join(path_key)} ({reason})"
             )
 
+    all_visit_texts = [
+        text
+        for texts in visit_texts_by_path.values()
+        for text in texts
+    ]
     for idx, candidate in enumerate(rejected_candidates):
         if not isinstance(candidate, dict):
             errors.append(f"rejected_candidates[{idx}] is not an object")
@@ -413,7 +422,12 @@ def validate_report(
             errors.append(f"rejected candidate path was not visited: {' > '.join(path_key)}")
         if not isinstance(text, str) or not text:
             errors.append(f"rejected_candidates[{idx}] has invalid text")
-        elif not _text_present_in_visit(text, visit_texts_by_path.get(path_key, [])):
+        elif not _rejected_candidate_text_present(
+            text,
+            path_key,
+            visit_texts_by_path.get(path_key, []),
+            all_visit_texts,
+        ):
             errors.append(
                 f"rejected_candidates[{idx}] text was not present in visited page: "
                 f"{' > '.join(path_key)} > {text}"
@@ -479,6 +493,21 @@ def _text_present_in_visit(text: str, visit_texts: Iterable[str]) -> bool:
         return True
     target = compact_text(text)
     return bool(target) and any(compact_text(item) == target for item in visit_texts)
+
+
+def _rejected_candidate_text_present(
+    text: str,
+    path_key: tuple[str, ...],
+    path_texts: Iterable[str],
+    all_visit_texts: Iterable[str],
+) -> bool:
+    if _text_present_in_visit(text, path_texts):
+        return True
+    # iPad split-view audits root/sidebar candidates while a detail pane is
+    # active. The candidate path is still ["Settings"], but the OCR evidence can
+    # be attached to a detail visit or truncated out of the root visit's first
+    # 40 texts. Keep child-page rejected candidates strict.
+    return path_key == ("Settings",) and _text_present_in_visit(text, all_visit_texts)
 
 
 def _requires_blocked_visit_evidence(path_key: tuple[str, ...], config: dict[str, Any]) -> bool:

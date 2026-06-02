@@ -51,6 +51,7 @@ def test_report_config_records_ocr_layout_ab_switches(monkeypatch):
     monkeypatch.setenv("GLASSBOX_OCR_TILING_COLS", "4")
     monkeypatch.setenv("GLASSBOX_OCR_TILING_OVERLAP", "0.2")
     monkeypatch.setenv("GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED", "1")
+    monkeypatch.setenv("GLASSBOX_IOS_CLOSED_SET_CANONICALIZATION_ENABLED", "0")
     get_config.cache_clear()
     try:
         report_config = _active_device_report_config()
@@ -69,6 +70,7 @@ def test_report_config_records_ocr_layout_ab_switches(monkeypatch):
     assert report_config["ocr_tiling_cols"] == 4
     assert report_config["ocr_tiling_overlap"] == 0.2
     assert report_config["ui_layout_segmentation_enabled"] is True
+    assert report_config["ios_closed_set_canonicalization_enabled"] is False
 
 
 @pytest.mark.smoke

@@ -49,6 +49,7 @@ class ScreenMemory:
         autosave: Callable[[UTG], None] | None = None,
         autosave_every: int = 0,
         ipados_settings_root_projection: bool = False,
+        closed_set_canonicalization_enabled: bool = True,
     ):
         self.utg = utg
         self.match_threshold = match_threshold
@@ -56,6 +57,7 @@ class ScreenMemory:
         self._last_ipados_settings_root_node_id: str | None = None
         self._last_ipados_settings_sidebar_right_x: int | None = None
         self._ipados_settings_root_projection = bool(ipados_settings_root_projection)
+        self._closed_set_canonicalization_enabled = bool(closed_set_canonicalization_enabled)
         # continue the scr_N counter past whatever was loaded from disk
         self._sig_counter = max(
             (int(n[4:]) for n in utg.nodes if n.startswith("scr_") and n[4:].isdigit()),
@@ -408,11 +410,24 @@ class ScreenMemory:
         frame_img: np.ndarray | None,
     ) -> tuple[ScreenNode, int]:
         root_scene, sidebar_right = self._ipados_settings_root_projection_scene(scene)
-        # The projection signature must be sidebar-scoped. Reusing the full-frame
-        # phash would reintroduce detail-pane fragmentation.
-        sig = compute_signature(root_scene, phash="")
+        sig = self._ipados_settings_root_signature(root_scene)
         node = self._observe_node(root_scene, sig, frame_img=frame_img)
         return node, sidebar_right
+
+    @staticmethod
+    def _ipados_settings_root_signature(scene: Scene) -> ScreenSignature:
+        """Stable identity for the persistent iPad Settings sidebar.
+
+        The projected root is a composite navigation surface. Its visible rows
+        change as the sidebar scrolls, while OCR noise and the detail pane must
+        not split the root node. Elements are still merged into the node layout;
+        only the screen identity is semantic.
+        """
+        return ScreenSignature(
+            stable_texts=[norm_text(scene.page_id or "settings/root")],
+            type_histogram={"settings_root": 1},
+            phash="",
+        )
 
     @staticmethod
     def _ipados_settings_root_projection_scene(scene: Scene) -> tuple[Scene, int]:
@@ -598,7 +613,11 @@ class ScreenMemory:
         for el in scene.elements:
             if el.type == "status_bar":
                 continue
-            k = element_key(el, frame_size)
+            k = element_key(
+                el,
+                frame_size,
+                use_canonical_text_intents=self._closed_set_canonicalization_enabled,
+            )
             seen_keys.add(k)
             fresh = to_remembered(el, k).model_copy(
                 update={

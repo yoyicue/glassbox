@@ -29,6 +29,9 @@ Built-in arms:
   ocr_tiling            minimumTextHeight=0 + GLASSBOX_OCR_TILING_ENABLED=1.
   ui_layout             GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED=1.
   ocr_tiling_ui_layout  OCR tiling + UI layout segmentation.
+  raw_no_canonical      Disable runtime Home/Settings closed-set canonicalization.
+  raw_no_canonical_ui_layout
+                        Disable runtime closed-set canonicalization + enable UI layout segmentation.
   root_projection_off   Legacy A-arm: root projection off, state-machine acceptance disabled.
 EOF
   exit 0
@@ -129,6 +132,15 @@ run_one() {
       ;;
     ui_layout)
       env_args+=(GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED=1)
+      ;;
+    raw_no_canonical)
+      env_args+=(GLASSBOX_IOS_CLOSED_SET_CANONICALIZATION_ENABLED=0)
+      ;;
+    raw_no_canonical_ui_layout)
+      env_args+=(
+        GLASSBOX_IOS_CLOSED_SET_CANONICALIZATION_ENABLED=0
+        GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED=1
+      )
       ;;
     ocr_tiling_ui_layout)
       env_args+=(

@@ -79,6 +79,7 @@ def _write_good_report(tmp_path):
                     "ocr": "vision",
                     "text_detector": "vision",
                     "en_ocr_correction": False,
+                    "ios_closed_set_canonicalization_enabled": False,
                     "ocr_minimum_text_height": 0.0,
                     "ocr_tiling_enabled": True,
                     "ocr_tiling_rows": 2,
@@ -152,6 +153,7 @@ def test_ab_extract_emits_one_complete_line_for_good_report(tmp_path, capsys):
     assert row["cfg_ocr"] == "vision"
     assert row["cfg_text_detector"] == "vision"
     assert row["cfg_en_ocr_correction"] is False
+    assert row["cfg_ios_closed_set_canonicalization_enabled"] is False
     assert row["cfg_ocr_minimum_text_height"] == 0.0
     assert row["cfg_ocr_tiling_enabled"] is True
     assert row["cfg_ocr_tiling_rows"] == 2
@@ -227,4 +229,30 @@ def test_ab_matrix_records_rows_for_each_configured_device_without_hardware(tmp_
         ("iphone_17_pro_max", "ios"),
     ]
     assert all(row["arm"] == "unknown_arm" for row in rows)
+    assert all(row["extraction_error"] == "report_missing" for row in rows)
+
+
+@pytest.mark.smoke
+def test_ab_matrix_accepts_raw_no_canonical_ui_layout_arm_without_hardware(tmp_path):
+    script = Path("skills/regression/ios_settings/ab_matrix.sh")
+    env = {
+        **os.environ,
+        "IPAD_SETTINGS_AB_DIR": str(tmp_path),
+        "IPAD_SETTINGS_AB_STAMP": "raw_layout_smoke",
+        "IPAD_SETTINGS_AB_ROUNDS": "1",
+        "IPAD_SETTINGS_AB_LOCALES": "en:HK",
+        "IPAD_SETTINGS_AB_ARMS": "raw_no_canonical raw_no_canonical_ui_layout",
+        "IPAD_SETTINGS_AB_DEVICES": "iphone_17_pro_max:ios:none",
+        "IPAD_SETTINGS_AB_EXTRA_ARGS": "--help",
+    }
+
+    result = subprocess.run([str(script)], env=env, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, result.stderr
+    assert "MATRIX_DONE raw_layout_smoke - rows: 2 / expected: 2" in result.stdout
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "results_raw_layout_smoke.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["arm"] for row in rows] == ["raw_no_canonical", "raw_no_canonical_ui_layout"]
     assert all(row["extraction_error"] == "report_missing" for row in rows)

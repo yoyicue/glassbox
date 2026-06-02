@@ -185,3 +185,106 @@ def test_layout_segmentation_does_not_pair_cross_row_label():
         ("button", None),
         ("text", "Notifications"),
     ]
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("size", [(440, 956), (744, 1133)])
+def test_layout_segmentation_promotes_settings_sidebar_text_rows_on_phone_and_ipad(size):
+    width, height = size
+    scene = _scene(
+        _el(
+            "text",
+            x=int(width * 0.14),
+            y=int(height * 0.30),
+            w=92,
+            h=18,
+            text="Notifications",
+            element_id=1,
+        ),
+        size=size,
+    )
+    scene.scene_type = "settings_detail"
+    scene.safe_actions = ["tap_root_row", "scroll"]
+
+    segment_layout(scene, viewport_size=size)
+
+    assert len(scene.elements) == 1
+    row = scene.elements[0]
+    assert row.type == "list_item"
+    assert row.text == "Notifications"
+    assert row.suggested_actions == ["tap"]
+    assert row.type_source == "layout_segmenter"
+    assert "layout_segment:text_row" in row.type_evidence
+    assert row.preferred_tap_point == row.box.center
+
+
+@pytest.mark.smoke
+def test_layout_segmentation_does_not_use_large_detector_regions_as_vertical_icons():
+    scene = _scene(
+        _el("image", x=10, y=60, w=236, h=88, element_id=58),
+        _el("text", x=68, y=162, w=96, h=14, text="Control Centre", element_id=5),
+        size=(640, 989),
+    )
+    scene.scene_type = "settings_detail"
+    scene.safe_actions = ["tap_root_row", "scroll"]
+
+    segment_layout(scene, viewport_size=(640, 989))
+
+    rows = [element for element in scene.elements if element.text == "Control Centre"]
+    assert len(rows) == 1
+    assert rows[0].type == "list_item"
+    assert "layout_segment:text_row" in rows[0].type_evidence
+    assert "layout_orientation:vertical" not in rows[0].type_evidence
+    assert all("layout_orientation:vertical" not in element.type_evidence for element in scene.elements)
+
+
+@pytest.mark.smoke
+def test_layout_segmentation_does_not_promote_settings_secondary_or_paragraph_text():
+    scene = _scene(
+        _el(
+            "text",
+            x=280,
+            y=270,
+            w=252,
+            h=12,
+            text="Choose the default for how notifications appear.",
+            element_id=1,
+        ),
+        _el("text", x=318, y=681, w=154, h=14, text="Banners, Sounds, Badges", element_id=2),
+        _el("text", x=204, y=314, w=20, h=12, text="On", element_id=3),
+        _el("text", x=580, y=410, w=12, h=14, text=">", element_id=4),
+        _el("text", x=94, y=178, w=52, h=12, text="and more", element_id=5),
+        _el("text", x=180, y=268, w=46, h=16, text="kacier", element_id=6),
+        size=(640, 989),
+    )
+    scene.scene_type = "settings_detail"
+    scene.safe_actions = ["tap_root_row", "scroll"]
+
+    segment_layout(scene, viewport_size=(640, 989))
+
+    assert [(element.type, element.text) for element in scene.elements] == [
+        ("text", "and more"),
+        ("text", "kacier"),
+        ("text", "Choose the default for how notifications appear."),
+        ("text", "On"),
+        ("text", ">"),
+        ("text", "Banners, Sounds, Badges"),
+    ]
+
+
+@pytest.mark.smoke
+def test_layout_segmentation_does_not_pair_status_value_as_vertical_label():
+    scene = _scene(
+        _el("image", x=548, y=310, w=72, h=72, element_id=1),
+        _el("text", x=561, y=408, w=20, h=12, text="On", element_id=2),
+        size=(640, 989),
+    )
+    scene.scene_type = "settings_detail"
+
+    segment_layout(scene, viewport_size=(640, 989))
+
+    assert [(element.type, element.text) for element in scene.elements] == [
+        ("button", None),
+        ("text", "On"),
+    ]
+    assert all("layout_segment:icon_label" not in element.type_evidence for element in scene.elements)

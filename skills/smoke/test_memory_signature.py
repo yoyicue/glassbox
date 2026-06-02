@@ -16,14 +16,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from glassbox.cognition.base import Box, Scene, UIElement
+from glassbox.cognition.base import Box, Scene, UIElement, WhiteboxHint
 from glassbox.memory import UTG, ScreenMemory, ScreenNode, compute_signature, dhash, similarity
 from glassbox.memory.signature import SIGNATURE_MATCH_THRESHOLD
 
 
-def _el(eid, text, *, type_="button", x=0, y=0):
+def _el(eid, text, *, type_="button", x=0, y=0, whitebox=None):
     return UIElement(type=type_, box=Box(x=x, y=y, w=80, h=30),
-                     text=text, confidence=0.9, element_id=eid)
+                     text=text, confidence=0.9, element_id=eid,
+                     whitebox_hint=whitebox)
 
 
 def _scene(*elements, scene_type=None, current_vc=None):
@@ -79,6 +80,31 @@ def test_signature_excludes_status_bar_from_histogram():
 
 
 @pytest.mark.smoke
+def test_signature_ignores_bare_detector_images():
+    """Opt-in icon detectors can flicker; bare detections are not screen identity."""
+    sig = compute_signature(_scene(
+        _el(0, "Settings", type_="text"),
+        _el(1, None, type_="image"),
+        _el(2, None, type_="image"),
+    ))
+    assert sig.type_histogram == {"text": 1}
+
+
+@pytest.mark.smoke
+def test_signature_keeps_semantic_images():
+    sig = compute_signature(_scene(
+        _el(0, "Settings", type_="text"),
+        _el(
+            1,
+            None,
+            type_="image",
+            whitebox=WhiteboxHint(asset_match="settings_icon"),
+        ),
+    ))
+    assert sig.type_histogram == {"text": 1, "image": 1}
+
+
+@pytest.mark.smoke
 def test_similarity_tolerates_status_bar_clock_churn():
     a = compute_signature(_scene(
         _el(0, "9:41", type_="status_bar"),
@@ -130,6 +156,29 @@ def test_recognize_collapses_one_screen_to_one_node():
     assert n1.screen_id == n2.screen_id
     assert len(mem.utg.nodes) == 1
     assert n1.visit_count == 2
+
+
+@pytest.mark.smoke
+def test_recognize_ignores_bare_detector_image_churn():
+    mem = ScreenMemory(UTG(bundle_id="com.x"))
+    s1 = _scene(
+        _el(0, "Settings", type_="text"),
+        _el(1, "Search", type_="text"),
+        _el(2, None, type_="image"),
+    )
+    s2 = _scene(
+        _el(0, "Settings", type_="text"),
+        _el(1, "Search", type_="text"),
+        _el(2, None, type_="image"),
+        _el(3, None, type_="image"),
+        _el(4, None, type_="image"),
+    )
+
+    n1 = mem.observe(s1)
+    n2 = mem.observe(s2)
+
+    assert n1.screen_id == n2.screen_id
+    assert len(mem.utg.nodes) == 1
 
 
 @pytest.mark.smoke

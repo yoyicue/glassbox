@@ -89,6 +89,7 @@ class PhoneGestureConfig:
 class PhoneFeatureFlags:
     detect_icons_in_perceive: bool = False
     ui_layout_segmentation: bool = False
+    ios_closed_set_canonicalization: bool = True
     strict_target_matching: bool = False
     require_home_icon_grid: bool = False
     reverify_fresh_frame: bool = False
@@ -241,6 +242,7 @@ class Phone:
         semantic_plan_ops: frozenset[str] | None = None,
         detect_icons_in_perceive: bool = False,
         ui_layout_segmentation: bool = False,
+        ios_closed_set_canonicalization: bool = True,
         max_ocr_elements: int = 800,
         max_ocr_text_chars: int = 1024,
         ocr_timeout: float = 0.0,
@@ -271,6 +273,7 @@ class Phone:
             perceive_cache_diff=perceive_cache_diff,
             detect_icons_in_perceive=detect_icons_in_perceive,
             ui_layout_segmentation=ui_layout_segmentation,
+            ios_closed_set_canonicalization=ios_closed_set_canonicalization,
             strict_target_matching=strict_target_matching,
             require_home_icon_grid=require_home_icon_grid,
             reverify_fresh_frame=reverify_fresh_frame,
@@ -338,6 +341,7 @@ class Phone:
         perceive_cache_diff: float,
         detect_icons_in_perceive: bool,
         ui_layout_segmentation: bool,
+        ios_closed_set_canonicalization: bool,
         strict_target_matching: bool,
         require_home_icon_grid: bool,
         reverify_fresh_frame: bool,
@@ -365,6 +369,7 @@ class Phone:
         feature_flags = feature_flags or PhoneFeatureFlags(
             detect_icons_in_perceive=detect_icons_in_perceive,
             ui_layout_segmentation=ui_layout_segmentation,
+            ios_closed_set_canonicalization=ios_closed_set_canonicalization,
             strict_target_matching=strict_target_matching,
             require_home_icon_grid=require_home_icon_grid,
             reverify_fresh_frame=reverify_fresh_frame,
@@ -462,6 +467,7 @@ class Phone:
         # enabled it also needs icon regions, so perceptor lets it trigger icon
         # detection even if the older icon-only flag is off.
         self._ui_layout_segmentation = bool(feature_flags.ui_layout_segmentation)
+        self._ios_closed_set_canonicalization = bool(feature_flags.ios_closed_set_canonicalization)
         # Live-camera OCR hardening: cap OCR output volume (default-on, generous
         # — only a chaotic camera-preview frame ever exceeds it) and an opt-in
         # recognize() watchdog (default off; enable on the live rig).
@@ -840,6 +846,10 @@ class Phone:
     @property
     def ui_layout_segmentation_enabled(self) -> bool:
         return self._ui_layout_segmentation
+
+    @property
+    def ios_closed_set_canonicalization_enabled(self) -> bool:
+        return self._ios_closed_set_canonicalization
 
     @property
     def max_ocr_elements(self) -> int:

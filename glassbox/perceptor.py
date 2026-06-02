@@ -125,6 +125,8 @@ class Perceptor:
     ) -> None:
         platform = _platform_key_from_model(getattr(getattr(self._phone, "device_geometry", None), "model", ""))
         scene_kind = str(scene.platform_scene_kind or "")
+        if not bool(getattr(self._phone, "ios_closed_set_canonicalization_enabled", True)):
+            return
         if platform not in {"ios", "ipados"} and not (
             scene_kind.startswith("springboard") or scene_kind.startswith("settings")
         ):

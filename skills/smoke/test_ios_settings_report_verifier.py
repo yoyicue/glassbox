@@ -161,6 +161,43 @@ def test_report_payload_threads_search_failures_into_root_coverage(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_report_payload_filters_resolved_navigation_failures(monkeypatch):
+    monkeypatch.setattr(
+        "skills.regression.ios_settings.report_writer._active_device_report_config",
+        lambda: {"phone_model": "ipad_mini_7", "platform": "ipados"},
+    )
+    run_config = SettingsRunConfig.for_child_audit(
+        max_depth=1,
+        max_pages=4,
+        max_child_scrolls_per_page=1,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+    )
+
+    payload = build_report_payload(
+        run_config=run_config,
+        visits=[
+            PageVisit(("Settings",), "Settings", ("Settings",)),
+            PageVisit(("Settings", "通用"), "通用", ("通用", "关于本机")),
+        ],
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[
+            NavigationFailure(("Settings",), "Settings", "通用", "tap_no_navigation"),
+        ],
+        root_coverage={"expected": ["通用"], "visited": ["通用"], "missing": []},
+        trace_payload=None,
+    )
+
+    assert payload["navigation_failures"] == []
+    assert payload["metrics"]["navigation_failure_count"] == 0
+    assert "ios-settings-navigation-tap-no-transition" not in {
+        issue["id"] for issue in payload["known_issues"]
+    }
+
+
+@pytest.mark.smoke
 def test_report_payload_uses_ipad_device_context_for_unavailable_roots(monkeypatch):
     monkeypatch.setattr(
         "skills.regression.ios_settings.report_writer._active_device_report_config",
@@ -379,7 +416,17 @@ def test_verifier_auto_exempts_ipad_search_absent_device_roots():
 
 @pytest.mark.smoke
 def test_report_summaries_downgrade_entry_exempt_navigation_failures():
-    report = _report()
+    report = _report(
+        visits=[
+            {"path": ["Settings"], "title": "Settings", "texts": ["Settings"]},
+            *[
+                {"path": ["Settings", label], "title": label, "texts": [label, "body line"]}
+                for label in EXPECTED_ROOT_NAV_TEXT_ZH
+                if label != "操作按钮"
+            ],
+        ],
+        missing=["操作按钮"],
+    )
     report["config"]["platform"] = "ipados"
     report["config"]["phone_model"] = "ipad_mini_7"
     report["root_coverage"]["entry_exempt"] = ["操作按钮"]
@@ -689,6 +736,7 @@ def test_ios_settings_report_verifier_checks_optional_ab_switch_config_types():
             "ocr": False,
             "text_detector": None,
             "en_ocr_correction": "0",
+            "ios_closed_set_canonicalization_enabled": "0",
             "ocr_minimum_text_height": "0",
             "ocr_unsharp_mask": "1",
             "ocr_tiling_enabled": "1",
@@ -705,6 +753,7 @@ def test_ios_settings_report_verifier_checks_optional_ab_switch_config_types():
     assert any("config.ocr must be a string" in error for error in errors)
     assert any("config.text_detector must be a string" in error for error in errors)
     assert any("config.en_ocr_correction must be a boolean" in error for error in errors)
+    assert any("config.ios_closed_set_canonicalization_enabled must be a boolean" in error for error in errors)
     assert any("config.ocr_minimum_text_height must be null or number" in error for error in errors)
     assert any("config.ocr_unsharp_mask must be null or boolean" in error for error in errors)
     assert any("config.ocr_tiling_enabled must be a boolean" in error for error in errors)
@@ -1168,6 +1217,33 @@ def test_ios_settings_report_verifier_allows_unknown_candidate_when_audit_not_st
 
 
 @pytest.mark.smoke
+def test_ios_settings_report_verifier_allows_root_candidate_evidence_from_split_view_visit():
+    report = _report()
+    report["visits"][0]["texts"] = [
+        text for text in report["visits"][0]["texts"] if text != "iCloud"
+    ]
+    report["visits"].append({
+        "path": ["Settings", "Apps"],
+        "title": "Apps",
+        "texts": ["Apps", "App Store", "iCloud"],
+    })
+    report["visit_count"] = len(report["visits"])
+    report["rejected_candidates"] = [
+        {
+            "path": ["Settings"],
+            "title": "Notifications",
+            "text": "iCloud",
+            "reason": "unsafe_text",
+        },
+    ]
+    _refresh_report_summaries(report)
+
+    errors = validate_report(report)
+
+    assert not any("text was not present in visited page" in error for error in errors)
+
+
+@pytest.mark.smoke
 def test_ios_settings_report_verifier_rejects_missing_affordance_in_strict_mode():
     report = _report()
     report["config"]["strict_child_candidate_audit"] = True
@@ -1273,6 +1349,23 @@ def test_ios_settings_report_verifier_rejects_navigation_failure_in_strict_mode(
     errors = validate_report(report)
 
     assert any("navigation candidate did not open" in error for error in errors)
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_allows_resolved_navigation_failure_in_strict_mode():
+    report = _report()
+    report["navigation_failures"] = [
+        {
+            "path": ["Settings"],
+            "title": "Settings",
+            "text": "通用",
+            "reason": "tap_no_navigation",
+        },
+    ]
+    _refresh_report_summaries(report)
+
+    assert report["navigation_failures"] == []
+    assert validate_report(report) == []
 
 
 @pytest.mark.smoke

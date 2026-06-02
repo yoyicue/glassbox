@@ -33,14 +33,19 @@ def is_volatile(el: UIElement) -> bool:
     return el.type == "list_item"
 
 
-def element_key(el: UIElement, frame_size: tuple[int, int]) -> str:
+def element_key(
+    el: UIElement,
+    frame_size: tuple[int, int],
+    *,
+    use_canonical_text_intents: bool = True,
+) -> str:
     """A node-stable id for an element.
 
     Closed-set canonicalizers may override noisy OCR text with an intent label;
     otherwise the identity follows design §4: own text > whitebox asset >
     accessibility id > coarse grid cell.
     """
-    t = _text_identity(el)
+    t = _text_identity(el, use_canonical_text_intents=use_canonical_text_intents)
     if t:
         return f"text:{t}"
     wb = el.whitebox_hint
@@ -56,9 +61,9 @@ def element_key(el: UIElement, frame_size: tuple[int, int]) -> str:
     return f"{el.type}@{col},{row}"
 
 
-def _text_identity(el: UIElement) -> str:
+def _text_identity(el: UIElement, *, use_canonical_text_intents: bool = True) -> str:
     intent = norm_text(el.intent_label)
-    if intent and el.intent_source in _CANONICAL_TEXT_INTENT_SOURCES:
+    if use_canonical_text_intents and intent and el.intent_source in _CANONICAL_TEXT_INTENT_SOURCES:
         return intent
     return norm_text(el.text)
 
