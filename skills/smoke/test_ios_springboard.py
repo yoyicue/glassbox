@@ -122,6 +122,32 @@ def test_ipad_home_widget_page_with_ocr_noise_counts_as_home():
 
     assert is_ios_home_screen(scene, viewport_size=(1920, 1080))
     assert is_ios_home_screen(scene, viewport_size=(1920, 1080), strict_springboard=True)
+    assert not _looks_like_today_widget_surface(scene, viewport_size=(1920, 1080))
+
+
+@pytest.mark.smoke
+def test_ipad_home_widget_page_with_icon_grid_is_not_widget_only():
+    scene = _scene(
+        _el("2:36PM Tue 2 Jun", 650, 53, w=114),
+        _el("No Events Today", 737, 324, w=112),
+        _el("Daxing", 737, 385, w=53),
+        _el("34°", 737, 402, w=53, h=28),
+        _el("4PM", 773, 458, w=22),
+        _el("34°", 773, 483, w=20),
+        _el("Home", 762, 700, w=36),
+        _el("Books", 762, 818, w=36),
+        _el("Notes", 860, 142, w=56),
+        _el("No Notes", 857, 179, w=47),
+        _el("Camera", 879, 698, w=42),
+        _el("Videos", 879, 818, w=39),
+        _el("FaceTime", 993, 460, w=53),
+        _el("Settings", 996, 818, w=47),
+        _el("Files", 1125, 460, w=28),
+        _el("Maps", 1122, 580, w=33),
+    )
+
+    assert is_ios_home_screen(scene, viewport_size=(1920, 1080))
+    assert not _looks_like_today_widget_surface(scene, viewport_size=(1920, 1080))
 
 
 @pytest.mark.smoke
