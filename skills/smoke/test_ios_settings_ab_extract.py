@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -125,12 +126,14 @@ def _run(argv, capsys):
 def test_ab_extract_emits_one_complete_line_for_good_report(tmp_path, capsys):
     report_path = _write_good_report(tmp_path)
 
-    row = _run(["B", "1", "en-HK", "0", str(report_path)], capsys)
+    row = _run(["B", "1", "en-HK", "0", str(report_path), "ipad_mini_7", "ipados"], capsys)
 
     assert "extraction_error" not in row
     assert row["arm"] == "B"
     assert row["round"] == 1
     assert row["locale"] == "en-HK"
+    assert row["device"] == "ipad_mini_7"
+    assert row["platform"] == "ipados"
     assert row["crash"] is False
     assert row["task_completion"] is True
     assert row["entered_graph"] == 1
@@ -164,11 +167,13 @@ def test_ab_extract_emits_one_complete_line_for_good_report(tmp_path, capsys):
 def test_ab_extract_emits_one_error_line_for_missing_report(tmp_path, capsys):
     report_path = tmp_path / "missing.json"
 
-    row = _run(["A", "2", "zh-CN", "1", str(report_path)], capsys)
+    row = _run(["A", "2", "zh-CN", "1", str(report_path), "iphone_17_pro_max", "ios"], capsys)
 
     assert row["arm"] == "A"
     assert row["round"] == 2
     assert row["locale"] == "zh-CN"
+    assert row["device"] == "iphone_17_pro_max"
+    assert row["platform"] == "ios"
     assert row["rc"] == 1
     assert row["crash"] is True
     assert row["extraction_error"] == "report_missing"
@@ -194,3 +199,32 @@ def test_ab_matrix_shell_syntax_is_valid():
     result = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True, check=False)
 
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.smoke
+def test_ab_matrix_records_rows_for_each_configured_device_without_hardware(tmp_path):
+    script = Path("skills/regression/ios_settings/ab_matrix.sh")
+    env = {
+        **os.environ,
+        "IPAD_SETTINGS_AB_DIR": str(tmp_path),
+        "IPAD_SETTINGS_AB_STAMP": "device_smoke",
+        "IPAD_SETTINGS_AB_ROUNDS": "1",
+        "IPAD_SETTINGS_AB_LOCALES": "en:HK",
+        "IPAD_SETTINGS_AB_ARMS": "unknown_arm",
+        "IPAD_SETTINGS_AB_DEVICES": "ipad_mini_7:ipados:state_machine iphone_17_pro_max:ios:none",
+    }
+
+    result = subprocess.run([str(script)], env=env, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, result.stderr
+    assert "MATRIX_DONE device_smoke - rows: 2 / expected: 2" in result.stdout
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "results_device_smoke.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert [(row["device"], row["platform"]) for row in rows] == [
+        ("ipad_mini_7", "ipados"),
+        ("iphone_17_pro_max", "ios"),
+    ]
+    assert all(row["arm"] == "unknown_arm" for row in rows)
+    assert all(row["extraction_error"] == "report_missing" for row in rows)

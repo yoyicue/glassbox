@@ -1,4 +1,4 @@
-"""Extract one iPad Settings A/B run into a single JSONL row.
+"""Extract one iOS Settings A/B run into a single JSONL row.
 
 The matrix driver calls this after every rig run, including runs that exited
 non-zero. It must be row-complete: missing or corrupt inputs are encoded as an
@@ -43,7 +43,16 @@ AB_CONFIG_KEYS = (
 )
 
 
-def extract_row(arm: str, round_value: str, locale: str, rc_value: str, report_path: str) -> dict[str, Any]:
+def extract_row(
+    arm: str,
+    round_value: str,
+    locale: str,
+    rc_value: str,
+    report_path: str,
+    *,
+    device: str | None = None,
+    platform: str | None = None,
+) -> dict[str, Any]:
     row: dict[str, Any] = {
         "arm": arm,
         "round": _int_or_text(round_value),
@@ -51,6 +60,10 @@ def extract_row(arm: str, round_value: str, locale: str, rc_value: str, report_p
         "rc": _int_or_none(rc_value),
         "report": report_path,
     }
+    if device:
+        row["device"] = device
+    if platform:
+        row["platform"] = platform
     rc = row["rc"] if isinstance(row["rc"], int) else 0
 
     path = Path(report_path)
@@ -300,18 +313,24 @@ def _str_or_none(value: Any) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 5:
+    if len(args) not in {5, 7}:
         row = {
             "arm": args[0] if len(args) > 0 else None,
             "round": args[1] if len(args) > 1 else None,
             "locale": args[2] if len(args) > 2 else None,
             "rc": _int_or_none(args[3]) if len(args) > 3 else None,
             "report": args[4] if len(args) > 4 else None,
+            "device": args[5] if len(args) > 5 else None,
+            "platform": args[6] if len(args) > 6 else None,
             "crash": False,
             "extraction_error": "usage",
         }
     else:
-        row = extract_row(*args)
+        row = extract_row(
+            *args[:5],
+            device=args[5] if len(args) > 5 else None,
+            platform=args[6] if len(args) > 6 else None,
+        )
     print(json.dumps(row, ensure_ascii=False, sort_keys=True), flush=True)
     return 0
 
