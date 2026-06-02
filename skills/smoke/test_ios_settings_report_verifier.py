@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from glassbox.config import get_config
 from skills.regression.ios_settings.config import SettingsRunConfig
 from skills.regression.ios_settings.policy import (
     EXPECTED_ROOT_NAV_TEXT_ZH,
@@ -230,6 +231,36 @@ def test_report_payload_uses_ipad_device_context_for_unavailable_roots(monkeypat
     assert payload["root_coverage"]["device_unavailable"] == ["操作按钮"]
     assert payload["root_coverage"]["required_missing"] == []
     assert payload["metrics"]["root_required_expected_count"] == 0
+
+
+@pytest.mark.smoke
+def test_report_payload_records_active_en_ocr_correction_switch(monkeypatch):
+    monkeypatch.setenv("GLASSBOX_EN_OCR_CORRECTION", "1")
+    get_config.cache_clear()
+
+    try:
+        run_config = SettingsRunConfig.for_child_audit(
+            max_depth=1,
+            max_pages=4,
+            max_child_scrolls_per_page=1,
+            max_candidates_per_page=0,
+            strict_child_candidate_audit=False,
+        )
+
+        payload = build_report_payload(
+            run_config=run_config,
+            visits=[PageVisit(("Settings",), "Settings", ("Settings",))],
+            limits_hit=set(),
+            blocked_pages=[],
+            rejected_candidates=[],
+            navigation_failures=[],
+            root_coverage={"expected": [], "visited": [], "missing": []},
+            trace_payload=None,
+        )
+    finally:
+        get_config.cache_clear()
+
+    assert payload["config"]["en_ocr_correction"] is True
 
 
 def _report(*, limits=None, visits=None, missing=None):
