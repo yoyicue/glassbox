@@ -17,6 +17,7 @@ from glassbox.backend_registry import (
     select_vlm_backend,
 )
 from glassbox.cognition.base import Box, Scene, UIElement
+from glassbox.cognition.contracts import TextRegion
 from glassbox.config import AgentConfig
 from glassbox.effector import ActionResult, BackendCapabilities, PreflightResult
 from glassbox.geometry import make_device_geometry
@@ -115,6 +116,29 @@ class CountingVotingOCR:
         ]
 
 
+class ScrollDriftVotingOCR:
+    def __init__(self):
+        self.calls = 0
+
+    def recognize(self, _image):
+        shift = 0 if self.calls == 0 else 12
+        self.calls += 1
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=80, y=300 + shift, w=90, h=20),
+                text="Notifications",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=318 + shift, w=90, h=20),
+                text="Sounds & Haptics",
+                confidence=0.9,
+            ),
+        ]
+
+
 class TimeoutOnceOCR:
     def __init__(self):
         self.calls = 0
@@ -140,6 +164,51 @@ class ShapeOCR:
 
     def recognize(self, image):
         self.shapes.append((image.shape[1], image.shape[0]))
+        return []
+
+
+class LayoutRowOCR:
+    def recognize(self, image):
+        height, width = image.shape[:2]
+        icon = max(22, int(width * 0.055))
+        x = int(width * 0.08)
+        y = int(height * 0.22)
+        gap = max(10, int(width * 0.025))
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=x + icon + gap, y=y + 2, w=max(52, int(width * 0.15)), h=20),
+                text="WLAN",
+                confidence=0.9,
+            )
+        ]
+
+
+class TileOnlyTextRegionOCR:
+    contract = "TextRegionOCR"
+
+    def __init__(self):
+        self.calls: list[tuple[str, tuple[int, int, int, int] | None, bool | None]] = []
+
+    def recognize(self, frame, *, roi=None, native_roi=None):
+        roi_tuple = None if roi is None else (roi.x, roi.y, roi.w, roi.h)
+        self.calls.append(("frame", roi_tuple, native_roi))
+        if roi is None:
+            return [
+                TextRegion(
+                    text="Full",
+                    box=Box(x=5, y=5, w=20, h=10),
+                    confidence=0.9,
+                )
+            ]
+        if roi.x == 0 and roi.y == 0:
+            return [
+                TextRegion(
+                    text="Tiny",
+                    box=Box(x=roi.x + 8, y=roi.y + 8, w=16, h=8),
+                    confidence=0.8,
+                )
+            ]
         return []
 
 
@@ -511,6 +580,26 @@ def test_runtime_populates_settings_root_row_intent_labels_from_core_annotator()
 
 
 @pytest.mark.smoke
+def test_runtime_can_disable_ios_closed_set_canonicalization_for_raw_ocr_measurement():
+    source = FakeSource()
+    effector = FakeEffector()
+    cfg = AgentConfig(
+        _env_file=None,
+        memory_bundle="com.apple.Preferences",
+        ios_closed_set_canonicalization_enabled=False,
+    )
+
+    runtime = build_phone(source=source, cfg=cfg, ocr=NoisySettingsRootOCR(), effector=effector)
+
+    scene = runtime.phone.perceive()
+
+    by_text = {element.text: element for element in scene.elements}
+    assert scene.platform_scene_kind == "settings_root"
+    assert by_text["待机見示"].intent_label is None
+    assert by_text["S0S"].intent_label is None
+
+
+@pytest.mark.smoke
 def test_runtime_populates_greater_china_english_settings_root_intents_from_core_annotator():
     source = FakeIPadSource()
     effector = FakeEffector()
@@ -557,6 +646,160 @@ def test_build_phone_threads_configured_app_viewport_into_default_observation_sc
     assert scene.viewport_size == (50, 70)
     assert runtime.phone.app_viewport is not None
     assert runtime.phone.app_viewport.bbox == (10, 20, 50, 70)
+
+
+@pytest.mark.smoke
+def test_ocr_tiling_is_default_off_for_text_region_ocr():
+    ocr = TileOnlyTextRegionOCR()
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(_env_file=None),
+        ocr=ocr,
+        effector=FakeEffector(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert [element.text for element in scene.elements] == ["Full"]
+    assert ocr.calls == [("frame", None, None)]
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("source_cls", "phone_model"),
+    [
+        (FakeSource, "iphone_17_pro_max"),
+        (FakeIPadSource, "ipad_mini_7"),
+    ],
+)
+def test_ocr_tiling_opt_in_recovers_tile_only_text_regions_on_iphone_and_ipad(
+    source_cls,
+    phone_model,
+):
+    ocr = TileOnlyTextRegionOCR()
+    runtime = build_phone(
+        source=source_cls(),
+        cfg=AgentConfig(
+            _env_file=None,
+            phone_model=phone_model,
+            ocr_tiling_enabled=True,
+            ocr_tiling_rows=2,
+            ocr_tiling_cols=2,
+            ocr_tiling_overlap=0.0,
+        ),
+        ocr=ocr,
+        effector=FakeEffector(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert [element.text for element in scene.elements] == ["Full", "Tiny"]
+    tile_calls = [call for call in ocr.calls if call[1] is not None]
+    assert len(tile_calls) == 4
+    assert all(native_roi is False for _, _, native_roi in tile_calls)
+
+
+@pytest.mark.smoke
+def test_ui_layout_segmentation_is_default_off_and_does_not_run_icon_detector(monkeypatch):
+    calls = 0
+
+    def fake_detect_icons(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return []
+
+    monkeypatch.setattr("glassbox.cognition.icon_detect.detect_icons", fake_detect_icons)
+    runtime = build_phone(
+        source=FakeSource(),
+        cfg=AgentConfig(_env_file=None),
+        ocr=LayoutRowOCR(),
+        effector=FakeEffector(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert calls == 0
+    assert [(element.type, element.text) for element in scene.elements] == [("text", "WLAN")]
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("source_cls", "phone_model"),
+    [
+        (FakeSource, "iphone_17_pro_max"),
+        (FakeIPadSource, "ipad_mini_7"),
+    ],
+)
+def test_ui_layout_segmentation_opt_in_groups_icon_labels_on_iphone_and_ipad(
+    monkeypatch,
+    source_cls,
+    phone_model,
+):
+    from glassbox.cognition.icon_detect import IconRegion
+
+    calls = 0
+
+    def fake_detect_icons(frame_img, *, text_boxes=(), **_kwargs):
+        nonlocal calls
+        calls += 1
+        height, width = frame_img.shape[:2]
+        icon = max(22, int(width * 0.055))
+        return [IconRegion(box=(int(width * 0.08), int(height * 0.22), icon, icon))]
+
+    monkeypatch.setattr("glassbox.cognition.icon_detect.detect_icons", fake_detect_icons)
+    runtime = build_phone(
+        source=source_cls(),
+        cfg=AgentConfig(
+            _env_file=None,
+            phone_model=phone_model,
+            ui_layout_segmentation_enabled=True,
+        ),
+        ocr=LayoutRowOCR(),
+        effector=FakeEffector(),
+    )
+
+    scene = runtime.phone.perceive()
+
+    assert calls == 1
+    assert len(scene.elements) == 1
+    row = scene.elements[0]
+    assert row.type == "list_item"
+    assert row.text == "WLAN"
+    assert row.element_id == 0
+    assert row.suggested_actions == ["tap"]
+    assert row.type_source == "layout_segmenter"
+    assert "layout_segment:icon_label" in row.type_evidence
+
+
+@pytest.mark.smoke
+def test_perceive_voted_preserves_detect_icons_in_perceive_path(monkeypatch):
+    from glassbox.cognition.icon_detect import IconRegion
+
+    calls = 0
+
+    def fake_detect_icons(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return [IconRegion(box=(320, 220, 28, 28))]
+
+    monkeypatch.setattr("glassbox.cognition.icon_detect.detect_icons", fake_detect_icons)
+    runtime = build_phone(
+        source=AdvancingSource(),
+        cfg=AgentConfig(
+            _env_file=None,
+            detect_icons_in_perceive=True,
+            ocr_temporal_voting_enabled=True,
+            ocr_temporal_voting_frames=2,
+        ),
+        ocr=FakeOCR(),
+        effector=FakeEffector(),
+    )
+
+    runtime.phone.action_context.ocr_temporal_voting_opt_in = True
+    scene = runtime.phone.perceive()
+
+    assert calls == 1
+    assert any(element.type == "image" and element.text is None for element in scene.elements)
 
 
 @pytest.mark.smoke
@@ -910,6 +1153,28 @@ def test_runtime_wires_ocr_temporal_voting_config_without_global_perceive_side_e
     assert scene.ocr_vote_metadata["samples_requested"] == 3
     assert scene.ocr_vote_metadata["samples_used"] == 3
     assert scene.ocr_vote_metadata["degrade_reason"] == "duplicate_frames"
+
+
+@pytest.mark.smoke
+def test_perceive_voted_preserves_internal_scroll_drift_degrade_reason():
+    runtime = build_phone(
+        source=AdvancingSource(),
+        cfg=AgentConfig(
+            _env_file=None,
+            ocr_temporal_voting_enabled=True,
+            ocr_temporal_voting_frames=2,
+            ocr_temporal_voting_min_presence=2,
+        ),
+        ocr=ScrollDriftVotingOCR(),
+    )
+
+    runtime.phone.action_context.ocr_temporal_voting_opt_in = True
+    scene = runtime.phone.perceive()
+
+    assert scene.observation_mode == "voted_degraded"
+    assert scene.ocr_vote_metadata["samples_used"] == 2
+    assert scene.ocr_vote_metadata["distinct_frames"] == 2
+    assert scene.ocr_vote_metadata["degrade_reason"] == "scroll_drift"
 
 
 @pytest.mark.smoke

@@ -226,6 +226,76 @@ def test_root_crawl_stops_before_scroll_when_required_missing_is_empty(monkeypat
 
 
 @pytest.mark.smoke
+def test_root_reground_only_uses_live_safe_root_candidates(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root = _scene(
+        _el("Settings", 48, 72, w=70),
+        # Right-pane/app-list text with the same label as a stale sidebar
+        # candidate. Re-grounding must not scan the whole scene and tap this.
+        _el("Game Center", 318, 819, w=90, h=14),
+    )
+
+    class IPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return root
+
+        def invalidate_perceive_cache(self):
+            pass
+
+    safe_calls = 0
+    taps: list[str] = []
+
+    def safe_candidates(_scene, **_kwargs):
+        nonlocal safe_calls
+        safe_calls += 1
+        if safe_calls == 1:
+            return [_el("Game Center", 66, 782, w=90)]
+        return []
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        scene_kind=lambda _scene, phone=None: "settings_root",
+        root_coverage_perceive=lambda phone, _depth: phone.perceive(),
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=safe_candidates,
+        tap_settings_row=lambda _phone, row: taps.append(row.text or "") or True,
+        same_page_after_tap=lambda *_args, **_kwargs: True,
+        is_settings_section_header=lambda *_args, **_kwargs: False,
+        vlm_point_for_label=lambda *_args, **_kwargs: None,
+        scroll_budget_for_depth=lambda _depth: 1,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", root),
+        root_coverage=lambda _visits, phone=None: {"visited": [], "missing": []},
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        crawl_missing_root_pages_via_search=lambda *_args, **_kwargs: None,
+    )
+
+    settings_navigation.crawl_current_page(
+        IPadPhone(),
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert safe_calls >= 2
+    assert taps == []
+
+
+@pytest.mark.smoke
 def test_search_result_picker_uses_top_visible_root_result():
     scene = _scene(
         _el("08:40", 48, 26, w=72, ty="status_bar"),
@@ -1588,8 +1658,8 @@ def test_vlm_point_that_does_not_navigate_records_tap_no_navigation(monkeypatch)
         should_audit_candidates=lambda _depth: False,
         record_rejected_candidates=lambda *_args, **_kwargs: None,
         should_traverse_candidates=lambda _depth: True,
-        safe_navigation_candidates=lambda _scene, **_kwargs: [
-            _el("关于本机", 80, 300, w=72),
+        safe_navigation_candidates=lambda scene, **_kwargs: [
+            element for element in scene.elements if (element.text or "").strip() == "关于本机"
         ],
         tap_settings_row=tap_row,
         same_page_after_tap=lambda *_args, **_kwargs: True,
@@ -3655,6 +3725,77 @@ def test_root_crawl_marks_row_tracked_sidebar_absent_roots_without_exempting(mon
     assert settings_context.sidebar_absent_root_labels(phone) == {"通知"}
     assert "通知" not in walkthrough._entry_exempt_sections([], phone=phone)
     assert opened == ["通知"]
+
+
+@pytest.mark.smoke
+def test_root_crawl_does_not_mark_sidebar_absent_when_only_entry_exempt_missing(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root = _scene(
+        _el("Settings", 48, 72, w=70),
+        _el("Wi-Fi", 72, 280, w=70),
+        _el("Bluetooth", 72, 344, w=120),
+    )
+
+    class IPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return root
+
+    phone = IPadPhone()
+    settings_context.reset_for(phone)
+    opened: list[str] = []
+    actions = None
+
+    def _scroll_down(*_args, **kwargs):
+        kwargs["scroll_metadata"]["row_tracked"] = True
+        return "stuck", root
+
+    def _crawl_search(_phone, **kwargs):
+        settings_navigation.crawl_missing_root_pages_via_search(
+            _phone,
+            **kwargs,
+            actions=actions,
+        )
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        root_coverage_perceive=lambda _phone, _depth: root,
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: False,
+        scroll_budget_for_depth=lambda _depth: 1,
+        scroll_down_confirmed=_scroll_down,
+        scroll_to_top=lambda _phone: None,
+        max_root_scroll_resets=0,
+        root_coverage=lambda _visits, phone=None: {"missing": ["钱包与 Apple Pay"]},
+        entry_exempt_sections=walkthrough._entry_exempt_sections,
+        expected_root_labels=["钱包与 Apple Pay"],
+        open_root_label_via_search=lambda _phone, label: opened.append(label) or False,
+        crawl_missing_root_pages_via_search=_crawl_search,
+    )
+
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert settings_context.root_sidebar_exhaustive(phone) is False
+    assert settings_context.sidebar_absent_root_labels(phone) == set()
+    assert opened == []
 
 
 @pytest.mark.smoke

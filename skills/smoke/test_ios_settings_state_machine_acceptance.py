@@ -99,6 +99,18 @@ def test_state_machine_acceptance_passes_for_projected_root_graph():
 
 
 @pytest.mark.smoke
+def test_state_machine_acceptance_does_not_require_sidebar_exhaustive_without_required_missing():
+    result = validate_state_machine_acceptance(
+        _report(),
+        _utg(),
+        min_detail_to_root_edges=1,
+        require_sidebar_exhaustive=True,
+    )
+
+    assert result.errors == []
+
+
+@pytest.mark.smoke
 def test_state_machine_acceptance_rejects_fragmented_root_and_missing_edges():
     result = validate_state_machine_acceptance(
         _report(entered_graph=[]),

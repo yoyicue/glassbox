@@ -123,6 +123,7 @@ def wrap_with_memory_if_enabled(
     memory_dir: str | Path | None = None,
     autosave_every: int = 0,
     ipados_settings_root_projection: bool = False,
+    closed_set_canonicalization_enabled: bool = True,
 ) -> ScreenMemory | None:
     """A ScreenMemory over the app's stored UTG when memory is enabled.
 
@@ -150,4 +151,5 @@ def wrap_with_memory_if_enabled(
         autosave=autosave,
         autosave_every=autosave_every or 0,
         ipados_settings_root_projection=ipados_settings_root_projection,
+        closed_set_canonicalization_enabled=closed_set_canonicalization_enabled,
     )

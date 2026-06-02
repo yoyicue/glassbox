@@ -47,6 +47,8 @@ def test_zh_ocr_engine_params_byte_identical_to_vision_defaults():
     assert tuple(loc.ocr_languages) == tuple(sig["languages"].default)
     assert loc.uses_language_correction is sig["uses_language_correction"].default
     assert tuple(loc.custom_words) == tuple(sig["custom_words"].default)
+    assert sig["minimum_text_height"].default is None
+    assert sig["confidence_threshold"].default == 0.3
 
 
 @pytest.mark.smoke
@@ -115,6 +117,11 @@ def test_vision_factory_forwards_locale_ocr_params(monkeypatch):
     assert tuple(captured["languages"]) == ("zh-Hans", "en-US")
     assert captured["uses_language_correction"] is False
     assert tuple(captured["custom_words"]) == ("+", "-")
+    assert "minimum_text_height" not in captured
+    assert "confidence_threshold" not in captured
+    assert "unsharp_mask" not in captured
+    assert "unsharp_sigma" not in captured
+    assert "unsharp_amount" not in captured
 
     # en + flag → correction on + whitelist forwarded.
     captured.clear()
@@ -124,6 +131,24 @@ def test_vision_factory_forwards_locale_ocr_params(monkeypatch):
     assert tuple(captured["languages"]) == ("en-US",)
     assert captured["uses_language_correction"] is True
     assert "WLAN" in captured["custom_words"]
+
+    # Explicit Vision knobs are opt-in and must forward even falsy 0.0/False.
+    captured.clear()
+    br._vision_ocr_factory(
+        cfg=AgentConfig(
+            _env_file=None,
+            ocr_minimum_text_height=0.0,
+            ocr_confidence_threshold=0.2,
+            ocr_unsharp_mask=False,
+            ocr_unsharp_sigma=0.8,
+            ocr_unsharp_amount=1.2,
+        )
+    )
+    assert captured["minimum_text_height"] == 0.0
+    assert captured["confidence_threshold"] == 0.2
+    assert captured["unsharp_mask"] is False
+    assert captured["unsharp_sigma"] == 0.8
+    assert captured["unsharp_amount"] == 1.2
 
 
 @pytest.mark.smoke

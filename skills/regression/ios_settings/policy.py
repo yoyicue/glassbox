@@ -465,6 +465,16 @@ IPAD_SIDEBAR_WRAPPED_TAIL_FRAGMENTS = frozenset({"App Library", "App 资源库"}
 _IPAD_SIDEBAR_WRAPPED_TAIL_COMPACT = frozenset(
     compact_text(fragment).casefold() for fragment in IPAD_SIDEBAR_WRAPPED_TAIL_FRAGMENTS
 )
+IPAD_ROOT_TRAVERSAL_SKIP_LABELS = frozenset({
+    # Game Center is account/social state, not a required Settings root. It can
+    # require onboarding/profile UI and is already handled as a blocked child
+    # page when reached deliberately. Do not let root/sidebar traversal spend a
+    # strict run proving that optional row.
+    "Game Center",
+})
+_IPAD_ROOT_TRAVERSAL_SKIP_COMPACT = frozenset(
+    compact_text(label).casefold() for label in IPAD_ROOT_TRAVERSAL_SKIP_LABELS
+)
 
 
 def _blocked_child_navigation_reason_from_texts(
@@ -1585,6 +1595,11 @@ class IPadSettingsPolicy(SettingsPolicy):
                 # Wrapped tail of the "Home Screen & App Library" sidebar row, not a
                 # standalone navigable root; the row is reached via "Home Screen &".
                 continue
+            if (
+                allow_sensitive_root_labels
+                and compact_text(text).casefold() in _IPAD_ROOT_TRAVERSAL_SKIP_COMPACT
+            ):
+                continue
             if current_detail_title and (
                 self.title_matches_navigation_label(current_detail_title, text)
                 or (
@@ -1701,14 +1716,21 @@ class IPadSettingsPolicy(SettingsPolicy):
             return None
         if self.is_status_bar_clock_text(text):
             return None
-        _w, h = viewport_size
+        w, h = viewport_size
         cx, cy = element.box.center
         if cy < int(h * 0.10) or cy > int(h * 0.96) or cx > sidebar_right:
+            return None
+        if element.box.x2 > sidebar_right + max(8, int(w * 0.02)):
             return None
         if cy <= int(h * 0.18) and (
             re.match(r"^[Qq]\s+", text)
             or self.is_settings_search_affordance_text(text)
         ):
+            return None
+        if cy <= int(h * 0.20) and not self.is_safe_known_navigation_label(text):
+            # The profile/Apple Account block lives directly below the top search
+            # field. Layout segmentation may expose the owner name ("Da Li") as a
+            # row-like button; that is never a Settings root navigation target.
             return None
         if len(text) <= 3 and (text[0] in "([（【〈《" or text[-1] in ")]）】〉》"):
             return None
@@ -1830,6 +1852,15 @@ class IPadSettingsPolicy(SettingsPolicy):
                 or compact.lower() in {"q", "qsearch"}
                 or compact in {"Q搜索"}
             )
+            if not is_placeholder:
+                # Layout segmentation can produce a large row-level control whose
+                # center happens to sit inside the top-search y band. That is not
+                # an editable query field; treating it as one makes recovery long-
+                # press Apple Account/profile rows while trying to clear search.
+                if element.type in {"button", "switch", "tab_bar_item"}:
+                    continue
+                if element.box.h > max(48, int(h * 0.055)):
+                    continue
             if not is_placeholder and cx > sidebar_right * 0.62:
                 continue
             if not allow_query and not is_placeholder:

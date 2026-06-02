@@ -38,6 +38,7 @@ from glassbox.perception.letterbox import LetterboxCrop
 from glassbox.perception.stable import StabilityPolicy
 from glassbox.phone import (
     OcrTemporalVotingConfig,
+    OcrTilingConfig,
     Phone,
     PhoneFeatureFlags,
     PhoneGestureConfig,
@@ -544,6 +545,7 @@ def build_phone(
             memory_dir=cfg.memory_dir,
             autosave_every=cfg.memory_autosave_every,
             ipados_settings_root_projection=cfg.settings_ipad_root_projection,
+            closed_set_canonicalization_enabled=cfg.ios_closed_set_canonicalization_enabled,
         )
 
     vlm_backend = select_vlm_backend(cfg)
@@ -712,6 +714,14 @@ def build_phone(
             ocr_timeout=cfg.ocr_timeout,
             settings_root_label_aliases=settings_root_label_aliases_for_config(cfg),
             settings_root_fuzzy_aliases=settings_root_fuzzy_aliases_for_config(cfg),
+            ocr_tiling=OcrTilingConfig(
+                enabled=cfg.ocr_tiling_enabled,
+                rows=cfg.ocr_tiling_rows,
+                cols=cfg.ocr_tiling_cols,
+                overlap=cfg.ocr_tiling_overlap,
+                include_full_frame=cfg.ocr_tiling_include_full_frame,
+                nms_iou=cfg.ocr_tiling_nms_iou,
+            ),
             ocr_temporal_voting=OcrTemporalVotingConfig(
                 enabled=cfg.ocr_temporal_voting_enabled,
                 frames=cfg.ocr_temporal_voting_frames,
@@ -724,6 +734,8 @@ def build_phone(
         ),
         feature_flags=PhoneFeatureFlags(
             detect_icons_in_perceive=cfg.detect_icons_in_perceive,
+            ui_layout_segmentation=cfg.ui_layout_segmentation_enabled,
+            ios_closed_set_canonicalization=cfg.ios_closed_set_canonicalization_enabled,
             strict_target_matching=cfg.strict_target_matching,
             require_home_icon_grid=cfg.require_home_icon_grid,
             reverify_fresh_frame=cfg.reverify_fresh_frame,

@@ -1118,6 +1118,115 @@ def test_ipad_top_search_query_does_not_steal_detail_title():
 
 
 @pytest.mark.smoke
+def test_ipad_top_search_ignores_layout_grouped_account_row():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Apps", 268, 44, w=36, h=14),
+            _el("Q Search Apps", 434, 42, w=106, h=16),
+            _el("Da Li", 19, 28, w=222, h=130, ty="button"),
+            _el("Q Search", 36, 90, w=70, h=14),
+            _el("Apple Account, iCloud", 94, 108, w=526, h=66, ty="switch"),
+            _el("WLAN", 25, 205, w=203, h=79, ty="button"),
+            _el("Bluetooth", 22, 252, w=217, h=74, ty="button"),
+        ],
+    )
+
+    field = policy.find_search_field(scene)
+
+    assert field is not None
+    assert field.text == "Q Search"
+    assert not policy.settings_search_has_query_text(scene)
+
+
+@pytest.mark.smoke
+def test_ipad_sidebar_candidates_ignore_profile_band_owner_row():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Apps", 268, 44, w=36, h=14),
+            _el("Q Search", 36, 90, w=70, h=14),
+            _el("Da Li", 94, 142, w=44, h=16, ty="list_item"),
+            _el("Apple Account, iCloud", 94, 108, w=526, h=66, ty="switch"),
+            _el("Airplane Mode", 30, 126, w=207, h=112, ty="button"),
+            _el("WLAN", 25, 205, w=203, h=79, ty="button"),
+            _el("Bluetooth", 22, 252, w=217, h=74, ty="button"),
+        ],
+    )
+
+    labels = [
+        element.text
+        for element in policy.safe_navigation_candidates(scene, allow_sensitive_root_labels=True)
+    ]
+
+    assert "Da Li" not in labels
+    assert "Apple Account, iCloud" not in labels
+    assert "Airplane Mode" not in labels
+    assert labels[:2] == ["WLAN", "Bluetooth"]
+
+
+@pytest.mark.smoke
+def test_ipad_sidebar_candidates_ignore_cross_pane_layout_rows():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 36, 90, w=70, h=14),
+            _el("Notifications", 18, 423, w=226, h=83, ty="button"),
+            # Layout segmentation can merge a right-pane detail row with left
+            # sidebar structure, giving it a center inside the sidebar even
+            # though its box crosses into the detail pane.
+            _el("Talk to Siri", 22, 298, w=328, h=44, ty="list_item"),
+            _el("Siri Requests", 280, 282, w=92, h=14),
+            _el("Siri", 280, 178, w=32, h=18, ty="button"),
+        ],
+    )
+
+    labels = [
+        (element.text or "").strip()
+        for element in policy.safe_navigation_candidates(scene, allow_sensitive_root_labels=True)
+    ]
+
+    assert labels == ["Notifications"]
+
+
+@pytest.mark.smoke
+def test_ipad_sidebar_candidates_skip_game_center_optional_social_root():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 36, 90, w=70, h=14),
+            _el("Privacy & Security", 18, 666, w=230, h=80, ty="button"),
+            # Layout segmentation can promote the optional Game Center sidebar
+            # row to a high-confidence button. It is account/social state, not a
+            # required root for strict Settings coverage.
+            _el("Game Center", 15, 710, w=229, h=86, ty="button"),
+            _el("iCloud", 66, 826, w=44, h=14),
+            _el("Apps", 66, 924, w=36, h=14),
+        ],
+    )
+
+    labels = [
+        (element.text or "").strip()
+        for element in policy.safe_navigation_candidates(scene, allow_sensitive_root_labels=True)
+    ]
+
+    assert "Privacy & Security" in labels
+    assert "Game Center" not in labels
+
+
+@pytest.mark.smoke
 def test_ios_settings_policy_counts_wallet_root_but_does_not_navigate_it():
     scene = _scene(
         _el("设置", 198, 72, w=48),

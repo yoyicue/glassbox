@@ -35,6 +35,35 @@ def test_element_key_prefers_text():
 
 
 @pytest.mark.smoke
+def test_element_key_can_ignore_closed_set_intents_for_raw_ocr_measurement():
+    element = _el(0, "口 Notes")
+    element.intent_label = "Notes"
+    element.intent_source = "springboard_lexicon"
+
+    assert element_key(element, (750, 1334)) == "text:Notes"
+    assert (
+        element_key(element, (750, 1334), use_canonical_text_intents=False)
+        == "text:口 Notes"
+    )
+
+
+@pytest.mark.smoke
+def test_screen_memory_can_ignore_closed_set_intents_for_raw_ocr_measurement():
+    element = _el(0, "待机見示")
+    element.intent_label = "待机显示"
+    element.intent_source = "settings_root_lexicon"
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        closed_set_canonicalization_enabled=False,
+    )
+
+    node = mem.observe(_scene(element))
+
+    assert node.element("text:待机見示") is not None
+    assert node.element("text:待机显示") is None
+
+
+@pytest.mark.smoke
 def test_element_key_falls_back_to_asset_then_aid():
     asset = _el(0, None, type_="image", whitebox=WhiteboxHint(asset_match="cold_icon"))
     assert element_key(asset, (750, 1334)) == "asset:cold_icon"

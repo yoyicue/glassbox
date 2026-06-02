@@ -189,12 +189,23 @@ def _vision_ocr_factory(*, cfg: AgentConfig):
     from glassbox.locale import resolve_ocr_locale
 
     loc = resolve_ocr_locale(cfg)
+    vision_kwargs = {
+        "languages": loc.ocr_languages,
+        "uses_language_correction": loc.uses_language_correction,
+        "custom_words": loc.custom_words,
+    }
+    optional_knobs = {
+        "minimum_text_height": getattr(cfg, "ocr_minimum_text_height", None),
+        "confidence_threshold": getattr(cfg, "ocr_confidence_threshold", None),
+        "unsharp_mask": getattr(cfg, "ocr_unsharp_mask", None),
+        "unsharp_sigma": getattr(cfg, "ocr_unsharp_sigma", None),
+        "unsharp_amount": getattr(cfg, "ocr_unsharp_amount", None),
+    }
+    vision_kwargs.update(
+        {key: value for key, value in optional_knobs.items() if value is not None}
+    )
     return LegacyUIElementOCRAdapter(
-        VisionOCR(
-            languages=loc.ocr_languages,
-            uses_language_correction=loc.uses_language_correction,
-            custom_words=loc.custom_words,
-        )
+        VisionOCR(**vision_kwargs)
     )
 
 

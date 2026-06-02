@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from glassbox.cognition.text_match import compact_text
 from glassbox.ios.progress import screen_signature
 from skills.regression.ios_settings.policy import (
     BLOCKED_CHILD_NAVIGATION_MARKERS,
@@ -333,6 +334,17 @@ def classify_root_coverage(
     return enriched
 
 
+def unresolved_navigation_failures(
+    navigation_failures: Sequence[Any],
+    visits: Sequence[Any],
+) -> list[Any]:
+    """Return navigation failures whose target page never appears in visits."""
+    return [
+        failure for failure in navigation_failures
+        if not _navigation_failure_target_was_visited(failure, visits)
+    ]
+
+
 def _sidebar_exhaustive(base: Mapping[str, Sequence[str]]) -> bool:
     return any(str(value).lower() == "true" for value in base.get("sidebar_exhaustive", ()))
 
@@ -553,7 +565,11 @@ def refresh_report_summaries(report: dict[str, Any]) -> dict[str, Any]:
         root_coverage = {}
     blocked_pages = _list_value(report.get("blocked_pages"))
     rejected_candidates = _list_value(report.get("rejected_candidates"))
-    navigation_failures = _list_value(report.get("navigation_failures"))
+    navigation_failures = unresolved_navigation_failures(
+        _list_value(report.get("navigation_failures")),
+        visits,
+    )
+    report["navigation_failures"] = navigation_failures
     limits_hit = [str(item) for item in _list_value(report.get("limits_hit"))]
     metrics = report_metrics(
         visits=visits,
@@ -595,6 +611,34 @@ def _path(item: Any) -> tuple[str, ...]:
     if isinstance(path, (list, tuple)):
         return tuple(str(segment) for segment in path)
     return ()
+
+
+def _navigation_failure_target_was_visited(failure: Any, visits: Sequence[Any]) -> bool:
+    base_path = _path(failure)
+    text = str(_value(failure, "text", "") or "").strip()
+    if not base_path or not text:
+        return False
+    for visit in visits:
+        visit_path = _path(visit)
+        if len(visit_path) != len(base_path) + 1:
+            continue
+        if visit_path[:len(base_path)] != base_path:
+            continue
+        if _navigation_target_matches(visit_path[-1], text):
+            return True
+    return False
+
+
+def _navigation_target_matches(visited_label: str, target: str) -> bool:
+    if visited_label == target:
+        return True
+    if compact_text(visited_label) == compact_text(target):
+        return True
+    visited_root = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(visited_label)
+    target_root = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label(target)
+    if visited_root is not None and visited_root == target_root:
+        return True
+    return DEFAULT_SETTINGS_POLICY.title_matches_navigation_label(visited_label, target)
 
 
 def _texts(item: Any) -> tuple[str, ...]:

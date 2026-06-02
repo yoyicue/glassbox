@@ -56,12 +56,34 @@ def compute_signature(scene: Scene, phash: str = "") -> ScreenSignature:
     }
     hist: Counter[str] = Counter()
     for e in scene.elements:
-        if e.type != "status_bar":
+        if _counts_for_signature_histogram(e):
             hist[e.type] += 1
     return ScreenSignature(
         stable_texts=sorted(stable),
         type_histogram=dict(hist),
         phash=phash,
+    )
+
+
+def _counts_for_signature_histogram(element: object) -> bool:
+    element_type = getattr(element, "type", None)
+    if element_type == "status_bar":
+        return False
+    if element_type != "image":
+        return True
+    if norm_text(getattr(element, "text", None)):
+        return True
+    if norm_text(getattr(element, "intent_label", None)):
+        return True
+    if getattr(element, "suggested_actions", None):
+        return True
+    whitebox = getattr(element, "whitebox_hint", None)
+    return bool(
+        whitebox is not None
+        and (
+            getattr(whitebox, "asset_match", None)
+            or getattr(whitebox, "accessibility_id", None)
+        )
     )
 
 

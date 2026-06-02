@@ -1,4 +1,4 @@
-"""Extract one iPad Settings A/B run into a single JSONL row.
+"""Extract one iOS Settings A/B run into a single JSONL row.
 
 The matrix driver calls this after every rig run, including runs that exited
 non-zero. It must be row-complete: missing or corrupt inputs are encoded as an
@@ -19,9 +19,41 @@ SETTINGS_BUNDLE_ID = ".".join(("com", "apple", "Preferences"))
 SETTINGS_ROOT_PAGE_ID = "settings/root"
 SETTINGS_ROOT_KIND = "settings_root"
 RETURN_ACTIONS = {"back", "home"}
+AB_CONFIG_KEYS = (
+    "detect_icons_in_perceive",
+    "en_ocr_correction",
+    "ios_closed_set_canonicalization_enabled",
+    "language",
+    "ocr",
+    "ocr_confidence_threshold",
+    "ocr_minimum_text_height",
+    "ocr_tiling_cols",
+    "ocr_tiling_enabled",
+    "ocr_tiling_include_full_frame",
+    "ocr_tiling_nms_iou",
+    "ocr_tiling_overlap",
+    "ocr_tiling_rows",
+    "ocr_unsharp_amount",
+    "ocr_unsharp_mask",
+    "ocr_unsharp_sigma",
+    "phone_model",
+    "platform",
+    "region",
+    "text_detector",
+    "ui_layout_segmentation_enabled",
+)
 
 
-def extract_row(arm: str, round_value: str, locale: str, rc_value: str, report_path: str) -> dict[str, Any]:
+def extract_row(
+    arm: str,
+    round_value: str,
+    locale: str,
+    rc_value: str,
+    report_path: str,
+    *,
+    device: str | None = None,
+    platform: str | None = None,
+) -> dict[str, Any]:
     row: dict[str, Any] = {
         "arm": arm,
         "round": _int_or_text(round_value),
@@ -29,6 +61,10 @@ def extract_row(arm: str, round_value: str, locale: str, rc_value: str, report_p
         "rc": _int_or_none(rc_value),
         "report": report_path,
     }
+    if device:
+        row["device"] = device
+    if platform:
+        row["platform"] = platform
     rc = row["rc"] if isinstance(row["rc"], int) else 0
 
     path = Path(report_path)
@@ -67,6 +103,7 @@ def extract_row(arm: str, round_value: str, locale: str, rc_value: str, report_p
     metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
     root_coverage = report.get("root_coverage") if isinstance(report.get("root_coverage"), dict) else {}
     row.update(_report_fields(report, metrics, root_coverage, rc=rc))
+    row.update(_config_fields(report))
 
     utg, utg_error, utg_path = _load_report_utg(report, path)
     if utg_path is not None:
@@ -123,6 +160,17 @@ def _report_fields(
         "root_required_expected": _int_or_none(metrics.get("root_required_expected_count")),
         "root_expected": _int_or_none(metrics.get("root_expected_count")),
         "root_sidebar_exhaustive": bool(metrics.get("root_sidebar_exhaustive")),
+    }
+
+
+def _config_fields(report: dict[str, Any]) -> dict[str, Any]:
+    config = report.get("config")
+    if not isinstance(config, dict):
+        return {}
+    return {
+        f"cfg_{key}": config.get(key)
+        for key in AB_CONFIG_KEYS
+        if key in config
     }
 
 
@@ -266,18 +314,24 @@ def _str_or_none(value: Any) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) != 5:
+    if len(args) not in {5, 7}:
         row = {
             "arm": args[0] if len(args) > 0 else None,
             "round": args[1] if len(args) > 1 else None,
             "locale": args[2] if len(args) > 2 else None,
             "rc": _int_or_none(args[3]) if len(args) > 3 else None,
             "report": args[4] if len(args) > 4 else None,
+            "device": args[5] if len(args) > 5 else None,
+            "platform": args[6] if len(args) > 6 else None,
             "crash": False,
             "extraction_error": "usage",
         }
     else:
-        row = extract_row(*args)
+        row = extract_row(
+            *args[:5],
+            device=args[5] if len(args) > 5 else None,
+            platform=args[6] if len(args) > 6 else None,
+        )
     print(json.dumps(row, ensure_ascii=False, sort_keys=True), flush=True)
     return 0
 

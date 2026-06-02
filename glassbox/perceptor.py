@@ -125,6 +125,8 @@ class Perceptor:
     ) -> None:
         platform = _platform_key_from_model(getattr(getattr(self._phone, "device_geometry", None), "model", ""))
         scene_kind = str(scene.platform_scene_kind or "")
+        if not bool(getattr(self._phone, "ios_closed_set_canonicalization_enabled", True)):
+            return
         if platform not in {"ios", "ipados"} and not (
             scene_kind.startswith("springboard") or scene_kind.startswith("settings")
         ):
@@ -464,6 +466,7 @@ class Perceptor:
         self.apply_profile(scene, frame.img)
         self.apply_scene_classifiers(scene, frame.img)
         self.maybe_detect_icons(scene, frame.img)
+        self.maybe_segment_layout(scene, frame.img)
         host.perceive_cache_stats["misses"] += 1
         self.observe_memory(scene, frame.img)
         context.cache_frame = frame
@@ -485,6 +488,8 @@ class Perceptor:
 
         def _recognize() -> list[UIElement]:
             if getattr(host.ocr, "contract", None) == "TextRegionOCR":
+                if host.ocr_tiling_config.enabled:
+                    return ocr_results_to_elements(self.recognize_tiled_regions(frame))
                 return ocr_results_to_elements(host.ocr.recognize(frame))
             return ocr_results_to_elements(host.ocr.recognize(frame.img))
 
@@ -514,6 +519,27 @@ class Perceptor:
             raise error[0]
         return result[0] if result else []
 
+    def recognize_tiled_regions(self, frame: Frame):
+        host = self._phone
+        cfg = host.ocr_tiling_config
+        from glassbox.cognition.ocr_tiling import merge_text_regions, tile_boxes
+
+        regions = []
+        if cfg.include_full_frame:
+            regions.extend(host.ocr.recognize(frame))
+        for roi in tile_boxes(
+            int(frame.img.shape[1]),
+            int(frame.img.shape[0]),
+            rows=cfg.rows,
+            cols=cfg.cols,
+            overlap=cfg.overlap,
+        ):
+            try:
+                regions.extend(host.ocr.recognize(frame, roi=roi, native_roi=False))
+            except TypeError:
+                regions.extend(host.ocr.recognize(frame, roi=roi))
+        return merge_text_regions(regions, iou_threshold=cfg.nms_iou)
+
     def bound_ocr_elements(self, elements: list[UIElement]) -> list[UIElement]:
         host = self._phone
         cap = host.max_ocr_elements
@@ -532,7 +558,10 @@ class Perceptor:
 
     def maybe_detect_icons(self, scene: Scene, frame_img) -> None:
         host = self._phone
-        if not host.detect_icons_in_perceive_enabled or frame_img is None:
+        if (
+            not host.detect_icons_in_perceive_enabled
+            and not host.ui_layout_segmentation_enabled
+        ) or frame_img is None:
             return
         try:
             from glassbox.cognition.icon_detect import detect_icons
@@ -563,6 +592,20 @@ class Perceptor:
                 )
             )
             next_id += 1
+
+    def maybe_segment_layout(self, scene: Scene, frame_img) -> None:
+        host = self._phone
+        if not host.ui_layout_segmentation_enabled:
+            return
+        try:
+            from glassbox.cognition.layout_segment import segment_layout
+
+            viewport_size = scene.viewport_size
+            if viewport_size is None and frame_img is not None:
+                viewport_size = (int(frame_img.shape[1]), int(frame_img.shape[0]))
+            segment_layout(scene, viewport_size=viewport_size)
+        except Exception as exc:
+            logger.warning(f"layout segmentation failed: {exc}")
 
     def perceive_voted(
         self,
@@ -667,7 +710,7 @@ class Perceptor:
             "outer_timeout_hit": stopped_by_outer_timeout,
             "timeouts": len(ocr_timeout_samples),
             "ocr_timeout_samples": ocr_timeout_samples,
-            "degrade_reason": degrade_reason,
+            "degrade_reason": degrade_reason or scene.ocr_vote_metadata.get("degrade_reason"),
         }
         if vote_cfg.keep_raw_samples:
             metadata["source_frame_hashes"] = source_frame_hashes
@@ -691,7 +734,11 @@ class Perceptor:
                     "timestamp": last_frame.ts,
                     "source_frame_ids": source_frame_ids,
                     "source_timestamps": source_timestamps,
-                    "observation_mode": "voted" if degrade_reason is None else "voted_degraded",
+                    "observation_mode": (
+                        "voted"
+                        if degrade_reason is None and scene.ocr_vote_metadata.get("degrade_reason") is None
+                        else "voted_degraded"
+                    ),
                     "stable_frame": any(item.stable_frame is True for item in scenes),
                     "viewport_size": (
                         int(last_frame.img.shape[1]),
@@ -703,6 +750,8 @@ class Perceptor:
         frame_img = last_frame.img if last_frame is not None else None
         self.apply_profile(scene, frame_img)
         self.apply_scene_classifiers(scene, frame_img)
+        self.maybe_detect_icons(scene, frame_img)
+        self.maybe_segment_layout(scene, frame_img)
         context.cache_frame = None
         context.cache_scene = None
         context.cache_scope = frame_scope

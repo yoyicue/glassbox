@@ -9,6 +9,7 @@ import pytest
 from glassbox.memory.schema import UTG, ScreenEdge, ScreenNode, ScreenSignature
 from glassbox.memory.store import save_utg
 from skills.regression.ios_settings.policy import EXPECTED_ROOT_NAV_TEXT_ZH
+from skills.regression.ios_settings.report_writer import _active_device_report_config
 from skills.regression.ios_settings.reporting import EXPECTED_MIN_VISITS, refresh_report_summaries
 from skills.regression.ios_settings.run_full import (
     _DRILL_DOWN_ENV_OVERRIDES,
@@ -34,6 +35,42 @@ def test_drill_down_enters_child_pages_and_snapshots():
 def test_quick_stays_shallow_and_non_exhaustive():
     assert _QUICK_ENV_OVERRIDES["IOS_SETTINGS_REQUIRE_EXHAUSTIVE"] == "0"
     assert _QUICK_ENV_OVERRIDES["IOS_SETTINGS_MAX_DEPTH"] == "1"
+
+
+@pytest.mark.smoke
+def test_report_config_records_ocr_layout_ab_switches(monkeypatch):
+    from glassbox.config import get_config
+
+    monkeypatch.setenv("GLASSBOX_PHONE_MODEL", "ipad_mini_7")
+    monkeypatch.setenv("GLASSBOX_PLATFORM", "ipados")
+    monkeypatch.setenv("GLASSBOX_LANGUAGE", "en")
+    monkeypatch.setenv("GLASSBOX_REGION", "HK")
+    monkeypatch.setenv("GLASSBOX_OCR_MINIMUM_TEXT_HEIGHT", "0")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_ENABLED", "1")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_ROWS", "3")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_COLS", "4")
+    monkeypatch.setenv("GLASSBOX_OCR_TILING_OVERLAP", "0.2")
+    monkeypatch.setenv("GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED", "1")
+    monkeypatch.setenv("GLASSBOX_IOS_CLOSED_SET_CANONICALIZATION_ENABLED", "0")
+    get_config.cache_clear()
+    try:
+        report_config = _active_device_report_config()
+    finally:
+        get_config.cache_clear()
+
+    assert report_config["phone_model"] == "ipad_mini_7"
+    assert report_config["platform"] == "ipados"
+    assert report_config["language"] == "en"
+    assert report_config["region"] == "HK"
+    assert report_config["ocr"] == "vision"
+    assert report_config["text_detector"] == "vision"
+    assert report_config["ocr_minimum_text_height"] == 0.0
+    assert report_config["ocr_tiling_enabled"] is True
+    assert report_config["ocr_tiling_rows"] == 3
+    assert report_config["ocr_tiling_cols"] == 4
+    assert report_config["ocr_tiling_overlap"] == 0.2
+    assert report_config["ui_layout_segmentation_enabled"] is True
+    assert report_config["ios_closed_set_canonicalization_enabled"] is False
 
 
 @pytest.mark.smoke

@@ -54,12 +54,14 @@ _LEVEL_MAP = {"accurate": 0, "fast": 1}
 class VisionOCR:
     """Apple Vision OCR (direct PyObjC calls)."""
 
+    supports_region_of_interest = True
+
     def __init__(
         self,
         languages: Sequence[str] = ("zh-Hans", "en-US"),
         recognition_level: str = "accurate",
         uses_language_correction: bool = False,
-        minimum_text_height: float = 0.0,
+        minimum_text_height: float | None = None,
         custom_words: Sequence[str] = ("+", "-"),
         confidence_threshold: float = 0.3,
         auto_detect_language: bool = False,
@@ -80,9 +82,9 @@ class VisionOCR:
             cases that need plain prose (long-form OCR, email, notes) can turn
             this on.
         minimum_text_height:
-            minimum text height (relative to image height), default 0.0 (no
-            filtering). Apple's default 0.03125 drops characters below ~3%
-            height, which is unfriendly to small button text.
+            minimum text height (relative to image height). Default None leaves
+            Apple's library default untouched. Pass 0.0 explicitly to request no
+            minimum-height filtering.
         custom_words:
             "known words" fed into the NL model; only useful when
             uses_language_correction=True. Default ["+", "-"] is
@@ -148,7 +150,7 @@ class VisionOCR:
         else:
             request.setRecognitionLanguages_(self.languages)
         request.setUsesLanguageCorrection_(bool(self.uses_language_correction))
-        if self.minimum_text_height > 0:
+        if self.minimum_text_height is not None:
             request.setMinimumTextHeight_(float(self.minimum_text_height))
         if self.custom_words:
             request.setCustomWords_(list(self.custom_words))

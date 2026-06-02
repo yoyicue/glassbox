@@ -45,6 +45,7 @@ from glassbox.cognition import (
     VLMRequest,
     VLMResult,
     VLMStageOutcome,
+    select_text_detector_backend,
 )
 from glassbox.cognition.ocr_contract import LegacyUIElementOCRAdapter
 from glassbox.crawl_policies import (
@@ -148,6 +149,7 @@ def test_phone_accepts_grouped_runtime_feature_and_observation_config():
         ),
         feature_flags=PhoneFeatureFlags(
             detect_icons_in_perceive=True,
+            ui_layout_segmentation=True,
             strict_target_matching=True,
             require_home_icon_grid=True,
             reverify_fresh_frame=True,
@@ -171,6 +173,7 @@ def test_phone_accepts_grouped_runtime_feature_and_observation_config():
     assert phone.max_ocr_text_chars == 11
     assert phone.ocr_timeout == 0.25
     assert phone.detect_icons_in_perceive_enabled is True
+    assert phone.ui_layout_segmentation_enabled is True
     assert phone.strict_target_matching_enabled is True
     assert phone.require_home_icon_grid_enabled is True
     assert phone.reverify_fresh_frame_enabled is True
@@ -202,6 +205,12 @@ def test_phone_legacy_constructor_flags_still_work_with_bucket_api():
     assert phone.perceive_cache_diff == 0.2
     assert phone.max_ocr_elements == 3
     assert phone.strict_target_matching_enabled is True
+
+
+def test_text_detector_selector_is_vision_only_until_conditional_goal_triggers():
+    from glassbox.config import AgentConfig
+
+    assert select_text_detector_backend(AgentConfig(_env_file=None)) == "vision"
 
 
 def test_boundary_contract_types_expose_stable_versions():
@@ -722,6 +731,40 @@ def test_legacy_ocr_adapter_returns_text_regions_and_offsets_roi():
         TextRegion(
             text="Hello",
             box=Box(x=11, y=22, w=10, h=5),
+            confidence=0.8,
+        )
+    ]
+
+
+def test_legacy_ocr_adapter_routes_supported_roi_to_native_vision_coordinates():
+    class NativeRoiOCR:
+        supports_region_of_interest = True
+
+        def __init__(self):
+            self.calls = []
+
+        def recognize(self, image, *, region_of_interest=None):
+            self.calls.append((image.shape, region_of_interest))
+            return [
+                UIElement(
+                    type="text",
+                    box=Box(x=10, y=20, w=30, h=10),
+                    text="Native",
+                    confidence=0.8,
+                )
+            ]
+
+    native = NativeRoiOCR()
+    adapter = LegacyUIElementOCRAdapter(native)
+    frame = Frame(img=np.zeros((80, 100, 3), dtype=np.uint8), ts=1.0)
+
+    regions = adapter.recognize(frame, roi=Box(x=10, y=20, w=30, h=40))
+
+    assert native.calls == [((80, 100, 3), (0.1, 0.25, 0.3, 0.5))]
+    assert regions == [
+        TextRegion(
+            text="Native",
+            box=Box(x=10, y=20, w=30, h=10),
             confidence=0.8,
         )
     ]

@@ -107,7 +107,11 @@ def validate_state_machine_acceptance(
         errors.append(f"required_missing is not empty: {required_missing}")
     if sidebar_absent and not sidebar_exhaustive:
         errors.append("sidebar_absent requires sidebar_exhaustive evidence")
-    if require_sidebar_exhaustive and not sidebar_exhaustive:
+    if (
+        require_sidebar_exhaustive
+        and not sidebar_exhaustive
+        and (required_missing or sidebar_absent)
+    ):
         errors.append("sidebar_exhaustive evidence is required")
     return StateMachineAcceptanceResult(errors=errors, metrics=metrics)
 

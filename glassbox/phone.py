@@ -88,6 +88,8 @@ class PhoneGestureConfig:
 @dataclass(frozen=True)
 class PhoneFeatureFlags:
     detect_icons_in_perceive: bool = False
+    ui_layout_segmentation: bool = False
+    ios_closed_set_canonicalization: bool = True
     strict_target_matching: bool = False
     require_home_icon_grid: bool = False
     reverify_fresh_frame: bool = False
@@ -121,11 +123,22 @@ class OcrTemporalVotingConfig:
 
 
 @dataclass(frozen=True)
+class OcrTilingConfig:
+    enabled: bool = False
+    rows: int = 2
+    cols: int = 2
+    overlap: float = 0.15
+    include_full_frame: bool = True
+    nms_iou: float = 0.55
+
+
+@dataclass(frozen=True)
 class PhoneObservationConfig:
     max_ocr_elements: int = 800
     max_ocr_text_chars: int = 1024
     ocr_timeout: float = 0.0
     perceive_cache_diff: float = 0.005
+    ocr_tiling: OcrTilingConfig = field(default_factory=OcrTilingConfig)
     ocr_temporal_voting: OcrTemporalVotingConfig = field(default_factory=OcrTemporalVotingConfig)
     settings_root_label_aliases: Mapping[str, str] | None = None
     settings_root_fuzzy_aliases: bool = False
@@ -228,6 +241,8 @@ class Phone:
         letterbox_refresh_consecutive: int = 1,
         semantic_plan_ops: frozenset[str] | None = None,
         detect_icons_in_perceive: bool = False,
+        ui_layout_segmentation: bool = False,
+        ios_closed_set_canonicalization: bool = True,
         max_ocr_elements: int = 800,
         max_ocr_text_chars: int = 1024,
         ocr_timeout: float = 0.0,
@@ -257,6 +272,8 @@ class Phone:
             ocr_timeout=ocr_timeout,
             perceive_cache_diff=perceive_cache_diff,
             detect_icons_in_perceive=detect_icons_in_perceive,
+            ui_layout_segmentation=ui_layout_segmentation,
+            ios_closed_set_canonicalization=ios_closed_set_canonicalization,
             strict_target_matching=strict_target_matching,
             require_home_icon_grid=require_home_icon_grid,
             reverify_fresh_frame=reverify_fresh_frame,
@@ -323,6 +340,8 @@ class Phone:
         ocr_timeout: float,
         perceive_cache_diff: float,
         detect_icons_in_perceive: bool,
+        ui_layout_segmentation: bool,
+        ios_closed_set_canonicalization: bool,
         strict_target_matching: bool,
         require_home_icon_grid: bool,
         reverify_fresh_frame: bool,
@@ -349,6 +368,8 @@ class Phone:
         )
         feature_flags = feature_flags or PhoneFeatureFlags(
             detect_icons_in_perceive=detect_icons_in_perceive,
+            ui_layout_segmentation=ui_layout_segmentation,
+            ios_closed_set_canonicalization=ios_closed_set_canonicalization,
             strict_target_matching=strict_target_matching,
             require_home_icon_grid=require_home_icon_grid,
             reverify_fresh_frame=reverify_fresh_frame,
@@ -442,6 +463,11 @@ class Phone:
         # CUQ-2.1: inject no-text icon regions into perceive() so icon-only
         # controls become tap candidates. Flag-gated (default off).
         self._detect_icons_in_perceive = bool(feature_flags.detect_icons_in_perceive)
+        # CUQ-UI-LAYOUT: default-off Tier-A geometric UI graph builder. When
+        # enabled it also needs icon regions, so perceptor lets it trigger icon
+        # detection even if the older icon-only flag is off.
+        self._ui_layout_segmentation = bool(feature_flags.ui_layout_segmentation)
+        self._ios_closed_set_canonicalization = bool(feature_flags.ios_closed_set_canonicalization)
         # Live-camera OCR hardening: cap OCR output volume (default-on, generous
         # — only a chaotic camera-preview frame ever exceeds it) and an opt-in
         # recognize() watchdog (default off; enable on the live rig).
@@ -454,6 +480,15 @@ class Phone:
             else None
         )
         self.settings_root_fuzzy_aliases = bool(observation_config.settings_root_fuzzy_aliases)
+        tiling_cfg = observation_config.ocr_tiling
+        self._ocr_tiling = OcrTilingConfig(
+            enabled=bool(tiling_cfg.enabled),
+            rows=max(1, int(tiling_cfg.rows)),
+            cols=max(1, int(tiling_cfg.cols)),
+            overlap=min(0.8, max(0.0, float(tiling_cfg.overlap))),
+            include_full_frame=bool(tiling_cfg.include_full_frame),
+            nms_iou=min(1.0, max(0.0, float(tiling_cfg.nms_iou))),
+        )
         vote_cfg = observation_config.ocr_temporal_voting
         self._ocr_temporal_voting = OcrTemporalVotingConfig(
             enabled=bool(vote_cfg.enabled),
@@ -809,6 +844,14 @@ class Phone:
         return self._detect_icons_in_perceive
 
     @property
+    def ui_layout_segmentation_enabled(self) -> bool:
+        return self._ui_layout_segmentation
+
+    @property
+    def ios_closed_set_canonicalization_enabled(self) -> bool:
+        return self._ios_closed_set_canonicalization
+
+    @property
     def max_ocr_elements(self) -> int:
         return self._max_ocr_elements
 
@@ -823,6 +866,10 @@ class Phone:
     @property
     def ocr_temporal_voting_config(self) -> OcrTemporalVotingConfig:
         return self._ocr_temporal_voting
+
+    @property
+    def ocr_tiling_config(self) -> OcrTilingConfig:
+        return self._ocr_tiling
 
     @property
     def ocr_temporal_voting_enabled(self) -> bool:

@@ -35,6 +35,7 @@ from skills.regression.ios_settings.reporting import (
     computed_root_coverage,
     path_has_root_label_evidence,
     texts_support_blocked_reason,
+    unresolved_navigation_failures,
 )
 from skills.regression.ios_settings.sections import root_section_ids_for_canonical_labels
 
@@ -108,6 +109,25 @@ CONFIG_BOOL_KEYS = frozenset({
 })
 CONFIG_OPTIONAL_STRING_KEYS = frozenset({"artifact_dir", "memory_dir"})
 CONFIG_DEVICE_STRING_KEYS = frozenset({"phone_model", "platform"})
+CONFIG_EXPERIMENT_STRING_KEYS = frozenset({"language", "ocr", "text_detector"})
+CONFIG_EXPERIMENT_OPTIONAL_STRING_KEYS = frozenset({"region"})
+CONFIG_EXPERIMENT_BOOL_KEYS = frozenset({
+    "detect_icons_in_perceive",
+    "en_ocr_correction",
+    "ios_closed_set_canonicalization_enabled",
+    "ocr_tiling_enabled",
+    "ocr_tiling_include_full_frame",
+    "ui_layout_segmentation_enabled",
+})
+CONFIG_EXPERIMENT_OPTIONAL_BOOL_KEYS = frozenset({"ocr_unsharp_mask"})
+CONFIG_EXPERIMENT_INT_KEYS = frozenset({"ocr_tiling_rows", "ocr_tiling_cols"})
+CONFIG_EXPERIMENT_FLOAT_KEYS = frozenset({"ocr_tiling_overlap", "ocr_tiling_nms_iou"})
+CONFIG_EXPERIMENT_OPTIONAL_FLOAT_KEYS = frozenset({
+    "ocr_confidence_threshold",
+    "ocr_minimum_text_height",
+    "ocr_unsharp_amount",
+    "ocr_unsharp_sigma",
+})
 
 
 
@@ -238,6 +258,8 @@ def validate_report(
     if not isinstance(navigation_failures, list):
         errors.append("missing or invalid navigation_failures list")
         navigation_failures = []
+    else:
+        navigation_failures = unresolved_navigation_failures(navigation_failures, visits)
 
     metrics = report.get("metrics")
     if not isinstance(metrics, dict):
@@ -378,6 +400,11 @@ def validate_report(
                 f"{' > '.join(path_key)} ({reason})"
             )
 
+    all_visit_texts = [
+        text
+        for texts in visit_texts_by_path.values()
+        for text in texts
+    ]
     for idx, candidate in enumerate(rejected_candidates):
         if not isinstance(candidate, dict):
             errors.append(f"rejected_candidates[{idx}] is not an object")
@@ -395,7 +422,12 @@ def validate_report(
             errors.append(f"rejected candidate path was not visited: {' > '.join(path_key)}")
         if not isinstance(text, str) or not text:
             errors.append(f"rejected_candidates[{idx}] has invalid text")
-        elif not _text_present_in_visit(text, visit_texts_by_path.get(path_key, [])):
+        elif not _rejected_candidate_text_present(
+            text,
+            path_key,
+            visit_texts_by_path.get(path_key, []),
+            all_visit_texts,
+        ):
             errors.append(
                 f"rejected_candidates[{idx}] text was not present in visited page: "
                 f"{' > '.join(path_key)} > {text}"
@@ -463,6 +495,21 @@ def _text_present_in_visit(text: str, visit_texts: Iterable[str]) -> bool:
     return bool(target) and any(compact_text(item) == target for item in visit_texts)
 
 
+def _rejected_candidate_text_present(
+    text: str,
+    path_key: tuple[str, ...],
+    path_texts: Iterable[str],
+    all_visit_texts: Iterable[str],
+) -> bool:
+    if _text_present_in_visit(text, path_texts):
+        return True
+    # iPad split-view audits root/sidebar candidates while a detail pane is
+    # active. The candidate path is still ["Settings"], but the OCR evidence can
+    # be attached to a detail visit or truncated out of the root visit's first
+    # 40 texts. Keep child-page rejected candidates strict.
+    return path_key == ("Settings",) and _text_present_in_visit(text, all_visit_texts)
+
+
 def _requires_blocked_visit_evidence(path_key: tuple[str, ...], config: dict[str, Any]) -> bool:
     # The root page can show sibling row labels that happen to match a protected
     # child-page marker pair. The crawler deliberately never treats Settings root
@@ -526,6 +573,32 @@ def _validate_config_schema(config: dict[str, Any], *, errors: list[str]) -> Non
     for key in sorted(CONFIG_DEVICE_STRING_KEYS):
         if key in config and not isinstance(config.get(key), str):
             errors.append(f"config.{key} must be a string")
+    for key in sorted(CONFIG_EXPERIMENT_STRING_KEYS):
+        if key in config and not isinstance(config.get(key), str):
+            errors.append(f"config.{key} must be a string")
+    for key in sorted(CONFIG_EXPERIMENT_OPTIONAL_STRING_KEYS):
+        value = config.get(key)
+        if value is not None and not isinstance(value, str):
+            errors.append(f"config.{key} must be null or string")
+    for key in sorted(CONFIG_EXPERIMENT_BOOL_KEYS):
+        if key in config and not isinstance(config.get(key), bool):
+            errors.append(f"config.{key} must be a boolean")
+    for key in sorted(CONFIG_EXPERIMENT_OPTIONAL_BOOL_KEYS):
+        value = config.get(key)
+        if value is not None and not isinstance(value, bool):
+            errors.append(f"config.{key} must be null or boolean")
+    for key in sorted(CONFIG_EXPERIMENT_INT_KEYS):
+        value = config.get(key)
+        if key in config and (not isinstance(value, int) or isinstance(value, bool)):
+            errors.append(f"config.{key} must be an integer")
+    for key in sorted(CONFIG_EXPERIMENT_FLOAT_KEYS):
+        value = config.get(key)
+        if key in config and (not isinstance(value, (int, float)) or isinstance(value, bool)):
+            errors.append(f"config.{key} must be a number")
+    for key in sorted(CONFIG_EXPERIMENT_OPTIONAL_FLOAT_KEYS):
+        value = config.get(key)
+        if value is not None and (not isinstance(value, (int, float)) or isinstance(value, bool)):
+            errors.append(f"config.{key} must be null or number")
 
 
 def _optional_config_str(value: Any) -> str | None:

@@ -49,6 +49,10 @@ from glassbox.cognition.ocr_contract import (
 )
 from glassbox.cognition.ocr_vision import VisionOCR
 from glassbox.cognition.som import render_set_of_mark
+from glassbox.cognition.text_detector import (
+    TextDetectorBackend,
+    select_text_detector_backend,
+)
 from glassbox.cognition.text_match import (
     MINUS_ALIASES,
     canonical_label,
@@ -91,6 +95,7 @@ __all__ = [
     "SceneClassification",
     "SceneClassificationProjector",
     "SiliconFlowVLM",
+    "TextDetectorBackend",
     "TextRegion",
     "TypeGuess",
     "UIElement",
@@ -120,6 +125,7 @@ __all__ = [
     "ocr_compact_text",
     "ocr_results_to_elements",
     "render_set_of_mark",
+    "select_text_detector_backend",
     "text_contains",
     "text_region_to_element",
     "text_regions_to_elements",

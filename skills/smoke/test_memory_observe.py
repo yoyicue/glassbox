@@ -600,6 +600,43 @@ def test_ipados_settings_root_projection_collapses_across_detail_pages():
 
 
 @pytest.mark.smoke
+def test_ipados_settings_root_projection_ignores_sidebar_ocr_and_icon_churn():
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        ipados_settings_root_projection=True,
+    )
+    first = _ipad_settings_split_scene("Notifications")
+    first.elements.insert(
+        0,
+        UIElement(type="text", box=Box(x=14, y=10, w=148, h=12), text="4 Search 1:31PM", confidence=0.9),
+    )
+    first.elements.append(
+        UIElement(type="image", box=Box(x=28, y=356, w=28, h=28), text=None, confidence=0.3),
+    )
+    second = _ipad_settings_split_scene("Sounds", "Silent Mode")
+    second.elements.insert(
+        0,
+        UIElement(type="text", box=Box(x=14, y=10, w=168, h=12), text="4 Search 1:32PM Tue 2 Jun", confidence=0.9),
+    )
+    second.elements.append(
+        UIElement(type="text", box=Box(x=64, y=390, w=82, h=24), text="ccessip", confidence=0.9),
+    )
+    second.elements.extend([
+        UIElement(type="image", box=Box(x=28, y=356, w=28, h=28), text=None, confidence=0.3),
+        UIElement(type="image", box=Box(x=28, y=412, w=28, h=28), text=None, confidence=0.3),
+    ])
+
+    mem.observe(first)
+    mem.observe(second)
+
+    roots = mem.nodes_for_page("settings/root", scene_type="settings_root")
+    assert len(roots) == 1
+    assert roots[0].signature.stable_texts == ["settings/root"]
+    assert roots[0].signature.type_histogram == {"settings_root": 1}
+    assert roots[0].visit_count == 2
+
+
+@pytest.mark.smoke
 def test_ipados_settings_sidebar_row_tap_sources_edge_from_root_projection():
     mem = ScreenMemory(
         UTG(bundle_id="com.apple.Preferences"),
