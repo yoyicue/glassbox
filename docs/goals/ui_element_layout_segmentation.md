@@ -1,9 +1,14 @@
 # Goal — UI element & layout segmentation (icon caption + typed, reading-ordered element graph)
 
-Status: **proposed, not started — 2026-06-02.** The capability-raising follow-on
-to [`ocr_max_out_vision_levers.md`](ocr_max_out_vision_levers.md). Line numbers
-are a snapshot as of `18ce14a` (the cited cognition files are byte-identical on
-this branch's `main` base — `git diff --name-only main 18ce14a` touches only
+Status: **Tier A implemented default-off / no promotion — 2026-06-02.** The
+classical reading-order, icon+label grouping, element typing, Settings sidebar
+text-row promotion, and A/B reporting plumbing have landed in core. A true iPad
+Settings `raw_no_canonical` vs `raw_no_canonical_ui_layout` n=1 did not show a
+task-level win, so Tier A remains opt-in and default-off. Tier B semantic icon
+captioning was not implemented; it remains a separate opt-in/billed or
+model-dependent follow-up. Line numbers are a snapshot as of `18ce14a` (the
+cited cognition files are byte-identical on this branch's `main` base —
+`git diff --name-only main 18ce14a` touches only
 `skills/regression/ios_settings/`); reference by symbol. Re-verify with:
 
 ```bash
@@ -81,6 +86,22 @@ validate it does not merge discrete rows).
   `entered_graph`, `required_rows_entered` up, `wrong_row_tapped` down — at
   acceptable latency. Promote Tier A default-on only on that win.
 - Default path byte-identical until promoted.
+
+## Close-out evidence (2026-06-02)
+
+- Tier A is implemented as `glassbox.cognition.layout_segment.segment_layout`
+  behind `GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED`.
+- Default path is unchanged: layout segmentation is default-off and does not run
+  the icon detector unless explicitly enabled.
+- Offline raw/no-canonical comparison showed structural/actionability value, but
+  the true iPad Settings n=1 A/B did not show task-level improvement. The feature
+  therefore remains opt-in; expanding to n>=5 was intentionally stopped.
+- iPad Settings graph instability found during A/B was fixed separately by
+  stabilizing projected root identity and verifier/state-machine acceptance.
+  That makes the A/B apples-to-apples but does not create a UI-layout win.
+- Smoke coverage includes iPhone and iPad runtime paths for layout grouping,
+  core layout segmentation units, memory signature/observe guards, Settings
+  navigation/report/state-machine checks, and raw/no-canonical A/B extraction.
 
 ## Constraints / reality (do not re-litigate)
 

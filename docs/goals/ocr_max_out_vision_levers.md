@@ -1,8 +1,12 @@
 # Goal — Max out the existing Apple Vision OCR levers (before any new detector)
 
-Status: **proposed, not started — 2026-06-02.** Handoff doc. Line numbers are a
-snapshot as of `18ce14a`; reference by symbol (they drift). Re-verify every
-pointer before editing — regenerate the inventory with:
+Status: **implemented default-off / closed — 2026-06-02.** The Apple Vision
+knob plumbing, native-ROI path, opt-in tiling pass, OCR voting geometry fix, and
+offline/on-rig A/B reporting hooks have landed. No global default was promoted:
+`minimumTextHeight=0` showed no raw OCR delta on the current offline iPad
+Settings corpus, and task-level promotion still requires a future on-rig win.
+Line numbers below are a snapshot as of `18ce14a`; reference by symbol (they
+drift). Re-verify every pointer before editing — regenerate the inventory with:
 
 ```bash
 git rev-parse --short HEAD
@@ -172,6 +176,21 @@ harness coverage.
   latency — not on a cleaner OCR dump.
 - **zh stays byte-identical**, locked by `skills/smoke/test_locale.py` (extend it
   for any new forwarded knob).
+
+## Close-out evidence (2026-06-02)
+
+- Implemented in core with identity-default behavior:
+  `VisionOCR.minimum_text_height=None`, optional factory forwarding for
+  `minimum_text_height` / `confidence_threshold` / `unsharp_*`, native ROI
+  coordinate routing, opt-in OCR tiling, and row-relative OCR voting guards.
+- Offline spike artifacts showed `minimumTextHeight=0` did **not** improve raw
+  OCR on the sampled iPad Settings frames; it remains opt-in.
+- True iPad Settings A/B used the new report plumbing and did not justify a
+  default flip. The correct resolution is to keep these levers available,
+  measured, and default-off.
+- Smoke coverage includes `test_locale`, `test_ocr_tiling`,
+  `test_ocr_vision_levers_spike`, `test_ocr_vote`, runtime tiling/voting paths,
+  and iOS Settings A/B extraction/report config checks.
 
 ## Out of scope — where the rest of the OCR roadmap lives
 

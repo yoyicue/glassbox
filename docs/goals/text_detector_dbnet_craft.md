@@ -1,7 +1,9 @@
 # Goal (conditional stub) — Optional text DETECTOR seam (DBNet / CRAFT)
 
-Status: **NOT TRIGGERED — conditional. 2026-06-02.** Do not start until the
-trigger below fires. This is a deliberate stub, not a full goal.
+Status: **conditional seam implemented / trigger not fired — 2026-06-02.** The
+core-owned `GLASSBOX_TEXT_DETECTOR` selector exists and currently accepts only
+`"vision"`. DBNet/CRAFT remains unimplemented because the trigger below did not
+fire. This stays a deliberate stub, not a full detector goal.
 
 ## Trigger (the only reason to open this)
 
@@ -42,6 +44,15 @@ Writing a full goal now would be speculative — the conditional may never fire.
 - A go/no-go A/B: annotated UI corpus → Baseline A (Vision tuned) vs B
   (Vision + DBNet), adopt only if B gives recall A cannot match on the hardest
   elements at acceptable latency.
+
+## Close-out evidence (2026-06-02)
+
+- Implemented seam: `glassbox.cognition.text_detector.select_text_detector_backend`
+  and `AgentConfig.text_detector`, defaulting to `"vision"`.
+- Non-vision backends are rejected by config tests; no DBNet/CRAFT dependency or
+  model path was added.
+- The Apple Vision lever and UI layout work did not produce evidence that a
+  third-party detector is now required, so this conditional remains closed.
 
 ## Constraints (already settled)
 
