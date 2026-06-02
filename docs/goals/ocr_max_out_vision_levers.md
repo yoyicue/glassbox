@@ -173,14 +173,28 @@ harness coverage.
 - **zh stays byte-identical**, locked by `skills/smoke/test_locale.py` (extend it
   for any new forwarded knob).
 
-## Out of scope (do not pull in)
+## Out of scope — where the rest of the OCR roadmap lives
 
-SAM3 (rejected, `[[sam3-not-a-text-detector]]`); a new DBNet/CRAFT detector
-(separate later goal, `[[dbnet-craft-apple-silicon]]`); icon caption + typed
-reading-ordered element graph (separate UI-element-segmentation goal);
-`RecognizeDocumentsRequest` reading-order (OS-26-gated); recognizer swap for the
-Cyrillic homoglyph error (recognition, not segmentation — long tail, poor ROI);
-VLM grounding (opt-in/billed, not the free default path).
+**Deferred to dedicated follow-on goals (written, not started):**
+- **UI element & layout segmentation** — icon caption + typed, reading-ordered
+  element graph (the *real* systemic gap):
+  [`ui_element_layout_segmentation.md`](ui_element_layout_segmentation.md).
+- **Optional text DETECTOR seam (DBNet/CRAFT)** — conditional, opens only if the
+  levers above prove recall-insufficient on-rig:
+  [`text_detector_dbnet_craft.md`](text_detector_dbnet_craft.md) (recipe parked
+  in `[[dbnet-craft-apple-silicon]]`).
+- `RecognizeDocumentsRequest` reading-order folds into the UI-segmentation goal
+  as the Apple-native (OS-26-gated) option — not a goal of its own.
+
+**Parked — consciously NOT goals** (deprioritized by the 2026-06-02 gap
+analysis; re-open only with new evidence):
+- **SAM3 before OCR** — rejected outright (class-agnostic concept seg, not a text
+  detector; license-incompatible with the MIT core): `[[sam3-not-a-text-detector]]`.
+- **Recognizer swap for the Cyrillic homoglyph error** — a recognition fix, not
+  segmentation; long tail; the closed-set `match_known_label`/`canonical_label`
+  already absorbs most Settings impact. Poor ROI for a free-default screen agent.
+- **VLM grounding** — opt-in/billed; must not sit on the free default path. Only
+  as a hybrid region-prior + VLM behind `GLASSBOX_ENABLE_VLM`, if ever.
 
 ## Constraints / reality (do not re-litigate)
 
