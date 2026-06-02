@@ -708,7 +708,7 @@ class Perceptor:
             "outer_timeout_hit": stopped_by_outer_timeout,
             "timeouts": len(ocr_timeout_samples),
             "ocr_timeout_samples": ocr_timeout_samples,
-            "degrade_reason": degrade_reason,
+            "degrade_reason": degrade_reason or scene.ocr_vote_metadata.get("degrade_reason"),
         }
         if vote_cfg.keep_raw_samples:
             metadata["source_frame_hashes"] = source_frame_hashes
@@ -732,7 +732,11 @@ class Perceptor:
                     "timestamp": last_frame.ts,
                     "source_frame_ids": source_frame_ids,
                     "source_timestamps": source_timestamps,
-                    "observation_mode": "voted" if degrade_reason is None else "voted_degraded",
+                    "observation_mode": (
+                        "voted"
+                        if degrade_reason is None and scene.ocr_vote_metadata.get("degrade_reason") is None
+                        else "voted_degraded"
+                    ),
                     "stable_frame": any(item.stable_frame is True for item in scenes),
                     "viewport_size": (
                         int(last_frame.img.shape[1]),

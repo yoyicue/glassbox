@@ -56,6 +56,10 @@ class LegacyUIElementOCRAdapter:
         native_roi: bool = True,
     ) -> list[TextRegion]:
         if roi is not None and native_roi and getattr(self.inner, "supports_region_of_interest", False):
+            # Apple Vision reports recognized-text boxes in the original image
+            # coordinate basis even when `regionOfInterest` limits detection.
+            # If a future backend reports ROI-local boxes, it must go through
+            # the crop fallback or add an explicit offset conversion here.
             elements = self.inner.recognize(
                 image.img,
                 region_of_interest=_vision_roi_for_box(image, roi),

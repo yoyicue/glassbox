@@ -1,6 +1,8 @@
 """多帧 OCR 投票(D)—— vote_scenes。"""
 from __future__ import annotations
 
+from collections import Counter
+
 import pytest
 
 from glassbox.cognition import Box, Scene, UIElement
@@ -130,10 +132,29 @@ def test_vote_scenes_does_not_swap_dense_adjacent_rows_during_scroll_drift():
 
     voted = vote_scenes([s1, s2], pos_tol=30)
 
-    by_y = {element.box.y: element.text for element in voted.elements}
-    assert by_y[300] == "Notifications"
-    assert by_y[318] == "Sounds & Haptics"
+    texts = Counter(element.text for element in voted.elements)
+    assert texts == {"Notifications": 1, "Sounds & Haptics": 1}
+    assert voted.ocr_vote_metadata["clusters"] == 2
     assert voted.ocr_vote_metadata["geometry"] == "row_relative"
+    assert voted.ocr_vote_metadata["degrade_reason"] == "scroll_drift"
+    assert voted.ocr_vote_metadata["mixed_text_clusters"] == 0
+    assert all("ocr_vote_status:degraded_scroll_drift" in e.type_evidence for e in voted.elements)
+
+
+@pytest.mark.smoke
+def test_vote_scenes_keeps_dense_adjacent_rows_when_only_jittering():
+    s1 = _scene(_el("Notifications", 80, 300), _el("Sounds & Haptics", 80, 318))
+    s2 = _scene(_el("Notifications", 81, 301), _el("Sounds & Haptics", 81, 319))
+    s3 = _scene(_el("Notifications", 79, 300), _el("Sounds & Haptics", 79, 318))
+
+    voted = vote_scenes([s1, s2, s3], pos_tol=30)
+
+    texts = Counter(element.text for element in voted.elements)
+    assert texts == {"Notifications": 1, "Sounds & Haptics": 1}
+    assert voted.ocr_vote_metadata["clusters"] == 2
+    assert voted.ocr_vote_metadata["stable_clusters"] == 2
+    assert voted.ocr_vote_metadata["mixed_text_clusters"] == 0
+    assert voted.ocr_vote_metadata.get("degrade_reason") is None
 
 
 @pytest.mark.smoke

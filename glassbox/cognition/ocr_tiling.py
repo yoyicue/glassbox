@@ -69,7 +69,9 @@ def merge_text_regions(
 def _duplicate_region(a: TextRegion, b: TextRegion, *, iou_threshold: float) -> bool:
     text_a = norm_text(a.text)
     text_b = norm_text(b.text)
-    if text_a and text_b and text_a != text_b:
+    if not text_a or not text_b:
+        return False
+    if text_a != text_b:
         return False
     return _box_iou(a.box, b.box) >= iou_threshold
 

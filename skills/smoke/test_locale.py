@@ -48,6 +48,7 @@ def test_zh_ocr_engine_params_byte_identical_to_vision_defaults():
     assert loc.uses_language_correction is sig["uses_language_correction"].default
     assert tuple(loc.custom_words) == tuple(sig["custom_words"].default)
     assert sig["minimum_text_height"].default is None
+    assert sig["confidence_threshold"].default == 0.3
 
 
 @pytest.mark.smoke

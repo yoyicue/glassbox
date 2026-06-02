@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Callable
+from itertools import pairwise
+from statistics import median
 
 from glassbox.cognition.base import Scene, UIElement
 from glassbox.cognition.text_match import norm_text
@@ -71,15 +73,15 @@ def _horizontally_compatible(a: UIElement, b: UIElement, *, tol_x: float) -> boo
 
 
 def _row_compatible(a: UIElement, b: UIElement, *, tol_y: float) -> bool:
-    if abs(float(a.box.center[1]) - float(b.box.center[1])) <= tol_y:
-        return True
-    return _overlap_ratio(a.box.y, a.box.y2, b.box.y, b.box.y2) >= 0.5
+    center_delta = abs(float(a.box.center[1]) - float(b.box.center[1]))
+    return center_delta <= tol_y and _overlap_ratio(a.box.y, a.box.y2, b.box.y, b.box.y2) >= 0.5
 
 
 def _matches_cluster(cluster: dict, el: UIElement, *, pos_tol: int) -> bool:
     tol_x, tol_y = _cluster_tolerance(cluster, el, pos_tol=pos_tol)
     for _, member in cluster["elements"]:
-        if _box_iou(member.box, el.box) >= 0.35:
+        center_delta = abs(float(member.box.center[1]) - float(el.box.center[1]))
+        if center_delta <= tol_y and _box_iou(member.box, el.box) >= 0.35:
             continue
         if not _row_compatible(member, el, tol_y=tol_y):
             return False
@@ -121,6 +123,53 @@ def _volatile_cluster(readings: list[str]) -> bool:
         return False
     values = {norm_text(text) for text in readings if norm_text(text)}
     return len(values) > 1
+
+
+def _ordered_vote_elements(scene: Scene) -> list[UIElement]:
+    return sorted(
+        [element for element in scene.elements if element.box.w > 0 and element.box.h > 0],
+        key=lambda element: (element.type, element.box.center[1], element.box.x),
+    )
+
+
+def _horizontally_aligned(a: UIElement, b: UIElement, *, pos_tol: int) -> bool:
+    if a.type != b.type:
+        return False
+    center_delta = abs(float(a.box.center[0]) - float(b.box.center[0]))
+    tol_x = min(max(1.0, float(pos_tol)), max(4.0, max(a.box.w, b.box.w) * 0.35))
+    return center_delta <= tol_x or _overlap_ratio(a.box.x, a.box.x2, b.box.x, b.box.x2) >= 0.5
+
+
+def _scene_global_y_shift(previous: Scene, current: Scene, *, pos_tol: int) -> float | None:
+    previous_elements = _ordered_vote_elements(previous)
+    current_elements = _ordered_vote_elements(current)
+    if len(previous_elements) < 2 or len(previous_elements) != len(current_elements):
+        return None
+    paired: list[tuple[UIElement, UIElement]] = []
+    for old, new in zip(previous_elements, current_elements, strict=False):
+        if _horizontally_aligned(old, new, pos_tol=pos_tol):
+            paired.append((old, new))
+    if len(paired) < 2:
+        return None
+    heights = [max(1, element.box.h) for pair in paired for element in pair]
+    median_h = float(median(heights))
+    tol_y = min(max(1.0, float(pos_tol)), max(2.0, median_h * 0.25))
+    deltas = [float(new.box.center[1] - old.box.center[1]) for old, new in paired]
+    shift = float(median(deltas))
+    if abs(shift) <= tol_y:
+        return None
+    consistency_tol = max(tol_y, median_h * 0.2)
+    if any(abs(delta - shift) > consistency_tol for delta in deltas):
+        return None
+    return shift
+
+
+def _detected_global_y_shift(scenes: list[Scene], *, pos_tol: int) -> float | None:
+    for previous, current in pairwise(scenes):
+        shift = _scene_global_y_shift(previous, current, pos_tol=pos_tol)
+        if shift is not None:
+            return shift
+    return None
 
 
 def _char_consensus(
@@ -206,6 +255,36 @@ def vote_scenes(
     valid_scenes = [s for s in scenes if s is not None]
     if len(valid_scenes) == 1:
         return base
+    global_y_shift = _detected_global_y_shift(valid_scenes, pos_tol=pos_tol)
+    if global_y_shift is not None:
+        latest = valid_scenes[-1]
+        elements: list[UIElement] = []
+        for element in latest.elements:
+            evidence = [
+                *element.type_evidence,
+                "ocr_vote_status:degraded_scroll_drift",
+                "ocr_vote_text_status:latest_sample",
+                f"ocr_vote_frames:{len(valid_scenes)}",
+                "ocr_vote_samples:1",
+            ]
+            elements.append(element.model_copy(update={"type_evidence": _dedupe_evidence(evidence)}))
+        metadata = {
+            **base.ocr_vote_metadata,
+            "frames": len(valid_scenes),
+            "clusters": len(elements),
+            "min_presence": max(1, int(min_presence)),
+            "pos_tol": int(pos_tol),
+            "geometry": "row_relative",
+            "stable_clusters": 0,
+            "transient_clusters": 0,
+            "volatile_clusters": 0,
+            "degraded_clusters": len(elements),
+            "mixed_text_clusters": 0,
+            "degrade_reason": "scroll_drift",
+            "global_y_shift_px": round(global_y_shift, 3),
+            "enabled": True,
+        }
+        return base.model_copy(update={"elements": elements, "ocr_vote_metadata": metadata})
 
     clusters: list[dict] = []
     for scene_index, scene in enumerate(valid_scenes):
@@ -252,6 +331,7 @@ def vote_scenes(
         "transient_clusters": 0,
         "volatile_clusters": 0,
         "degraded_clusters": 0,
+        "mixed_text_clusters": 0,
     }
     for cluster in clusters:
         members = cluster["elements"]
@@ -260,6 +340,8 @@ def vote_scenes(
             members[0][1],
         )
         readings = [el.text or "" for _, el in members]
+        if len({norm_text(text) for text in readings if norm_text(text)}) > 1:
+            stats["mixed_text_clusters"] += 1
         presence = _scene_presence(members)
         region_status = "stable" if presence >= max(1, int(min_presence)) else "transient"
         stats[f"{region_status}_clusters"] += 1

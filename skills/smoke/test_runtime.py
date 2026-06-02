@@ -116,6 +116,29 @@ class CountingVotingOCR:
         ]
 
 
+class ScrollDriftVotingOCR:
+    def __init__(self):
+        self.calls = 0
+
+    def recognize(self, _image):
+        shift = 0 if self.calls == 0 else 12
+        self.calls += 1
+        return [
+            UIElement(
+                type="text",
+                box=Box(x=80, y=300 + shift, w=90, h=20),
+                text="Notifications",
+                confidence=0.9,
+            ),
+            UIElement(
+                type="text",
+                box=Box(x=80, y=318 + shift, w=90, h=20),
+                text="Sounds & Haptics",
+                confidence=0.9,
+            ),
+        ]
+
+
 class TimeoutOnceOCR:
     def __init__(self):
         self.calls = 0
@@ -1079,6 +1102,28 @@ def test_runtime_wires_ocr_temporal_voting_config_without_global_perceive_side_e
     assert scene.ocr_vote_metadata["samples_requested"] == 3
     assert scene.ocr_vote_metadata["samples_used"] == 3
     assert scene.ocr_vote_metadata["degrade_reason"] == "duplicate_frames"
+
+
+@pytest.mark.smoke
+def test_perceive_voted_preserves_internal_scroll_drift_degrade_reason():
+    runtime = build_phone(
+        source=AdvancingSource(),
+        cfg=AgentConfig(
+            _env_file=None,
+            ocr_temporal_voting_enabled=True,
+            ocr_temporal_voting_frames=2,
+            ocr_temporal_voting_min_presence=2,
+        ),
+        ocr=ScrollDriftVotingOCR(),
+    )
+
+    runtime.phone.action_context.ocr_temporal_voting_opt_in = True
+    scene = runtime.phone.perceive()
+
+    assert scene.observation_mode == "voted_degraded"
+    assert scene.ocr_vote_metadata["samples_used"] == 2
+    assert scene.ocr_vote_metadata["distinct_frames"] == 2
+    assert scene.ocr_vote_metadata["degrade_reason"] == "scroll_drift"
 
 
 @pytest.mark.smoke
