@@ -100,8 +100,9 @@ can prove them).**
   to generic apps.
 - **A2 Decision brain.** Initial slice: `AIPhone.explore()` now emits an
   auditable `observe -> decide -> act -> verify` decision trace for each step.
-  Remaining work: the planner is still policy/heuristic/VLM-shaped rather than
-  learned, and `Phone.tap_xy` still bypasses the orchestrator entirely.
+  `Phone.tap_xy` is also locked by smoke as an orchestrator-ledger action, so raw
+  coordinates are no longer a silent untraced path. Remaining work: the planner is
+  still policy/heuristic/VLM-shaped rather than learned.
   The realistic "policy" is VLM-as-System-2, **not** a trained net — glassbox has
   no large `(state, action)` corpus.
 - **A3 Signature stability under richer perception.** `compute_signature` drops
@@ -217,6 +218,9 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
 - `AIPhone.explore()` now records `DecisionTraceStep` entries in the returned
   `ExplorationTrail` and trail JSON, covering the observation event, decision
   action/target/reason, action semantic status, and post-action verification.
+- `Phone.tap_xy()` goes through `GestureExecutor.tap_xy()` -> `execute_action()`;
+  smoke locks that coordinate taps appear in the orchestrator action ledger with
+  policy evaluation, command geometry, and verification artifacts.
 - iPadOS Settings detail node identity is guarded as a non-root semantic
   signature: text churn and richer perception retyping detail rows to `list_item`
   do not split a remembered `settings/...` detail node.
@@ -225,7 +229,8 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
   immediately for the next decision in the same run.
 - Smoke coverage: `skills/smoke/test_world_model_spine.py`,
   `skills/smoke/test_ios_scene.py`, `skills/smoke/test_canonical_primitives.py`,
-  `skills/smoke/test_memory_observe.py`, and
+  `skills/smoke/test_memory_observe.py`,
+  `skills/smoke/test_computer_use_runtime.py`, and
   `skills/smoke/test_ai_native_interface.py`.
 
 ## Non-goals / honest posture

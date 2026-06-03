@@ -2324,6 +2324,35 @@ def test_computer_use_runtime_records_crawler_actor(tmp_path):
 
 
 @pytest.mark.smoke
+def test_computer_use_runtime_tap_xy_uses_orchestrator_action_ledger(tmp_path):
+    phone, orchestrator, store = _make_phone(
+        tmp_path,
+        [["主屏幕"], ["After tap"]],
+    )
+
+    result = phone.tap_xy(10, 20)
+    orchestrator.close()
+
+    assert result.attempt_id == "act_000000"
+    action = _read_jsonl(store.run_dir / "actions.jsonl")[0]
+    assert action["op"] == "tap"
+    assert action["intent"]["name"] == "tap_xy"
+    assert action["command"] == {
+        "type": "tap",
+        "x": 10,
+        "y": 20,
+        "coordinate_space": "frame_px",
+        "target_point": {"x": 10, "y": 20, "space": "frame_px"},
+        "target_point_frame": {"x": 10, "y": 20, "space": "frame_px"},
+        "via": "tap_xy",
+    }
+    assert action["before_requested"]["screenshot"].startswith("frames/")
+    assert action["verification"].startswith("verifications/")
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert any(event["type"] == "policy.evaluated" for event in audit)
+
+
+@pytest.mark.smoke
 def test_computer_use_runtime_no_after_is_verification_skipped(tmp_path):
     phone, orchestrator, store = _make_phone(
         tmp_path,
