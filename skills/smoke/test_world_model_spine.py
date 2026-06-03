@@ -232,6 +232,13 @@ class _MemoryNavPhone:
         self.back_calls = 0
         self.home_calls = 0
         self.tap_calls: list[tuple[int, int, str | None]] = []
+        self.text_tap_calls: list[str] = []
+        self.text_tap_result = ActionResult(
+            ok=True,
+            backend="fake",
+            connected=True,
+            semantic_status="succeeded",
+        )
         self.path_queries: list[dict] = []
 
     def perceive(self, *, fresh=None):
@@ -272,6 +279,16 @@ class _MemoryNavPhone:
         self.tap_calls.append((x, y, coordinate_space))
         self.replayed += 1
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+    def tap_text(self, target: str):
+        self.text_tap_calls.append(target)
+        if self.text_tap_result.ok and self.text_tap_result.semantic_status not in {
+            "failed",
+            "blocked",
+            "exception",
+        }:
+            self.replayed += 1
+        return self.text_tap_result
 
 
 class _GenericMemoryNavPhone:
@@ -317,7 +334,7 @@ def test_navigate_via_memory_path_replays_learned_path_without_home_fallback():
 
 
 @pytest.mark.smoke
-def test_navigate_via_memory_path_replays_learned_tap_edges():
+def test_navigate_via_memory_path_relocalizes_learned_target_tap_edges():
     tap = ActionRecord.from_op(
         "tap",
         {
@@ -341,10 +358,75 @@ def test_navigate_via_memory_path_replays_learned_tap_edges():
     assert result.reached is True
     assert result.reason == "reached"
     assert result.replayed_ops == ("tap",)
-    assert phone.tap_calls == [(733, 469, "frame_px")]
+    assert phone.text_tap_calls == ["General"]
+    assert phone.tap_calls == []
     assert phone.back_calls == 0
     assert phone.home_calls == 0
     assert phone.path_queries[0]["allowed_actions"] == {"tap"}
+
+
+@pytest.mark.smoke
+def test_navigate_via_memory_path_replays_explicit_tap_xy_edges_by_coordinate():
+    tap = ActionRecord.from_op(
+        "tap_xy",
+        {
+            "x": 733,
+            "y": 469,
+            "coordinate_space": "frame_px",
+            "target": "General",
+            "action_ok": True,
+        },
+    )
+    phone = _MemoryNavPhone(path=[_Edge("tap_xy", action=tap)], arrive_page="settings/General")
+
+    result = navigate_via_memory_path(
+        phone,
+        "settings/General",
+        allowed_actions={"tap_xy"},
+        min_success_rate=0.5,
+    )
+
+    assert result.reached is True
+    assert result.reason == "reached"
+    assert result.replayed_ops == ("tap_xy",)
+    assert phone.text_tap_calls == []
+    assert phone.tap_calls == [(733, 469, "frame_px")]
+    assert phone.path_queries[0]["allowed_actions"] == {"tap_xy"}
+
+
+@pytest.mark.smoke
+def test_navigate_via_memory_path_does_not_fallback_to_stale_xy_after_target_miss():
+    tap = ActionRecord.from_op(
+        "tap",
+        {
+            "x": 733,
+            "y": 469,
+            "coordinate_space": "frame_px",
+            "target": "General",
+            "via": "settings.tap_row",
+            "action_ok": True,
+        },
+    )
+    phone = _MemoryNavPhone(path=[_Edge("tap", action=tap)], arrive_page="settings/General")
+    phone.text_tap_result = ActionResult(
+        ok=True,
+        backend="fake",
+        connected=True,
+        semantic_status="failed",
+    )
+
+    result = navigate_via_memory_path(
+        phone,
+        "settings/General",
+        allowed_actions={"tap"},
+        min_success_rate=0.5,
+    )
+
+    assert result.reached is False
+    assert result.reason == "replay_failed"
+    assert result.replayed_ops == ()
+    assert phone.text_tap_calls == ["General"]
+    assert phone.tap_calls == []
 
 
 @pytest.mark.smoke

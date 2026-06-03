@@ -319,9 +319,38 @@ def _edge_action_kwargs(edge: Any) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+def _edge_action_target(action: Any, kwargs: dict[str, Any]) -> str | None:
+    target = (getattr(action, "target", None) if action is not None else None) or kwargs.get("target")
+    if target is None:
+        params = getattr(action, "params", None) if action is not None else None
+        if isinstance(params, dict):
+            target = params.get("text")
+    if target is None:
+        target = kwargs.get("text")
+    text = str(target or "").strip()
+    return text or None
+
+
+def _replay_tap_text(phone: object, target: str) -> bool | None:
+    fn = getattr(phone, "tap_text", None)
+    if not callable(fn):
+        return None
+    try:
+        result = fn(target)
+    except Exception:
+        return False
+    return _replay_result_ok(result)
+
+
 def _replay_tap_edge(phone: object, edge: Any) -> bool:
     action = getattr(edge, "action", None)
     kwargs = _edge_action_kwargs(edge)
+    op = str(getattr(edge, "action_op", "") or "")
+    target = _edge_action_target(action, kwargs)
+    if target and op != "tap_xy":
+        replayed = _replay_tap_text(phone, target)
+        if replayed is not None:
+            return replayed
     x = getattr(action, "x", None) if action is not None else None
     y = getattr(action, "y", None) if action is not None else None
     if x is None:
@@ -343,17 +372,10 @@ def _replay_tap_edge(phone: object, edge: Any) -> bool:
         except Exception:
             return False
         return _replay_result_ok(result)
-    target = (getattr(action, "target", None) if action is not None else None) or kwargs.get("target")
     if not target:
         return False
-    fn = getattr(phone, "tap_text", None)
-    if not callable(fn):
-        return False
-    try:
-        result = fn(str(target))
-    except Exception:
-        return False
-    return _replay_result_ok(result)
+    replayed = _replay_tap_text(phone, target)
+    return False if replayed is None else replayed
 
 
 # CUQ-0.5: navigation ops the generic memory-path recovery can replay on ANY
