@@ -1171,6 +1171,11 @@ def test_settings_crawl_policy_adapter_exposes_provisional_crawl_policy():
 
     assert adapter.classify(scene) == "settings_root"
     assert [item["text"] for item in candidates] == ["无线局域网", "蓝牙", "通用"]
+    assert [item["page_id"] for item in candidates] == [
+        "settings/无线局域网",
+        "settings/蓝牙",
+        "settings/通用",
+    ]
     assert adapter.is_safe(candidates[0], scene) is True
     assert adapter.is_safe({"text": "Apple ID"}, scene) is False
     assert adapter.should_stop(scene, []) is False

@@ -211,23 +211,23 @@ def _policy_should_stop(policy: Any | None, scene: Any, entries: list[CrawlEntry
     return bool(should_stop(scene, history))
 
 
-def _try_candidate_memory_navigation(phone: Any, candidate: TapCandidate) -> Any | None:
+def _try_candidate_memory_navigation(phone: Any, candidate: TapCandidate) -> tuple[Any | None, bool]:
     page_id = str(candidate.page_id or "").strip()
     if not page_id:
-        return None
+        return None, False
     navigate = getattr(phone, "navigate_to_page", None)
     if not callable(navigate):
-        return None
+        return None, False
     try:
         result = navigate(page_id)
     except Exception:
-        return None
+        return None, True
     reached = (
         getattr(result, "reached", False) is True
         or getattr(result, "semantic_status", None) == "succeeded"
         or getattr(result, "ok", False) is True
     )
-    return result if reached else None
+    return (result if reached else None), True
 
 
 def crawl_app(
@@ -295,8 +295,16 @@ def crawl_app(
                 return
             if not _goto(phone, foreground, path, screen_texts, settle_s=tap_settle_s):
                 break
-            result = _try_candidate_memory_navigation(phone, cand)
+            result, memory_navigation_attempted = _try_candidate_memory_navigation(phone, cand)
             if result is None:
+                if memory_navigation_attempted and not _goto(
+                    phone,
+                    foreground,
+                    path,
+                    screen_texts,
+                    settle_s=tap_settle_s,
+                ):
+                    break
                 result = phone.tap_xy(*cand.center)
             budget["actions"] -= 1
             counts["actions"] += 1

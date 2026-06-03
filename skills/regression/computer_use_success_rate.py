@@ -634,9 +634,11 @@ def _task_outcome(
 
 
 def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    measured_tasks = [task for task in tasks if task.get("outcome") != "precondition_failed"]
+    navigation_origin_precondition_failures = len(tasks) - len(measured_tasks)
     all_actions = [
         action
-        for task in tasks
+        for task in measured_tasks
         for action in _task_actions(task)
     ]
     primary_actions = [
@@ -666,26 +668,23 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     vlm_action_covered = sum(
         1 for action in task_actions if _metric_int(action, "vlm_calls") > 0
     )
-    task_count = len(tasks)
-    task_success = sum(1 for task in tasks if task.get("outcome") == "succeeded")
-    navigation_origin_precondition_failures = sum(
-        1 for task in tasks if task.get("outcome") == "precondition_failed"
-    )
+    task_count = len(measured_tasks)
+    task_success = sum(1 for task in measured_tasks if task.get("outcome") == "succeeded")
     task_completion_rate = task_success / task_count if task_count else 0.0
     task_completion_variance = (
         sum(
             ((1.0 if task.get("outcome") == "succeeded" else 0.0) - task_completion_rate) ** 2
-            for task in tasks
+            for task in measured_tasks
         )
         / task_count
         if task_count
         else 0.0
     )
-    recoveries = sum(_task_recovery_count(task) for task in tasks)
+    recoveries = sum(_task_recovery_count(task) for task in measured_tasks)
     # Coverage = entered ÷ reachable, where reachable = expected − blocked
     # (deliberately-blocked pages are unreachable and must not penalize coverage).
     coverage_ratios = []
-    for task in tasks:
+    for task in measured_tasks:
         reachable = _metric_int(task, "root_pages_expected") - _metric_int(task, "root_pages_blocked")
         if reachable > 0:
             coverage_ratios.append(_metric_int(task, "root_pages_covered") / reachable)

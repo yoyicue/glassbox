@@ -543,9 +543,10 @@ def test_aggregate_benchmark_manifest_supports_fixed_task_set(tmp_path):
     assert payload["metrics"]["task_completion_rate"] == 1.0
 
 
-def test_navigation_origin_precondition_failure_is_separate_task_outcome(tmp_path):
-    run_dir = _run_dir(tmp_path, status="succeeded")
-    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+def test_navigation_origin_precondition_failure_is_not_task_completion_sample(tmp_path):
+    succeeded_run = _run_dir(tmp_path / "succeeded", status="succeeded")
+    precondition_run = _run_dir(tmp_path / "precondition", status="succeeded")
+    manifest = json.loads((precondition_run / "manifest.json").read_text(encoding="utf-8"))
     manifest["navigation_origin"] = {
         "policy": "home_verified_precondition",
         "attempted": True,
@@ -557,19 +558,22 @@ def test_navigation_origin_precondition_failure_is_separate_task_outcome(tmp_pat
         "semantic_verifier": None,
         "error": None,
     }
-    _write_json(run_dir / "manifest.json", manifest)
+    _write_json(precondition_run / "manifest.json", manifest)
 
     payload = aggregate_benchmark(
-        [run_dir],
+        [succeeded_run, precondition_run],
         task="canonical_navigation",
         terminal_expected_state={"kind": "page_id", "payload": {"page_id": "settings/root"}},
     )
 
-    task = payload["tasks"][0]
-    assert task["outcome"] == "precondition_failed"
-    assert task["navigation_origin"]["can_start_clock"] is False
-    assert payload["metrics"]["task_completion_rate"] == 0.0
+    assert [task["outcome"] for task in payload["tasks"]] == ["succeeded", "precondition_failed"]
+    assert payload["tasks"][1]["navigation_origin"]["can_start_clock"] is False
+    assert payload["metrics"]["task_completion_rate"] == 1.0
+    assert payload["metrics"]["task_completion_variance"] == 0.0
     assert payload["metrics"]["navigation_origin_precondition_failures"] == 1
+    assert payload["metrics"]["task_action_count"] == 1
+    assert payload["metrics"]["vlm_calls"] == 1
+    assert payload["metrics"]["vlm_calls_per_task"] == 1.0
     assert validate_benchmark(payload) == []
 
 
