@@ -365,15 +365,28 @@ def _canonical_settings_detail_title(title: str | None) -> str | None:
         margin=0.12,
         max_leading_noise=0,
     )
-    if known is None or _looks_like_ascii_title_prefix_truncation(text, known):
+    if known is None or _looks_like_ascii_title_affix_mismatch(text, known):
         return text
     return known
 
 
-def _looks_like_ascii_title_prefix_truncation(text: str, label: str) -> bool:
+def _looks_like_ascii_title_affix_mismatch(text: str, label: str) -> bool:
     norm = compact_text(text).casefold()
     label_norm = compact_text(label).casefold()
-    return norm != label_norm and label_norm.startswith(norm) and len(norm) < len(label_norm)
+    if norm == label_norm:
+        return False
+    if label_norm.startswith(norm) and len(norm) < len(label_norm):
+        return True
+    if norm.startswith(label_norm) and len(label_norm) < len(norm):
+        suffix = norm[len(label_norm):]
+        return _looks_like_distinct_ascii_title_suffix(suffix)
+    return False
+
+
+def _looks_like_distinct_ascii_title_suffix(suffix: str) -> bool:
+    if not suffix or len(suffix) > 3 or not suffix.isascii():
+        return False
+    return any(ch.isalnum() or ch in {"+", "&"} for ch in suffix)
 
 
 def _top_detail_back_y(scene: Scene, *, viewport_size: tuple[int, int]) -> int | None:

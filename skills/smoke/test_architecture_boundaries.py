@@ -515,6 +515,26 @@ def test_ipados_platform_canonicalizes_screen_time_title_ocr_typo():
     assert classified.page_id == "settings/Screen Time"
 
 
+def test_ipados_settings_detail_title_canonicalizer_preserves_distinct_suffix_pages():
+    from glassbox.ipados import scene as ipados_scene
+
+    assert ipados_scene._canonical_settings_detail_title("Screem Time") == "Screen Time"
+    assert ipados_scene._canonical_settings_detail_title("Sound") == "Sound"
+    assert ipados_scene._canonical_settings_detail_title("iCloud+") == "iCloud+"
+    assert ipados_scene._canonical_settings_detail_title("Cameras") == "Cameras"
+
+
+def test_ipados_settings_detail_title_labels_cover_sidebar_markers():
+    from glassbox.ipados import scene as ipados_scene
+
+    missing = sorted(
+        set(ipados_scene._IPAD_SETTINGS_SIDEBAR_MARKERS)
+        - set(ipados_scene._IPAD_SETTINGS_DETAIL_TITLE_LABELS)
+    )
+
+    assert missing == []
+
+
 def test_ipados_platform_does_not_reuse_ios_settings_detail_fallback_on_home_widgets():
     platform = IPadOSPlatform()
     scene = Scene(
