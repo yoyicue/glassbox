@@ -98,10 +98,12 @@ can prove them).**
   before falling back to text tapping. Remaining work: make arbitrary-goal
   planners choose it from learned UTG context and extend the UTG beyond Settings
   to generic apps.
-- **A2 Decision brain.** No owned/learned `observe→decide→act→verify` loop;
-  decisions are hand-scripted in skills, and `tap_xy` (`phone.py:1714`) bypasses
-  the orchestrator entirely. The realistic "policy" is VLM-as-System-2, **not** a
-  trained net — glassbox has no large `(state, action)` corpus.
+- **A2 Decision brain.** Initial slice: `AIPhone.explore()` now emits an
+  auditable `observe -> decide -> act -> verify` decision trace for each step.
+  Remaining work: the planner is still policy/heuristic/VLM-shaped rather than
+  learned, and `Phone.tap_xy` still bypasses the orchestrator entirely.
+  The realistic "policy" is VLM-as-System-2, **not** a trained net — glassbox has
+  no large `(state, action)` corpus.
 - **A3 Signature stability under richer perception.** `compute_signature` drops
   `is_volatile` (`list_item`) text from `stable_texts` (`signature.py:55`,
   `element_key.py:33`), so any perception change that re-types rows shifts the
@@ -169,7 +171,10 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
    automatic facade slice handles page-id-shaped `goto(...)` targets, while the
    remaining work is planner-selected memory paths and UTG extension past Settings.
    Gate: fewer recoveries / shorter routes on a multi-app task.
-4. **Live control + signature guard (B3, A3).** Feed `actuation_profile` success
+4. **Decision loop evidence (A2).** Keep each exploratory step auditable as
+   `observe -> decide -> act -> verify`, then use the task-level gate to decide
+   which planner complexity is worth keeping.
+5. **Live control + signature guard (B3, A3).** Feed `actuation_profile` success
    rates into live strategy selection and de-advertise a failed capability within
    a run; keep broadening non-root signature-stability guards beyond the initial
    Settings-detail regression.
@@ -209,6 +214,9 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
 - `AIPhone.goto()` treats page-id-shaped labels (`foo/bar`, no whitespace) as a
   memory-path navigation request first, and falls back to the original text-tap
   behavior when memory is unavailable or cannot reach the page.
+- `AIPhone.explore()` now records `DecisionTraceStep` entries in the returned
+  `ExplorationTrail` and trail JSON, covering the observation event, decision
+  action/target/reason, action semantic status, and post-action verification.
 - iPadOS Settings detail node identity is guarded as a non-root semantic
   signature: text churn and richer perception retyping detail rows to `list_item`
   do not split a remembered `settings/...` detail node.

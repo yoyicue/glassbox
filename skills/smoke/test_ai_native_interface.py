@@ -586,6 +586,12 @@ def test_ai_explore_and_save_path_as_are_text_first(tmp_path):
     assert trail.success is True
     assert trail.artifact_path.exists()
     assert "visible:关于本机" in trail.matched_path
+    assert trail.decision_trace[0].decision_action == "scroll"
+    assert trail.decision_trace[0].decision_reason == "no_safe_policy_candidate"
+    assert trail.decision_trace[0].verified is True
+    trail_payload = json.loads(trail.artifact_path.read_text(encoding="utf-8"))
+    assert trail_payload["decision_trace"][0]["decision_action"] == "scroll"
+    assert trail_payload["decision_trace"][0]["verification"] == "visible_goal"
     assert artifact.path.exists()
     assert artifact.script_snippet_path and artifact.script_snippet_path.exists()
 
@@ -621,6 +627,11 @@ def test_ai_explore_uses_policy_candidates_and_safety(tmp_path):
     assert trail.success is True
     assert phone._phone.actions[0] == ("tap_text", "通用")
     assert "tap:通用" in trail.matched_path
+    assert trail.decision_trace[0].decision_action == "tap"
+    assert trail.decision_trace[0].decision_target == "通用"
+    assert trail.decision_trace[0].decision_reason == "policy_candidate"
+    assert trail.decision_trace[0].action_semantic_status == "succeeded"
+    assert trail.decision_trace[0].verified is True
 
 
 @pytest.mark.smoke

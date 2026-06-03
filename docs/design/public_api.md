@@ -45,6 +45,7 @@ Stable data classes:
 - `ElementBox`
 - `ActionOutcome`
 - `RunArtifacts`
+- `DecisionTraceStep`
 - `ExplorationTrail`
 - `PathArtifact`
 - `AIAssertionError`
@@ -71,6 +72,10 @@ cached facade read: it returns the latest observation unless `refresh=True`.
 trusted semantic result; visual-only `scene_progressed` success is downgraded to
 `unknown` by the facade unless the caller supplied an explicit expectation and it
 matched.
+
+`explore()` writes an auditable decision trace into `ExplorationTrail` and the
+trail JSON: observation event, decision action/target/reason, action semantic
+status, and post-action verification.
 
 `launch_app()` performs a facade-level landing check when no explicit expectation
 is provided. It verifies Settings via page metadata, profile-backed apps via

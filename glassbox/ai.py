@@ -116,6 +116,21 @@ class RunArtifacts:
 
 
 @dataclass(frozen=True)
+class DecisionTraceStep:
+    index: int
+    observation_event_seq: int
+    observed_page_id: str | None
+    decision_action: str
+    decision_target: str | None
+    decision_reason: str
+    action_semantic_status: str
+    verified: bool
+    verification: str
+    after_event_seq: int
+    after_page_id: str | None
+
+
+@dataclass(frozen=True)
 class ExplorationTrail:
     goal: str
     success: bool
@@ -123,6 +138,7 @@ class ExplorationTrail:
     final_observation: ObservationSummary
     matched_path: tuple[str, ...]
     artifact_path: Path
+    decision_trace: tuple[DecisionTraceStep, ...] = ()
 
     def summary(self) -> str:
         status = "success" if self.success else "failed"
@@ -688,6 +704,7 @@ class AIPhone:
     def explore(self, goal: str, *, max_steps: int = 12) -> ExplorationTrail:
         steps: list[str] = []
         matched_path: list[str] = []
+        decision_trace: list[DecisionTraceStep] = []
         needle = goal.strip()
         obs = self.observe()
         success = self._goal_visible(needle, obs)
@@ -699,15 +716,37 @@ class AIPhone:
             candidate = self._next_policy_candidate(obs, goal=needle)
             if candidate is not None:
                 result = self._execute_candidate(candidate)
-                self._action_outcome(f"explore.{candidate.action}", candidate.label, result)
+                outcome = self._action_outcome(f"explore.{candidate.action}", candidate.label, result)
+                decision_action = candidate.action
+                decision_target = candidate.label
+                decision_reason = candidate.reason or "policy_candidate"
                 steps.append(f"{idx + 1}. {candidate.action} {candidate.label}")
                 matched_path.append(f"{candidate.action}:{candidate.label}")
             else:
                 result = self._phone_scroll("down")
-                self._action_outcome("explore.scroll", needle, result)
+                outcome = self._action_outcome("explore.scroll", needle, result)
+                decision_action = "scroll"
+                decision_target = "down"
+                decision_reason = "no_safe_policy_candidate"
                 steps.append(f"{idx + 1}. scroll down")
+            before_obs = obs
             obs = self.observe()
             success = self._goal_visible(needle, obs)
+            decision_trace.append(
+                DecisionTraceStep(
+                    index=idx + 1,
+                    observation_event_seq=before_obs.event_seq,
+                    observed_page_id=before_obs.page_id,
+                    decision_action=decision_action,
+                    decision_target=decision_target,
+                    decision_reason=decision_reason,
+                    action_semantic_status=outcome.semantic_status,
+                    verified=success,
+                    verification="visible_goal" if success else "goal_not_visible",
+                    after_event_seq=obs.event_seq,
+                    after_page_id=obs.page_id,
+                )
+            )
             if success:
                 if candidate is None:
                     matched_path.append("scroll:down")
@@ -715,7 +754,7 @@ class AIPhone:
                 break
             if self._policy_should_stop(obs, steps=len(steps), found=success):
                 break
-        artifact_path = self._write_trail(needle, success, steps, matched_path, obs)
+        artifact_path = self._write_trail(needle, success, steps, matched_path, obs, decision_trace)
         trail = ExplorationTrail(
             goal=goal,
             success=success,
@@ -723,6 +762,7 @@ class AIPhone:
             final_observation=obs,
             matched_path=tuple(matched_path),
             artifact_path=artifact_path,
+            decision_trace=tuple(decision_trace),
         )
         self._last_trail = trail
         return trail
@@ -1146,6 +1186,7 @@ class AIPhone:
         steps: list[str],
         matched_path: list[str],
         observation: ObservationSummary,
+        decision_trace: list[DecisionTraceStep],
     ) -> Path:
         trails_dir = self.run_dir / "exploration"
         trails_dir.mkdir(exist_ok=True)
@@ -1157,6 +1198,22 @@ class AIPhone:
                     "success": success,
                     "steps": steps,
                     "matched_path": matched_path,
+                    "decision_trace": [
+                        {
+                            "index": step.index,
+                            "observation_event_seq": step.observation_event_seq,
+                            "observed_page_id": step.observed_page_id,
+                            "decision_action": step.decision_action,
+                            "decision_target": step.decision_target,
+                            "decision_reason": step.decision_reason,
+                            "action_semantic_status": step.action_semantic_status,
+                            "verified": step.verified,
+                            "verification": step.verification,
+                            "after_event_seq": step.after_event_seq,
+                            "after_page_id": step.after_page_id,
+                        }
+                        for step in decision_trace
+                    ],
                     "final_observation": {
                         "summary": observation.summary,
                         "page_id": observation.page_id,
