@@ -254,7 +254,10 @@ def classify_ios_scene(
         scene, viewport_size=(w, h), strict=strict_settings_detail
     )
     if semantic_detail is not None:
-        if _settings_detail_resisted_by_prior(prior):
+        if _settings_detail_resisted_by_prior(
+            prior,
+            read_confidence=semantic_detail.confidence,
+        ):
             return _settings_detail_prior_abstain(
                 title=semantic_detail.title or title,
                 prior=prior,
@@ -318,7 +321,7 @@ def classify_ios_scene(
                 safe_actions=("trace", "vlm_on_uncertain"),
                 evidence=("settings_detail_abstain", "missing_settings_anchor"),
             )
-        if _settings_detail_resisted_by_prior(prior):
+        if _settings_detail_resisted_by_prior(prior, read_confidence=0.78):
             return _settings_detail_prior_abstain(
                 title=title,
                 prior=prior,
@@ -366,9 +369,22 @@ def apply_ios_classification(
     return classified
 
 
-def _settings_detail_resisted_by_prior(prior: SceneClassificationPrior | None) -> bool:
+_SETTINGS_PRIOR_RESIST_MARGIN = 0.08
+
+
+def _settings_detail_resisted_by_prior(
+    prior: SceneClassificationPrior | None,
+    *,
+    read_confidence: float,
+) -> bool:
     """Return True when a weak Settings-detail read conflicts with a known app prior."""
     if prior is None:
+        return False
+    try:
+        recognition_score = float(prior.recognition_score)
+    except (TypeError, ValueError):
+        return False
+    if recognition_score < float(read_confidence) + _SETTINGS_PRIOR_RESIST_MARGIN:
         return False
     prior_page = str(prior.page_id or "").strip().lower()
     prior_kind = str(prior.platform_scene_kind or prior.semantic_scene_type or prior.scene_type or "").strip().lower()

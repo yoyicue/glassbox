@@ -31,6 +31,7 @@ class TapCandidate:
     center: tuple[int, int]
     source: str            # "ocr" | "vlm_anchored" | "vlm_only"
     role: str = ""
+    page_id: str | None = None
 
 
 def ocr_tap_candidates(scene: Any) -> list[TapCandidate]:

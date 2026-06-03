@@ -62,6 +62,7 @@ class SceneClassificationPrior:
 
     screen_id: str | None = None
     page_id: str | None = None
+    recognition_score: float | None = None
     scene_type: str | None = None
     semantic_scene_type: str | None = None
     platform_scene_kind: str | None = None

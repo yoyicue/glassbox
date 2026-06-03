@@ -82,6 +82,8 @@ def test_scene_classification_prior_comes_from_recognized_memory_node_and_last_a
     assert prior is not None
     assert prior.screen_id == node.screen_id
     assert prior.page_id == "app/home"
+    assert prior.recognition_score is not None
+    assert prior.recognition_score >= memory.match_threshold
     assert prior.platform_scene_kind == "app_home"
     assert prior.last_action_op == "tap"
     assert prior.last_action_target == "Search"

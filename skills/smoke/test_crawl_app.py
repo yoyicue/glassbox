@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -202,6 +203,59 @@ def test_crawl_app_uses_injected_crawl_policy_for_candidates():
     )
 
     assert report.strategy == "policy"
+    assert [(entry.label, entry.source, entry.outcome) for entry in report.entries] == [
+        ("设置", "unit_policy", "navigated")
+    ]
+
+
+@pytest.mark.smoke
+def test_crawl_app_policy_candidate_page_id_uses_memory_navigation():
+    class PageIdPolicy:
+        def candidates(self, _scene):
+            return [
+                {
+                    "action": "tap",
+                    "label": "设置",
+                    "center": list(_box_for(0).center),
+                    "source": "unit_policy",
+                    "safe": True,
+                    "page_id": "app/settings",
+                }
+            ]
+
+        def is_safe(self, action, _scene):
+            return action.get("safe") is True
+
+        def should_stop(self, _scene, _history):
+            return False
+
+    class MemoryPathApp(_FakeApp):
+        def __init__(self):
+            super().__init__({"home": [("设置", "settings")], "settings": []})
+            self.memory_targets: list[str] = []
+
+        def navigate_to_page(self, page_id: str):
+            self.memory_targets.append(page_id)
+            if page_id == "app/settings":
+                self._stack.append(self._cur)
+                self._cur = "settings"
+                return SimpleNamespace(reached=True)
+            return SimpleNamespace(reached=False)
+
+    app = MemoryPathApp()
+
+    report = crawl_app(
+        app,
+        foreground=app.foreground,
+        annotator=None,
+        crawl_policy=PageIdPolicy(),
+        max_depth=1,
+        tap_settle_s=0.0,
+    )
+
+    assert report.navigations == 1
+    assert app.memory_targets == ["app/settings"]
+    assert app.taps == []
     assert [(entry.label, entry.source, entry.outcome) for entry in report.entries] == [
         ("设置", "unit_policy", "navigated")
     ]

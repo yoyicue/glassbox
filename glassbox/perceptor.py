@@ -118,11 +118,14 @@ class Perceptor:
         ]
         last_action = actions[0] if len(actions) == 1 else None
         node = None
+        recognition_score = None
         memory = getattr(host, "memory", None)
         recognize = getattr(memory, "recognize", None) if memory is not None else None
         if callable(recognize):
             try:
                 node = recognize(scene, frame_img)
+                if node is not None:
+                    recognition_score = getattr(memory, "last_recognize_score", None)
             except Exception as exc:
                 logger.warning(f"screen-memory prior recognition failed: {exc}")
         if node is None and last_action is None:
@@ -130,6 +133,7 @@ class Perceptor:
         return SceneClassificationPrior(
             screen_id=getattr(node, "screen_id", None),
             page_id=getattr(node, "page_id", None),
+            recognition_score=recognition_score,
             scene_type=getattr(node, "scene_type", None),
             semantic_scene_type=getattr(node, "semantic_scene_type", None),
             platform_scene_kind=getattr(node, "platform_scene_kind", None),

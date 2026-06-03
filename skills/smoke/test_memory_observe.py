@@ -673,6 +673,43 @@ def test_generic_non_root_page_signature_survives_row_retyping_and_text_churn():
 
 
 @pytest.mark.smoke
+def test_semantic_page_structural_fallback_preserves_clickable_image_icons():
+    mem = ScreenMemory(UTG(bundle_id="com.example.icons"))
+
+    def icon_grid(*, page_id: str | None) -> Scene:
+        scene = Scene(
+            frame_id=0,
+            timestamp=0.0,
+            elements=[
+                UIElement(
+                    type="image",
+                    box=Box(x=32 + index * 52, y=120, w=36, h=36),
+                    text=None,
+                    confidence=0.9,
+                    suggested_actions=["tap"],
+                    element_id=index,
+                )
+                for index in range(4)
+            ],
+        )
+        if page_id is not None:
+            scene.page_id = page_id
+            scene.scene_type = "icon_grid"
+            scene.platform_scene_kind = "icon_grid"
+            scene.classification_source = "profile"
+            scene.classification_confidence = 0.9
+        return scene
+
+    node = mem.observe(icon_grid(page_id="icons/detail"))
+    recognized = mem.recognize(icon_grid(page_id=None))
+
+    assert node.signature.stable_texts == ["icons/detail"]
+    assert node.signature.type_histogram == {"semantic_page": 1}
+    assert recognized is not None
+    assert recognized.screen_id == node.screen_id
+
+
+@pytest.mark.smoke
 def test_ipados_settings_root_projection_ignores_sidebar_ocr_and_icon_churn():
     mem = ScreenMemory(
         UTG(bundle_id="com.apple.Preferences"),

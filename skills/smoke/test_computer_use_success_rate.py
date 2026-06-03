@@ -543,6 +543,36 @@ def test_aggregate_benchmark_manifest_supports_fixed_task_set(tmp_path):
     assert payload["metrics"]["task_completion_rate"] == 1.0
 
 
+def test_navigation_origin_precondition_failure_is_separate_task_outcome(tmp_path):
+    run_dir = _run_dir(tmp_path, status="succeeded")
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest["navigation_origin"] = {
+        "policy": "home_verified_precondition",
+        "attempted": True,
+        "home_reached": False,
+        "can_start_clock": False,
+        "reason": "home_unverified",
+        "action_ok": True,
+        "semantic_status": "unknown",
+        "semantic_verifier": None,
+        "error": None,
+    }
+    _write_json(run_dir / "manifest.json", manifest)
+
+    payload = aggregate_benchmark(
+        [run_dir],
+        task="canonical_navigation",
+        terminal_expected_state={"kind": "page_id", "payload": {"page_id": "settings/root"}},
+    )
+
+    task = payload["tasks"][0]
+    assert task["outcome"] == "precondition_failed"
+    assert task["navigation_origin"]["can_start_clock"] is False
+    assert payload["metrics"]["task_completion_rate"] == 0.0
+    assert payload["metrics"]["navigation_origin_precondition_failures"] == 1
+    assert validate_benchmark(payload) == []
+
+
 def test_task_completion_rate_uses_terminal_expected_state(tmp_path):
     payload = aggregate_benchmark(
         [_run_dir(tmp_path, status="succeeded")],

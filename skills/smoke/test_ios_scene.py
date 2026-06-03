@@ -252,6 +252,7 @@ def test_ios_scene_classifier_uses_non_settings_prior_to_abstain_weak_settings_d
     )
     prior = SceneClassificationPrior(
         page_id="appstore/search",
+        recognition_score=1.0,
         platform_scene_kind="app_store",
         last_action_op="tap",
         last_action_target="Apps",
@@ -264,6 +265,31 @@ def test_ios_scene_classifier_uses_non_settings_prior_to_abstain_weak_settings_d
     assert classified.kind == "unknown"
     assert classified.safe_actions == ("trace", "vlm_on_uncertain")
     assert "settings_detail_prior_abstain" in classified.evidence
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_does_not_resist_settings_detail_on_weak_prior_match():
+    scene = _scene(
+        _el("<", 18, 76, w=18, ty="nav_back"),
+        _el("Apps", 196, 96, w=62),
+        _el("Manage apps and access settings", 58, 190, w=310),
+        _el("Default Apps", 58, 270, w=132),
+        _el("Privacy", 58, 326, w=82),
+    )
+    prior = SceneClassificationPrior(
+        page_id="appstore/search",
+        recognition_score=0.83,
+        platform_scene_kind="app_store",
+        last_action_op="tap",
+        last_action_target="Apps",
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 973), prior=prior)
+
+    assert classified.kind == "settings_detail"
+    assert classified.page_id is not None
+    assert classified.page_id.startswith("settings/")
+    assert "settings_detail_prior_abstain" not in classified.evidence
 
 
 @pytest.mark.smoke

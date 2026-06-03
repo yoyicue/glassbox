@@ -3,7 +3,7 @@
 Status: **THESIS + ACTION ROADMAP, with implementation slices — updated
 2026-06-03.** Distilled from an architecture review (autonomous-driving analogy
 → glassbox). This branch implements offline-verifiable primitives for **0b**,
-**B1**, **B2**, **A1**, and **B3**, then wires **0b/A1/B1/B2** into default-
+**B1**, **B2**, and **A1**, then wires **0b/A1/B1/B2** into default-
 compatible runtime or harness entrypoints. These are contracts / entrypoints /
 guards, not a claim that the task-level roadmap is complete. Every `file:line`
 anchor is a **snapshot as of `1d75ee9`** —
@@ -85,8 +85,9 @@ task-completion comparator.
   current classifier result already marks the scene `vlm_on_uncertain`.
 - **B3 Live capability model.** `BackendCapabilities` is a static declaration
   (`effector.py:166-202`), not validated/updated from action outcomes at runtime.
-  Initial slice: current-run `ActuationProfile.record_attempt()` feedback is
-  locked by smoke as a live de-advertise signal for failed methods.
+  This branch smoke-locks the existing `ActuationProfile.record_attempt()`
+  feedback as a live de-advertise signal, but does not implement new B3
+  orchestrator wiring.
 
 **A — Wiring (capabilities exist, not load-bearing; fix THIRD, once the compass
 can prove them).**
@@ -102,8 +103,10 @@ can prove them).**
   requests through the memory path before falling back to their original behavior.
   The planner-selected slice lets policy/crawl candidates carry a target
   `page_id`, so arbitrary text goals can choose a learned memory path before
-  falling back to the candidate's original action. Remaining work: prove the
-  benefit on live multi-app tasks rather than only offline smoke graphs.
+  falling back to the candidate's original action. The generic crawler now
+  consumes those page IDs; remaining live work is wiring the Settings-specific
+  `run_full` row harness through the same page-id route and proving the benefit
+  on live multi-app tasks rather than only offline smoke graphs.
 - **A2 Decision brain.** Initial slice: `AIPhone.explore()` now emits an
   auditable `observe -> decide -> act -> verify` decision trace for each step.
   `Phone.tap_xy` is also locked by smoke as an orchestrator-ledger action, so raw
@@ -203,6 +206,10 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
   default for navigation-class primitive runs, records `navigation_origin` in the
   run manifest and `navigation_origin.json`, and keeps
   `--skip-navigation-origin` as an explicit opt-out.
+- `aggregate_benchmark()` treats `navigation_origin.can_start_clock=False` as a
+  separate `precondition_failed` task outcome and reports
+  `navigation_origin_precondition_failures`, so failed Home anchors are not mixed
+  into ordinary navigation samples.
 - `SceneClassificationPrior` is a cognition contract with recognized UTG node
   identity (`screen_id`, `page_id`, scene-kind fields) plus the pending
   successful last action (`last_action_op`, `last_action_target`,
@@ -213,7 +220,8 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
 - Runtime platform/app classifier wrappers now accept `prior=`, iOS/iPadOS
   classifiers propagate it, and the iOS Settings-detail classifier can abstain to
   `unknown + vlm_on_uncertain` when a weak detail read conflicts with a known
-  non-Settings prior.
+  non-Settings prior whose memory recognition score is stronger than the current
+  Settings read.
 - VLM describe output may now carry `platform_scene_kind` and optional `page_id`.
   When System-2 returns `platform_scene_kind="unknown"`, stale page IDs and safe
   actions are cleared instead of leaving a dangerous platform-classifier residue.
@@ -232,6 +240,10 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
   memory path for policy-selected candidates before falling back to the candidate
   tap/scroll action, and SettingsPolicy emits `settings/<visible label>` targets
   for safe known rows.
+- Generic `skills.crawl.crawl_app` policy candidates may also carry `page_id`;
+  the crawler tries `phone.navigate_to_page(page_id)` before falling back to
+  `tap_xy`, so the memory path is reachable from the crawler path, not only the
+  AI facade.
 - `AIPhone.explore()` now records `DecisionTraceStep` entries in the returned
   `ExplorationTrail` and trail JSON, covering the observation event, decision
   action/target/reason, action semantic status, and post-action verification.
@@ -246,13 +258,15 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
   recognize a known page before classifiers reattach `page_id`.
 - UTG path planning and proactive memory replay are smoke-covered on a generic
   `com.example.recipes` graph, not only Settings fixtures.
-- Current-run actuation feedback is covered as a live B3 de-advertise signal:
-  once a method crosses the unactuatable gate, `should_skip_bucket()` flips
-  immediately for the next decision in the same run.
+- Pre-existing current-run actuation feedback is smoke-covered: once a method
+  crosses the unactuatable gate, `should_skip_bucket()` flips immediately for
+  the next decision in the same run. New B3 orchestrator wiring remains pending.
 - Smoke coverage: `skills/smoke/test_world_model_spine.py`,
   `skills/smoke/test_ios_scene.py`, `skills/smoke/test_canonical_primitives.py`,
   `skills/smoke/test_memory_observe.py`,
-  `skills/smoke/test_computer_use_runtime.py`, and
+  `skills/smoke/test_computer_use_runtime.py`,
+  `skills/smoke/test_computer_use_success_rate.py`,
+  `skills/smoke/test_crawl_app.py`, and
   `skills/smoke/test_ai_native_interface.py`.
 
 ## Non-goals / honest posture
