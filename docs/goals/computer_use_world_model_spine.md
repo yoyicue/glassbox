@@ -62,7 +62,11 @@ A failed run can pass the green gate, and there is no single accuracy number by
 design — honest, but it means the architecture defects below stay invisible on
 CI. You cannot tell whether any spine/wiring change helped without an honest
 task-level compass on the *default* path. See `computer_use_honest_gate_first.md`,
-`computer_use_success_rate.md`.
+`computer_use_success_rate.md`. Initial 0a slice: `make check` now runs the
+offline regression gate, the committed floor must contain completed tasks, and
+the comparator is smoke-locked to fail a direct `task_completion_rate` regression.
+Remaining measurement work is the live multi-app/on-rig gate, not the offline
+task-completion comparator.
 
 **B — Architecture (real design changes; fix SECOND).**
 - **B1 Belief-conditioned perception.** Invert the observe-memory ordering so the
@@ -96,8 +100,10 @@ can prove them).**
   `AIPhone.navigate_to_page()`. A conservative automatic slice now routes
   page-id-shaped `AIPhone.goto("settings/...")` and `AIPhone.explore("settings/...")`
   requests through the memory path before falling back to their original behavior.
-  Remaining work: make arbitrary-goal planners choose it from learned UTG context
-  and extend the UTG beyond Settings to generic apps.
+  The planner-selected slice lets policy/crawl candidates carry a target
+  `page_id`, so arbitrary text goals can choose a learned memory path before
+  falling back to the candidate's original action. Remaining work: prove the
+  benefit on live multi-app tasks rather than only offline smoke graphs.
 - **A2 Decision brain.** Initial slice: `AIPhone.explore()` now emits an
   auditable `observe -> decide -> act -> verify` decision trace for each step.
   `Phone.tap_xy` is also locked by smoke as an orchestrator-ledger action, so raw
@@ -110,8 +116,10 @@ can prove them).**
   `element_key.py:33`), so any perception change that re-types rows shifts the
   belief-state's identity basis. Initial guard: iPadOS Settings detail nodes use
   page-id-anchored semantic signatures under the Settings root projection, and
-  smoke now covers row text churn plus `text` -> `list_item` retyping. Remaining
-  work: generic non-root signatures outside that Settings projection.
+  smoke now covers row text churn plus `text` -> `list_item` retyping. The
+  generic slice applies page-id-anchored identity to non-root pages outside
+  Settings while preserving structural fallback recognition before the next
+  frame has been classified.
 
 ## Actions, in dependency order
 
@@ -121,9 +129,10 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
    whole roadmap.
 
    **0a. Honest task-level signal.** A default-path metric a failed run cannot
-   pass. Until it exists, treat every improvement below as unproven. (Builds on
-   the existing honest-gate work; the gap is that it isn't on the load-bearing
-   path.)
+   pass. The offline merge-gate slice is implemented: the committed floor must be
+   completed work, and `compare_benchmarks` is covered for a direct
+   `task_completion_rate` drop. Treat remaining spine improvements as unproven
+   until the live multi-app/on-rig task-level gate also exists.
 
    **0b. Canonical home-reset + verify as the navigation-measurement origin.**
    On a new navigation task, reset to Home **and verify Home is reached before
@@ -187,6 +196,9 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
   `NavigationMeasurementOrigin` and only sets `can_start_clock=True` when
   `phone.home()` reports `semantic_status == "succeeded"`. Unverified or failed
   Home resets are precondition failures, not navigation trajectory samples.
+- The 0a offline gate is load-bearing in `make check`: `regression-gate` validates
+  the committed benchmark floor and smoke asserts that a candidate with a dropped
+  task outcome fails on `task_completion_rate`.
 - `skills.regression.canonical_primitives` now uses that Home precondition by
   default for navigation-class primitive runs, records `navigation_origin` in the
   run manifest and `navigation_origin.json`, and keeps
@@ -216,6 +228,10 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
 - `AIPhone.goto()` and `AIPhone.explore()` treat page-id-shaped labels (`foo/bar`,
   no whitespace) as a memory-path navigation request first, and fall back to their
   original behavior when memory is unavailable or cannot reach the page.
+- `NavigationCandidate` may now carry `page_id`; `AIPhone.explore()` tries that
+  memory path for policy-selected candidates before falling back to the candidate
+  tap/scroll action, and SettingsPolicy emits `settings/<visible label>` targets
+  for safe known rows.
 - `AIPhone.explore()` now records `DecisionTraceStep` entries in the returned
   `ExplorationTrail` and trail JSON, covering the observation event, decision
   action/target/reason, action semantic status, and post-action verification.
@@ -225,6 +241,11 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
 - iPadOS Settings detail node identity is guarded as a non-root semantic
   signature: text churn and richer perception retyping detail rows to `list_item`
   do not split a remembered `settings/...` detail node.
+- Generic non-root page IDs use the same semantic identity guard outside
+  Settings, with a structural remembered-elements fallback so memory priors still
+  recognize a known page before classifiers reattach `page_id`.
+- UTG path planning and proactive memory replay are smoke-covered on a generic
+  `com.example.recipes` graph, not only Settings fixtures.
 - Current-run actuation feedback is covered as a live B3 de-advertise signal:
   once a method crosses the unactuatable gate, `should_skip_bucket()` flips
   immediately for the next decision in the same run.

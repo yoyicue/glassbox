@@ -555,7 +555,15 @@ class SettingsPolicy:
                 continue
             seen.add(text)
             if self.is_safe_known_navigation_label(text):
-                out.append(NavigationCandidate(label=text, action="tap", confidence=0.6, reason="visible_settings_label"))
+                out.append(
+                    NavigationCandidate(
+                        label=text,
+                        action="tap",
+                        confidence=0.6,
+                        reason="visible_settings_label",
+                        page_id=f"settings/{text}",
+                    )
+                )
         return out
 
     def is_safe(self, candidate: NavigationCandidate, _observation) -> bool:

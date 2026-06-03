@@ -740,6 +740,38 @@ class AIPhone:
                 break
             candidate = self._next_policy_candidate(obs, goal=needle)
             if candidate is not None:
+                before_obs = obs
+                memory_page_id = str(candidate.page_id or "").strip()
+                if memory_page_id:
+                    outcome = self.navigate_to_page(memory_page_id)
+                    obs = self.perceive()
+                    page_reached = obs.page_id == memory_page_id or outcome.semantic_status == "succeeded"
+                    if page_reached:
+                        success = self._explore_goal_met(needle, obs)
+                        steps.append(f"{idx + 1}. navigate_to_page {memory_page_id}")
+                        matched_path.append(f"navigate_to_page:{memory_page_id}")
+                        decision_trace.append(
+                            DecisionTraceStep(
+                                index=idx + 1,
+                                observation_event_seq=before_obs.event_seq,
+                                observed_page_id=before_obs.page_id,
+                                decision_action="navigate_to_page",
+                                decision_target=memory_page_id,
+                                decision_reason=candidate.reason or "policy_candidate_page_id",
+                                action_semantic_status=outcome.semantic_status,
+                                verified=success,
+                                verification="visible_goal" if success else "page_id",
+                                after_event_seq=obs.event_seq,
+                                after_page_id=obs.page_id,
+                            )
+                        )
+                        if success:
+                            matched_path.append(f"visible:{needle}")
+                            break
+                        if self._policy_should_stop(obs, steps=len(steps), found=success):
+                            break
+                        continue
+                    before_obs = obs
                 result = self._execute_candidate(candidate)
                 outcome = self._action_outcome(f"explore.{candidate.action}", candidate.label, result)
                 decision_action = candidate.action
@@ -754,7 +786,7 @@ class AIPhone:
                 decision_target = "down"
                 decision_reason = "no_safe_policy_candidate"
                 steps.append(f"{idx + 1}. scroll down")
-            before_obs = obs
+                before_obs = obs
             obs = self.observe()
             success = self._explore_goal_met(needle, obs)
             decision_trace.append(

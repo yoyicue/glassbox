@@ -23,6 +23,7 @@ class NavigationCandidate:
     action: str = "tap"
     confidence: float = 0.0
     reason: str | None = None
+    page_id: str | None = None
 
 
 @dataclass(frozen=True)

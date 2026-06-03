@@ -11,6 +11,7 @@ import contextlib
 import time
 from collections import deque
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from glassbox.cognition.text_match import norm_text
@@ -104,11 +105,7 @@ class ScreenMemory:
         if root_projection is not None and self._scene_is_ipados_settings_root(scene):
             node = root_projection
         else:
-            sig = (
-                self._ipados_settings_detail_signature(scene)
-                if self._should_use_ipados_settings_detail_signature(scene)
-                else compute_signature(scene, phash=phash)
-            )
+            sig = self._identity_signature(scene, phash=phash)
             node = self._observe_node(scene, sig, frame_img=frame_img)
 
         self.last_transition_mismatch = None
@@ -179,8 +176,10 @@ class ScreenMemory:
         folded into memory.
         """
         phash = dhash(frame_img) if frame_img is not None else ""
-        sig = compute_signature(scene, phash=phash)
+        sig = self._identity_signature(scene, phash=phash)
         node = self._existing_node_for_signature(scene, sig)
+        if node is None and scene.classification_source:
+            node = self.utg.nodes.get(self._last_node_id or "")
         if node is None:
             node = self._resolve_node(scene, sig)
         else:
@@ -195,7 +194,10 @@ class ScreenMemory:
         self, scene: Scene, frame_img: np.ndarray | None = None
     ) -> ScreenNode | None:
         """Which node this scene shows — WITHOUT mutating the graph. None if unseen."""
-        sig = compute_signature(scene, phash=dhash(frame_img) if frame_img is not None else "")
+        sig = self._identity_signature(
+            scene,
+            phash=dhash(frame_img) if frame_img is not None else "",
+        )
         node, score = self._nearest_signature_node(sig, scene)
         # CUQ-1.8: expose the near-miss so a drifted-but-known screen is
         # distinguishable from a genuinely new one (recognize alone returns None
@@ -366,6 +368,13 @@ class ScreenMemory:
         node.last_seen = time.time()
         return node
 
+    def _identity_signature(self, scene: Scene, *, phash: str = "") -> ScreenSignature:
+        if self._should_use_ipados_settings_detail_signature(scene):
+            return self._ipados_settings_detail_signature(scene)
+        if self._should_use_semantic_non_root_signature(scene):
+            return self._semantic_non_root_signature(scene)
+        return compute_signature(scene, phash=phash)
+
     def _should_project_ipados_settings_root(self, scene: Scene) -> bool:
         if not self._ipados_settings_root_projection:
             return False
@@ -397,6 +406,36 @@ class ScreenMemory:
             type_histogram={"settings_detail": 1},
             phash="",
         )
+
+    @staticmethod
+    def _should_use_semantic_non_root_signature(scene: Scene) -> bool:
+        page_id = str(scene.page_id or "").strip()
+        if not page_id:
+            return False
+        return not ScreenMemory._scene_is_root_identity(scene)
+
+    @staticmethod
+    def _semantic_non_root_signature(scene: Scene) -> ScreenSignature:
+        return ScreenSignature(
+            stable_texts=[norm_text(scene.page_id or "")],
+            type_histogram={"semantic_page": 1},
+            phash="",
+        )
+
+    @staticmethod
+    def _scene_is_root_identity(scene: Scene) -> bool:
+        page_id = str(scene.page_id or "").strip().lower()
+        kind = str(
+            scene.platform_scene_kind
+            or scene.semantic_scene_type
+            or scene.scene_type
+            or ""
+        ).strip().lower()
+        if page_id in {"springboard", "ios/springboard"}:
+            return True
+        if page_id.rsplit("/", 1)[-1:] == ["root"]:
+            return True
+        return kind in {"root", "springboard"} or kind.endswith("_root")
 
     @staticmethod
     def _scene_is_ipados_settings_root(scene: Scene) -> bool:
@@ -527,6 +566,8 @@ class ScreenMemory:
             if not self._node_scope_matches(node, scene):
                 continue
             s = similarity(sig, node.signature)
+            if scene is not None and scene.page_id is None and self._signature_is_semantic_identity(node.signature):
+                s = max(s, similarity(sig, self._remembered_structural_signature(node)))
             if s > best_score:
                 best, best_score = node, s
         return best, best_score
@@ -553,6 +594,18 @@ class ScreenMemory:
             if key in node.app_state and node.app_state[key] != value:
                 return False
         return True
+
+    @staticmethod
+    def _signature_is_semantic_identity(signature: ScreenSignature) -> bool:
+        return signature.type_histogram in (
+            {"semantic_page": 1},
+            {"settings_detail": 1},
+        )
+
+    @staticmethod
+    def _remembered_structural_signature(node: ScreenNode) -> ScreenSignature:
+        elements = [element for element in node.elements if element.present]
+        return compute_signature(SimpleNamespace(elements=elements))
 
     @staticmethod
     def _is_unknown_app_state(value: str) -> bool:

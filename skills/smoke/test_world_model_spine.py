@@ -24,6 +24,17 @@ def _scene(*elements: UIElement) -> Scene:
     return Scene(frame_id=0, timestamp=0.0, elements=list(elements))
 
 
+def _app_page(page_id: str, kind: str, *texts: str) -> Scene:
+    scene = _scene(*[_el(text, y=120 + index * 48) for index, text in enumerate(texts)])
+    scene.page_id = page_id
+    scene.scene_type = kind
+    scene.platform_scene_kind = kind
+    scene.classification_source = "profile"
+    scene.classification_confidence = 0.9
+    scene.safe_actions = ["tap", "back", "scroll"]
+    return scene
+
+
 @pytest.mark.smoke
 def test_scene_classification_prior_comes_from_recognized_memory_node_and_last_action():
     known = _scene(_el("Dashboard"), _el("Search", y=180))
@@ -254,6 +265,24 @@ class _MemoryNavPhone:
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
 
+class _GenericMemoryNavPhone:
+    def __init__(self, memory: ScreenMemory, scenes: list[Scene]):
+        self.memory = memory
+        self.scenes = scenes
+        self.observe_calls = 0
+        self.back_calls = 0
+
+    def perceive(self, *, fresh=None):
+        del fresh
+        idx = min(self.observe_calls, len(self.scenes) - 1)
+        self.observe_calls += 1
+        return self.scenes[idx]
+
+    def back_gesture(self):
+        self.back_calls += 1
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+
 @pytest.mark.smoke
 def test_navigate_via_memory_path_replays_learned_path_without_home_fallback():
     phone = _MemoryNavPhone(path=[_Edge("back"), _Edge("back")], arrive_page="app/root")
@@ -276,6 +305,39 @@ def test_navigate_via_memory_path_replays_learned_path_without_home_fallback():
             "min_success_rate": 0.75,
         }
     ]
+
+
+@pytest.mark.smoke
+def test_navigate_via_memory_path_replays_generic_app_utg_beyond_settings():
+    memory = ScreenMemory(UTG(bundle_id="com.example.recipes"))
+    list_scene = _app_page("recipes/list", "recipe_list", "Recipes", "Cake", "Soup")
+    detail_scene = _app_page("recipes/detail/42", "recipe_detail", "Cake", "Ingredients", "Steps")
+    list_again = _app_page("recipes/list", "recipe_list", "Recipes", "Cake", "Pie")
+
+    memory.observe(list_scene)
+    detail = memory.observe(
+        detail_scene,
+        last_action=("tap", {"target": "Cake", "via": "tap_text", "action_ok": True}),
+    )
+    memory.observe(
+        list_again,
+        last_action=("back", {"via": "back_gesture", "action_ok": True}),
+    )
+    phone = _GenericMemoryNavPhone(memory, [detail_scene, list_again])
+
+    result = navigate_via_memory_path(
+        phone,
+        "recipes/list",
+        scene_type="recipe_list",
+        allowed_actions={"back"},
+        min_success_rate=0.5,
+    )
+
+    assert result.reached is True
+    assert result.reason == "reached"
+    assert result.from_id == detail.screen_id
+    assert result.replayed_ops == ("back",)
+    assert phone.back_calls == 1
 
 
 @pytest.mark.smoke
