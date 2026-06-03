@@ -72,6 +72,7 @@ def to_remembered(el: UIElement, key: str) -> RememberedElement:
     """A fresh single-observation RememberedElement from a perceived element."""
     return RememberedElement(
         key=key, box=el.box, type=el.type, text=el.text,
+        suggested_actions=list(el.suggested_actions),
         intent_label=el.intent_label, whitebox_hint=el.whitebox_hint,
         volatile=is_volatile(el), visit_count=1,
     )
@@ -104,6 +105,7 @@ def merge_element(
         box=box,
         type=new.type or old.type,
         text=new.text or old.text,
+        suggested_actions=new.suggested_actions or old.suggested_actions,
         intent_label=(
             new.intent_label
             if (clear_missing_intent or new.intent_label is not None)

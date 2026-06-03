@@ -479,6 +479,62 @@ def test_ipados_platform_classifies_screen_time_dashboard_title():
     assert classified.page_id == "settings/Screen Time"
 
 
+def test_ipados_platform_canonicalizes_screen_time_title_ocr_typo():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            UIElement(type="text", box=Box(x=36, y=90, w=70, h=14), text="Q Search", confidence=0.9),
+            UIElement(type="text", box=Box(x=66, y=117, w=52, h=14), text="Camera", confidence=0.9),
+            UIElement(type="text", box=Box(x=68, y=162, w=96, h=14), text="Control Centre", confidence=0.9),
+            UIElement(type="text", box=Box(x=68, y=494, w=82, h=14), text="Notifications", confidence=0.9),
+            UIElement(type="text", box=Box(x=66, y=539, w=52, h=12), text="Sounds", confidence=0.9),
+            UIElement(type="text", box=Box(x=66, y=627, w=84, h=14), text="Screem Time", confidence=0.9),
+            UIElement(type="text", box=Box(x=66, y=681, w=140, h=12), text="Touch ID & Passcode", confidence=0.9),
+            UIElement(type="text", box=Box(x=64, y=725, w=124, h=18), text="Privacy & Security", confidence=0.9),
+            UIElement(type="text", box=Box(x=406, y=44, w=88, h=14), text="Screen Time", confidence=0.9),
+            UIElement(type="text", box=Box(x=282, y=106, w=76, h=12), text="All Devices", confidence=0.9),
+            UIElement(type="text", box=Box(x=282, y=142, w=90, h=14), text="Daily Average", confidence=0.9),
+            UIElement(type="button", box=Box(x=280, y=161, w=118, h=28), text="48h 25m", confidence=0.9),
+            UIElement(type="text", box=Box(x=280, y=332, w=202, h=14), text="See All App & WebsiteActivity", confidence=0.9),
+            UIElement(type="text", box=Box(x=278, y=428, w=86, h=16), text="Limit Usage", confidence=0.9),
+            UIElement(type="text", box=Box(x=320, y=457, w=66, h=12), text="Downtime", confidence=0.9),
+            UIElement(type="text", box=Box(x=316, y=509, w=74, h=16), text="App Limits", confidence=0.9),
+            UIElement(type="text", box=Box(x=318, y=563, w=102, h=14), text="Always Allowed", confidence=0.9),
+            UIElement(type="text", box=Box(x=318, y=615, w=110, h=14), text="Screen Distance", confidence=0.9),
+            UIElement(type="text", box=Box(x=282, y=738, w=158, h=12), text="Communication Safety", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(640, 989))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "settings_detail"
+    assert classified.page_id == "settings/Screen Time"
+
+
+def test_ipados_settings_detail_title_canonicalizer_preserves_distinct_suffix_pages():
+    from glassbox.ipados import scene as ipados_scene
+
+    assert ipados_scene._canonical_settings_detail_title("Screem Time") == "Screen Time"
+    assert ipados_scene._canonical_settings_detail_title("Sound") == "Sound"
+    assert ipados_scene._canonical_settings_detail_title("iCloud+") == "iCloud+"
+    assert ipados_scene._canonical_settings_detail_title("Cameras") == "Cameras"
+
+
+def test_ipados_settings_detail_title_labels_cover_sidebar_markers():
+    from glassbox.ipados import scene as ipados_scene
+
+    missing = sorted(
+        set(ipados_scene._IPAD_SETTINGS_SIDEBAR_MARKERS)
+        - set(ipados_scene._IPAD_SETTINGS_DETAIL_TITLE_LABELS)
+    )
+
+    assert missing == []
+
+
 def test_ipados_platform_does_not_reuse_ios_settings_detail_fallback_on_home_widgets():
     platform = IPadOSPlatform()
     scene = Scene(
@@ -501,6 +557,39 @@ def test_ipados_platform_does_not_reuse_ios_settings_detail_fallback_on_home_wid
     assert classified is not None
     assert classified.platform_scene_kind == "springboard"
     assert "ipad_home_widgets" in classified.evidence
+
+
+def test_ipados_platform_app_store_chrome_beats_home_widget_false_positive():
+    platform = IPadOSPlatform()
+    scene = Scene(
+        frame_id=1,
+        timestamp=0.0,
+        viewport_size=(640, 982),
+        elements=[
+            UIElement(type="text", box=Box(x=14, y=10, w=114, h=12), text="2:11PM Wed 3Jun", confidence=0.9),
+            UIElement(type="text", box=Box(x=172, y=42, w=44, h=15), text="Today", confidence=0.9),
+            UIElement(type="text", box=Box(x=242, y=41, w=48, h=13), text="Games", confidence=0.9),
+            UIElement(type="text", box=Box(x=316, y=42, w=36, h=14), text="Apps", confidence=0.9),
+            UIElement(type="text", box=Box(x=376, y=42, w=50, h=12), text="Arcade", confidence=0.9),
+            UIElement(type="text", box=Box(x=210, y=92, w=220, h=34), text="Tuesday, June 2", confidence=0.9),
+            UIElement(type="text", box=Box(x=346, y=164, w=106, h=12), text="NOW AVAILABLE", confidence=0.9),
+            UIElement(type="text", box=Box(x=48, y=310, w=102, h=12), text="WORLD PREMIERE", confidence=0.9),
+            UIElement(type="text", box=Box(x=46, y=330, w=188, h=20), text="Hit the Streets in", confidence=0.9),
+            UIElement(type="button", box=Box(x=352, y=340, w=238, h=24), text="Meet Mortenax Blade", confidence=0.9),
+            UIElement(type="text", box=Box(x=224, y=491, w=64, h=10), text="In-App Purchases", confidence=0.9),
+            UIElement(type="text", box=Box(x=528, y=491, w=66, h=10), text="In-App Purchases", confidence=0.9),
+            UIElement(type="text", box=Box(x=98, y=659, w=56, h=12), text="ChatGPT", confidence=0.9),
+            UIElement(type="text", box=Box(x=98, y=713, w=62, h=12), text="Calendar", confidence=0.9),
+            UIElement(type="text", box=Box(x=232, y=727, w=48, h=15), text="$12.99", confidence=0.9),
+        ],
+    )
+
+    classified = platform.scene_classifier.classify(scene, viewport_size=(640, 982))
+
+    assert classified is not None
+    assert classified.platform_scene_kind == "unknown"
+    assert "appstore_chrome" in classified.evidence
+    assert "ipad_home_widgets" not in classified.evidence
 
 
 def test_ipados_ios_compat_fallback_is_explicit_and_guards_settings_detail(monkeypatch):
@@ -1171,6 +1260,11 @@ def test_settings_crawl_policy_adapter_exposes_provisional_crawl_policy():
 
     assert adapter.classify(scene) == "settings_root"
     assert [item["text"] for item in candidates] == ["无线局域网", "蓝牙", "通用"]
+    assert [item["page_id"] for item in candidates] == [
+        "settings/无线局域网",
+        "settings/蓝牙",
+        "settings/通用",
+    ]
     assert adapter.is_safe(candidates[0], scene) is True
     assert adapter.is_safe({"text": "Apple ID"}, scene) is False
     assert adapter.should_stop(scene, []) is False

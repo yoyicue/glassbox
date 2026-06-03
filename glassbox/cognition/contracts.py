@@ -48,6 +48,27 @@ class SceneClassification:
     source: ClassificationSource = "app"
     safe_actions: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
+    clear_page_id: bool = False
+    clear_safe_actions: bool = False
+
+
+@dataclass(frozen=True)
+class SceneClassificationPrior:
+    """Belief-state hint supplied before scene classification.
+
+    This is intentionally a thin cognition contract rather than a memory object:
+    classifiers may use it to break ties, but they cannot mutate the UTG.
+    """
+
+    screen_id: str | None = None
+    page_id: str | None = None
+    recognition_score: float | None = None
+    scene_type: str | None = None
+    semantic_scene_type: str | None = None
+    platform_scene_kind: str | None = None
+    last_action_op: str | None = None
+    last_action_target: str | None = None
+    last_action_via: str | None = None
 
 
 @dataclass(frozen=True)
@@ -125,8 +146,12 @@ class SceneClassificationProjector:
         for item in classifications:
             if item.platform_scene_kind:
                 scene.platform_scene_kind = item.platform_scene_kind
+            if item.clear_page_id:
+                scene.page_id = None
             if item.page_id:
                 scene.page_id = item.page_id
+            if item.clear_safe_actions:
+                scene.safe_actions = []
             if item.safe_actions:
                 scene.safe_actions = list(item.safe_actions)
             if item.evidence:

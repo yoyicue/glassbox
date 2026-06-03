@@ -97,6 +97,7 @@ SAVE_VIEW_SNAPSHOTS = RUN_CONFIG.save_view_snapshots
 ARTIFACT_DIR = RUN_CONFIG.artifact_dir
 MEMORY_DIR = RUN_CONFIG.memory_dir
 MEMORY_REUSE = RUN_CONFIG.memory_reuse
+PAGE_ID_ROUTE_ENABLED = RUN_CONFIG.page_id_route_enabled
 
 _SOFT_LIMITS = settings_reporting.SOFT_LIMITS
 # 滚动类 HID op:有效/无效要按 scroll_outcome 判,不能用 same_visible_page
@@ -145,6 +146,7 @@ def _current_run_config() -> SettingsRunConfig:
         artifact_dir=ARTIFACT_DIR,
         memory_dir=MEMORY_DIR,
         memory_reuse=MEMORY_REUSE,
+        page_id_route_enabled=PAGE_ID_ROUTE_ENABLED,
     )
 
 
@@ -1077,6 +1079,8 @@ def _navigation_actions() -> settings_navigation.SettingsNavigationActions:
         scroll_budget_for_depth=_scroll_budget_for_depth,
         scroll_to_top=_scroll_to_settings_root_top,
         max_root_scroll_resets=MAX_ROOT_SCROLL_RESETS,
+        page_id_route_enabled=PAGE_ID_ROUTE_ENABLED,
+        page_id_route_label_candidates=DEFAULT_SETTINGS_POLICY.page_id_route_label_candidates,
     )
 
 

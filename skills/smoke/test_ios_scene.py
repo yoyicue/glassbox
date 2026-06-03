@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from glassbox.action.context import ActionContext
-from glassbox.cognition import Box, Scene, UIElement
+from glassbox.cognition import Box, Scene, SceneClassificationPrior, UIElement
 from glassbox.element_selector import ElementSelector
 from glassbox.ios.app_store import annotate_app_store_search_intents
 from glassbox.ios.recovery import should_foreground_target_app_instead_of_back
@@ -239,6 +239,77 @@ def test_ios_scene_classifier_settings_search_results():
 
     assert classified.kind == "settings_search_results"
     assert "tap_root_result" in classified.safe_actions
+
+
+def _ambiguous_settings_like_detail_scene() -> Scene:
+    return _scene(
+        _el("<", 18, 76, w=18, ty="nav_back"),
+        _el("Apps", 196, 96, w=62),
+        _el("Manage apps and access settings", 58, 190, w=310),
+        _el("Default Apps", 58, 270, w=132),
+        _el("Privacy", 58, 326, w=82),
+    )
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_uses_non_settings_prior_to_abstain_weak_settings_detail():
+    scene = _ambiguous_settings_like_detail_scene()
+    prior = SceneClassificationPrior(
+        page_id="appstore/search",
+        recognition_score=1.0,
+        platform_scene_kind="app_store",
+        last_action_op="tap",
+        last_action_target="Apps",
+    )
+
+    baseline = classify_ios_scene(scene, viewport_size=(448, 973))
+    classified = classify_ios_scene(scene, viewport_size=(448, 973), prior=prior)
+
+    assert baseline.kind == "settings_detail"
+    assert classified.kind == "unknown"
+    assert classified.safe_actions == ("trace", "vlm_on_uncertain")
+    assert "settings_detail_prior_abstain" in classified.evidence
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_uses_generic_prior_fallback_to_abstain_weak_settings_detail():
+    scene = _ambiguous_settings_like_detail_scene()
+    prior = SceneClassificationPrior(
+        page_id="notes/app-list",
+        recognition_score=0.95,
+        platform_scene_kind="notes_app",
+        last_action_op="tap",
+        last_action_target="Apps",
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 973), prior=prior)
+
+    assert classified.kind == "unknown"
+    assert classified.safe_actions == ("trace", "vlm_on_uncertain")
+    assert "settings_detail_prior_abstain" in classified.evidence
+    assert "prior:notes_app" in classified.evidence
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_does_not_resist_settings_detail_below_prior_margin():
+    scene = _ambiguous_settings_like_detail_scene()
+    prior = SceneClassificationPrior(
+        page_id="appstore/search",
+        # The ambiguous semantic detail read is 0.80; the prior must clear it by
+        # SETTINGS_PRIOR_RESIST_MARGIN (0.08). Scores below 0.88 intentionally
+        # defer to the current frame instead of forcing a memory-prior veto.
+        recognition_score=0.87,
+        platform_scene_kind="app_store",
+        last_action_op="tap",
+        last_action_target="Apps",
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 973), prior=prior)
+
+    assert classified.kind == "settings_detail"
+    assert classified.page_id is not None
+    assert classified.page_id.startswith("settings/")
+    assert "settings_detail_prior_abstain" not in classified.evidence
 
 
 @pytest.mark.smoke

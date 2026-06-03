@@ -493,6 +493,8 @@ SYSTEM_DESCRIBE = """你是 iOS UI 走查助手。看截图 + 用户给的元素
 **只返回严格 JSON**:
 {
   "scene_type": "login_form | paywall | list | settings | splash | modal | onboarding | main | unknown",
+  "platform_scene_kind": "<可选: springboard | settings_root | settings_detail | system_search | app_store | unknown>",
+  "page_id": "<可选: 已知页面稳定 ID,不确定则省略>",
   "context": "<≤80字 当前屏幕状态说明,可省略>",
   "available_intents": ["<≤8字 可执行动作短语>", "..."],
   "app_state": {
@@ -522,7 +524,9 @@ SYSTEM_DESCRIBE = """你是 iOS UI 走查助手。看截图 + 用户给的元素
 4. 纯展示性元素(标题、温度数值、说明文字、插画 banner)不可操作 → intent_label 用空字符串。
 5. 不要返回 box 坐标,也不要自创新元素。
 6. context / available_intents 可选;available_intents 只列当前屏幕真实可执行的动作。
-7. app_state 各 key 都可选;不确定填 "unknown" 或干脆省略。subscription
+7. platform_scene_kind 只在你能高置信判断 iOS/iPadOS 系统或平台页面时填写;
+   不确定就省略或填 "unknown",不要猜。
+8. app_state 各 key 都可选;不确定填 "unknown" 或干脆省略。subscription
    要看页面上是否有"会员/订阅/试用/解锁/付费/限制"等线索,有"高级会员"
    "已订阅"等正向词 → "subscribed";有"获取折扣/解锁/升级"等促销 → "free"。"""
 
@@ -545,12 +549,19 @@ def vlm_stage_outcome_from_result(result: VLMResult) -> VLMStageOutcome:
         return VLMStageOutcome(status="parse_error", error="invalid parsed payload")
 
     classification = None
-    scene_type = parsed.get("scene_type")
-    if isinstance(scene_type, str) and scene_type:
+    scene_type = _clean_vlm_string(parsed.get("scene_type"), limit=64)
+    platform_scene_kind = _clean_vlm_string(parsed.get("platform_scene_kind"), limit=64)
+    page_id = _clean_vlm_string(parsed.get("page_id"), limit=128)
+    if scene_type or platform_scene_kind:
         classification = SceneClassification(
+            page_id=page_id,
             semantic_scene_type=scene_type,
+            platform_scene_kind=platform_scene_kind,
             confidence=1.0,
             source="vlm",
+            evidence=("vlm_platform_scene_kind",) if platform_scene_kind else (),
+            clear_page_id=platform_scene_kind == "unknown" and page_id is None,
+            clear_safe_actions=platform_scene_kind == "unknown",
         )
 
     element_intents: dict[int, str] = {}
@@ -573,6 +584,15 @@ def vlm_stage_outcome_from_result(result: VLMResult) -> VLMStageOutcome:
         element_intents=element_intents,
         classification=classification,
     )
+
+
+def _clean_vlm_string(value: object, *, limit: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    return text[:limit]
 
 
 # ─── enrich_scene: populate Kimi results onto the Scene ──────────────

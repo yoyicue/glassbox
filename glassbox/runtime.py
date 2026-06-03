@@ -529,8 +529,8 @@ def build_phone(
         platform=selected_platform,
     )
     if app_scene_classifier is not None:
-        def _classify_app_scene(scene, viewport_size):
-            return app_scene_classifier.classify(scene, viewport_size=viewport_size)
+        def _classify_app_scene(scene, viewport_size=None, prior=None):
+            return app_scene_classifier.classify(scene, viewport_size=viewport_size, prior=prior)
 
         scene_classifiers.append(_classify_app_scene)
 
@@ -645,8 +645,8 @@ def build_phone(
         cfg=cfg,
     )
     if platform.scene_classifier is not None:
-        def _classify_platform_scene(scene, viewport_size):
-            return platform.scene_classifier.classify(scene, viewport_size=viewport_size)
+        def _classify_platform_scene(scene, viewport_size=None, prior=None):
+            return platform.scene_classifier.classify(scene, viewport_size=viewport_size, prior=prior)
 
         scene_classifiers.insert(0, _classify_platform_scene)
 

@@ -10259,6 +10259,7 @@
   "metrics": {
     "task_completion_rate": 1.0,
     "task_completion_variance": 0.0,
+    "navigation_origin_precondition_failures": 0,
     "action_success_rate": 1.0,
     "unknown_rate": 0.0,
     "task_action_count": 105,

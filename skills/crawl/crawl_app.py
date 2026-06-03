@@ -157,6 +157,7 @@ def _candidate_from_policy_action(action: dict[str, Any]) -> TapCandidate | None
             center=(x, y),
             source=str(action.get("source") or "policy"),
             role=str(action.get("role") or action.get("action") or ""),
+            page_id=_candidate_page_id(action),
         )
     box = action.get("box")
     if isinstance(box, list | tuple) and len(box) == 4:
@@ -169,8 +170,14 @@ def _candidate_from_policy_action(action: dict[str, Any]) -> TapCandidate | None
             center=((x1 + x2) // 2, (y1 + y2) // 2),
             source=str(action.get("source") or "policy"),
             role=str(action.get("role") or action.get("action") or ""),
+            page_id=_candidate_page_id(action),
         )
     return None
+
+
+def _candidate_page_id(action: dict[str, Any]) -> str | None:
+    page_id = str(action.get("page_id") or "").strip()
+    return page_id or None
 
 
 def _policy_tap_candidates(policy: Any, scene: Any) -> list[TapCandidate]:
@@ -202,6 +209,25 @@ def _policy_should_stop(policy: Any | None, scene: Any, entries: list[CrawlEntry
         for entry in entries
     ]
     return bool(should_stop(scene, history))
+
+
+def _try_candidate_memory_navigation(phone: Any, candidate: TapCandidate) -> tuple[Any | None, bool]:
+    page_id = str(candidate.page_id or "").strip()
+    if not page_id:
+        return None, False
+    navigate = getattr(phone, "navigate_to_page", None)
+    if not callable(navigate):
+        return None, False
+    try:
+        result = navigate(page_id)
+    except Exception:
+        return None, True
+    reached = (
+        getattr(result, "reached", False) is True
+        or getattr(result, "semantic_status", None) == "succeeded"
+        or getattr(result, "ok", False) is True
+    )
+    return (result if reached else None), True
 
 
 def crawl_app(
@@ -269,7 +295,17 @@ def crawl_app(
                 return
             if not _goto(phone, foreground, path, screen_texts, settle_s=tap_settle_s):
                 break
-            result = phone.tap_xy(*cand.center)
+            result, memory_navigation_attempted = _try_candidate_memory_navigation(phone, cand)
+            if result is None:
+                if memory_navigation_attempted and not _goto(
+                    phone,
+                    foreground,
+                    path,
+                    screen_texts,
+                    settle_s=tap_settle_s,
+                ):
+                    break
+                result = phone.tap_xy(*cand.center)
             budget["actions"] -= 1
             counts["actions"] += 1
             if not action_accepted(result):

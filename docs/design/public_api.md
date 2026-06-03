@@ -27,7 +27,8 @@ Stable symbols:
 - `AIPhone.swipe_xy(x1, y1, x2, y2, *, steps=20, end_hold_ms=100, expect_visible=None, expect_page=None) -> ActionOutcome`
 - `AIPhone.launch_app(app, *, aliases=(), expect_visible=None, expect_page=None) -> ActionOutcome`
 - `AIPhone.close_app() -> ActionOutcome`
-- `AIPhone.goto(label, *, timeout_s=10.0) -> ObservationSummary`
+- `AIPhone.goto(label, *, timeout_s=10.0) -> ObservationSummary` (page-id-shaped
+  labels try learned memory-path navigation first)
 - `AIPhone.back() -> ActionOutcome`
 - `AIPhone.home() -> ActionOutcome`
 - `AIPhone.scroll(direction="down", *, until=None) -> ObservationSummary`
@@ -44,6 +45,7 @@ Stable data classes:
 - `ElementBox`
 - `ActionOutcome`
 - `RunArtifacts`
+- `DecisionTraceStep`
 - `ExplorationTrail`
 - `PathArtifact`
 - `AIAssertionError`
@@ -70,6 +72,11 @@ cached facade read: it returns the latest observation unless `refresh=True`.
 trusted semantic result; visual-only `scene_progressed` success is downgraded to
 `unknown` by the facade unless the caller supplied an explicit expectation and it
 matched.
+
+`explore()` writes an auditable decision trace into `ExplorationTrail` and the
+trail JSON: observation event, decision action/target/reason, action semantic
+status, and post-action verification. Page-id-shaped goals try learned
+memory-path navigation first.
 
 `launch_app()` performs a facade-level landing check when no explicit expectation
 is provided. It verifies Settings via page metadata, profile-backed apps via

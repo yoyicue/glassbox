@@ -376,6 +376,108 @@ def test_ai_scroll_routes_through_semantic_plan_when_flagged(tmp_path):
 
 
 @pytest.mark.smoke
+def test_ai_navigate_to_page_uses_memory_path_entrypoint(tmp_path):
+    phone = _ai_phone(tmp_path, [_scene("设置", "通用", page_id="settings/general")])
+    calls: list[dict[str, object]] = []
+
+    def fake_navigate(page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.5):
+        calls.append(
+            {
+                "page_id": page_id,
+                "scene_type": scene_type,
+                "allowed_actions": set(allowed_actions or ()),
+                "min_success_rate": min_success_rate,
+            }
+        )
+        return type(
+            "Result",
+            (),
+            {
+                "attempted": True,
+                "reached": True,
+                "reason": "reached",
+            },
+        )()
+
+    phone._phone.navigate_to_page = fake_navigate
+
+    outcome = phone.navigate_to_page(
+        "settings/general",
+        allowed_actions={"back"},
+        min_success_rate=0.8,
+    )
+
+    assert outcome.semantic_status == "succeeded"
+    assert outcome.semantic_verifier == "memory_path_navigation"
+    assert calls == [
+        {
+            "page_id": "settings/general",
+            "scene_type": None,
+            "allowed_actions": {"back"},
+            "min_success_rate": 0.8,
+        }
+    ]
+
+
+@pytest.mark.smoke
+def test_ai_goto_page_id_prefers_memory_path_navigation(tmp_path):
+    phone = _ai_phone(tmp_path, [_scene("设置", "通用", page_id="settings/general")])
+    calls: list[dict[str, object]] = []
+
+    def fake_navigate(page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.5):
+        calls.append(
+            {
+                "page_id": page_id,
+                "scene_type": scene_type,
+                "allowed_actions": allowed_actions,
+                "min_success_rate": min_success_rate,
+            }
+        )
+        return SimpleNamespace(attempted=True, reached=True, reason="reached")
+
+    phone._phone.navigate_to_page = fake_navigate
+
+    obs = phone.goto("settings/general")
+
+    assert obs.page_id == "settings/general"
+    assert calls == [
+        {
+            "page_id": "settings/general",
+            "scene_type": None,
+            "allowed_actions": None,
+            "min_success_rate": 0.5,
+        }
+    ]
+    assert phone._phone.actions == []
+    assert phone._last_action is not None
+    assert phone._last_action.action == "navigate_to_page"
+
+
+@pytest.mark.smoke
+def test_ai_goto_page_id_falls_back_to_label_when_memory_path_cannot_reach(tmp_path):
+    phone = _ai_phone(
+        tmp_path,
+        [
+            _scene("设置", page_id="settings/root"),
+            _scene("设置", page_id="settings/root"),
+        ],
+    )
+    calls: list[str] = []
+
+    def fake_navigate(page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.5):
+        del scene_type, allowed_actions, min_success_rate
+        calls.append(page_id)
+        return SimpleNamespace(attempted=True, reached=False, reason="no_path")
+
+    phone._phone.navigate_to_page = fake_navigate
+
+    phone.goto("settings/missing")
+
+    assert calls == ["settings/missing"]
+    assert phone._phone.actions == [("tap_text", "settings/missing")]
+
+
+@pytest.mark.smoke
 def test_ai_scroll_flag_off_with_wheel_support_stays_on_swipe(tmp_path):
     """CUQ-3.15 default-safety (audit fix): the byte-identical default branch —
     flag OFF/absent while the backend DOES support the wheel must still swipe.
@@ -484,8 +586,98 @@ def test_ai_explore_and_save_path_as_are_text_first(tmp_path):
     assert trail.success is True
     assert trail.artifact_path.exists()
     assert "visible:关于本机" in trail.matched_path
+    assert trail.decision_trace[0].decision_action == "scroll"
+    assert trail.decision_trace[0].decision_reason == "no_safe_policy_candidate"
+    assert trail.decision_trace[0].verified is True
+    trail_payload = json.loads(trail.artifact_path.read_text(encoding="utf-8"))
+    assert trail_payload["decision_trace"][0]["decision_action"] == "scroll"
+    assert trail_payload["decision_trace"][0]["verification"] == "visible_goal"
     assert artifact.path.exists()
     assert artifact.script_snippet_path and artifact.script_snippet_path.exists()
+
+
+@pytest.mark.smoke
+def test_ai_explore_page_id_prefers_memory_path_navigation(tmp_path):
+    phone = _ai_phone(
+        tmp_path,
+        [
+            _scene("设置", "通用", page_id="settings/root"),
+            _scene("设置", "通用", page_id="settings/general"),
+        ],
+    )
+    calls: list[str] = []
+
+    def fake_navigate(page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.5):
+        del scene_type, allowed_actions, min_success_rate
+        calls.append(page_id)
+        return SimpleNamespace(attempted=True, reached=True, reason="reached")
+
+    phone._phone.navigate_to_page = fake_navigate
+
+    trail = phone.explore("settings/general", max_steps=3)
+
+    assert trail.success is True
+    assert calls == ["settings/general"]
+    assert phone._phone.actions == []
+    assert trail.matched_path == ("navigate_to_page:settings/general", "page:settings/general")
+    assert trail.decision_trace[0].decision_action == "navigate_to_page"
+    assert trail.decision_trace[0].decision_reason == "page_id_memory_path"
+    assert trail.decision_trace[0].verification == "page_id"
+    assert trail.decision_trace[0].after_page_id == "settings/general"
+
+
+@pytest.mark.smoke
+def test_ai_explore_policy_candidate_page_id_prefers_memory_path(tmp_path):
+    class UnitPolicy:
+        def classify(self, observation):
+            return PageInfo(page_id=observation.page_id, confidence=1.0)
+
+        def candidates(self, observation):
+            if "通用" in observation.visible_texts:
+                return [
+                    NavigationCandidate(
+                        label="通用",
+                        action="tap",
+                        confidence=0.9,
+                        reason="known_page",
+                        page_id="settings/general",
+                    )
+                ]
+            return []
+
+        def is_safe(self, candidate, observation):
+            return candidate.label == "通用" and candidate.action == "tap"
+
+        def should_stop(self, state: CrawlState):
+            return state.steps >= 4 or state.found
+
+    phone = _ai_phone(
+        tmp_path,
+        [
+            _scene("设置", "通用", page_id="settings/root"),
+            _scene("设置", "关于本机", page_id="settings/general"),
+        ],
+    )
+    calls: list[str] = []
+
+    def fake_navigate(page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.5):
+        del scene_type, allowed_actions, min_success_rate
+        calls.append(page_id)
+        return SimpleNamespace(attempted=True, reached=True, reason="reached")
+
+    phone._phone.navigate_to_page = fake_navigate
+    phone.policy = UnitPolicy()
+
+    trail = phone.explore("关于本机", max_steps=3)
+
+    assert trail.success is True
+    assert calls == ["settings/general"]
+    assert phone._phone.actions == []
+    assert trail.matched_path == ("navigate_to_page:settings/general", "visible:关于本机")
+    assert trail.decision_trace[0].decision_action == "navigate_to_page"
+    assert trail.decision_trace[0].decision_target == "settings/general"
+    assert trail.decision_trace[0].decision_reason == "known_page"
+    assert trail.decision_trace[0].verification == "visible_goal"
 
 
 @pytest.mark.smoke
@@ -519,6 +711,11 @@ def test_ai_explore_uses_policy_candidates_and_safety(tmp_path):
     assert trail.success is True
     assert phone._phone.actions[0] == ("tap_text", "通用")
     assert "tap:通用" in trail.matched_path
+    assert trail.decision_trace[0].decision_action == "tap"
+    assert trail.decision_trace[0].decision_target == "通用"
+    assert trail.decision_trace[0].decision_reason == "policy_candidate"
+    assert trail.decision_trace[0].action_semantic_status == "succeeded"
+    assert trail.decision_trace[0].verified is True
 
 
 @pytest.mark.smoke
@@ -620,9 +817,11 @@ def test_settings_policy_is_separate_from_ai_facade():
     )
 
     assert policy.classify(obs).page_id == "settings/root"
-    labels = [candidate.label for candidate in policy.candidates(obs)]
+    candidates = policy.candidates(obs)
+    labels = [candidate.label for candidate in candidates]
     assert "通用" in labels
     assert "飞行模式" not in labels
+    assert {candidate.label: candidate.page_id for candidate in candidates}["通用"] == "settings/通用"
 
 
 @pytest.mark.smoke

@@ -600,6 +600,116 @@ def test_ipados_settings_root_projection_collapses_across_detail_pages():
 
 
 @pytest.mark.smoke
+def test_ipados_settings_detail_signature_survives_row_retyping_and_text_churn():
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        ipados_settings_root_projection=True,
+    )
+    first = _ipad_settings_split_scene("General", "About", "Software Update", "AirDrop")
+    second = _ipad_settings_split_scene("General", "Version", "iPad Storage", "VPN")
+    second.elements = [
+        element.model_copy(update={"type": "list_item"})
+        if element.box.x >= 384 and element.text != "General"
+        else element
+        for element in second.elements
+    ]
+
+    detail = mem.observe(first)
+    observed = mem.observe(second)
+
+    assert observed.screen_id == detail.screen_id
+    assert observed.visit_count == 2
+    assert observed.signature.stable_texts == ["settings/General"]
+    assert observed.signature.type_histogram == {"settings_detail": 1}
+    assert len(mem.nodes_for_page("settings/General", scene_type="settings_detail")) == 1
+
+
+@pytest.mark.smoke
+def test_generic_non_root_page_signature_survives_row_retyping_and_text_churn():
+    mem = ScreenMemory(UTG(bundle_id="com.example.recipes"))
+
+    def recipe_scene(page_id: str, *rows: str) -> Scene:
+        elements = [
+            UIElement(type="text", box=Box(x=32, y=72, w=210, h=28), text="Recipe Detail", confidence=0.9),
+        ]
+        for index, text in enumerate(rows):
+            elements.append(
+                UIElement(
+                    type="text",
+                    box=Box(x=32, y=140 + index * 48, w=260, h=24),
+                    text=text,
+                    confidence=0.9,
+                )
+            )
+        scene = Scene(frame_id=0, timestamp=0.0, elements=elements)
+        scene.scene_type = "recipe_detail"
+        scene.platform_scene_kind = "recipe_detail"
+        scene.page_id = page_id
+        scene.classification_source = "profile"
+        scene.classification_confidence = 0.9
+        scene.safe_actions = ["back", "scroll"]
+        return scene
+
+    first = recipe_scene("recipes/detail/42", "Ingredients", "Steps", "Reviews")
+    second = recipe_scene("recipes/detail/42", "Servings", "Nutrition", "Related")
+    second.elements = [
+        element.model_copy(update={"type": "list_item"})
+        if element.text != "Recipe Detail"
+        else element
+        for element in second.elements
+    ]
+
+    detail = mem.observe(first)
+    recognized = mem.recognize(second)
+    observed = mem.observe(second)
+
+    assert recognized is not None
+    assert recognized.screen_id == detail.screen_id
+    assert observed.screen_id == detail.screen_id
+    assert observed.visit_count == 2
+    assert observed.signature.stable_texts == ["recipes/detail/42"]
+    assert observed.signature.type_histogram == {"semantic_page": 1}
+    assert len(mem.nodes_for_page("recipes/detail/42", scene_type="recipe_detail")) == 1
+
+
+@pytest.mark.smoke
+def test_semantic_page_structural_fallback_preserves_clickable_image_icons():
+    mem = ScreenMemory(UTG(bundle_id="com.example.icons"))
+
+    def icon_grid(*, page_id: str | None) -> Scene:
+        scene = Scene(
+            frame_id=0,
+            timestamp=0.0,
+            elements=[
+                UIElement(
+                    type="image",
+                    box=Box(x=32 + index * 52, y=120, w=36, h=36),
+                    text=None,
+                    confidence=0.9,
+                    suggested_actions=["tap"],
+                    element_id=index,
+                )
+                for index in range(4)
+            ],
+        )
+        if page_id is not None:
+            scene.page_id = page_id
+            scene.scene_type = "icon_grid"
+            scene.platform_scene_kind = "icon_grid"
+            scene.classification_source = "profile"
+            scene.classification_confidence = 0.9
+        return scene
+
+    node = mem.observe(icon_grid(page_id="icons/detail"))
+    recognized = mem.recognize(icon_grid(page_id=None))
+
+    assert node.signature.stable_texts == ["icons/detail"]
+    assert node.signature.type_histogram == {"semantic_page": 1}
+    assert recognized is not None
+    assert recognized.screen_id == node.screen_id
+
+
+@pytest.mark.smoke
 def test_ipados_settings_root_projection_ignores_sidebar_ocr_and_icon_churn():
     mem = ScreenMemory(
         UTG(bundle_id="com.apple.Preferences"),

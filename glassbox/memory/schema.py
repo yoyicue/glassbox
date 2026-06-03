@@ -122,6 +122,7 @@ class RememberedElement(BaseModel):
     box: Box                                 # smoothed / latest position
     type: ElementType
     text: str | None = None
+    suggested_actions: list[str] = Field(default_factory=list)
     intent_label: str | None = None
     whitebox_hint: WhiteboxHint | None = None
     volatile: bool = False                   # content/position unreliable (list rows)

@@ -1249,17 +1249,19 @@ class Phone:
         self,
         scene: Scene,
         viewport_size: tuple[int, int] | None,
+        prior=None,
     ) -> SceneClassification | None:
-        return _perceptor_for(self).classify_platform_scene_now(scene, viewport_size)
+        return _perceptor_for(self).classify_platform_scene_now(scene, viewport_size, prior=prior)
 
     def classify_platform_scene_now(
         self,
         scene: Scene,
         *,
         viewport_size: tuple[int, int] | None,
+        prior=None,
     ) -> SceneClassification | None:
         """Public platform scene classifier hook for planning collaborators."""
-        return self._classify_platform_scene_now(scene, viewport_size=viewport_size)
+        return self._classify_platform_scene_now(scene, viewport_size=viewport_size, prior=prior)
 
     # —— Profile (Tier 1+ white-box) ——
     def _apply_profile(self, scene: Scene, frame_img=None) -> None:
@@ -2063,6 +2065,24 @@ class Phone:
 
     def home(self) -> ActionResult:
         return _system_navigator_for(self).home()
+
+    def navigate_to_page(
+        self,
+        page_id: str,
+        *,
+        scene_type: str | None = None,
+        allowed_actions: set[str] | None = None,
+        min_success_rate: float = 0.5,
+    ):
+        from glassbox.action import navigate_via_memory_path
+
+        return navigate_via_memory_path(
+            self,
+            page_id,
+            scene_type=scene_type,
+            allowed_actions=allowed_actions,
+            min_success_rate=min_success_rate,
+        )
 
     def _picokvm_home_needs_fallback(self, result: ActionResult) -> bool:
         return _system_navigator_for(self).picokvm_home_needs_fallback(result)

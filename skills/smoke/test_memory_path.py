@@ -129,6 +129,56 @@ def test_path_to_page_accepts_platform_scene_kind_and_policy_action():
 
 
 @pytest.mark.smoke
+def test_path_to_page_uses_generic_app_page_ids_beyond_settings():
+    def app_page(page_id: str, kind: str, *texts: str) -> Scene:
+        scene = _scene(*texts)
+        scene.page_id = page_id
+        scene.scene_type = kind
+        scene.platform_scene_kind = kind
+        scene.classification_source = "profile"
+        scene.classification_confidence = 0.9
+        scene.safe_actions = ["tap", "back", "scroll"]
+        return scene
+
+    mem = ScreenMemory(UTG(bundle_id="com.example.recipes"))
+    list_node = mem.observe(app_page("recipes/list", "recipe_list", "Recipes", "Cake", "Soup"))
+    detail = mem.observe(
+        app_page("recipes/detail/42", "recipe_detail", "Cake", "Ingredients", "Steps"),
+        last_action=("tap", {"target": "Cake", "via": "tap_text", "action_ok": True}),
+    )
+    mem.observe(
+        app_page("recipes/list", "recipe_list", "Recipes", "Cake", "Pie"),
+        last_action=("back", {"via": "back_gesture", "action_ok": True}),
+    )
+
+    path_to_detail = mem.path_to_page(
+        list_node.screen_id,
+        "recipes/detail/42",
+        scene_type="recipe_detail",
+        allowed_actions={"tap"},
+        min_success_rate=0.5,
+    )
+    path_to_list = mem.path_to_page(
+        detail.screen_id,
+        "recipes/list",
+        scene_type="recipe_list",
+        allowed_actions={"back"},
+        min_success_rate=0.5,
+    )
+
+    assert path_to_detail is not None
+    assert [(edge.from_id, edge.to_id, edge.action_op) for edge in path_to_detail] == [
+        (list_node.screen_id, detail.screen_id, "tap")
+    ]
+    assert path_to_list is not None
+    assert [(edge.from_id, edge.to_id, edge.policy_action) for edge in path_to_list] == [
+        (detail.screen_id, list_node.screen_id, "back")
+    ]
+    assert len(mem.nodes_for_page("recipes/list", scene_type="recipe_list")) == 1
+    assert len(mem.nodes_for_page("recipes/detail/42", scene_type="recipe_detail")) == 1
+
+
+@pytest.mark.smoke
 def test_path_prefers_reliable_edge_among_equal_length():
     """CUQ-3.23: among equal-length paths, route via the higher-success edge,
     not whichever low-success edge happens to be visited first."""

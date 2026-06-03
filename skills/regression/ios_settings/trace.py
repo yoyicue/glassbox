@@ -126,7 +126,7 @@ class TracedSettingsPhone(TracedPhone):
         "scroll_wheel", "wheel_scroll_down", "wheel_scroll_up",
         "swipe_up", "swipe_down", "swipe_left", "swipe_right",
         "back_gesture", "home", "recents", "control_center",
-        "notification_center", "type", "key", "paste",
+        "notification_center", "type", "key", "paste", "navigate_to_page",
     })
 
     def __init__(self, phone, trace: SettingsRunTrace):

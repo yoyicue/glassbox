@@ -71,6 +71,28 @@ def _flip_task_action_verdicts(
     return out
 
 
+def _flip_task_outcomes(payload: dict[str, Any], to_outcome: str, count: int) -> dict[str, Any]:
+    """Return a self-consistent copy with completed task outcomes regressed.
+
+    This isolates the task-level compass itself from lower-level action verdicts:
+    a run that no longer completes the task must fail the comparator even if its
+    action ACK mix remains unchanged.
+    """
+    out = copy.deepcopy(payload)
+    flipped = 0
+    for task in out["tasks"]:
+        if flipped >= count:
+            break
+        if task.get("outcome") == "succeeded":
+            task["outcome"] = to_outcome
+            flipped += 1
+    assert flipped == count, (
+        f"fixture lacks {count} succeeded tasks to flip (found {flipped})"
+    )
+    out["metrics"] = _metrics(out["tasks"])
+    return out
+
+
 @pytest.mark.smoke
 def test_committed_baseline_floor_completed_a_task():
     """The committed floor must prove at least one end-to-end task completed.
@@ -104,6 +126,16 @@ def test_gate_fails_on_action_success_regression():
     rc, lines = compare_benchmarks(baseline, regressed)
     assert rc == 1
     assert any(line.startswith("action_success_rate:") and "delta=-" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_fails_on_task_completion_regression():
+    baseline = _baseline()
+    regressed = _flip_task_outcomes(baseline, "failed", count=1)
+    assert regressed["metrics"]["task_completion_rate"] < baseline["metrics"]["task_completion_rate"]
+    rc, lines = compare_benchmarks(baseline, regressed)
+    assert rc == 1
+    assert any(line.startswith("task_completion_rate:") and "delta=-" in line for line in lines)
 
 
 @pytest.mark.smoke

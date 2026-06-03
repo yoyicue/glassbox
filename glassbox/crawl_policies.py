@@ -136,7 +136,7 @@ class SettingsCrawlPolicyAdapter:
         out = []
         for element in self.settings_policy.safe_navigation_candidates(scene):
             text = (element.text or "").strip()
-            out.append({
+            action = {
                 "action": "tap",
                 "text": text,
                 "label": text,
@@ -144,7 +144,10 @@ class SettingsCrawlPolicyAdapter:
                 "box": [element.box.x, element.box.y, element.box.x2, element.box.y2],
                 "safe": True,
                 "source": "ios_settings",
-            })
+            }
+            if self.settings_policy.is_safe_known_navigation_label(text):
+                action["page_id"] = f"settings/{text}"
+            out.append(action)
         return out
 
     def is_safe(self, action: dict[str, Any], scene) -> bool:

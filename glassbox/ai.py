@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import TracebackType
@@ -116,6 +116,21 @@ class RunArtifacts:
 
 
 @dataclass(frozen=True)
+class DecisionTraceStep:
+    index: int
+    observation_event_seq: int
+    observed_page_id: str | None
+    decision_action: str
+    decision_target: str | None
+    decision_reason: str
+    action_semantic_status: str
+    verified: bool
+    verification: str
+    after_event_seq: int
+    after_page_id: str | None
+
+
+@dataclass(frozen=True)
 class ExplorationTrail:
     goal: str
     success: bool
@@ -123,6 +138,7 @@ class ExplorationTrail:
     final_observation: ObservationSummary
     matched_path: tuple[str, ...]
     artifact_path: Path
+    decision_trace: tuple[DecisionTraceStep, ...] = ()
 
     def summary(self) -> str:
         status = "success" if self.success else "failed"
@@ -475,6 +491,10 @@ class AIPhone:
         return unknown
 
     def goto(self, label: str, *, timeout_s: float = 10.0) -> ObservationSummary:
+        if self._looks_like_page_id(label):
+            outcome = self.navigate_to_page(label)
+            if outcome.semantic_status == "succeeded":
+                return self.perceive()
         target = self._policy_target(label, self.observe()) if self.policy is not None else label
         result = self._phone.tap_text(target, timeout=timeout_s)
         self._action_outcome("goto", target, result)
@@ -489,6 +509,57 @@ class AIPhone:
             if callable(close_app):
                 return self._action_outcome("home", None, close_app())
         return self._action_outcome("home", None, self._phone.home())
+
+    def navigate_to_page(
+        self,
+        page_id: str,
+        *,
+        scene_type: str | None = None,
+        allowed_actions: set[str] | None = None,
+        min_success_rate: float = 0.5,
+    ) -> ActionOutcome:
+        navigator = getattr(self._phone, "navigate_to_page", None)
+        if callable(navigator):
+            result = navigator(
+                page_id,
+                scene_type=scene_type,
+                allowed_actions=allowed_actions,
+                min_success_rate=min_success_rate,
+            )
+        else:
+            from glassbox.action import navigate_via_memory_path
+
+            result = navigate_via_memory_path(
+                self._phone,
+                page_id,
+                scene_type=scene_type,
+                allowed_actions=allowed_actions,
+                min_success_rate=min_success_rate,
+            )
+        obs = self.observe()
+        if getattr(result, "reached", False):
+            semantic_status = "succeeded"
+            confidence = 1.0
+        elif not getattr(result, "attempted", False) and getattr(result, "reason", "") == "memory_unavailable":
+            semantic_status = "unsupported"
+            confidence = 0.0
+        else:
+            semantic_status = "unknown"
+            confidence = 0.0
+        outcome = ActionOutcome(
+            ok=bool(getattr(result, "reached", False)),
+            semantic_status=semantic_status,
+            action="navigate_to_page",
+            target=page_id,
+            reason=getattr(result, "reason", None),
+            artifact_path=obs.scene_path,
+            transport_ok=None,
+            unsupported=semantic_status == "unsupported",
+            semantic_verifier="memory_path_navigation",
+            semantic_confidence=confidence,
+        )
+        self._last_action = outcome
+        return outcome
 
     def close_app(self) -> ActionOutcome:
         close_app = getattr(self._phone, "close_foreground_app", None)
@@ -633,26 +704,106 @@ class AIPhone:
     def explore(self, goal: str, *, max_steps: int = 12) -> ExplorationTrail:
         steps: list[str] = []
         matched_path: list[str] = []
+        decision_trace: list[DecisionTraceStep] = []
         needle = goal.strip()
         obs = self.observe()
-        success = self._goal_visible(needle, obs)
+        success = self._explore_goal_met(needle, obs)
         if success:
             matched_path.append(f"observe:{needle}")
-        for idx in range(max(0, int(max_steps))):
+        step_limit = max(0, int(max_steps))
+        if self._looks_like_page_id(needle) and not success and step_limit > 0:
+            before_obs = obs
+            outcome = self.navigate_to_page(needle)
+            obs = self.perceive()
+            success = self._explore_goal_met(needle, obs)
+            steps.append(f"1. navigate_to_page {needle}")
+            matched_path.append(f"navigate_to_page:{needle}")
+            decision_trace.append(
+                DecisionTraceStep(
+                    index=1,
+                    observation_event_seq=before_obs.event_seq,
+                    observed_page_id=before_obs.page_id,
+                    decision_action="navigate_to_page",
+                    decision_target=needle,
+                    decision_reason="page_id_memory_path",
+                    action_semantic_status=outcome.semantic_status,
+                    verified=success,
+                    verification="page_id" if success else "page_not_reached",
+                    after_event_seq=obs.event_seq,
+                    after_page_id=obs.page_id,
+                )
+            )
+            if success:
+                matched_path.append(f"page:{needle}")
+        for idx in range(len(steps), step_limit):
             if success:
                 break
             candidate = self._next_policy_candidate(obs, goal=needle)
             if candidate is not None:
+                before_obs = obs
+                memory_page_id = str(candidate.page_id or "").strip()
+                if memory_page_id:
+                    outcome = self.navigate_to_page(memory_page_id)
+                    obs = self.perceive()
+                    page_reached = obs.page_id == memory_page_id or outcome.semantic_status == "succeeded"
+                    if page_reached:
+                        success = self._explore_goal_met(needle, obs)
+                        steps.append(f"{idx + 1}. navigate_to_page {memory_page_id}")
+                        matched_path.append(f"navigate_to_page:{memory_page_id}")
+                        decision_trace.append(
+                            DecisionTraceStep(
+                                index=idx + 1,
+                                observation_event_seq=before_obs.event_seq,
+                                observed_page_id=before_obs.page_id,
+                                decision_action="navigate_to_page",
+                                decision_target=memory_page_id,
+                                decision_reason=candidate.reason or "policy_candidate_page_id",
+                                action_semantic_status=outcome.semantic_status,
+                                verified=success,
+                                verification="visible_goal" if success else "page_id",
+                                after_event_seq=obs.event_seq,
+                                after_page_id=obs.page_id,
+                            )
+                        )
+                        if success:
+                            matched_path.append(f"visible:{needle}")
+                            break
+                        if self._policy_should_stop(obs, steps=len(steps), found=success):
+                            break
+                        continue
+                    before_obs = obs
                 result = self._execute_candidate(candidate)
-                self._action_outcome(f"explore.{candidate.action}", candidate.label, result)
+                outcome = self._action_outcome(f"explore.{candidate.action}", candidate.label, result)
+                decision_action = candidate.action
+                decision_target = candidate.label
+                decision_reason = candidate.reason or "policy_candidate"
                 steps.append(f"{idx + 1}. {candidate.action} {candidate.label}")
                 matched_path.append(f"{candidate.action}:{candidate.label}")
             else:
                 result = self._phone_scroll("down")
-                self._action_outcome("explore.scroll", needle, result)
+                outcome = self._action_outcome("explore.scroll", needle, result)
+                decision_action = "scroll"
+                decision_target = "down"
+                decision_reason = "no_safe_policy_candidate"
                 steps.append(f"{idx + 1}. scroll down")
+                before_obs = obs
             obs = self.observe()
-            success = self._goal_visible(needle, obs)
+            success = self._explore_goal_met(needle, obs)
+            decision_trace.append(
+                DecisionTraceStep(
+                    index=idx + 1,
+                    observation_event_seq=before_obs.event_seq,
+                    observed_page_id=before_obs.page_id,
+                    decision_action=decision_action,
+                    decision_target=decision_target,
+                    decision_reason=decision_reason,
+                    action_semantic_status=outcome.semantic_status,
+                    verified=success,
+                    verification="visible_goal" if success else "goal_not_visible",
+                    after_event_seq=obs.event_seq,
+                    after_page_id=obs.page_id,
+                )
+            )
             if success:
                 if candidate is None:
                     matched_path.append("scroll:down")
@@ -660,7 +811,7 @@ class AIPhone:
                 break
             if self._policy_should_stop(obs, steps=len(steps), found=success):
                 break
-        artifact_path = self._write_trail(needle, success, steps, matched_path, obs)
+        artifact_path = self._write_trail(needle, success, steps, matched_path, obs, decision_trace)
         trail = ExplorationTrail(
             goal=goal,
             success=success,
@@ -668,6 +819,7 @@ class AIPhone:
             final_observation=obs,
             matched_path=tuple(matched_path),
             artifact_path=artifact_path,
+            decision_trace=tuple(decision_trace),
         )
         self._last_trail = trail
         return trail
@@ -710,6 +862,23 @@ class AIPhone:
     def save_report(self) -> RunArtifacts:
         self._write_report()
         return self._run_artifacts()
+
+    def update_manifest(self, payload: Mapping[str, Any]) -> None:
+        data = dict(payload)
+        if self._store is not None:
+            self._store.update_manifest(data)
+            return
+        path = self._manifest_path()
+        current: dict[str, Any] = {}
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                loaded = {}
+            if isinstance(loaded, dict):
+                current = loaded
+        current.update(data)
+        path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     def _open_app(self, app: str) -> None:
         if hasattr(self._phone, "open_app"):
@@ -929,6 +1098,14 @@ class AIPhone:
             raise ValueError(f"goto() only supports tap candidates, got {candidate.action!r}")
         return candidate.label
 
+    @staticmethod
+    def _looks_like_page_id(label: str) -> bool:
+        value = label.strip()
+        if "/" not in value or any(ch.isspace() for ch in value):
+            return False
+        parts = value.split("/")
+        return len(parts) >= 2 and all(parts)
+
     def _matching_policy_candidate(self, label: str, obs: ObservationSummary) -> NavigationCandidate | None:
         for candidate in self._policy_candidates(obs):
             if self._labels_match(candidate.label, label):
@@ -1066,6 +1243,7 @@ class AIPhone:
         steps: list[str],
         matched_path: list[str],
         observation: ObservationSummary,
+        decision_trace: list[DecisionTraceStep],
     ) -> Path:
         trails_dir = self.run_dir / "exploration"
         trails_dir.mkdir(exist_ok=True)
@@ -1077,6 +1255,22 @@ class AIPhone:
                     "success": success,
                     "steps": steps,
                     "matched_path": matched_path,
+                    "decision_trace": [
+                        {
+                            "index": step.index,
+                            "observation_event_seq": step.observation_event_seq,
+                            "observed_page_id": step.observed_page_id,
+                            "decision_action": step.decision_action,
+                            "decision_target": step.decision_target,
+                            "decision_reason": step.decision_reason,
+                            "action_semantic_status": step.action_semantic_status,
+                            "verified": step.verified,
+                            "verification": step.verification,
+                            "after_event_seq": step.after_event_seq,
+                            "after_page_id": step.after_page_id,
+                        }
+                        for step in decision_trace
+                    ],
                     "final_observation": {
                         "summary": observation.summary,
                         "page_id": observation.page_id,
@@ -1223,6 +1417,11 @@ class AIPhone:
 
     def _goal_visible(self, goal: str, obs: ObservationSummary) -> bool:
         return any(self._labels_match(text, goal) for text in obs.visible_texts)
+
+    def _explore_goal_met(self, goal: str, obs: ObservationSummary) -> bool:
+        if self._looks_like_page_id(goal):
+            return obs.page_id == goal
+        return self._goal_visible(goal, obs)
 
     def _text_visible(self, text: str, obs: ObservationSummary) -> bool:
         return any(self._labels_match(visible, text) for visible in obs.visible_texts)

@@ -14,6 +14,7 @@ from glassbox.cognition.base import Box, Scene
 from glassbox.cognition.contracts import (
     IconBox,
     SceneClassification,
+    SceneClassificationPrior,
     TextRegion,
     VLMRequest,
     VLMResult,
@@ -88,6 +89,7 @@ class SceneClassifier(Protocol):
         scene: Scene,
         *,
         viewport_size: tuple[int, int] | None = None,
+        prior: SceneClassificationPrior | None = None,
     ) -> SceneClassification | None: ...
 
 
@@ -97,6 +99,7 @@ class AppSceneClassifier(Protocol):
         scene: Scene,
         *,
         viewport_size: tuple[int, int] | None = None,
+        prior: SceneClassificationPrior | None = None,
     ) -> SceneClassification | None: ...
 
 

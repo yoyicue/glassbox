@@ -634,9 +634,11 @@ def _task_outcome(
 
 
 def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    measured_tasks = [task for task in tasks if task.get("outcome") != "precondition_failed"]
+    navigation_origin_precondition_failures = len(tasks) - len(measured_tasks)
     all_actions = [
         action
-        for task in tasks
+        for task in measured_tasks
         for action in _task_actions(task)
     ]
     primary_actions = [
@@ -666,23 +668,23 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     vlm_action_covered = sum(
         1 for action in task_actions if _metric_int(action, "vlm_calls") > 0
     )
-    task_count = len(tasks)
-    task_success = sum(1 for task in tasks if task.get("outcome") == "succeeded")
+    task_count = len(measured_tasks)
+    task_success = sum(1 for task in measured_tasks if task.get("outcome") == "succeeded")
     task_completion_rate = task_success / task_count if task_count else 0.0
     task_completion_variance = (
         sum(
             ((1.0 if task.get("outcome") == "succeeded" else 0.0) - task_completion_rate) ** 2
-            for task in tasks
+            for task in measured_tasks
         )
         / task_count
         if task_count
         else 0.0
     )
-    recoveries = sum(_task_recovery_count(task) for task in tasks)
+    recoveries = sum(_task_recovery_count(task) for task in measured_tasks)
     # Coverage = entered ÷ reachable, where reachable = expected − blocked
     # (deliberately-blocked pages are unreachable and must not penalize coverage).
     coverage_ratios = []
-    for task in tasks:
+    for task in measured_tasks:
         reachable = _metric_int(task, "root_pages_expected") - _metric_int(task, "root_pages_blocked")
         if reachable > 0:
             coverage_ratios.append(_metric_int(task, "root_pages_covered") / reachable)
@@ -702,6 +704,7 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "task_completion_rate": task_completion_rate,
         "task_completion_variance": task_completion_variance,
+        "navigation_origin_precondition_failures": navigation_origin_precondition_failures,
         "action_success_rate": succeeded / denominator if denominator else 0.0,
         "unknown_rate": unknown / denominator if denominator else 0.0,
         "task_action_count": len(task_actions),
@@ -781,6 +784,15 @@ def _task_actions(task: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return [action for action in actions if isinstance(action, Mapping)]
 
 
+def _navigation_origin_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any] | None:
+    origin = manifest.get("navigation_origin")
+    return dict(origin) if isinstance(origin, Mapping) else None
+
+
+def _navigation_origin_precondition_failed(origin: Mapping[str, Any] | None) -> bool:
+    return isinstance(origin, Mapping) and origin.get("can_start_clock") is False
+
+
 def _metric_int(action: Mapping[str, Any], key: str) -> int:
     value = action.get(key, 0)
     return int(value) if _is_non_negative_int(value) else 0
@@ -821,6 +833,7 @@ def aggregate_run_dir(
             action_records.append(record)
 
     terminal = dict(terminal_expected_state or DEFAULT_TERMINAL_EXPECTED_STATE)
+    navigation_origin = _navigation_origin_from_manifest(manifest)
     final_state = _final_state(run_dir, actions)
     if isinstance(root_coverage, Mapping):
         # Authoritative: the walkthrough already computed which top-level pages it
@@ -833,16 +846,21 @@ def aggregate_run_dir(
         )
     reachable_count = max(0, expected_count - blocked_count)
     root_coverage_complete = reachable_count > 0 and covered == reachable_count and not missing
-    return {
-        "task": task,
-        "round": round_index,
-        "terminal_expected_state": terminal,
-        "outcome": _task_outcome(
+    outcome = (
+        "precondition_failed"
+        if _navigation_origin_precondition_failed(navigation_origin)
+        else _task_outcome(
             action_records,
             final_state,
             terminal,
             root_coverage_complete=root_coverage_complete,
-        ),
+        )
+    )
+    return {
+        "task": task,
+        "round": round_index,
+        "terminal_expected_state": terminal,
+        "outcome": outcome,
         "final_state": final_state,
         "root_pages_expected": expected_count,
         "root_pages_covered": covered,
@@ -851,6 +869,7 @@ def aggregate_run_dir(
         "actions": action_records,
         "artifact_run_dir": str(run_dir),
         "artifact_run_id": manifest.get("run_id") or run_dir.name,
+        **({"navigation_origin": navigation_origin} if navigation_origin is not None else {}),
     }
 
 
@@ -1067,8 +1086,14 @@ def validate_benchmark(payload: Mapping[str, Any]) -> list[str]:
             errors.append(f"tasks[{task_index}].task must be a non-empty string")
         if not _is_non_negative_int(task.get("round")):
             errors.append(f"tasks[{task_index}].round must be a non-negative integer")
-        if task.get("outcome") not in {"succeeded", "failed", "unknown"}:
+        if task.get("outcome") not in {"succeeded", "failed", "unknown", "precondition_failed"}:
             errors.append(f"tasks[{task_index}].outcome is invalid")
+        if "navigation_origin" in task:
+            origin = task.get("navigation_origin")
+            if not isinstance(origin, dict):
+                errors.append(f"tasks[{task_index}].navigation_origin must be an object")
+            elif not isinstance(origin.get("can_start_clock"), bool):
+                errors.append(f"tasks[{task_index}].navigation_origin.can_start_clock must be a boolean")
         _validate_final_state(task.get("final_state"), f"tasks[{task_index}].final_state", errors)
         for key in ("root_pages_expected", "root_pages_covered", "root_pages_blocked"):
             if key in task and not _is_non_negative_int(task.get(key)):
@@ -1198,6 +1223,7 @@ def compare_benchmarks(
     for key in (
         "task_completion_rate",
         "task_completion_variance",
+        "navigation_origin_precondition_failures",
         "action_success_rate",
         "unknown_rate",
         "task_action_count",
@@ -1220,6 +1246,8 @@ def compare_benchmarks(
         delta = cand - base
         lines.append(f"{key}: baseline={base:.6g} candidate={cand:.6g} delta={delta:+.6g}")
         if key in {"task_completion_rate", "action_success_rate", "root_pages_coverage"} and delta < -tolerance:
+            rc = 1
+        if key == "navigation_origin_precondition_failures" and delta > tolerance:
             rc = 1
         if key == "unknown_rate" and delta > tolerance:
             rc = 1
