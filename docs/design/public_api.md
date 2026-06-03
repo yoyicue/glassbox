@@ -27,7 +27,8 @@ Stable symbols:
 - `AIPhone.swipe_xy(x1, y1, x2, y2, *, steps=20, end_hold_ms=100, expect_visible=None, expect_page=None) -> ActionOutcome`
 - `AIPhone.launch_app(app, *, aliases=(), expect_visible=None, expect_page=None) -> ActionOutcome`
 - `AIPhone.close_app() -> ActionOutcome`
-- `AIPhone.goto(label, *, timeout_s=10.0) -> ObservationSummary`
+- `AIPhone.goto(label, *, timeout_s=10.0) -> ObservationSummary` (page-id-shaped
+  labels try learned memory-path navigation first)
 - `AIPhone.back() -> ActionOutcome`
 - `AIPhone.home() -> ActionOutcome`
 - `AIPhone.scroll(direction="down", *, until=None) -> ObservationSummary`

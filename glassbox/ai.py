@@ -475,6 +475,10 @@ class AIPhone:
         return unknown
 
     def goto(self, label: str, *, timeout_s: float = 10.0) -> ObservationSummary:
+        if self._looks_like_page_id(label):
+            outcome = self.navigate_to_page(label)
+            if outcome.semantic_status == "succeeded":
+                return self.perceive()
         target = self._policy_target(label, self.observe()) if self.policy is not None else label
         result = self._phone.tap_text(target, timeout=timeout_s)
         self._action_outcome("goto", target, result)
@@ -996,6 +1000,14 @@ class AIPhone:
         if candidate.action != "tap":
             raise ValueError(f"goto() only supports tap candidates, got {candidate.action!r}")
         return candidate.label
+
+    @staticmethod
+    def _looks_like_page_id(label: str) -> bool:
+        value = label.strip()
+        if "/" not in value or any(ch.isspace() for ch in value):
+            return False
+        parts = value.split("/")
+        return len(parts) >= 2 and all(parts)
 
     def _matching_policy_candidate(self, label: str, obs: ObservationSummary) -> NavigationCandidate | None:
         for candidate in self._policy_candidates(obs):

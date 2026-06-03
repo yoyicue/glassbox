@@ -93,8 +93,11 @@ can prove them).**
   `navigate_via_memory_path()` promotes the same safe replay machinery into a
   normal decision entrypoint without Home fallback. The follow-up wiring slice
   exposes this through `Phone.navigate_to_page()` and the AI facade's
-  `AIPhone.navigate_to_page()`. Remaining work: make higher-level planners
-  choose it automatically and extend the UTG beyond Settings to generic apps.
+  `AIPhone.navigate_to_page()`. A conservative automatic slice now routes
+  page-id-shaped `AIPhone.goto("settings/...")` requests through the memory path
+  before falling back to text tapping. Remaining work: make arbitrary-goal
+  planners choose it from learned UTG context and extend the UTG beyond Settings
+  to generic apps.
 - **A2 Decision brain.** No owned/learned `observe→decide→act→verify` loop;
   decisions are hand-scripted in skills, and `tap_xy` (`phone.py:1714`) bypasses
   the orchestrator entirely. The realistic "policy" is VLM-as-System-2, **not** a
@@ -102,9 +105,10 @@ can prove them).**
 - **A3 Signature stability under richer perception.** `compute_signature` drops
   `is_volatile` (`list_item`) text from `stable_texts` (`signature.py:55`,
   `element_key.py:33`), so any perception change that re-types rows shifts the
-  belief-state's identity basis. Only the iPadOS Settings root is currently
-  special-cased (`graph._ipados_settings_root_signature`, `graph.py:418`); a spine
-  made of UTG nodes needs a non-root regression guard.
+  belief-state's identity basis. Initial guard: iPadOS Settings detail nodes use
+  page-id-anchored semantic signatures under the Settings root projection, and
+  smoke now covers row text churn plus `text` -> `list_item` retyping. Remaining
+  work: generic non-root signatures outside that Settings projection.
 
 ## Actions, in dependency order
 
@@ -161,11 +165,14 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
 2. **System-2 can steer (B2).** Let VLM escalation arbitrate `platform_scene_kind`
    under the existing triggers, not just annotate `semantic_scene_type`. Gate:
    `unknown_rate` ↓ and misclassification ↓ on a multi-app surface, task-level.
-3. **Navigation in the loop (A1).** Call `path_to_page` proactively, UTG extended
-   past Settings. Gate: fewer recoveries / shorter routes on a multi-app task.
+3. **Navigation in the loop (A1).** Call `path_to_page` proactively; the first
+   automatic facade slice handles page-id-shaped `goto(...)` targets, while the
+   remaining work is planner-selected memory paths and UTG extension past Settings.
+   Gate: fewer recoveries / shorter routes on a multi-app task.
 4. **Live control + signature guard (B3, A3).** Feed `actuation_profile` success
    rates into live strategy selection and de-advertise a failed capability within
-   a run; add the non-root signature-stability regression.
+   a run; keep broadening non-root signature-stability guards beyond the initial
+   Settings-detail regression.
 
 ## Implementation Slices
 
@@ -199,12 +206,19 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
   generic edges, and verify arrival without falling back to Home.
 - `Phone.navigate_to_page()` and `AIPhone.navigate_to_page()` expose that
   proactive memory-path navigation on normal runtime/facade surfaces.
+- `AIPhone.goto()` treats page-id-shaped labels (`foo/bar`, no whitespace) as a
+  memory-path navigation request first, and falls back to the original text-tap
+  behavior when memory is unavailable or cannot reach the page.
+- iPadOS Settings detail node identity is guarded as a non-root semantic
+  signature: text churn and richer perception retyping detail rows to `list_item`
+  do not split a remembered `settings/...` detail node.
 - Current-run actuation feedback is covered as a live B3 de-advertise signal:
   once a method crosses the unactuatable gate, `should_skip_bucket()` flips
   immediately for the next decision in the same run.
 - Smoke coverage: `skills/smoke/test_world_model_spine.py`,
   `skills/smoke/test_ios_scene.py`, `skills/smoke/test_canonical_primitives.py`,
-  and `skills/smoke/test_ai_native_interface.py`.
+  `skills/smoke/test_memory_observe.py`, and
+  `skills/smoke/test_ai_native_interface.py`.
 
 ## Non-goals / honest posture
 

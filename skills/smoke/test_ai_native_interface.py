@@ -420,6 +420,64 @@ def test_ai_navigate_to_page_uses_memory_path_entrypoint(tmp_path):
 
 
 @pytest.mark.smoke
+def test_ai_goto_page_id_prefers_memory_path_navigation(tmp_path):
+    phone = _ai_phone(tmp_path, [_scene("设置", "通用", page_id="settings/general")])
+    calls: list[dict[str, object]] = []
+
+    def fake_navigate(page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.5):
+        calls.append(
+            {
+                "page_id": page_id,
+                "scene_type": scene_type,
+                "allowed_actions": allowed_actions,
+                "min_success_rate": min_success_rate,
+            }
+        )
+        return SimpleNamespace(attempted=True, reached=True, reason="reached")
+
+    phone._phone.navigate_to_page = fake_navigate
+
+    obs = phone.goto("settings/general")
+
+    assert obs.page_id == "settings/general"
+    assert calls == [
+        {
+            "page_id": "settings/general",
+            "scene_type": None,
+            "allowed_actions": None,
+            "min_success_rate": 0.5,
+        }
+    ]
+    assert phone._phone.actions == []
+    assert phone._last_action is not None
+    assert phone._last_action.action == "navigate_to_page"
+
+
+@pytest.mark.smoke
+def test_ai_goto_page_id_falls_back_to_label_when_memory_path_cannot_reach(tmp_path):
+    phone = _ai_phone(
+        tmp_path,
+        [
+            _scene("设置", page_id="settings/root"),
+            _scene("设置", page_id="settings/root"),
+        ],
+    )
+    calls: list[str] = []
+
+    def fake_navigate(page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.5):
+        del scene_type, allowed_actions, min_success_rate
+        calls.append(page_id)
+        return SimpleNamespace(attempted=True, reached=False, reason="no_path")
+
+    phone._phone.navigate_to_page = fake_navigate
+
+    phone.goto("settings/missing")
+
+    assert calls == ["settings/missing"]
+    assert phone._phone.actions == [("tap_text", "settings/missing")]
+
+
+@pytest.mark.smoke
 def test_ai_scroll_flag_off_with_wheel_support_stays_on_swipe(tmp_path):
     """CUQ-3.15 default-safety (audit fix): the byte-identical default branch —
     flag OFF/absent while the backend DOES support the wheel must still swipe.

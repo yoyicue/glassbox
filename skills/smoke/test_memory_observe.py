@@ -600,6 +600,31 @@ def test_ipados_settings_root_projection_collapses_across_detail_pages():
 
 
 @pytest.mark.smoke
+def test_ipados_settings_detail_signature_survives_row_retyping_and_text_churn():
+    mem = ScreenMemory(
+        UTG(bundle_id="com.apple.Preferences"),
+        ipados_settings_root_projection=True,
+    )
+    first = _ipad_settings_split_scene("General", "About", "Software Update", "AirDrop")
+    second = _ipad_settings_split_scene("General", "Version", "iPad Storage", "VPN")
+    second.elements = [
+        element.model_copy(update={"type": "list_item"})
+        if element.box.x >= 384 and element.text != "General"
+        else element
+        for element in second.elements
+    ]
+
+    detail = mem.observe(first)
+    observed = mem.observe(second)
+
+    assert observed.screen_id == detail.screen_id
+    assert observed.visit_count == 2
+    assert observed.signature.stable_texts == ["settings/General"]
+    assert observed.signature.type_histogram == {"settings_detail": 1}
+    assert len(mem.nodes_for_page("settings/General", scene_type="settings_detail")) == 1
+
+
+@pytest.mark.smoke
 def test_ipados_settings_root_projection_ignores_sidebar_ocr_and_icon_churn():
     mem = ScreenMemory(
         UTG(bundle_id="com.apple.Preferences"),
