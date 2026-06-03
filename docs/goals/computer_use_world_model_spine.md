@@ -94,10 +94,10 @@ can prove them).**
   normal decision entrypoint without Home fallback. The follow-up wiring slice
   exposes this through `Phone.navigate_to_page()` and the AI facade's
   `AIPhone.navigate_to_page()`. A conservative automatic slice now routes
-  page-id-shaped `AIPhone.goto("settings/...")` requests through the memory path
-  before falling back to text tapping. Remaining work: make arbitrary-goal
-  planners choose it from learned UTG context and extend the UTG beyond Settings
-  to generic apps.
+  page-id-shaped `AIPhone.goto("settings/...")` and `AIPhone.explore("settings/...")`
+  requests through the memory path before falling back to their original behavior.
+  Remaining work: make arbitrary-goal planners choose it from learned UTG context
+  and extend the UTG beyond Settings to generic apps.
 - **A2 Decision brain.** Initial slice: `AIPhone.explore()` now emits an
   auditable `observe -> decide -> act -> verify` decision trace for each step.
   `Phone.tap_xy` is also locked by smoke as an orchestrator-ledger action, so raw
@@ -169,9 +169,10 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
    under the existing triggers, not just annotate `semantic_scene_type`. Gate:
    `unknown_rate` ↓ and misclassification ↓ on a multi-app surface, task-level.
 3. **Navigation in the loop (A1).** Call `path_to_page` proactively; the first
-   automatic facade slice handles page-id-shaped `goto(...)` targets, while the
-   remaining work is planner-selected memory paths and UTG extension past Settings.
-   Gate: fewer recoveries / shorter routes on a multi-app task.
+   automatic facade slice handles page-id-shaped `goto(...)` / `explore(...)`
+   targets, while the remaining work is planner-selected memory paths and UTG
+   extension past Settings. Gate: fewer recoveries / shorter routes on a multi-app
+   task.
 4. **Decision loop evidence (A2).** Keep each exploratory step auditable as
    `observe -> decide -> act -> verify`, then use the task-level gate to decide
    which planner complexity is worth keeping.
@@ -212,9 +213,9 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
   generic edges, and verify arrival without falling back to Home.
 - `Phone.navigate_to_page()` and `AIPhone.navigate_to_page()` expose that
   proactive memory-path navigation on normal runtime/facade surfaces.
-- `AIPhone.goto()` treats page-id-shaped labels (`foo/bar`, no whitespace) as a
-  memory-path navigation request first, and falls back to the original text-tap
-  behavior when memory is unavailable or cannot reach the page.
+- `AIPhone.goto()` and `AIPhone.explore()` treat page-id-shaped labels (`foo/bar`,
+  no whitespace) as a memory-path navigation request first, and fall back to their
+  original behavior when memory is unavailable or cannot reach the page.
 - `AIPhone.explore()` now records `DecisionTraceStep` entries in the returned
   `ExplorationTrail` and trail JSON, covering the observation event, decision
   action/target/reason, action semantic status, and post-action verification.

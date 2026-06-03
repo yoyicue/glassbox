@@ -597,6 +597,36 @@ def test_ai_explore_and_save_path_as_are_text_first(tmp_path):
 
 
 @pytest.mark.smoke
+def test_ai_explore_page_id_prefers_memory_path_navigation(tmp_path):
+    phone = _ai_phone(
+        tmp_path,
+        [
+            _scene("设置", "通用", page_id="settings/root"),
+            _scene("设置", "通用", page_id="settings/general"),
+        ],
+    )
+    calls: list[str] = []
+
+    def fake_navigate(page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.5):
+        del scene_type, allowed_actions, min_success_rate
+        calls.append(page_id)
+        return SimpleNamespace(attempted=True, reached=True, reason="reached")
+
+    phone._phone.navigate_to_page = fake_navigate
+
+    trail = phone.explore("settings/general", max_steps=3)
+
+    assert trail.success is True
+    assert calls == ["settings/general"]
+    assert phone._phone.actions == []
+    assert trail.matched_path == ("navigate_to_page:settings/general", "page:settings/general")
+    assert trail.decision_trace[0].decision_action == "navigate_to_page"
+    assert trail.decision_trace[0].decision_reason == "page_id_memory_path"
+    assert trail.decision_trace[0].verification == "page_id"
+    assert trail.decision_trace[0].after_page_id == "settings/general"
+
+
+@pytest.mark.smoke
 def test_ai_explore_uses_policy_candidates_and_safety(tmp_path):
     class UnitPolicy:
         def classify(self, observation):

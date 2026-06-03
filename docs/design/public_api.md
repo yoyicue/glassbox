@@ -75,7 +75,8 @@ matched.
 
 `explore()` writes an auditable decision trace into `ExplorationTrail` and the
 trail JSON: observation event, decision action/target/reason, action semantic
-status, and post-action verification.
+status, and post-action verification. Page-id-shaped goals try learned
+memory-path navigation first.
 
 `launch_app()` performs a facade-level landing check when no explicit expectation
 is provided. It verifies Settings via page metadata, profile-backed apps via

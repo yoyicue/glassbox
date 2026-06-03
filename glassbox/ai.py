@@ -707,10 +707,35 @@ class AIPhone:
         decision_trace: list[DecisionTraceStep] = []
         needle = goal.strip()
         obs = self.observe()
-        success = self._goal_visible(needle, obs)
+        success = self._explore_goal_met(needle, obs)
         if success:
             matched_path.append(f"observe:{needle}")
-        for idx in range(max(0, int(max_steps))):
+        step_limit = max(0, int(max_steps))
+        if self._looks_like_page_id(needle) and not success and step_limit > 0:
+            before_obs = obs
+            outcome = self.navigate_to_page(needle)
+            obs = self.perceive()
+            success = self._explore_goal_met(needle, obs)
+            steps.append(f"1. navigate_to_page {needle}")
+            matched_path.append(f"navigate_to_page:{needle}")
+            decision_trace.append(
+                DecisionTraceStep(
+                    index=1,
+                    observation_event_seq=before_obs.event_seq,
+                    observed_page_id=before_obs.page_id,
+                    decision_action="navigate_to_page",
+                    decision_target=needle,
+                    decision_reason="page_id_memory_path",
+                    action_semantic_status=outcome.semantic_status,
+                    verified=success,
+                    verification="page_id" if success else "page_not_reached",
+                    after_event_seq=obs.event_seq,
+                    after_page_id=obs.page_id,
+                )
+            )
+            if success:
+                matched_path.append(f"page:{needle}")
+        for idx in range(len(steps), step_limit):
             if success:
                 break
             candidate = self._next_policy_candidate(obs, goal=needle)
@@ -731,7 +756,7 @@ class AIPhone:
                 steps.append(f"{idx + 1}. scroll down")
             before_obs = obs
             obs = self.observe()
-            success = self._goal_visible(needle, obs)
+            success = self._explore_goal_met(needle, obs)
             decision_trace.append(
                 DecisionTraceStep(
                     index=idx + 1,
@@ -1360,6 +1385,11 @@ class AIPhone:
 
     def _goal_visible(self, goal: str, obs: ObservationSummary) -> bool:
         return any(self._labels_match(text, goal) for text in obs.visible_texts)
+
+    def _explore_goal_met(self, goal: str, obs: ObservationSummary) -> bool:
+        if self._looks_like_page_id(goal):
+            return obs.page_id == goal
+        return self._goal_visible(goal, obs)
 
     def _text_visible(self, text: str, obs: ObservationSummary) -> bool:
         return any(self._labels_match(visible, text) for visible in obs.visible_texts)
