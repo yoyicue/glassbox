@@ -12,6 +12,7 @@ import re
 from collections.abc import Iterable
 
 from glassbox.cognition.base import Scene, UIElement
+from glassbox.cognition.contracts import SceneClassificationPrior
 from glassbox.cognition.text_match import texts_match
 from glassbox.ios._scene_common import (
     element_text,
@@ -42,6 +43,7 @@ def classify_ipados_scene(
     scene: Scene,
     *,
     viewport_size: tuple[int, int] | None = None,
+    prior: SceneClassificationPrior | None = None,
 ) -> IOSSceneClassification:
     w, h = _scene_size(scene, viewport_size)
     sidebar = _settings_sidebar_evidence(scene, viewport_size=(w, h))
@@ -77,7 +79,7 @@ def classify_ipados_scene(
                 safe_actions=("tap_search_result", "clear_search", "home"),
                 evidence=("ipad_settings_top_search", *settings_search),
             )
-        ios = _classify_ios_compat_fallback(scene, viewport_size=(w, h))
+        ios = _classify_ios_compat_fallback(scene, viewport_size=(w, h), prior=prior)
         if ios.kind == "settings_detail":
             return IOSSceneClassification(
                 kind="unknown",
@@ -114,9 +116,12 @@ def _classify_ios_compat_fallback(
     scene: Scene,
     *,
     viewport_size: tuple[int, int],
+    prior: SceneClassificationPrior | None = None,
 ) -> IOSSceneClassification:
     """Intentional fallback for non-split iPadOS surfaces that share iOS chrome."""
-    return classify_ios_scene(scene, viewport_size=viewport_size)
+    if prior is None:
+        return classify_ios_scene(scene, viewport_size=viewport_size)
+    return classify_ios_scene(scene, viewport_size=viewport_size, prior=prior)
 
 
 def _strong_settings_top_search(evidence: tuple[str, ...]) -> bool:

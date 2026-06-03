@@ -9,8 +9,10 @@ from glassbox.action import (
     prepare_navigation_measurement_origin,
 )
 from glassbox.cognition import Box, Scene, SceneClassification, SceneClassificationPrior, UIElement
+from glassbox.cognition.vlm_kimi import VLMResponse
 from glassbox.effector import ActionResult
 from glassbox.memory import UTG, ActionRecord, ScreenMemory
+from glassbox.perception.source import Frame
 from glassbox.phone import Phone
 
 
@@ -99,6 +101,95 @@ def test_scene_classifier_without_prior_parameter_remains_compatible():
 
     assert calls == [(30, 20)]
     assert scene.platform_scene_kind == "legacy_surface"
+
+
+@pytest.mark.smoke
+def test_uncertain_scene_classifier_triggers_vlm_arbitration_and_vlm_kind_wins():
+    class FakeKimi:
+        model = "fake"
+
+        def __init__(self):
+            self.calls = 0
+            self.last_hint = None
+
+        def describe_scene(self, *, frame_image, elements, scene_hint=None):
+            del frame_image, elements
+            self.calls += 1
+            self.last_hint = scene_hint
+            return VLMResponse(
+                raw_content="{}",
+                parsed={
+                    "scene_type": "app_store",
+                    "platform_scene_kind": "unknown",
+                    "elements": [{"id": 0, "intent_label": ""}],
+                },
+                usage={},
+                model="fake",
+                elapsed_ms=1,
+            )
+
+    def uncertain_classifier(scene: Scene, viewport_size: tuple[int, int] | None) -> SceneClassification:
+        del scene, viewport_size
+        return SceneClassification(
+            page_id="settings/Apps",
+            platform_scene_kind="settings_detail",
+            confidence=0.7,
+            source="platform",
+            safe_actions=("trace", "vlm_on_uncertain"),
+            evidence=("weak_settings_detail",),
+        )
+
+    img = np.zeros((20, 30, 3), dtype=np.uint8)
+    kimi = FakeKimi()
+    phone = Phone(
+        source=None,
+        ocr=None,
+        effector=None,
+        kimi=kimi,
+        scene_classifiers=[uncertain_classifier],
+    )
+    phone.action_context.last_frame = Frame(img=img, ts=0.0)
+    scene = _scene(_el("Apps"))
+
+    phone.apply_scene_classifiers(scene, img)
+
+    assert kimi.calls == 1
+    assert kimi.last_hint == "scene_arbitration:vlm_on_uncertain"
+    assert scene.semantic_scene_type == "app_store"
+    assert scene.platform_scene_kind == "unknown"
+    assert scene.page_id is None
+    assert scene.safe_actions == []
+    assert scene.classification_source == "vlm"
+
+
+@pytest.mark.smoke
+def test_existing_vlm_scene_arbitration_survives_classifier_rerun():
+    def stale_classifier(scene: Scene, viewport_size: tuple[int, int] | None) -> SceneClassification:
+        del scene, viewport_size
+        return SceneClassification(
+            page_id="settings/Apps",
+            platform_scene_kind="settings_detail",
+            confidence=0.7,
+            source="platform",
+            safe_actions=("back", "edge_back"),
+            evidence=("stale_settings_detail",),
+        )
+
+    phone = Phone(source=None, ocr=None, effector=None, scene_classifiers=[stale_classifier])
+    scene = _scene(_el("Apps"))
+    scene.vlm_status = "ok"
+    scene.semantic_scene_type = "app_store"
+    scene.platform_scene_kind = "unknown"
+    scene.classification_source = "vlm"
+    scene.classification_evidence = ["vlm_platform_scene_kind"]
+
+    phone.apply_scene_classifiers(scene, np.zeros((20, 30, 3), dtype=np.uint8))
+
+    assert scene.semantic_scene_type == "app_store"
+    assert scene.platform_scene_kind == "unknown"
+    assert scene.page_id is None
+    assert scene.safe_actions == []
+    assert scene.classification_source == "vlm"
 
 
 class _HomePhone:

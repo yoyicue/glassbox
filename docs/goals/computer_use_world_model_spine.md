@@ -1,11 +1,12 @@
 # Computer-Use Endgame: World-Model as Spine
 
-Status: **THESIS + ACTION ROADMAP, with an initial implementation slice —
-updated 2026-06-03.** Distilled from an architecture review
-(autonomous-driving analogy → glassbox). This branch implements offline-
-verifiable primitives for **0b**, **B1**, **B2**, **A1**, and **B3**. These are
-contracts / entrypoints / guards, not a claim that the task-level roadmap is
-complete. Every `file:line` anchor is a **snapshot as of `1d75ee9`** —
+Status: **THESIS + ACTION ROADMAP, with implementation slices — updated
+2026-06-03.** Distilled from an architecture review (autonomous-driving analogy
+→ glassbox). This branch implements offline-verifiable primitives for **0b**,
+**B1**, **B2**, **A1**, and **B3**, then wires **0b/A1/B1/B2** into default-
+compatible runtime or harness entrypoints. These are contracts / entrypoints /
+guards, not a claim that the task-level roadmap is complete. Every `file:line`
+anchor is a **snapshot as of `1d75ee9`** —
 regenerate with the command in [Anchors](#anchors-regenerate-before-trusting-line-numbers)
 before trusting a number.
 
@@ -40,7 +41,10 @@ already classified, so classification structurally could not use belief.
 - Classifiers historically received only `(scene, viewport_size)`
   (`perceptor.py:106-114`) — no memory handle. The initial implementation slice
   keeps old classifiers compatible while allowing prior-aware classifiers to
-  accept `prior=SceneClassificationPrior`.
+  accept `prior=SceneClassificationPrior`. The follow-up wiring slice passes
+  this prior through runtime platform/app classifier wrappers and lets the iOS
+  Settings-detail classifier abstain when a non-Settings prior conflicts with a
+  weak Settings read.
 - The UTG is opt-in and default-off (`enable_memory = False`, `config.py:657`),
   so most runs build no belief-state at all.
 
@@ -71,8 +75,10 @@ task-level compass on the *default* path. See `computer_use_honest_gate_first.md
   `semantic_scene_type` (`contracts.py:126-127` vs `:142-162`). The VLM can
   *think* but not *steer* scene identity. Initial slice: VLM output may now
   include `platform_scene_kind`; `unknown` explicitly clears stale `page_id` and
-  `safe_actions` so System-2 can safely veto a bad platform read. Endgame:
-  System-2 may arbitrate the authoritative kind under uncertainty.
+  `safe_actions` so System-2 can safely veto a bad platform read. The follow-up
+  wiring slice preserves VLM scene arbitration when classifiers rerun after
+  `describe()`, and `perceive()` escalates to the configured VLM only when the
+  current classifier result already marks the scene `vlm_on_uncertain`.
 - **B3 Live capability model.** `BackendCapabilities` is a static declaration
   (`effector.py:166-202`), not validated/updated from action outcomes at runtime.
   Initial slice: current-run `ActuationProfile.record_attempt()` feedback is
@@ -85,8 +91,10 @@ can prove them).**
   `recover_to_home_then_renavigate` after stuck-recovery (`recovery.py:71-77`;
   installed default-on at `runtime.py:631-637`). Initial slice:
   `navigate_via_memory_path()` promotes the same safe replay machinery into a
-  normal decision entrypoint without Home fallback. Remaining work: call it from
-  a real planner and extend the UTG beyond Settings to generic apps.
+  normal decision entrypoint without Home fallback. The follow-up wiring slice
+  exposes this through `Phone.navigate_to_page()` and the AI facade's
+  `AIPhone.navigate_to_page()`. Remaining work: make higher-level planners
+  choose it automatically and extend the UTG beyond Settings to generic apps.
 - **A2 Decision brain.** No owned/learned `observe→decide→act→verify` loop;
   decisions are hand-scripted in skills, and `tap_xy` (`phone.py:1714`) bypasses
   the orchestrator entirely. The realistic "policy" is VLM-as-System-2, **not** a
@@ -159,12 +167,16 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
    rates into live strategy selection and de-advertise a failed capability within
    a run; add the non-root signature-stability regression.
 
-## Initial Slice Implemented
+## Implementation Slices
 
 - `prepare_navigation_measurement_origin(phone)` returns a
   `NavigationMeasurementOrigin` and only sets `can_start_clock=True` when
   `phone.home()` reports `semantic_status == "succeeded"`. Unverified or failed
   Home resets are precondition failures, not navigation trajectory samples.
+- `skills.regression.canonical_primitives` now uses that Home precondition by
+  default for navigation-class primitive runs, records `navigation_origin` in the
+  run manifest and `navigation_origin.json`, and keeps
+  `--skip-navigation-origin` as an explicit opt-out.
 - `SceneClassificationPrior` is a cognition contract with recognized UTG node
   identity (`screen_id`, `page_id`, scene-kind fields) plus the pending
   successful last action (`last_action_op`, `last_action_target`,
@@ -172,16 +184,27 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
 - `Perceptor.apply_scene_classifiers()` computes that prior before projection and
   passes it to classifiers that declare `prior=`, while old
   `(scene, viewport_size)` classifiers stay compatible.
+- Runtime platform/app classifier wrappers now accept `prior=`, iOS/iPadOS
+  classifiers propagate it, and the iOS Settings-detail classifier can abstain to
+  `unknown + vlm_on_uncertain` when a weak detail read conflicts with a known
+  non-Settings prior.
 - VLM describe output may now carry `platform_scene_kind` and optional `page_id`.
   When System-2 returns `platform_scene_kind="unknown"`, stale page IDs and safe
   actions are cleared instead of leaving a dangerous platform-classifier residue.
+- `perceive()` now consumes `vlm_on_uncertain` when a VLM client is already
+  configured, runs one scene-arbitration describe on that frame, and preserves the
+  VLM's authoritative platform kind when platform/app classifiers rerun.
 - `navigate_via_memory_path(phone, target_page, ...)` is the proactive A1
   primitive: recognize current node, ask `path_to_page`, replay only allowed
   generic edges, and verify arrival without falling back to Home.
+- `Phone.navigate_to_page()` and `AIPhone.navigate_to_page()` expose that
+  proactive memory-path navigation on normal runtime/facade surfaces.
 - Current-run actuation feedback is covered as a live B3 de-advertise signal:
   once a method crosses the unactuatable gate, `should_skip_bucket()` flips
   immediately for the next decision in the same run.
-- Smoke coverage: `skills/smoke/test_world_model_spine.py`.
+- Smoke coverage: `skills/smoke/test_world_model_spine.py`,
+  `skills/smoke/test_ios_scene.py`, `skills/smoke/test_canonical_primitives.py`,
+  and `skills/smoke/test_ai_native_interface.py`.
 
 ## Non-goals / honest posture
 
@@ -191,6 +214,9 @@ The ordering *is* the point: each tier needs the previous one to be measurable.
   `computer_use_success_rate.md`); do not cite one rate as task success.
 - **Stage-count reduction is explicitly NOT a goal.** The spine + lossless
   interfaces are.
+- **No forced Home reset for every production workflow.** The verified Home
+  origin is defaulted for canonical navigation measurement, not for arbitrary
+  stateful tasks that need to preserve in-app context.
 
 ## Anchors (regenerate before trusting line numbers)
 

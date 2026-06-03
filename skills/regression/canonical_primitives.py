@@ -16,11 +16,14 @@ primitives drive real HID/HDMI hardware.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from glassbox.action import NavigationMeasurementOrigin, prepare_navigation_measurement_origin
 
 # A permissive terminal: success is then judged by the action's own semantic
 # verdict (captured in the run artifacts), not an absolute end-state. Used for
@@ -89,12 +92,20 @@ CANONICAL_PRIMITIVE_TASKS: tuple[PrimitiveTask, ...] = (
 )
 
 _TASKS_BY_NAME = {task.name: task for task in CANONICAL_PRIMITIVE_TASKS}
+NAVIGATION_ORIGIN_POLICY = "home_verified_precondition"
 
 
 def run_primitive(phone: Any, task: PrimitiveTask) -> Any:
     """Drive a single canonical primitive against an AIPhone. Returns the
     primitive's outcome (ActionOutcome / ObservationSummary)."""
     return task.run(phone)
+
+
+def prepare_canonical_task_origin(phone: Any) -> NavigationMeasurementOrigin:
+    """Prepare the fixed Home origin used by navigation-class primitive tasks."""
+    origin = prepare_navigation_measurement_origin(phone)
+    _record_navigation_origin(phone, origin)
+    return origin
 
 
 def run_canonical_suite(
@@ -123,8 +134,28 @@ def build_canonical_manifest(
             )
     return {
         "tasks": tasks,
-        "config": {"task_set": "canonical_primitives", "rounds": int(rounds)},
+        "config": {
+            "task_set": "canonical_primitives",
+            "rounds": int(rounds),
+            "navigation_origin_policy": NAVIGATION_ORIGIN_POLICY,
+        },
     }
+
+
+def _record_navigation_origin(phone: Any, origin: NavigationMeasurementOrigin) -> None:
+    payload = {
+        "policy": NAVIGATION_ORIGIN_POLICY,
+        **origin.to_dict(),
+    }
+    update_manifest = getattr(phone, "update_manifest", None)
+    if callable(update_manifest):
+        update_manifest({"navigation_origin": payload})
+    run_dir = getattr(phone, "run_dir", None)
+    if run_dir is None:
+        return
+    path = Path(run_dir) / "navigation_origin.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - rig only
@@ -139,12 +170,23 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - rig only
     parser = argparse.ArgumentParser(description="Run one canonical-primitive task on the rig")
     parser.add_argument("--task", required=True, choices=sorted(_TASKS_BY_NAME))
     parser.add_argument("--run-name", default=None)
+    parser.add_argument(
+        "--skip-navigation-origin",
+        action="store_true",
+        help="Opt out of the default verified-Home precondition for this primitive run.",
+    )
     args = parser.parse_args(argv)
 
     from glassbox.ai import open_phone
 
     task = _TASKS_BY_NAME[args.task]
     with open_phone(run_name=args.run_name or f"canonical-{task.name}") as phone:
+        if not args.skip_navigation_origin:
+            origin = prepare_canonical_task_origin(phone)
+            if not origin.can_start_clock:
+                artifacts = phone.save_report()
+                print(Path(getattr(artifacts, "run_dir", ".")))
+                return 1
         outcome = run_primitive(phone, task)
         artifacts = phone.save_report()
     print(Path(getattr(artifacts, "run_dir", ".")))

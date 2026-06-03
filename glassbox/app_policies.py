@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from importlib.metadata import entry_points
 from typing import Protocol
 
-from glassbox.cognition.contracts import SceneClassification
+from glassbox.cognition.contracts import SceneClassification, SceneClassificationPrior
 from glassbox.ios.scene import classify_ios_scene
 
 
@@ -22,6 +22,7 @@ class AppSceneClassifier(Protocol):
         scene,
         *,
         viewport_size: tuple[int, int] | None = None,
+        prior: SceneClassificationPrior | None = None,
     ) -> SceneClassification | None: ...
 
 
@@ -40,9 +41,10 @@ class IOSSettingsSceneClassifier:
         scene,
         *,
         viewport_size: tuple[int, int] | None = None,
+        prior: SceneClassificationPrior | None = None,
     ) -> SceneClassification | None:
         return replace(
-            classify_ios_scene(scene, viewport_size=viewport_size).to_scene_classification(),
+            classify_ios_scene(scene, viewport_size=viewport_size, prior=prior).to_scene_classification(),
             source="app",
         )
 
@@ -53,11 +55,12 @@ class IPadOSSettingsSceneClassifier:
         scene,
         *,
         viewport_size: tuple[int, int] | None = None,
+        prior: SceneClassificationPrior | None = None,
     ) -> SceneClassification | None:
         from glassbox.ipados.scene import classify_ipados_scene
 
         return replace(
-            classify_ipados_scene(scene, viewport_size=viewport_size).to_scene_classification(),
+            classify_ipados_scene(scene, viewport_size=viewport_size, prior=prior).to_scene_classification(),
             source="app",
         )
 

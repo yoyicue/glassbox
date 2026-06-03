@@ -155,8 +155,81 @@ class Perceptor:
                 )
                 if result is not None:
                     classifications.append(result)
+            if classifications:
+                vlm_classification = self.vlm_classification_from_scene(scene)
+                if vlm_classification is not None:
+                    classifications.append(vlm_classification)
             DEFAULT_SCENE_CLASSIFICATION_PROJECTOR.project(scene, classifications)
+        self.maybe_arbitrate_uncertain_scene_with_vlm(scene, frame_img, viewport_size=viewport_size)
         self.apply_scene_annotations(scene, viewport_size=viewport_size)
+
+    @staticmethod
+    def vlm_classification_from_scene(scene: Scene) -> SceneClassification | None:
+        if getattr(scene, "vlm_status", None) != "ok":
+            return None
+        semantic_scene_type = getattr(scene, "semantic_scene_type", None)
+        evidence = tuple(getattr(scene, "classification_evidence", ()) or ())
+        platform_scene_kind = None
+        if "vlm_platform_scene_kind" in evidence:
+            platform_scene_kind = getattr(scene, "platform_scene_kind", None)
+        if not semantic_scene_type and not platform_scene_kind:
+            return None
+        return SceneClassification(
+            page_id=getattr(scene, "page_id", None) if platform_scene_kind else None,
+            semantic_scene_type=semantic_scene_type,
+            platform_scene_kind=platform_scene_kind,
+            confidence=1.0,
+            source="vlm",
+            evidence=evidence,
+            clear_page_id=platform_scene_kind == "unknown",
+            clear_safe_actions=platform_scene_kind == "unknown",
+        )
+
+    def maybe_arbitrate_uncertain_scene_with_vlm(
+        self,
+        scene: Scene,
+        frame_img: np.ndarray | None,
+        *,
+        viewport_size: tuple[int, int] | None,
+    ) -> None:
+        host = self._phone
+        if "vlm_on_uncertain" not in set(getattr(scene, "safe_actions", ()) or ()):
+            return
+        if getattr(host, "kimi", None) is None:
+            return
+        if getattr(scene, "vlm_status", None) is not None:
+            return
+        frame = getattr(host, "last_frame", None)
+        if frame is None:
+            return
+        try:
+            from glassbox.cognition.vlm_kimi import enrich_scene
+        except Exception:
+            return
+        if hasattr(host.kimi, "last_hit"):
+            host.kimi.last_hit = False
+        t0 = time.monotonic()
+        enrich_scene(
+            scene,
+            frame,
+            host.kimi,
+            scene_hint="scene_arbitration:vlm_on_uncertain",
+            set_of_mark=bool(getattr(host, "vlm_set_of_mark_enabled", False)),
+        )
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        if getattr(scene, "vlm_status", None) == "ok":
+            self.apply_profile(scene, frame_img)
+        if host.recorder is not None:
+            host.recorder.kimi_call(
+                model=scene.vlm_model or getattr(host.kimi, "model", "?"),
+                hit=bool(getattr(host.kimi, "last_hit", False)),
+                elapsed_ms=elapsed_ms,
+                usage=dict(scene.vlm_usage),
+                scene_hint=scene.vlm_scene_hint,
+                status=scene.vlm_status or "unknown",
+                error=scene.vlm_error,
+                parse_ok=scene.vlm_status == "ok",
+            )
 
     @staticmethod
     def call_scene_classifier(
@@ -225,6 +298,7 @@ class Perceptor:
         self,
         scene: Scene,
         viewport_size: tuple[int, int] | None,
+        prior: SceneClassificationPrior | None = None,
     ) -> SceneClassification | None:
         host = self._phone
         classifier = host.platform_scene_classifier
@@ -233,6 +307,8 @@ class Perceptor:
         kwargs: dict[str, Any] = {"viewport_size": viewport_size}
         if host.strict_settings_detail_enabled:
             kwargs["strict_settings_detail"] = True
+        if prior is not None:
+            kwargs["prior"] = prior
         return classifier.classify(scene, **kwargs)
 
     def apply_profile(self, scene: Scene, frame_img=None) -> None:

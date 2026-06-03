@@ -14,6 +14,7 @@ from glassbox.cognition.base import Scene, UIElement
 from glassbox.cognition.contracts import (
     DEFAULT_SCENE_CLASSIFICATION_PROJECTOR,
     SceneClassification,
+    SceneClassificationPrior,
 )
 from glassbox.cognition.text_match import (
     confusion_compact,
@@ -158,6 +159,7 @@ def classify_ios_scene(
     *,
     viewport_size: tuple[int, int] | None = None,
     strict_settings_detail: bool = False,
+    prior: SceneClassificationPrior | None = None,
 ) -> IOSSceneClassification:
     """Classify common iOS surfaces from OCR output.
 
@@ -252,6 +254,12 @@ def classify_ios_scene(
         scene, viewport_size=(w, h), strict=strict_settings_detail
     )
     if semantic_detail is not None:
+        if _settings_detail_resisted_by_prior(prior):
+            return _settings_detail_prior_abstain(
+                title=semantic_detail.title or title,
+                prior=prior,
+                evidence=semantic_detail.evidence,
+            )
         return IOSSceneClassification(
             kind="settings_detail",
             confidence=semantic_detail.confidence,
@@ -310,6 +318,12 @@ def classify_ios_scene(
                 safe_actions=("trace", "vlm_on_uncertain"),
                 evidence=("settings_detail_abstain", "missing_settings_anchor"),
             )
+        if _settings_detail_resisted_by_prior(prior):
+            return _settings_detail_prior_abstain(
+                title=title,
+                prior=prior,
+                evidence=("center_title_or_back", "detail_rows"),
+            )
         return IOSSceneClassification(
             kind="settings_detail",
             confidence=0.78,
@@ -333,6 +347,7 @@ def apply_ios_classification(
     *,
     viewport_size: tuple[int, int] | None = None,
     overwrite_scene_type: bool = False,
+    prior: SceneClassificationPrior | None = None,
 ) -> IOSSceneClassification:
     """Project the iOS classifier result onto a Scene.
 
@@ -341,7 +356,7 @@ def apply_ios_classification(
     before handing the Scene to ScreenMemory. Existing Layer 3/profile
     `scene_type` is preserved unless `overwrite_scene_type=True`.
     """
-    classified = classify_ios_scene(scene, viewport_size=viewport_size)
+    classified = classify_ios_scene(scene, viewport_size=viewport_size, prior=prior)
     DEFAULT_SCENE_CLASSIFICATION_PROJECTOR.project(
         scene,
         [classified.to_scene_classification()],
@@ -349,6 +364,41 @@ def apply_ios_classification(
     )
     scene.classification_source = "ios"
     return classified
+
+
+def _settings_detail_resisted_by_prior(prior: SceneClassificationPrior | None) -> bool:
+    """Return True when a weak Settings-detail read conflicts with a known app prior."""
+    if prior is None:
+        return False
+    prior_page = str(prior.page_id or "").strip().lower()
+    prior_kind = str(prior.platform_scene_kind or prior.semantic_scene_type or prior.scene_type or "").strip().lower()
+    if prior_page.startswith("settings/") or prior_kind.startswith("settings"):
+        return False
+    action = str(prior.last_action_op or "").strip().lower()
+    target = str(prior.last_action_target or "").casefold()
+    if action in {"open_app", "launch_app"} and target in {"settings", "设置"}:
+        return False
+    if prior_kind in {"app_store", "appstore", "app_store_search"}:
+        return True
+    if prior_page.startswith(("app_store", "appstore")):
+        return True
+    return bool(prior_page) and not prior_page.startswith(("springboard", "home", "app_library"))
+
+
+def _settings_detail_prior_abstain(
+    *,
+    title: str | None,
+    prior: SceneClassificationPrior | None,
+    evidence: tuple[str, ...],
+) -> IOSSceneClassification:
+    prior_kind = str(getattr(prior, "platform_scene_kind", None) or getattr(prior, "page_id", None) or "unknown")
+    return IOSSceneClassification(
+        kind="unknown",
+        confidence=0.26,
+        title=title,
+        safe_actions=("trace", "vlm_on_uncertain"),
+        evidence=("settings_detail_prior_abstain", f"prior:{prior_kind}", *evidence[:3]),
+    )
 
 
 def _scene_size(scene: Scene, viewport_size: tuple[int, int] | None) -> tuple[int, int]:

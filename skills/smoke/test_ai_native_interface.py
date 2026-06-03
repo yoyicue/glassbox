@@ -376,6 +376,50 @@ def test_ai_scroll_routes_through_semantic_plan_when_flagged(tmp_path):
 
 
 @pytest.mark.smoke
+def test_ai_navigate_to_page_uses_memory_path_entrypoint(tmp_path):
+    phone = _ai_phone(tmp_path, [_scene("设置", "通用", page_id="settings/general")])
+    calls: list[dict[str, object]] = []
+
+    def fake_navigate(page_id, *, scene_type=None, allowed_actions=None, min_success_rate=0.5):
+        calls.append(
+            {
+                "page_id": page_id,
+                "scene_type": scene_type,
+                "allowed_actions": set(allowed_actions or ()),
+                "min_success_rate": min_success_rate,
+            }
+        )
+        return type(
+            "Result",
+            (),
+            {
+                "attempted": True,
+                "reached": True,
+                "reason": "reached",
+            },
+        )()
+
+    phone._phone.navigate_to_page = fake_navigate
+
+    outcome = phone.navigate_to_page(
+        "settings/general",
+        allowed_actions={"back"},
+        min_success_rate=0.8,
+    )
+
+    assert outcome.semantic_status == "succeeded"
+    assert outcome.semantic_verifier == "memory_path_navigation"
+    assert calls == [
+        {
+            "page_id": "settings/general",
+            "scene_type": None,
+            "allowed_actions": {"back"},
+            "min_success_rate": 0.8,
+        }
+    ]
+
+
+@pytest.mark.smoke
 def test_ai_scroll_flag_off_with_wheel_support_stays_on_swipe(tmp_path):
     """CUQ-3.15 default-safety (audit fix): the byte-identical default branch —
     flag OFF/absent while the backend DOES support the wheel must still swipe.

@@ -4,11 +4,15 @@ The suite only *executes* on a rig (main → open_phone), but the task
 definitions, sequencing, and manifest assembly are pure and unit-tested here."""
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from skills.regression.canonical_primitives import (
     CANONICAL_PRIMITIVE_TASKS,
+    NAVIGATION_ORIGIN_POLICY,
     build_canonical_manifest,
+    prepare_canonical_task_origin,
     run_canonical_suite,
     run_primitive,
 )
@@ -38,6 +42,28 @@ class _MockAIPhone:
         return type("O", (), {"ok": True})()
 
 
+class _OriginAIPhone(_MockAIPhone):
+    def __init__(self, run_dir):
+        super().__init__()
+        self.run_dir = run_dir
+        self.manifest_updates: list[dict] = []
+
+    def home(self):
+        self.calls.append(("home",))
+        return type(
+            "O",
+            (),
+            {
+                "ok": True,
+                "semantic_status": "succeeded",
+                "semantic_verifier": "ios_home_screen_visible",
+            },
+        )()
+
+    def update_manifest(self, payload):
+        self.manifest_updates.append(dict(payload))
+
+
 @pytest.mark.smoke
 def test_canonical_suite_drives_each_primitive_in_order():
     phone = _MockAIPhone()
@@ -55,6 +81,34 @@ def test_canonical_suite_drives_each_primitive_in_order():
         ("back",),
         ("scroll", "down", 10),
     ]
+
+
+@pytest.mark.smoke
+def test_canonical_task_origin_resets_and_records_verified_home_precondition(tmp_path):
+    phone = _OriginAIPhone(tmp_path / "run")
+
+    origin = prepare_canonical_task_origin(phone)
+
+    assert origin.can_start_clock is True
+    assert phone.calls == [("home",)]
+    assert phone.manifest_updates == [
+        {
+            "navigation_origin": {
+                "policy": NAVIGATION_ORIGIN_POLICY,
+                "attempted": True,
+                "home_reached": True,
+                "can_start_clock": True,
+                "reason": "verified_home_reached",
+                "action_ok": True,
+                "semantic_status": "succeeded",
+                "semantic_verifier": "ios_home_screen_visible",
+                "error": None,
+            }
+        }
+    ]
+    recorded = json.loads((phone.run_dir / "navigation_origin.json").read_text(encoding="utf-8"))
+    assert recorded["policy"] == NAVIGATION_ORIGIN_POLICY
+    assert recorded["can_start_clock"] is True
 
 
 @pytest.mark.smoke
@@ -97,7 +151,11 @@ def test_build_canonical_manifest_shapes_tasks_for_aggregator(tmp_path):
     }
     manifest = build_canonical_manifest(run_dirs, rounds=2)
 
-    assert manifest["config"] == {"task_set": "canonical_primitives", "rounds": 2}
+    assert manifest["config"] == {
+        "task_set": "canonical_primitives",
+        "rounds": 2,
+        "navigation_origin_policy": NAVIGATION_ORIGIN_POLICY,
+    }
     tasks = manifest["tasks"]
     # 2 go_home rounds + 1 launch_app round; back/scroll absent (no run dirs).
     assert [t["task"] for t in tasks] == ["go_home", "go_home", "launch_app"]

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import TracebackType
@@ -490,6 +490,57 @@ class AIPhone:
                 return self._action_outcome("home", None, close_app())
         return self._action_outcome("home", None, self._phone.home())
 
+    def navigate_to_page(
+        self,
+        page_id: str,
+        *,
+        scene_type: str | None = None,
+        allowed_actions: set[str] | None = None,
+        min_success_rate: float = 0.5,
+    ) -> ActionOutcome:
+        navigator = getattr(self._phone, "navigate_to_page", None)
+        if callable(navigator):
+            result = navigator(
+                page_id,
+                scene_type=scene_type,
+                allowed_actions=allowed_actions,
+                min_success_rate=min_success_rate,
+            )
+        else:
+            from glassbox.action import navigate_via_memory_path
+
+            result = navigate_via_memory_path(
+                self._phone,
+                page_id,
+                scene_type=scene_type,
+                allowed_actions=allowed_actions,
+                min_success_rate=min_success_rate,
+            )
+        obs = self.observe()
+        if getattr(result, "reached", False):
+            semantic_status = "succeeded"
+            confidence = 1.0
+        elif not getattr(result, "attempted", False) and getattr(result, "reason", "") == "memory_unavailable":
+            semantic_status = "unsupported"
+            confidence = 0.0
+        else:
+            semantic_status = "unknown"
+            confidence = 0.0
+        outcome = ActionOutcome(
+            ok=bool(getattr(result, "reached", False)),
+            semantic_status=semantic_status,
+            action="navigate_to_page",
+            target=page_id,
+            reason=getattr(result, "reason", None),
+            artifact_path=obs.scene_path,
+            transport_ok=None,
+            unsupported=semantic_status == "unsupported",
+            semantic_verifier="memory_path_navigation",
+            semantic_confidence=confidence,
+        )
+        self._last_action = outcome
+        return outcome
+
     def close_app(self) -> ActionOutcome:
         close_app = getattr(self._phone, "close_foreground_app", None)
         if not callable(close_app):
@@ -710,6 +761,23 @@ class AIPhone:
     def save_report(self) -> RunArtifacts:
         self._write_report()
         return self._run_artifacts()
+
+    def update_manifest(self, payload: Mapping[str, Any]) -> None:
+        data = dict(payload)
+        if self._store is not None:
+            self._store.update_manifest(data)
+            return
+        path = self._manifest_path()
+        current: dict[str, Any] = {}
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                loaded = {}
+            if isinstance(loaded, dict):
+                current = loaded
+        current.update(data)
+        path.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     def _open_app(self, app: str) -> None:
         if hasattr(self._phone, "open_app"):
