@@ -31,6 +31,7 @@ class SettingsRunConfig:
     artifact_dir: str | None = None
     memory_dir: str | None = None
     memory_reuse: bool = False
+    page_id_route_enabled: bool = False
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> SettingsRunConfig:
@@ -67,6 +68,15 @@ class SettingsRunConfig:
             artifact_dir=env.get("IOS_SETTINGS_ARTIFACT_DIR"),
             memory_dir=env.get("IOS_SETTINGS_MEMORY_DIR") or env.get("GLASSBOX_MEMORY_DIR"),
             memory_reuse=env.get("IOS_SETTINGS_MEMORY_REUSE") == "1",
+            page_id_route_enabled=_env_bool(
+                env,
+                "IOS_SETTINGS_PAGE_ID_ROUTE",
+                default=_env_bool(
+                    env,
+                    "GLASSBOX_SETTINGS_NAVIGATION_PAGE_ID_ROUTE",
+                    default=False,
+                ),
+            ),
         )
 
     @classmethod
@@ -112,6 +122,7 @@ class SettingsRunConfig:
             "artifact_dir": self.artifact_dir,
             "memory_dir": self.memory_dir,
             "memory_reuse": self.memory_reuse,
+            "page_id_route_enabled": self.page_id_route_enabled,
         }
 
     def to_walkthrough_globals(self) -> dict[str, object]:
@@ -126,6 +137,7 @@ class SettingsRunConfig:
             "STRICT_CHILD_CANDIDATE_AUDIT": self.strict_child_candidate_audit,
             "MAX_CANDIDATES_PER_PAGE": self.max_candidates_per_page,
             "REQUIRE_EXHAUSTIVE": self.require_exhaustive,
+            "PAGE_ID_ROUTE_ENABLED": self.page_id_route_enabled,
         }
 
     def to_walkthrough_runtime_globals(self) -> dict[str, object]:
@@ -138,6 +150,7 @@ class SettingsRunConfig:
             "ARTIFACT_DIR": self.artifact_dir,
             "MEMORY_DIR": self.memory_dir,
             "MEMORY_REUSE": self.memory_reuse,
+            "PAGE_ID_ROUTE_ENABLED": self.page_id_route_enabled,
         })
         return values
 
@@ -183,6 +196,10 @@ def build_full_run_env(
     env.setdefault("IOS_SETTINGS_MAX_CANDIDATES_PER_PAGE", "0")
     env.setdefault("IOS_SETTINGS_MIN_PAGES", str(len(EXPECTED_ROOT_NAV_TEXT_ZH) + 1))
     env.setdefault("IOS_SETTINGS_TRACE_ACTIONS", "1")
+    env.setdefault(
+        "IOS_SETTINGS_PAGE_ID_ROUTE",
+        env.get("GLASSBOX_SETTINGS_NAVIGATION_PAGE_ID_ROUTE", "0"),
+    )
     # Enable the VLM (Layer 3) for live cold-start runs. build_phone already
     # creates the SpringBoard icon-map + wires phone.kimi; the only thing gating
     # the springboard's VLM visual icon-grounding fallback (and the row-OCR

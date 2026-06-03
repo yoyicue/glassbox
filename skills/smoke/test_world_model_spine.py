@@ -218,8 +218,9 @@ class _HomePhone:
 
 
 class _Edge:
-    def __init__(self, action_op: str):
+    def __init__(self, action_op: str, *, action: ActionRecord | None = None):
         self.action_op = action_op
+        self.action = action
 
 
 class _MemoryNavPhone:
@@ -230,6 +231,7 @@ class _MemoryNavPhone:
         self.replayed = 0
         self.back_calls = 0
         self.home_calls = 0
+        self.tap_calls: list[tuple[int, int, str | None]] = []
         self.path_queries: list[dict] = []
 
     def perceive(self, *, fresh=None):
@@ -263,6 +265,11 @@ class _MemoryNavPhone:
 
     def home(self):
         self.home_calls += 1
+        self.replayed += 1
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+    def tap_xy(self, x: int, y: int, *, coordinate_space: str | None = None):
+        self.tap_calls.append((x, y, coordinate_space))
         self.replayed += 1
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
@@ -307,6 +314,37 @@ def test_navigate_via_memory_path_replays_learned_path_without_home_fallback():
             "min_success_rate": 0.75,
         }
     ]
+
+
+@pytest.mark.smoke
+def test_navigate_via_memory_path_replays_learned_tap_edges():
+    tap = ActionRecord.from_op(
+        "tap",
+        {
+            "x": 733,
+            "y": 469,
+            "coordinate_space": "frame_px",
+            "target": "General",
+            "via": "settings.tap_row",
+            "action_ok": True,
+        },
+    )
+    phone = _MemoryNavPhone(path=[_Edge("tap", action=tap)], arrive_page="settings/General")
+
+    result = navigate_via_memory_path(
+        phone,
+        "settings/General",
+        allowed_actions={"tap"},
+        min_success_rate=0.5,
+    )
+
+    assert result.reached is True
+    assert result.reason == "reached"
+    assert result.replayed_ops == ("tap",)
+    assert phone.tap_calls == [(733, 469, "frame_px")]
+    assert phone.back_calls == 0
+    assert phone.home_calls == 0
+    assert phone.path_queries[0]["allowed_actions"] == {"tap"}
 
 
 @pytest.mark.smoke

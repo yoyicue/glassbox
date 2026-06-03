@@ -1256,6 +1256,26 @@ class SettingsPolicy:
             pass
         return ROOT_SEARCH_QUERIES.get(query_label)
 
+    def page_id_route_label_candidates(self, label: str) -> tuple[str, ...]:
+        """Return Settings page-id label aliases worth trying for learned UTG routes."""
+        visible = str(label or "").strip()
+        candidates: list[str] = []
+
+        def add(candidate: str | None) -> None:
+            text = str(candidate or "").strip()
+            if text and text not in candidates:
+                candidates.append(text)
+
+        add(visible)
+        canonical = self.canonical_expected_root_label(visible)
+        add(canonical)
+        if canonical is not None:
+            add(ROOT_SEARCH_QUERIES_EN.get(canonical))
+            add(ROOT_SEARCH_QUERIES_GREATER_CHINA_EN.get(canonical))
+        if compact_text(visible) == compact_text("Home Screen &"):
+            add("Home Screen & App Library")
+        return tuple(candidates)
+
     def visible_root_row_label(self, element: UIElement) -> str | None:
         return visible_settings_root_row_label(
             element,

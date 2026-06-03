@@ -83,6 +83,17 @@ class MemoryPathNavigationResult:
             "replayed_ops": list(self.replayed_ops),
         }
 
+    def to_event_fields(self) -> dict[str, Any]:
+        return {
+            "memory_path_attempted": self.attempted,
+            "memory_path_reached": self.reached,
+            "memory_path_reason": self.reason,
+            "memory_path_target_page": self.target_page,
+            "memory_path_from_id": self.from_id,
+            "memory_path_edge_count": self.edge_count,
+            "memory_path_replayed_ops": list(self.replayed_ops),
+        }
+
 
 def prepare_navigation_measurement_origin(phone: object) -> NavigationMeasurementOrigin:
     """Reset to Home and verify it before a navigation metric starts.
@@ -295,12 +306,64 @@ def _current_frame_img(phone: object) -> Any | None:
     return getattr(frame, "img", None) if frame is not None else None
 
 
+def _replay_result_ok(result: Any) -> bool:
+    # Lenient per-edge: a transport-failed step aborts, but a verified-unknown
+    # step may still have navigated — the final arrival check is the real gate.
+    if getattr(result, "ok", True) is False:
+        return False
+    return getattr(result, "semantic_status", None) not in {"failed", "blocked", "exception"}
+
+
+def _edge_action_kwargs(edge: Any) -> dict[str, Any]:
+    raw = getattr(edge, "action_kwargs", None)
+    return raw if isinstance(raw, dict) else {}
+
+
+def _replay_tap_edge(phone: object, edge: Any) -> bool:
+    action = getattr(edge, "action", None)
+    kwargs = _edge_action_kwargs(edge)
+    x = getattr(action, "x", None) if action is not None else None
+    y = getattr(action, "y", None) if action is not None else None
+    if x is None:
+        x = kwargs.get("x")
+    if y is None:
+        y = kwargs.get("y")
+    if x is not None and y is not None:
+        fn = getattr(phone, "tap_xy", None)
+        if not callable(fn):
+            return False
+        coordinate_space = (
+            getattr(action, "coordinate_space", None) if action is not None else None
+        ) or kwargs.get("coordinate_space")
+        try:
+            if coordinate_space is None:
+                result = fn(int(x), int(y))
+            else:
+                result = fn(int(x), int(y), coordinate_space=coordinate_space)
+        except Exception:
+            return False
+        return _replay_result_ok(result)
+    target = (getattr(action, "target", None) if action is not None else None) or kwargs.get("target")
+    if not target:
+        return False
+    fn = getattr(phone, "tap_text", None)
+    if not callable(fn):
+        return False
+    try:
+        result = fn(str(target))
+    except Exception:
+        return False
+    return _replay_result_ok(result)
+
+
 # CUQ-0.5: navigation ops the generic memory-path recovery can replay on ANY
 # backend — each maps a learned edge to a backend-agnostic Phone primitive. An
 # edge whose op is outside this set fails the replay cleanly (the caller then
 # falls back to the home-anchor hook), so the replay never improvises an action.
 def _replay_edge(phone: object, edge: Any) -> bool:
     op = str(getattr(edge, "action_op", "") or "")
+    if op in {"tap", "tap_xy", "target_tap"}:
+        return _replay_tap_edge(phone, edge)
     if op == "home":
         fn = getattr(phone, "home", None)
     elif op in {"back", "back_gesture"}:
@@ -317,11 +380,7 @@ def _replay_edge(phone: object, edge: Any) -> bool:
         result = fn()
     except Exception:
         return False
-    # Lenient per-edge: a transport-failed step aborts, but a verified-unknown
-    # step may still have navigated — the final arrival check is the real gate.
-    if getattr(result, "ok", True) is False:
-        return False
-    return getattr(result, "semantic_status", None) not in {"failed", "blocked", "exception"}
+    return _replay_result_ok(result)
 
 
 def _delegate_fallback(

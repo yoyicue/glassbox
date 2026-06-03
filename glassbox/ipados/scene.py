@@ -13,7 +13,7 @@ from collections.abc import Iterable
 
 from glassbox.cognition.base import Scene, UIElement
 from glassbox.cognition.contracts import SceneClassificationPrior
-from glassbox.cognition.text_match import texts_match
+from glassbox.cognition.text_match import compact_text, match_known_label, texts_match
 from glassbox.ios._scene_common import (
     element_text,
     marker_hits,
@@ -28,6 +28,7 @@ from glassbox.ios.scene import (
     SETTINGS_SEARCH_LABELS,
     SETTINGS_TITLE_LABELS,
     IOSSceneClassification,
+    _app_store_chrome_evidence,
     classify_ios_scene,
 )
 
@@ -37,6 +38,13 @@ _IPAD_SETTINGS_SIDEBAR_MARKERS = (
     "WLAN", "Mobile Service", "Apple Pencil", "Camera",
     "Control Centre", "Control Center",
 )
+_IPAD_SETTINGS_DETAIL_TITLE_LABELS = tuple(dict.fromkeys((
+    *_IPAD_SETTINGS_SIDEBAR_MARKERS,
+    "Apps", "App Library", "Display & Brightness", "Home Screen &",
+    "Home Screen & App Library", "iCloud", "Multitasking & Gestures",
+    "Notifications", "Privacy & Security", "Sounds", "Touch ID & Passcode",
+    "Wallpaper",
+)))
 
 
 def classify_ipados_scene(
@@ -63,6 +71,14 @@ def classify_ipados_scene(
                 confidence=0.82,
                 safe_actions=("tap_search_result", "home"),
                 evidence=("ipad_system_search_overlay",),
+            )
+        appstore_evidence = _app_store_chrome_evidence(scene, viewport_size=(w, h))
+        if appstore_evidence is not None:
+            return IOSSceneClassification(
+                kind="unknown",
+                confidence=0.34,
+                safe_actions=("trace", "vlm_on_uncertain", "home"),
+                evidence=appstore_evidence,
             )
         if _looks_like_ipad_home_widgets(scene, viewport_size=(w, h)):
             return IOSSceneClassification(
@@ -326,7 +342,7 @@ def _detail_pane_title(
     if not candidates:
         repeated = _repeated_detail_title_candidate(repeatable)
         if repeated is not None:
-            return repeated
+            return _canonical_settings_detail_title(repeated)
         return None
     detail_center = left + (w - left) / 2
     candidates.sort(key=lambda el: (
@@ -335,7 +351,29 @@ def _detail_pane_title(
         el.box.center[1],
         -el.box.w,
     ))
-    return _text(candidates[0])
+    return _canonical_settings_detail_title(_text(candidates[0]))
+
+
+def _canonical_settings_detail_title(title: str | None) -> str | None:
+    text = str(title or "").strip()
+    if not text:
+        return None
+    known = match_known_label(
+        text,
+        _IPAD_SETTINGS_DETAIL_TITLE_LABELS,
+        min_score=0.88,
+        margin=0.12,
+        max_leading_noise=0,
+    )
+    if known is None or _looks_like_ascii_title_prefix_truncation(text, known):
+        return text
+    return known
+
+
+def _looks_like_ascii_title_prefix_truncation(text: str, label: str) -> bool:
+    norm = compact_text(text).casefold()
+    label_norm = compact_text(label).casefold()
+    return norm != label_norm and label_norm.startswith(norm) and len(norm) < len(label_norm)
 
 
 def _top_detail_back_y(scene: Scene, *, viewport_size: tuple[int, int]) -> int | None:
@@ -390,7 +428,12 @@ def _semantic_detail_pane_title(
     viewport_size: tuple[int, int],
 ) -> str | None:
     if _looks_like_ipad_screen_time_detail(scene, viewport_size=viewport_size):
-        return _sidebar_label_for(scene, ("Screen Time", "屏幕使用时间", "屏幕时间"), viewport_size=viewport_size) or "Screen Time"
+        sidebar = _sidebar_label_for(
+            scene,
+            ("Screen Time", "屏幕使用时间", "屏幕时间"),
+            viewport_size=viewport_size,
+        )
+        return _canonical_settings_detail_title(sidebar) or "Screen Time"
     return None
 
 

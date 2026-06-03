@@ -1618,6 +1618,10 @@ def test_settings_policy_uses_english_root_search_queries_for_english_locale(mon
         assert policy.canonical_expected_root_label("Sounds") == "声音与触感"
         assert policy.canonical_expected_root_label("All Devices") == "屏幕使用时间"
         assert policy.canonical_expected_root_label("Touch ID & Passcode") == "Face ID与密码"
+        assert "WLAN" in policy.page_id_route_label_candidates("无线局域网")
+        assert "Notifications" in policy.page_id_route_label_candidates("通知")
+        assert "Touch ID & Passcode" in policy.page_id_route_label_candidates("Face ID与密码")
+        assert "Home Screen & App Library" in policy.page_id_route_label_candidates("Home Screen &")
     finally:
         get_config.cache_clear()
 

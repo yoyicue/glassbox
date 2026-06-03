@@ -35,6 +35,7 @@ def test_settings_run_config_report_dict_matches_walkthrough_contract():
         "IOS_SETTINGS_TRACE_ACTIONS": "1",
         "IOS_SETTINGS_MEMORY_DIR": "/tmp/memory",
         "IOS_SETTINGS_MEMORY_REUSE": "1",
+        "IOS_SETTINGS_PAGE_ID_ROUTE": "1",
     })
 
     assert config.run_id == "run-1"
@@ -55,6 +56,7 @@ def test_settings_run_config_report_dict_matches_walkthrough_contract():
         "artifact_dir": None,
         "memory_dir": "/tmp/memory",
         "memory_reuse": True,
+        "page_id_route_enabled": True,
     }
     assert config.to_walkthrough_runtime_globals() == {
         "MIN_PAGES_VISITED": 17,
@@ -67,6 +69,7 @@ def test_settings_run_config_report_dict_matches_walkthrough_contract():
         "STRICT_CHILD_CANDIDATE_AUDIT": False,
         "MAX_CANDIDATES_PER_PAGE": 3,
         "REQUIRE_EXHAUSTIVE": True,
+        "PAGE_ID_ROUTE_ENABLED": True,
         "REPORT_PATH": "/tmp/settings.json",
         "RUN_ID": "run-1",
         "TRACE_ACTIONS": True,
@@ -94,6 +97,7 @@ def test_full_run_env_uses_settings_run_contract_defaults(tmp_path):
     assert env["IOS_SETTINGS_CHILD_NAVIGATION_ENABLED"] == "0"
     assert env["IOS_SETTINGS_MAX_CANDIDATES_PER_PAGE"] == "0"
     assert env["IOS_SETTINGS_TRACE_ACTIONS"] == "1"
+    assert env["IOS_SETTINGS_PAGE_ID_ROUTE"] == "0"
     assert env["GLASSBOX_VLM_CACHE_DIR"] == str(Path.home() / ".cache" / "glassbox" / "vlm_describe")
     assert env["IOS_SETTINGS_MEMORY_REUSE"] == "0"
     assert env["GLASSBOX_MEMORY_DIR"] == str(report.with_suffix(".artifacts") / "abc" / "memory")
@@ -109,6 +113,20 @@ def test_full_run_env_preserves_explicit_vlm_cache_dir(tmp_path):
     )
 
     assert env["GLASSBOX_VLM_CACHE_DIR"] == "/tmp/custom-vlm-cache"
+
+
+@pytest.mark.smoke
+def test_full_run_env_can_enable_page_id_route_from_glassbox_alias(tmp_path):
+    report = tmp_path / "full.json"
+    env = build_full_run_env(
+        report,
+        base_env={"GLASSBOX_SETTINGS_NAVIGATION_PAGE_ID_ROUTE": "1"},
+        run_id="abc",
+    )
+    config = SettingsRunConfig.from_env(env)
+
+    assert env["IOS_SETTINGS_PAGE_ID_ROUTE"] == "1"
+    assert config.page_id_route_enabled is True
 
 
 @pytest.mark.smoke

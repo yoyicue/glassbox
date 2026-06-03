@@ -94,6 +94,164 @@ def test_root_path_prefers_requested_label_when_detail_title_ocr_is_garbled():
 
 
 @pytest.mark.smoke
+def test_tap_settings_row_prefers_page_id_route_when_enabled():
+    class RoutePhone:
+        def __init__(self) -> None:
+            self.navigate_calls: list[dict[str, object]] = []
+            self.tap_element_calls = 0
+
+        def navigate_to_page(self, page_id, *, allowed_actions=None, min_success_rate=0.5):
+            self.navigate_calls.append({
+                "page_id": page_id,
+                "allowed_actions": set(allowed_actions or ()),
+                "min_success_rate": min_success_rate,
+            })
+            return SimpleNamespace(
+                attempted=True,
+                reached=True,
+                reason="reached",
+                edge_count=1,
+                replayed_ops=("tap",),
+            )
+
+        def tap_element(self, *_args, **_kwargs):
+            self.tap_element_calls += 1
+            raise AssertionError("tap fallback should not run after page-id route succeeds")
+
+    phone = RoutePhone()
+    settings_context.reset_for(phone)
+    actions = replace(
+        walkthrough._navigation_actions(),
+        page_id_route_enabled=True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+    )
+
+    assert settings_navigation.tap_settings_row(phone, _el("Bluetooth", 72, 344), actions)
+
+    assert phone.navigate_calls == [
+        {
+            "page_id": "settings/Bluetooth",
+            "allowed_actions": set(settings_navigation.PAGE_ID_ROUTE_ALLOWED_ACTIONS),
+            "min_success_rate": 0.5,
+        }
+    ]
+    assert phone.tap_element_calls == 0
+    verdict = settings_context.last_action_verdict(phone)
+    assert verdict is not None
+    assert verdict.status == "succeeded"
+
+
+@pytest.mark.smoke
+def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
+    class RoutePhone:
+        def __init__(self) -> None:
+            self.tap_element_calls = 0
+
+        def navigate_to_page(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                attempted=True,
+                reached=False,
+                reason="no_path",
+                edge_count=0,
+                replayed_ops=(),
+            )
+
+        def tap_element(self, *_args, **_kwargs):
+            self.tap_element_calls += 1
+            return ActionResult(
+                ok=True,
+                backend="mock",
+                connected=True,
+                semantic_status="succeeded",
+            )
+
+    phone = RoutePhone()
+    actions = replace(
+        walkthrough._navigation_actions(),
+        page_id_route_enabled=True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+    )
+
+    assert settings_navigation.tap_settings_row(phone, _el("Bluetooth", 72, 344), actions)
+
+    assert phone.tap_element_calls == 1
+
+
+@pytest.mark.smoke
+def test_tap_settings_row_tries_page_id_route_alias_candidates_before_fallback():
+    class RoutePhone:
+        def __init__(self) -> None:
+            self.page_ids: list[str] = []
+            self.tap_element_calls = 0
+
+        def navigate_to_page(self, page_id, **_kwargs):
+            self.page_ids.append(page_id)
+            if page_id == "settings/Notifications":
+                return SimpleNamespace(
+                    attempted=True,
+                    reached=True,
+                    reason="reached",
+                    edge_count=1,
+                    replayed_ops=("tap",),
+                )
+            return SimpleNamespace(
+                attempted=True,
+                reached=False,
+                reason="no_path",
+                edge_count=0,
+                replayed_ops=(),
+            )
+
+        def tap_element(self, *_args, **_kwargs):
+            self.tap_element_calls += 1
+            raise AssertionError("tap fallback should not run after an alias route succeeds")
+
+    phone = RoutePhone()
+    actions = replace(
+        walkthrough._navigation_actions(),
+        page_id_route_enabled=True,
+        page_id_route_label_candidates=lambda label: (label, "Notifications"),
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+    )
+
+    assert settings_navigation.tap_settings_row(phone, _el("通知", 72, 344), actions)
+
+    assert phone.page_ids == ["settings/通知", "settings/Notifications"]
+    assert phone.tap_element_calls == 0
+
+
+@pytest.mark.smoke
+def test_tap_settings_row_does_not_fallback_after_partial_page_id_replay_failure():
+    class RoutePhone:
+        def __init__(self) -> None:
+            self.tap_element_calls = 0
+
+        def navigate_to_page(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                attempted=True,
+                reached=False,
+                reason="replay_failed",
+                edge_count=2,
+                replayed_ops=("scroll",),
+            )
+
+        def tap_element(self, *_args, **_kwargs):
+            self.tap_element_calls += 1
+            raise AssertionError("stale row hit should not be tapped after partial replay failure")
+
+    phone = RoutePhone()
+    actions = replace(
+        walkthrough._navigation_actions(),
+        page_id_route_enabled=True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+    )
+
+    assert not settings_navigation.tap_settings_row(phone, _el("Bluetooth", 72, 344), actions)
+
+    assert phone.tap_element_calls == 0
+
+
+@pytest.mark.smoke
 def test_root_crawl_credits_semantic_success_when_same_page_texts_match(monkeypatch):
     monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
     root = _scene(_el("Settings", 48, 72, w=70), _el("Bluetooth", 72, 344, w=120))

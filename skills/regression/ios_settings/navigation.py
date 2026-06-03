@@ -13,6 +13,7 @@ import time
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from glassbox.boundaries import action_host_backend_capabilities
@@ -34,6 +35,22 @@ NavigationFailure = settings_reporting.NavigationFailure
 ActionIntent = Callable[..., AbstractContextManager[Any]]
 ActionResultRecorder = Callable[[Any, Any], bool]
 ViewportKey = tuple[tuple[str, ...], tuple[str, ...]]
+PAGE_ID_ROUTE_ALLOWED_ACTIONS = frozenset({
+    "tap",
+    "tap_xy",
+    "settings.tap_row",
+    "target_tap",
+    "back",
+    "back_gesture",
+    "home",
+    "scroll",
+    "scroll_down",
+    "scroll_up",
+    "swipe_up",
+    "swipe_down",
+    "wheel_scroll_down",
+    "wheel_scroll_up",
+})
 
 
 @dataclass(frozen=True)
@@ -87,6 +104,10 @@ class SettingsNavigationActions:
     # None (e.g. minimal test facades) the multi-pass reset is skipped.
     scroll_to_top: Callable[[Any], None] | None = None
     max_root_scroll_resets: int = 2
+    page_id_route_enabled: bool = False
+    page_id_route_allowed_actions: frozenset[str] = PAGE_ID_ROUTE_ALLOWED_ACTIONS
+    page_id_route_min_success_rate: float = 0.5
+    page_id_route_label_candidates: Callable[[str], Sequence[str]] | None = None
 
 
 def open_root_label_via_search(phone, label: str, actions: SettingsNavigationActions) -> bool:
@@ -388,8 +409,89 @@ def settings_row_target_element(phone, scene, row_hit: UIElement) -> UIElement:
     })
 
 
+def _settings_row_page_id(label: str) -> str | None:
+    text = str(label or "").strip()
+    if not text:
+        return None
+    if text.startswith("settings/"):
+        return text
+    return f"settings/{text}"
+
+
+def _settings_row_page_id_candidates(
+    label: str,
+    actions: SettingsNavigationActions,
+) -> tuple[str, ...]:
+    if actions.page_id_route_label_candidates is None:
+        labels: Sequence[str] = (label,)
+    else:
+        labels = actions.page_id_route_label_candidates(label)
+    candidates: list[str] = []
+    for candidate_label in labels:
+        page_id = _settings_row_page_id(str(candidate_label))
+        if page_id is not None and page_id not in candidates:
+            candidates.append(page_id)
+    return tuple(candidates)
+
+
+def _try_settings_row_page_id_route(
+    phone,
+    label: str,
+    actions: SettingsNavigationActions,
+) -> bool | None:
+    """Return True on routed arrival, False on unsafe replay failure, None to fallback."""
+    if not actions.page_id_route_enabled:
+        return None
+    page_ids = _settings_row_page_id_candidates(label, actions)
+    if not page_ids:
+        return None
+    navigate_to_page = getattr(phone, "navigate_to_page", None)
+    if not callable(navigate_to_page):
+        return None
+    allowed_actions = set(actions.page_id_route_allowed_actions)
+    for index, page_id in enumerate(page_ids):
+        with actions.action_intent(
+            phone,
+            "settings.page_id_route",
+            text=label,
+            page_id=page_id,
+            candidate_index=index,
+            candidate_count=len(page_ids),
+            allowed_actions=sorted(allowed_actions),
+        ):
+            try:
+                result = navigate_to_page(
+                    page_id,
+                    allowed_actions=allowed_actions,
+                    min_success_rate=actions.page_id_route_min_success_rate,
+                )
+            except Exception:
+                return False
+        if getattr(result, "reached", False):
+            settings_context.record_action_verdict(
+                phone,
+                SimpleNamespace(
+                    accepted=True,
+                    status="succeeded",
+                    reason=getattr(result, "reason", None),
+                    transport_ok=True,
+                ),
+            )
+            settings_scene_state.record_settings_row_tap(phone, label)
+            return True
+        # A no-path lookup leaves the screen unchanged, so the normal row tap can
+        # still use the live row hit. A replayed-but-failed path may have moved
+        # the UI, so do not continue with stale coordinates.
+        if getattr(result, "edge_count", 0) or tuple(getattr(result, "replayed_ops", ()) or ()):
+            return False
+    return None
+
+
 def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActions) -> bool:
     label = settings_scene_state.row_label(row_hit)
+    page_id_routed = _try_settings_row_page_id_route(phone, label, actions)
+    if page_id_routed is not None:
+        return page_id_routed
     tap_element = getattr(phone, "tap_element", None)
     if callable(tap_element):
         # Delegate to glassbox's actuation: same settings-aware first tap, but it
