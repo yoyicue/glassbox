@@ -59,6 +59,12 @@ class FakePhone:
         self.actions: list[tuple[str, str | None]] = []
         self.action_kwargs: list[dict[str, object]] = []
         self.ai_scroll_prefer_wheel_enabled = False
+        self.type_result = ActionResult(
+            ok=True,
+            backend="fake",
+            connected=True,
+            semantic_status="succeeded",
+        )
         self._last_frame = Frame(
             img=np.zeros((40, 80, 3), dtype=np.uint8),
             ts=1.0,
@@ -87,6 +93,20 @@ class FakePhone:
     def swipe_xy(self, x1, y1, x2, y2, **_kw):
         self.actions.append(("swipe_xy", f"{x1},{y1}->{x2},{y2}"))
         self.action_kwargs.append(dict(_kw))
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+    def scroll_wheel(self, ticks, **_kw):
+        self.actions.append(("scroll_wheel", f"wheel:{ticks}"))
+        self.action_kwargs.append(dict(_kw))
+        return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
+
+    def type(self, text, **_kw):
+        self.actions.append(("type", text))
+        self.action_kwargs.append(dict(_kw))
+        return self.type_result
+
+    def key(self, modifier, keycode):
+        self.actions.append(("key", f"{modifier}:{keycode}"))
         return ActionResult(ok=True, backend="fake", connected=True, semantic_status="succeeded")
 
     def close_foreground_app(self):
@@ -290,6 +310,81 @@ def test_ai_swipe_expect_visible_uses_stream_until_match(tmp_path):
     assert kwargs["expected_state"] == {"kind": "visible_text", "payload": {"any_of": ["Continue"]}}
     assert kwargs["stream_timeout_ms"] >= 1
     assert kwargs["max_stream_frames"] >= 1
+
+
+@pytest.mark.smoke
+def test_ai_swipe_forwards_explicit_coordinate_space(tmp_path):
+    phone = _ai_phone(tmp_path, [_scene("Settings")])
+
+    outcome = phone.swipe_xy(1, 2, 3, 4, coordinate_space="cropped_px")
+
+    assert outcome.semantic_status == "succeeded"
+    assert phone._phone.action_kwargs[-1]["coordinate_space"] == "cropped_px"
+
+
+@pytest.mark.smoke
+def test_ai_scroll_wheel_forwards_explicit_coordinate_space(tmp_path):
+    phone = _ai_phone(tmp_path, [_scene("Settings")])
+
+    outcome = phone.scroll_wheel(
+        90,
+        focus_x=135,
+        focus_y=930,
+        coordinate_space="cropped_px",
+    )
+
+    assert outcome.semantic_status == "succeeded"
+    assert phone._phone.actions[-1] == ("scroll_wheel", "wheel:90")
+    assert phone._phone.action_kwargs[-1]["focus_x"] == 135
+    assert phone._phone.action_kwargs[-1]["focus_y"] == 930
+    assert phone._phone.action_kwargs[-1]["coordinate_space"] == "cropped_px"
+
+
+@pytest.mark.smoke
+def test_ai_type_text_and_key_forward_to_phone(tmp_path):
+    phone = _ai_phone(tmp_path, [_scene("gbvckbd")])
+
+    typed = phone.type_text("gbvckbd", verify=False)
+    key = phone.key(0x08, 0x04)
+
+    assert typed.semantic_status == "succeeded"
+    assert key.semantic_status == "succeeded"
+    assert phone._phone.actions[-2:] == [("type", "gbvckbd"), ("key", "8:4")]
+    assert phone._phone.action_kwargs[-1]["verify"] is False
+
+
+@pytest.mark.smoke
+def test_ai_type_text_waits_for_typed_text_after_initial_unknown(tmp_path):
+    phone = _ai_phone(
+        tmp_path,
+        [
+            _scene("Search"),
+            _scene("Search"),
+            _scene("gbvcretry"),
+        ],
+    )
+    phone._phone.type_result = ActionResult(
+        ok=True,
+        backend="fake",
+        connected=True,
+        semantic_status="unknown",
+        semantic_reason="typed text is not visible; target may be hidden or OCR-inaccessible",
+        semantic_verifier="text_inserted",
+        semantic_confidence=0.4,
+    )
+
+    outcome = phone.type_text(
+        "gbvcretry",
+        verify=False,
+        expect_timeout_s=1.0,
+        sample_interval_s=0.01,
+    )
+
+    assert outcome.semantic_status == "succeeded"
+    assert outcome.semantic_verifier == "ai_expectation"
+    assert outcome.reason == "AI facade expectation matched"
+    assert phone._phone.action_kwargs[-1]["verify"] is False
+    assert phone._phone.observe_calls == 3
 
 
 @pytest.mark.smoke

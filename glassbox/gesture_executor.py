@@ -218,6 +218,7 @@ class GestureExecutor:
         horizontal: int = 0,
         focus_x: int | None = None,
         focus_y: int | None = None,
+        coordinate_space: str | None = None,
         focus_click: bool = False,
         interval_ms: int | None = None,
     ) -> ActionResult:
@@ -225,7 +226,8 @@ class GestureExecutor:
         width, height = host.viewport_size()
         cx = width // 2 if focus_x is None else int(focus_x)
         cy = int(height * 0.55) if focus_y is None else int(focus_y)
-        px, py = host.to_phone_coordinates(cx, cy)
+        input_space = host.normalize_input_coordinate_space(coordinate_space)
+        px, py = host.to_phone_coordinates(cx, cy, coordinate_space=coordinate_space)
         kwargs = {
             "horizontal": int(horizontal),
             "focus_x": px,
@@ -242,6 +244,7 @@ class GestureExecutor:
                 "focus_x": px,
                 "focus_y": py,
                 "coordinate_space": host.effector_coordinate_space(),
+                "target_point_frame": {"x": cx, "y": cy, "space": input_space},
                 "via": "scroll_wheel",
             }
             if focus_click:
@@ -256,6 +259,7 @@ class GestureExecutor:
             "focus_x": px,
             "focus_y": py,
             "coordinate_space": host.effector_coordinate_space(),
+            "target_point_frame": {"x": cx, "y": cy, "space": input_space},
             "via": "scroll_wheel",
         }
         if focus_click:

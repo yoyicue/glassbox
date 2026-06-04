@@ -10,6 +10,7 @@ import pytest
 
 from glassbox.cognition import Box, UIElement
 from glassbox.effector import ActionResult
+from glassbox.perception.letterbox import LetterboxCrop
 from glassbox.perception.source import Frame
 
 
@@ -318,6 +319,25 @@ def test_phone_wheel_scroll_wrappers_are_not_swipes(mock_phone):
         "focus_y": 110,
     }
     assert actions[1].kwargs["ticks"] == -7
+
+
+@pytest.mark.smoke
+def test_phone_scroll_wheel_accepts_explicit_coordinate_space(mock_phone):
+    mock_phone.crop = LetterboxCrop(
+        crop_bbox=(100, 200, 300, 400),
+        frame_size=(800, 600),
+        phone_size=(300, 400),
+    )
+    mock_phone._last_frame = Frame(img=np.zeros((600, 800, 3), dtype=np.uint8), ts=0.0)
+
+    mock_phone.scroll_wheel(5, focus_x=10, focus_y=20, coordinate_space="cropped_px")
+
+    action = mock_phone.effector.actions[-1]
+    assert action.op == "scroll_wheel"
+    assert action.kwargs["focus_x"] == 110
+    assert action.kwargs["focus_y"] == 220
+    record = mock_phone._pending_actions_for_memory[-1]
+    assert record.params["target_point_frame"] == {"x": 10, "y": 20, "space": "cropped_px"}
 
 
 @pytest.mark.smoke

@@ -1944,6 +1944,7 @@ class Phone:
         horizontal: int = 0,
         focus_x: int | None = None,
         focus_y: int | None = None,
+        coordinate_space: str | None = None,
         focus_click: bool = False,
         interval_ms: int | None = None,
     ) -> ActionResult:
@@ -1952,6 +1953,7 @@ class Phone:
             horizontal=horizontal,
             focus_x=focus_x,
             focus_y=focus_y,
+            coordinate_space=coordinate_space,
             focus_click=focus_click,
             interval_ms=interval_ms,
         )

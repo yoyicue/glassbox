@@ -77,6 +77,14 @@ from glassbox.cognition.vlm_kimi import (
     make_vlm_client,
     vlm_stage_outcome_from_result,
 )
+from glassbox.cognition.voice_control_overlay import (
+    VoiceControlOverlayKind,
+    VoiceControlOverlayMarker,
+    VoiceControlOverlayMode,
+    apply_voice_control_overlay_hints,
+    overlay_number,
+    parse_voice_control_overlay,
+)
 from glassbox.cognition.whitebox import apply_whitebox
 
 __all__ = [
@@ -110,7 +118,11 @@ __all__ = [
     "VLMResult",
     "VLMStageOutcome",
     "VisionOCR",
+    "VoiceControlOverlayKind",
+    "VoiceControlOverlayMarker",
+    "VoiceControlOverlayMode",
     "WhiteboxHint",
+    "apply_voice_control_overlay_hints",
     "apply_whitebox",
     "canonical_label",
     "compact_text",
@@ -126,6 +138,8 @@ __all__ = [
     "norm_text",
     "ocr_compact_text",
     "ocr_results_to_elements",
+    "overlay_number",
+    "parse_voice_control_overlay",
     "render_set_of_mark",
     "select_text_detector_backend",
     "text_contains",
