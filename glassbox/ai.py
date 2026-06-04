@@ -1481,8 +1481,8 @@ class AIPhone:
         return any(self._labels_match(visible, text) for visible in obs.visible_texts)
 
     def _labels_match(self, left: str, right: str) -> bool:
-        lhs = left.strip()
-        rhs = right.strip()
+        lhs = left.strip().casefold()
+        rhs = right.strip().casefold()
         return bool(lhs and rhs and (lhs == rhs or lhs in rhs or rhs in lhs))
 
     def _actuation_attribution(self) -> str:

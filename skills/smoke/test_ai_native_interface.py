@@ -360,7 +360,7 @@ def test_ai_type_text_waits_for_typed_text_after_initial_unknown(tmp_path):
         [
             _scene("Search"),
             _scene("Search"),
-            _scene("gbvcretry"),
+            _scene("Q Gbvcretry"),
         ],
     )
     phone._phone.type_result = ActionResult(

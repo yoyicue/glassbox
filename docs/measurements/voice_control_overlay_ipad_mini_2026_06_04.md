@@ -154,6 +154,22 @@
 >   --keyboard-text gbvcretry
 > ```
 >
+> **Patched facade keyboard retake generator**:
+>
+> ```bash
+> set -a
+> source /Users/biu/glassbox/.env
+> set +a
+> GLASSBOX_PHONE_MODEL=ipad_mini_7 uv run python -m skills.regression.voice_control_overlay_probe \
+>   --phone-model ipad_mini_7 \
+>   --overlay-mode item_numbers \
+>   --output-dir /tmp/glassbox-vc-keyboard-casefold-v1 \
+>   --keyboard-probe \
+>   --keyboard-point 44,97 \
+>   --keyboard-clear-before-type \
+>   --keyboard-text gbvccase
+> ```
+>
 > **Keyboard Cmd-F focus probe generator**:
 >
 > ```bash
@@ -486,8 +502,28 @@ field path after reboot. It also exposes a verifier timing issue: the
 `type_text` action's immediate semantic reason can be negative even when the
 probe's later capture sees the inserted token. Follow-up code now makes
 `AIPhone.type_text()` use the typed text as a post-action visible-text
-expectation by default; this measurement has not been rerun with that patched
-facade path.
+expectation by default.
+
+A 2026-06-05 patched-facade retake first reproduced one remaining verifier
+bug: `gbvcpatch` was visible in the later HDMI/OCR capture as `Q Gbvcpatch` /
+`"Gbvcpatch"`, but `AIPhone` still returned `unknown` because visible-text
+matching was case-sensitive. After changing the facade matcher to compare
+case-folded labels, the same guarded coordinate Search-field path passed with
+`gbvccase`:
+
+| Step | Page | OCR elements | Parsed markers | Notes |
+|---|---|---:|---:|---|
+| `00_preflight` | `settings/Overlay` | 45 | `item_numbers=10` | Guard passed; FKA help overlay absent. |
+| `tap_keyboard_field` | `settings/Overlay` | — | — | `tap_xy(44,97,cropped_px)` transport OK; focus suggestions appeared. |
+| `keyboard_pretype_select_all` / `keyboard_pretype_delete` | same page | — | — | Clear sequence transport OK. |
+| `type_keyboard_text` | same page | — | — | `type_text("gbvccase", verify=False)` returned `semantic_status=succeeded`, `reason="AI facade expectation matched"`. |
+| `05_item_numbers_after_keyboard_type` | `page_id=null` | 16 | all modes `0` | Analyzer found `keyboard_text_visible=true`; the token was visible in filtered Search results. |
+| restore keys | same page | — | — | Cmd-A, Delete, Esc transport OK. |
+| `06_item_numbers_after_keyboard_restore` | `settings/Overlay` | 35 | `item_numbers=1` | Restore returned to Overlay. |
+
+This closes the patched `type_text` verifier retake for this one coordinate
+Search-field path. It does not rehabilitate the earlier `Cmd-F`, overlay-off
+double-tap, or `Ctrl-Space` variants.
 
 The attempted input-source switch variant is **discarded as invalid**. It added
 `--keyboard-switch-input-before-type`, which sends `Ctrl-Space` after focusing
@@ -616,8 +652,10 @@ configured Voice Control overlay mode.
   `Cmd-F` sample could navigate away from Overlay. After reboot, the guarded
   coordinate Search-field retry inserted `gbvcretry`; the immediate `type_text`
   semantic reason was still negative, but the later HDMI/OCR capture reported
-  `keyboard_text_visible=true` and follow-up preflight returned to
-  `settings/Overlay` with Item Numbers visible. A discarded `Ctrl-Space`
+  `keyboard_text_visible=true`. A 2026-06-05 patched-facade retake inserted
+  `gbvccase`; `AIPhone.type_text()` returned `semantic_status=succeeded` after
+  matching the case-folded visible text, and the later capture again reported
+  `keyboard_text_visible=true`. A discarded `Ctrl-Space`
   input-source switch attempt remains invalid and unsafe: it left Settings and
   opened the Full Keyboard Access help overlay on Home.
 - This is **not** a task-success rate and not proof of voice recognition. It is
@@ -653,10 +691,12 @@ configured Voice Control overlay mode.
 - Keyboard visible insertion is now accepted for one coordinate Search-field
   retry after reboot. The run exposed a timing bug where the immediate
   `type_text` verifier reported "typed text is not visible" before the later
-  probe capture saw `gbvcretry`; the AI facade now waits for the typed text as a
-  post-action expectation by default, but this patched path still needs an
-  on-rig retake. Do not use `Ctrl-Space` as an input-source strategy on this
-  rig: the discarded switch-input run opened Full Keyboard Access help on Home.
+  probe capture saw `gbvcretry`. The patched AI facade now waits for the typed
+  text as a post-action expectation by default and matches visible text
+  case-insensitively; the 2026-06-05 retake with `gbvccase` returned
+  `semantic_status=succeeded`. Do not use `Ctrl-Space` as an input-source
+  strategy on this rig: the discarded switch-input run opened Full Keyboard
+  Access help on Home.
 - Wheel scrolling is now accepted for `360 -> -360` at `(135,930,cropped_px)`,
   but smaller `90` deltas remain weak and focus-click changes page selection.
   Future callers should treat wheel validation as page/focus/tick-size specific.

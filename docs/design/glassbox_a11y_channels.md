@@ -96,8 +96,9 @@ iPad Settings root 签名碎裂**（见 `MEMORY` / `docs/design/settings_detail_
    insertion 早期样本也曾为负：`gbvckbd` / `gbvccmdf` / overlay-off `gbvcoffdt` 都未显示，`Cmd-F`
    还会离开 Overlay；但 after-reboot 的 coordinate Search-field retry 成功显示 `gbvcretry`。该样本暴露了
    `type_text` 即时 semantic reason 早于后续 capture 的时序问题；当前 facade 已默认把 typed text 当作
-   post-action visible expectation，但 patched path 还需上机复验。`Ctrl-Space` 输入源切换仍禁用，因为它会离开
-   Settings 并打开 Full Keyboard Access help overlay。详见
+   post-action visible expectation，并把 visible-text 匹配改为大小写无关。2026-06-05 patched retake
+   `gbvccase` 返回 `semantic_status=succeeded`，后续 capture 也报告 `keyboard_text_visible=true`。
+   `Ctrl-Space` 输入源切换仍禁用，因为它会离开 Settings 并打开 Full Keyboard Access help overlay。详见
    `docs/measurements/voice_control_overlay_ipad_mini_2026_06_04.md`。
 2. overlay 会**遮挡内容、扰动 letterbox/stability** → 需要一个分层解析 pass（overlay 文字层 vs
    内容层），把 number/label 映回元素 bbox。
@@ -213,8 +214,9 @@ VO+Send-to-HDMI。三重不契合，不建议投入。
   对 `5881a28` 源码逐条核验。
 
 **Caveats**：(1) rank-1 的 **Voice Control + 坐标 HID tap/drag scroll**已在 iPad mini 7 小样本证实；
-text tap、keyboard visible insertion、wheel scroll 均已有负/弱样本，仍未闭合。(2) Voice Control overlay 的 OCR 解析
-需处理 overlay 遮挡；当前 parser 是 mode-scoped，不负责自动识别 `Item Numbers` vs `Numbered Grid`；
+coordinate Search-field keyboard insertion 也已在 2026-06-05 patched retake 闭合；text tap 仍是负样本，
+wheel scroll 只对当前 page/focus/tick-size 小样本成立。(2) Voice Control overlay 的 OCR 解析需处理 overlay 遮挡；
+当前 parser 是 mode-scoped，不负责自动识别 `Item Numbers` vs `Numbered Grid`；
 数字/grid marker 是 frame-local；Item Names 自动映射已能用 labeled replay gate 复放，但仍需更广样本后
 才能作为默认稳定 identity。(3) 5 通道研究的两个 search 角度（VoiceOver-audio 细节、external-introspection）
 在 workflow 中未产出结构化 finding，相关结论由对抗核验判词 + 既有领域常识补足。
