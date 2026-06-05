@@ -8,11 +8,12 @@ baseline fixture — must hold offline, or a silent change to the comparator (or
 schema drift that quietly invalidates the floor) would let a regression through
 unnoticed.
 
-These tests pin four things without any device:
+These tests pin the comparator without any device:
   1. the committed baseline fixture is an honest floor with completed work,
   2. the committed baseline fixture stays schema-valid as the harness evolves,
   3. the comparator passes parity / improvement and fails a real regression, and
-  4. an unparseable/invalid candidate is rejected (rc 2), never silently passed.
+  4. coverage/process/scroll regression metrics have rc1 teeth once the floor is
+     non-zero, while invalid candidates are rejected (rc 2), never silently passed.
 
 A degraded/regressed benchmark is derived at runtime from the fixture (flip
 non-scroll task-action verdicts, then recompute metrics with the harness's own
@@ -93,6 +94,96 @@ def _flip_task_outcomes(payload: dict[str, Any], to_outcome: str, count: int) ->
     return out
 
 
+def _primary_actions(payload: dict[str, Any], *, scroll: bool) -> list[dict[str, Any]]:
+    return [
+        action
+        for task in payload["tasks"]
+        for action in task["actions"]
+        if action.get("role") == "primary"
+        and (str(action.get("op", "")) in _SCROLL_FILLER_OPS) is scroll
+    ]
+
+
+def _with_expected_state_coverage(payload: dict[str, Any], count: int) -> dict[str, Any]:
+    out = copy.deepcopy(payload)
+    actions = _primary_actions(out, scroll=False)
+    assert len(actions) >= count
+    for action in actions:
+        action["expected_state"] = {"kind": "unknown", "payload": {}}
+    for action in actions[:count]:
+        action["expected_state"] = {"kind": "page_id", "payload": {"page_id": "settings/test"}}
+    out["metrics"] = _metrics(out["tasks"])
+    return out
+
+
+def _with_vlm_action_coverage(payload: dict[str, Any], count: int) -> dict[str, Any]:
+    out = copy.deepcopy(payload)
+    actions = _primary_actions(out, scroll=False)
+    assert len(actions) >= count
+    for action in actions:
+        action["vlm_calls"] = 0
+        action["vlm_triggers"] = []
+        action["last_vlm_trigger"] = None
+    for action in actions[:count]:
+        action["vlm_calls"] = 1
+        action["vlm_triggers"] = ["verify_unknown"]
+        action["last_vlm_trigger"] = "verify_unknown"
+    out["metrics"] = _metrics(out["tasks"])
+    return out
+
+
+def _with_strategy_switches(payload: dict[str, Any], count: int) -> dict[str, Any]:
+    out = copy.deepcopy(payload)
+    actions = _primary_actions(out, scroll=False)
+    assert len(actions) >= count
+    for action in actions:
+        action["strategy_switches"] = 0
+    for action in actions[:count]:
+        action["strategy_switches"] = 1
+    out["metrics"] = _metrics(out["tasks"])
+    return out
+
+
+def _with_recoveries(payload: dict[str, Any], count: int) -> dict[str, Any]:
+    out = copy.deepcopy(payload)
+    actions = _primary_actions(out, scroll=False)
+    assert len(actions) >= count
+    for action in actions:
+        action["recovered"] = False
+    for action in actions[:count]:
+        action["recovered"] = True
+    out["metrics"] = _metrics(out["tasks"])
+    return out
+
+
+def _with_scroll_success(payload: dict[str, Any], count: int) -> dict[str, Any]:
+    out = copy.deepcopy(payload)
+    actions = _primary_actions(out, scroll=True)
+    assert len(actions) >= count
+    for action in actions:
+        action["verdict"] = "unknown"
+    for action in actions[:count]:
+        action["verdict"] = "succeeded"
+        action["raw_semantic_status"] = "succeeded"
+    out["metrics"] = _metrics(out["tasks"])
+    return out
+
+
+def _without_scroll_actions(payload: dict[str, Any]) -> dict[str, Any]:
+    out = copy.deepcopy(payload)
+    for task in out["tasks"]:
+        task["actions"] = [
+            action
+            for action in task["actions"]
+            if not (
+                action.get("role") == "primary"
+                and str(action.get("op", "")) in _SCROLL_FILLER_OPS
+            )
+        ]
+    out["metrics"] = _metrics(out["tasks"])
+    return out
+
+
 @pytest.mark.smoke
 def test_committed_baseline_floor_completed_a_task():
     """The committed floor must prove at least one end-to-end task completed.
@@ -146,6 +237,82 @@ def test_gate_fails_on_unknown_rate_spike():
     rc, lines = compare_benchmarks(baseline, regressed)
     assert rc == 1
     assert any(line.startswith("unknown_rate:") and "delta=+" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_fails_when_expected_state_coverage_drops():
+    baseline = _with_expected_state_coverage(_baseline(), count=3)
+    regressed = _with_expected_state_coverage(baseline, count=0)
+    assert validate_benchmark(baseline) == []
+    assert validate_benchmark(regressed) == []
+    assert regressed["metrics"]["expected_state_coverage"] < baseline["metrics"]["expected_state_coverage"]
+    rc, lines = compare_benchmarks(baseline, regressed)
+    assert rc == 1
+    assert any(line.startswith("expected_state_coverage:") and "delta=-" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_fails_when_vlm_action_coverage_drops():
+    baseline = _with_vlm_action_coverage(_baseline(), count=3)
+    regressed = _with_vlm_action_coverage(baseline, count=0)
+    assert validate_benchmark(baseline) == []
+    assert validate_benchmark(regressed) == []
+    assert regressed["metrics"]["vlm_action_coverage"] < baseline["metrics"]["vlm_action_coverage"]
+    rc, lines = compare_benchmarks(baseline, regressed)
+    assert rc == 1
+    assert any(line.startswith("vlm_action_coverage:") and "delta=-" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_fails_when_strategy_switches_drop():
+    baseline = _with_strategy_switches(_baseline(), count=2)
+    regressed = _with_strategy_switches(baseline, count=0)
+    assert validate_benchmark(baseline) == []
+    assert validate_benchmark(regressed) == []
+    assert regressed["metrics"]["strategy_switches"] < baseline["metrics"]["strategy_switches"]
+    rc, lines = compare_benchmarks(baseline, regressed)
+    assert rc == 1
+    assert any(line.startswith("strategy_switches:") and "delta=-" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_fails_when_recoveries_drop():
+    baseline = _with_recoveries(_baseline(), count=2)
+    regressed = _with_recoveries(baseline, count=0)
+    assert validate_benchmark(baseline) == []
+    assert validate_benchmark(regressed) == []
+    assert regressed["metrics"]["recoveries"] < baseline["metrics"]["recoveries"]
+    rc, lines = compare_benchmarks(baseline, regressed)
+    assert rc == 1
+    assert any(line.startswith("recoveries:") and "delta=-" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_fails_when_scroll_success_rate_drops_with_scroll_samples():
+    baseline = _with_scroll_success(_baseline(), count=3)
+    regressed = _with_scroll_success(baseline, count=0)
+    assert validate_benchmark(baseline) == []
+    assert validate_benchmark(regressed) == []
+    assert baseline["metrics"]["scroll_action_count"] > 0
+    assert regressed["metrics"]["scroll_action_count"] > 0
+    assert regressed["metrics"]["scroll_success_rate"] < baseline["metrics"]["scroll_success_rate"]
+    rc, lines = compare_benchmarks(baseline, regressed)
+    assert rc == 1
+    assert any(line.startswith("scroll_success_rate:") and "delta=-" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_does_not_scroll_gate_without_scroll_samples():
+    baseline = _with_scroll_success(_baseline(), count=3)
+    no_scroll_candidate = _without_scroll_actions(baseline)
+    assert validate_benchmark(baseline) == []
+    assert validate_benchmark(no_scroll_candidate) == []
+    assert baseline["metrics"]["scroll_action_count"] > 0
+    assert no_scroll_candidate["metrics"]["scroll_action_count"] == 0
+    assert no_scroll_candidate["metrics"]["scroll_success_rate"] < baseline["metrics"]["scroll_success_rate"]
+    rc, lines = compare_benchmarks(baseline, no_scroll_candidate)
+    assert rc == 0
+    assert any(line.startswith("scroll_success_rate:") and "delta=-" in line for line in lines)
 
 
 @pytest.mark.smoke

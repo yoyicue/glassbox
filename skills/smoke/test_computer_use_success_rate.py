@@ -1015,7 +1015,7 @@ def test_compare_benchmarks_respects_success_rate_regression_tolerance(tmp_path)
     baseline = aggregate_benchmark(
         [
             _run_dir(tmp_path / "baseline-a", status="succeeded"),
-            _run_dir(tmp_path / "baseline-b", status="succeeded_recovered"),
+            _run_dir(tmp_path / "baseline-b", status="succeeded"),
         ]
     )
     candidate = aggregate_benchmark(
@@ -1024,6 +1024,11 @@ def test_compare_benchmarks_respects_success_rate_regression_tolerance(tmp_path)
             _run_dir(tmp_path / "candidate-b", status="unknown"),
         ]
     )
+    for action in candidate["tasks"][1]["actions"]:
+        action["vlm_calls"] = 1
+        action["vlm_cache_misses"] = 1
+        action["strategy_switches"] = 1
+    candidate["metrics"] = success_rate._metrics(candidate["tasks"])
 
     tolerated_rc, tolerated_lines = compare_benchmarks(baseline, candidate, tolerance=0.5)
     strict_rc, strict_lines = compare_benchmarks(baseline, candidate, tolerance=0.49)

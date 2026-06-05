@@ -181,19 +181,19 @@ glassbox 真正缺的、也是 SPA-Bench 替不了的，是那个 **screenshot-o
   - **真机门**（nightly，阻塞性）：`make regression-compare CANDIDATE=...`（`Makefile:61`）拿新鲜
     真机跑比地板，`compare_benchmarks` 回归即 rc1 → 开 issue / 阻塞 release tag。
 - **验收 / 待修**：
-  1. **扩 gate 覆盖**：`compare_benchmarks`（`computer_use_success_rate.py:1248-1253`）当前只让
-     `task_completion_rate` / `action_success_rate` / `root_pages_coverage`（降）、
-     `navigation_origin_precondition_failures` / `unknown_rate`（升）触发 rc1；其余 14 个只打印。
-     **把 `expected_state_coverage` / `vlm_action_coverage` / `strategy_switches` / `recoveries`
-     做成单边棘轮 floor**（可升不可降），并把 `scroll_success_rate` 对齐 canonical-primitive 基线
-     gate。配套在 `skills/smoke/test_computer_use_regression_gate.py` 加合成回归断言。
+  1. **扩 gate 覆盖（已落地，2026-06-05）**：`compare_benchmarks` 现在把
+     `expected_state_coverage` / `vlm_action_coverage` / `strategy_switches` / `recoveries`
+     纳入单边棘轮 floor（可升不可降），并在 baseline 与 candidate 都有 scroll 样本时 gate
+     `scroll_success_rate`。配套 smoke 用合成 benchmark 断言 coverage/process/scroll 回归会 rc1，且无
+     scroll 样本不误报。
   2. **抬门槛**：把 floor 的 `task_completion_rate>0` 棘轮到 L2 实测值（n≥5 的 1.0，带容差），
      堵住"一个非失败任务的 n=1 floor"被当降级提交。
   3. **nightly 阻塞化**：`rig-nightly.yml` 的 `regression-compare` 从 advisory 变成 issue/阻塞。
 - **接线（现有）**：`make check: lint test regression-gate golden-audit`（`Makefile:14`）；
   `regression-gate`（`:38`）；`regression-compare`（`:61`，nightly）；
   `reliability_baseline.json`（19 个 metrics）。
-- **现状**：⚠️ **存在但错位**。地板由 `tap_xy` 爬虫产生（coverage 全 0）、`compare` 只 gate 5/19。
+- **现状**：⚠️ **存在但仍不诚实**。离线 gate 已能守住 coverage/process/scroll 回归；但 committed
+  地板仍由 `tap_xy` 爬虫产生（coverage 全 0），还不是 L2 outcome floor。
 
 ### 旁路 — 漂移模拟（advisory，永不挡合并）
 
@@ -238,9 +238,11 @@ glassbox 真正缺的、也是 SPA-Bench 替不了的，是那个 **screenshot-o
 | `recoveries` / `strategy_switches` / `retries` | 跨动作求和（`:683,719-726`） | P2/P3 机制是否真触发 |
 | `vlm_*` | 调用/缓存命中等（`:692-735`） | 成本与缓存 |
 
-**`compare_benchmarks` 门禁集（`:1223-1254`）**：仅 `task_completion_rate` /
-`action_success_rate` / `root_pages_coverage`（降）+ `navigation_origin_precondition_failures` /
-`unknown_rate`（升）→ rc1；其余 14 个**只打印**。L3 待修 #1 = 扩这个集合。
+**`compare_benchmarks` 门禁集（2026-06-05 branch state）**：`task_completion_rate` /
+`action_success_rate` / `root_pages_coverage` / `expected_state_coverage` / `vlm_action_coverage` /
+`recoveries` / `strategy_switches` 下降 → rc1；`navigation_origin_precondition_failures` /
+`unknown_rate` 上升 → rc1；`scroll_success_rate` 仅在 baseline 与 candidate 都有 scroll 样本时下降
+→ rc1。其余成本/计数指标仍只打印。
 
 ---
 
@@ -248,16 +250,15 @@ glassbox 真正缺的、也是 SPA-Bench 替不了的，是那个 **screenshot-o
 
 | 步 | 动作 | 层 | 成本 | 依据 |
 |---|---|---|---|---|
-| **Rank 1** | 把 coverage 指标接进 `compare_benchmarks` rc1（单边棘轮）+ smoke 合成回归断言 | L3 | 低·离线 | §4 门禁集只 5/19 |
+| **Rank 1** | ✅ 把 coverage/process/scroll 指标接进 `compare_benchmarks` rc1（单边棘轮）+ smoke 合成回归断言 | L3 | 低·离线 | 2026-06-05 已落地 |
 | **Rank 2** | 行点击改走 `phone.semantic` + 每步 `terminal_expected_state`；定义 n≥5 多采样 | L2 | 高·真机 | honest-gate；`_task_outcome:622` |
 | **Rank 3** | 从 L2 冻结诚实地板 + nightly `regression-compare` 阻塞化 + 抬门槛>0 | L3 | 中 | `Makefile:61` |
 | Rank 4 | canonical-primitive floor + gate `scroll_success_rate` | L2/L3 | 中·真机 | `run-canonical-primitives` |
 | Rank 5 | world-model spine memory ON/OFF A/B（操作性门，非 census） | L2 | 中·真机 | spine 文档 |
 | 后置 | Tier B 感知回放（L1）；Tier C / UTG sim（旁路） | L1/旁路 | 中·离线 | 无默认路径数字前模拟无对照 |
 
-**关键依赖**：Rank 1（L3 离线、零遗憾）先做，给 Rank 2 的 coverage 指标"长出牙齿"；Rank 2
-（L2 承重）让 coverage 非零、outcome 真 execution-based；Rank 3 才有诚实地板可冻结。L1/旁路排在
-L2 跑通之后。
+**关键依赖**：Rank 1 已给 Rank 2 的 coverage 指标"长出牙齿"；Rank 2（L2 承重）让 coverage 非零、
+outcome 真 execution-based；Rank 3 才有诚实地板可冻结。L1/旁路排在 L2 跑通之后。
 
 ---
 
@@ -267,8 +268,8 @@ L2 跑通之后。
 - **L1**：录制语料上 grounding(point-in-box)/场景/OCR 不破地板。
 - **L2**：被测任务走 `phone.semantic`、每步带 terminal_expected_state、coverage 非零、n≥5 出
   `task_completion_rate`+方差+人类对照。
-- **L3**：`compare_benchmarks` gate 集含 4 个 coverage 指标 + scroll；floor 门槛棘轮到 L2 实测值；
-  nightly 阻塞。
+- **L3**：`compare_benchmarks` gate 集含 coverage/process 指标 + 有样本时的 scroll；floor 门槛棘轮到
+  L2 实测值；nightly 阻塞。
 - **旁路**：永远 advisory，不进任何 rc1。
 
 ---

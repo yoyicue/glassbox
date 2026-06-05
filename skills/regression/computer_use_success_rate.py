@@ -57,6 +57,40 @@ IOS_SETTINGS_TERMINAL_EXPECTED_STATE = {
     "kind": "root_coverage_complete",
     "payload": {},
 }
+COMPARE_METRIC_KEYS = (
+    "task_completion_rate",
+    "task_completion_variance",
+    "navigation_origin_precondition_failures",
+    "action_success_rate",
+    "unknown_rate",
+    "task_action_count",
+    "scroll_action_count",
+    "scroll_success_rate",
+    "expected_state_coverage",
+    "vlm_action_coverage",
+    "root_pages_coverage",
+    "recoveries",
+    "strategy_switches",
+    "retries",
+    "vlm_calls",
+    "vlm_calls_per_task",
+    "vlm_cache_hits",
+    "vlm_cache_misses",
+    "vlm_cache_hit_rate",
+)
+GATE_DROP_METRICS = {
+    "task_completion_rate",
+    "action_success_rate",
+    "expected_state_coverage",
+    "vlm_action_coverage",
+    "root_pages_coverage",
+    "recoveries",
+    "strategy_switches",
+}
+GATE_RISE_METRICS = {
+    "navigation_origin_precondition_failures",
+    "unknown_rate",
+}
 
 
 def _json_default(value: Any) -> str:
@@ -1220,36 +1254,21 @@ def compare_benchmarks(
     cand_metrics = candidate.get("metrics") or {}
     lines: list[str] = []
     rc = 0
-    for key in (
-        "task_completion_rate",
-        "task_completion_variance",
-        "navigation_origin_precondition_failures",
-        "action_success_rate",
-        "unknown_rate",
-        "task_action_count",
-        "scroll_action_count",
-        "scroll_success_rate",
-        "expected_state_coverage",
-        "vlm_action_coverage",
-        "root_pages_coverage",
-        "recoveries",
-        "strategy_switches",
-        "retries",
-        "vlm_calls",
-        "vlm_calls_per_task",
-        "vlm_cache_hits",
-        "vlm_cache_misses",
-        "vlm_cache_hit_rate",
-    ):
+    for key in COMPARE_METRIC_KEYS:
         base = float(base_metrics.get(key, 0.0) or 0.0)
         cand = float(cand_metrics.get(key, 0.0) or 0.0)
         delta = cand - base
         lines.append(f"{key}: baseline={base:.6g} candidate={cand:.6g} delta={delta:+.6g}")
-        if key in {"task_completion_rate", "action_success_rate", "root_pages_coverage"} and delta < -tolerance:
+        if key in GATE_DROP_METRICS and delta < -tolerance:
             rc = 1
-        if key == "navigation_origin_precondition_failures" and delta > tolerance:
+        if key in GATE_RISE_METRICS and delta > tolerance:
             rc = 1
-        if key == "unknown_rate" and delta > tolerance:
+        if (
+            key == "scroll_success_rate"
+            and float(base_metrics.get("scroll_action_count", 0.0) or 0.0) > 0.0
+            and float(cand_metrics.get("scroll_action_count", 0.0) or 0.0) > 0.0
+            and delta < -tolerance
+        ):
             rc = 1
     return rc, lines
 
