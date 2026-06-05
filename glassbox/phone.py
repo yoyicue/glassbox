@@ -1581,6 +1581,7 @@ class Phone:
         retry_budget: int | None = None,
         unknown_policy: str | None = None,
         idempotent: bool | None = None,
+        expected_state: dict[str, Any] | None = None,
     ) -> ActionResult:
         """Tap a known perceived element through target-bearing actuation feedback."""
         label = target or element.text or element.type or "element"
@@ -1606,6 +1607,8 @@ class Phone:
             target=label,
             actuation_options=actuation_options,
         )
+        if expected_state is not None:
+            metadata = {**metadata, "expected_state": expected_state}
         return self._execute_action(
             op,
             plan,

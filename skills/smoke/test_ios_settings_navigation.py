@@ -146,6 +146,7 @@ def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
     class RoutePhone:
         def __init__(self) -> None:
             self.tap_element_calls = 0
+            self.tap_element_kwargs: dict | None = None
 
         def navigate_to_page(self, *_args, **_kwargs):
             return SimpleNamespace(
@@ -158,6 +159,7 @@ def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
 
         def tap_element(self, *_args, **_kwargs):
             self.tap_element_calls += 1
+            self.tap_element_kwargs = dict(_kwargs)
             return ActionResult(
                 ok=True,
                 backend="mock",
@@ -175,6 +177,11 @@ def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
     assert settings_navigation.tap_settings_row(phone, _el("Bluetooth", 72, 344), actions)
 
     assert phone.tap_element_calls == 1
+    assert phone.tap_element_kwargs is not None
+    assert phone.tap_element_kwargs["expected_state"] == {
+        "kind": "page_id",
+        "payload": {"any_of": ["settings/Bluetooth", "settings/蓝牙"]},
+    }
 
 
 @pytest.mark.smoke

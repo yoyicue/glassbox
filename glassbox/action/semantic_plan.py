@@ -398,20 +398,20 @@ def verify_expected_state(expected: ExpectedState, scene: Any) -> SemanticOutcom
             confidence=0.0,
         )
     if expected.kind == "page_id":
-        wanted = str(expected.payload.get("page_id") or "")
+        wanted = _expected_page_ids(expected.payload)
         actual = str(getattr(scene, "page_id", "") or "")
-        status = "succeeded" if wanted and actual == wanted else "failed"
+        status = "succeeded" if wanted and actual in wanted else "failed"
         return SemanticOutcome(
             status=status,
             verifier="expected_state",
             reason=(
-                f"page_id matched: {wanted}"
+                f"page_id matched: {actual}"
                 if status == "succeeded"
-                else f"page_id mismatch: expected {wanted!r}, got {actual!r}"
+                else f"page_id mismatch: expected one of {wanted!r}, got {actual!r}"
             ),
             confidence=0.95 if status == "succeeded" else 0.75,
             matched_evidence=[actual] if status == "succeeded" else [],
-            missing_evidence=[wanted] if status != "succeeded" and wanted else [],
+            missing_evidence=list(wanted) if status != "succeeded" else [],
             deterministic=True,
         )
     texts = _scene_texts(scene)
@@ -460,6 +460,22 @@ def verify_expected_state(expected: ExpectedState, scene: Any) -> SemanticOutcom
         reason=f"unsupported expected-state kind: {expected.kind}",
         confidence=0.0,
     )
+
+
+def _expected_page_ids(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    wanted: list[str] = []
+
+    def add(value: Any) -> None:
+        page_id = str(value or "").strip()
+        if page_id and page_id not in wanted:
+            wanted.append(page_id)
+
+    any_of = payload.get("any_of")
+    if isinstance(any_of, (list, tuple)):
+        for item in any_of:
+            add(item)
+    add(payload.get("page_id"))
+    return tuple(wanted)
 
 
 def _scene_texts(scene: Any) -> list[str]:

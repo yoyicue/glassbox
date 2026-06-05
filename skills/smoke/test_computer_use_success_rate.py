@@ -589,6 +589,20 @@ def test_task_completion_rate_uses_terminal_expected_state(tmp_path):
     assert payload["metrics"]["action_success_rate"] == 1.0
 
 
+def test_task_completion_rate_supports_page_id_any_of_terminal_state(tmp_path):
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path, status="succeeded")],
+        terminal_expected_state={
+            "kind": "page_id",
+            "payload": {"any_of": ["settings/about", "settings/root"]},
+        },
+    )
+
+    assert validate_benchmark(payload) == []
+    assert payload["tasks"][0]["outcome"] == "succeeded"
+    assert payload["metrics"]["task_completion_rate"] == 1.0
+
+
 def test_task_completion_rate_supports_visible_text_terminal_state(tmp_path):
     payload = aggregate_benchmark(
         [_run_dir(tmp_path, status="succeeded")],

@@ -163,6 +163,10 @@ def test_tap_settings_row_uses_canonical_root_label_target():
     assert settings_navigation.tap_settings_row(phone, row, walkthrough._navigation_actions())
     assert phone.calls[0]["target"] == "待机显示"
     assert phone.calls[0]["intent"] == "settings.row:待机显示"
+    assert set(phone.calls[0]["expected_state"]["payload"]["any_of"]) >= {
+        "settings/待机显示",
+        "settings/StandBy",
+    }
     assert row.intent_label == "待机显示"
 
 

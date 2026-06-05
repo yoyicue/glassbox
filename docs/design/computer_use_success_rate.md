@@ -288,7 +288,7 @@ class ExpectedState:
     kind: Literal["page_id", "visible_text", "element_appears", "element_gone"]
     payload: dict[str, Any]   # typed variants are fine instead of a raw dict
     # payload shape per kind:
-    #   page_id         -> {"page_id": "settings/root"}
+    #   page_id         -> {"page_id": "settings/root"} or {"any_of": ["settings/root", ...]}
     #   visible_text    -> {"any_of": [...], "all_of": [...]}
     #   element_appears -> {"role": "...", "text": "...", "box": [x,y,w,h]?}
     #   element_gone    -> {"target_identity": {...}}   # needs the original target id
@@ -437,7 +437,10 @@ P3**:
    `StrategySpec` / `ExpectedState` round-trip as JSON; `SemanticActionPlan`
    binds runtime callables; the orchestrator can execute a semantic plan through
    the normal attempt/action artifact path; expected-state verification covers
-   `page_id`, `visible_text`, `element_appears`, and `element_gone`.
+   `page_id` (single `page_id` or `any_of` candidates), `visible_text`,
+   `element_appears`, and `element_gone`. Settings row taps now pass action-level
+   `page_id` expected-state through `tap_element`, so the success-rate harness
+   can measure expected-state coverage on the real row-opening path.
 3. **P1 — VLM gated escalation** — _implemented foundation + expected-state
    runtime integration._ The
    `VLMEscalationGate` implements the four triggers, confidence-missing

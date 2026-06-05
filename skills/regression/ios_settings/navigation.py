@@ -434,6 +434,18 @@ def _settings_row_page_id_candidates(
     return tuple(candidates)
 
 
+def _settings_row_expected_state(
+    label: str,
+    actions: SettingsNavigationActions,
+) -> dict[str, Any] | None:
+    page_ids = _settings_row_page_id_candidates(label, actions)
+    if not page_ids:
+        return None
+    if len(page_ids) == 1:
+        return {"kind": "page_id", "payload": {"page_id": page_ids[0]}}
+    return {"kind": "page_id", "payload": {"any_of": list(page_ids)}}
+
+
 def _try_settings_row_page_id_route(
     phone,
     label: str,
@@ -492,6 +504,7 @@ def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActio
     page_id_routed = _try_settings_row_page_id_route(phone, label, actions)
     if page_id_routed is not None:
         return page_id_routed
+    expected_state = _settings_row_expected_state(label, actions)
     tap_element = getattr(phone, "tap_element", None)
     if callable(tap_element):
         # Delegate to glassbox's actuation: same settings-aware first tap, but it
@@ -511,6 +524,7 @@ def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActio
             retry_budget=2,
             unknown_policy="retry",
             idempotent=True,
+            expected_state=expected_state,
         )
         accepted = actions.record_action_verdict(phone, result)
         if accepted:

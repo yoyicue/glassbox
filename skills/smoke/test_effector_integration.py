@@ -72,7 +72,14 @@ def test_phone_tap_text_drives_effector(mock_phone):
 def test_target_tap_entrypoints_record_action_plan_contract(mock_phone):
     """P6: high-level tap entrypoints preserve plan metadata in ActionRecord."""
 
-    def assert_last_action(*, x: int, y: int, via: str, target: str) -> None:
+    def assert_last_action(
+        *,
+        x: int,
+        y: int,
+        via: str,
+        target: str,
+        expected_state: dict | None = None,
+    ) -> None:
         last = mock_phone.effector.last()
         assert last is not None
         assert last.op == "tap"
@@ -89,6 +96,10 @@ def test_target_tap_entrypoints_record_action_plan_contract(mock_phone):
         assert record.params["actuation_attempt_index"] == 0
         assert record.params["regrounded"] is False
         assert record.params["action_ok"] is True
+        if expected_state is None:
+            assert "expected_state" not in record.params
+        else:
+            assert record.params["expected_state"] == expected_state
 
     mock_phone.ocr.elements = [
         UIElement(type="text", box=Box(x=10, y=20, w=20, h=10), text="Login", confidence=0.95)
@@ -97,8 +108,15 @@ def test_target_tap_entrypoints_record_action_plan_contract(mock_phone):
     assert_last_action(x=20, y=25, via="tap_text", target="Login")
 
     element = UIElement(type="text", box=Box(x=30, y=40, w=20, h=10), text="Next", confidence=0.95)
-    mock_phone.tap_element(element)
-    assert_last_action(x=40, y=45, via="tap_element", target="Next")
+    expected_state = {"kind": "visible_text", "payload": {"any_of": ["Done"]}}
+    mock_phone.tap_element(element, expected_state=expected_state)
+    assert_last_action(
+        x=40,
+        y=45,
+        via="tap_element",
+        target="Next",
+        expected_state=expected_state,
+    )
 
     mock_phone.ocr.elements = [
         UIElement(type="button", box=Box(x=50, y=60, w=30, h=12), text="Save", confidence=0.95)

@@ -407,8 +407,8 @@ def _terminal_expected_state_met(
     payload = terminal_expected_state.get("payload")
     payload = payload if isinstance(payload, Mapping) else {}
     if kind == "page_id":
-        wanted = str(payload.get("page_id") or "")
-        return bool(wanted) and final_state.get("page_id") == wanted
+        wanted = _expected_page_ids(payload)
+        return bool(wanted) and str(final_state.get("page_id") or "") in wanted
     if kind == "visible_text":
         texts = [str(text) for text in final_state.get("visible_texts", []) or []]
         any_of = [str(item) for item in payload.get("any_of", []) or []]
@@ -421,6 +421,22 @@ def _terminal_expected_state_met(
         matched = _final_state_element_matches(final_state, query)
         return matched if kind == "element_appears" else not matched
     return None
+
+
+def _expected_page_ids(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    wanted: list[str] = []
+
+    def add(value: Any) -> None:
+        page_id = str(value or "").strip()
+        if page_id and page_id not in wanted:
+            wanted.append(page_id)
+
+    any_of = payload.get("any_of")
+    if isinstance(any_of, list):
+        for item in any_of:
+            add(item)
+    add(payload.get("page_id"))
+    return tuple(wanted)
 
 
 def _final_state_element_matches(final_state: Mapping[str, Any], query: Mapping[str, Any]) -> bool:

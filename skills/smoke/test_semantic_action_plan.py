@@ -493,9 +493,26 @@ def test_verify_expected_state_page_id_and_visible_text():
         ],
     )
 
-    assert verify_expected_state(ExpectedState("page_id", {"page_id": "settings/root"}), scene).status == "succeeded"
-    assert verify_expected_state(ExpectedState("visible_text", {"any_of": ["通用"]}), scene).status == "succeeded"
-    assert verify_expected_state(ExpectedState("visible_text", {"all_of": ["通用", "不存在"]}), scene).status == "failed"
+    assert (
+        verify_expected_state(ExpectedState("page_id", {"page_id": "settings/root"}), scene).status
+        == "succeeded"
+    )
+    assert (
+        verify_expected_state(
+            ExpectedState("page_id", {"any_of": ["settings/about", "settings/root"]}), scene
+        ).status
+        == "succeeded"
+    )
+    assert (
+        verify_expected_state(ExpectedState("visible_text", {"any_of": ["通用"]}), scene).status
+        == "succeeded"
+    )
+    assert (
+        verify_expected_state(
+            ExpectedState("visible_text", {"all_of": ["通用", "不存在"]}), scene
+        ).status
+        == "failed"
+    )
 
 
 def test_verify_expected_state_element_appears_and_gone():
