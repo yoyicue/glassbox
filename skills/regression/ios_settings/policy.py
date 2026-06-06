@@ -93,6 +93,9 @@ EXPECTED_ROOT_NAV_TEXT = (
 
 SAFE_NAV_TEXT = (
     *EXPECTED_ROOT_NAV_TEXT,
+    # Locale-pack aliases that appear on Greater China English iPadOS but should
+    # not change the canonical 17-label acceptance vocabulary.
+    "WLAN",
     # Top-level read-only Settings pages that are not in the shared 17-label
     # acceptance vocabulary but are safe to enter and observe. iOS does not always
     # render a detectable disclosure chevron for these, so they need an explicit
@@ -471,6 +474,10 @@ IPAD_ROOT_TRAVERSAL_SKIP_LABELS = frozenset({
     # page when reached deliberately. Do not let root/sidebar traversal spend a
     # strict run proving that optional row.
     "Game Center",
+    # Optional/system roots outside the 17-label acceptance vocabulary. They can
+    # be counted from visible text/block evidence, but strict sidebar traversal
+    # should not spend action attempts on them.
+    "Wallpaper", "墙纸", "Apps",
 })
 _IPAD_ROOT_TRAVERSAL_SKIP_COMPACT = frozenset(
     compact_text(label).casefold() for label in IPAD_ROOT_TRAVERSAL_SKIP_LABELS
@@ -1777,6 +1784,8 @@ class IPadSettingsPolicy(SettingsPolicy):
         if len(text) > 48:
             return None
         if text in ROOT_TITLE or text in HARNESS_APP_MARKERS:
+            return None
+        if not self.is_safe_known_navigation_label(text):
             return None
         return text
 

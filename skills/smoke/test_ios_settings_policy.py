@@ -470,6 +470,7 @@ def test_ipad_split_view_detail_root_can_still_be_blocked():
     assert policy.safe_navigation_candidates(scene) == []
     root_candidates = policy.safe_navigation_candidates(scene, allow_sensitive_root_labels=True)
     assert [candidate.text for candidate in root_candidates] == [
+        "WLAN",
         "Bluetooth",
         "General",
         "Accessibility",
@@ -1169,6 +1170,32 @@ def test_ipad_sidebar_candidates_ignore_profile_band_owner_row():
     assert "Apple Account, iCloud" not in labels
     assert "Airplane Mode" not in labels
     assert labels[:2] == ["WLAN", "Bluetooth"]
+
+
+@pytest.mark.smoke
+def test_ipad_sidebar_candidates_skip_status_text_and_optional_roots():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        elements=[
+            _el("Q Search", 36, 90, w=70, h=14),
+            _el("WLAN", 35, 205, w=203, h=79, ty="button"),
+            _el("kacier", 182, 270, w=44, h=14),
+            _el("Bluetooth", 35, 252, w=217, h=74, ty="button"),
+            _el("General", 35, 346, w=217, h=74, ty="button"),
+            _el("Wallpaper", 35, 435, w=99, h=26, ty="list_item"),
+            _el("Apps", 35, 916, w=67, h=25, ty="list_item"),
+        ],
+    )
+
+    labels = [
+        (element.text or "").strip()
+        for element in policy.safe_navigation_candidates(scene, allow_sensitive_root_labels=True)
+    ]
+
+    assert labels == ["WLAN", "Bluetooth", "General"]
 
 
 @pytest.mark.smoke
