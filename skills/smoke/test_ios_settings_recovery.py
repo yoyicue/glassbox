@@ -89,7 +89,7 @@ def test_enter_settings_search_uses_ipad_top_search_pill_hit_point(monkeypatch):
     phone = SearchPhone()
     monkeypatch.setattr(walkthrough, "_scene_is_settings_root", lambda scene: scene is root)
     monkeypatch.setattr(walkthrough, "_is_settings_search_scene", lambda scene: scene is search)
-    monkeypatch.setattr(walkthrough.DEFAULT_SETTINGS_POLICY, "find_root_search_tab", lambda _scene: field)
+    monkeypatch.setattr(walkthrough, "_find_root_search_tab", lambda _scene: field)
 
     assert _enter_settings_search(phone)
     assert phone.taps == [(151, 100)]
@@ -138,7 +138,7 @@ def test_enter_settings_search_accepts_ipad_top_search_focus_without_scene_chang
     phone = SearchPhone()
     monkeypatch.setattr(walkthrough, "_scene_is_settings_root", lambda scene: scene is root)
     monkeypatch.setattr(walkthrough, "_is_settings_search_scene", lambda _scene: False)
-    monkeypatch.setattr(walkthrough.DEFAULT_SETTINGS_POLICY, "find_root_search_tab", lambda _scene: field)
+    monkeypatch.setattr(walkthrough, "_find_root_search_tab", lambda _scene: field)
 
     assert _enter_settings_search(phone)
     assert phone.taps == [(151, 100)]
@@ -561,7 +561,8 @@ def test_return_to_settings_root_recovers_from_system_search_via_home(monkeypatc
     assert phone.keys == []
 
 @pytest.mark.smoke
-def test_system_search_bootstrap_taps_safe_settings_root_result():
+def test_system_search_bootstrap_taps_safe_settings_root_result_row_lead(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
     scene = _scene(
         _el("建议", 18, 98, w=36),
         _el("App", 56, 152, w=34),
@@ -570,10 +571,62 @@ def test_system_search_bootstrap_taps_safe_settings_root_result():
         _el("面容ID与密码", 58, 710, w=106, ty="button"),
         _el("Q 搜索", 48, 912, w=62),
     )
-    phone = _NoNavigationPhone(scene)
+    root = _scene(_el("设置", 196, 72, w=48), _el("无线局域网", 54, 218, w=88))
+    monkeypatch.setattr(walkthrough, "_scene_is_settings_root", lambda current: current is root)
+
+    class OpeningSystemSearchPhone(_NoNavigationPhone):
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            self.scene = root
+            return ActionResult(
+                ok=True,
+                backend="fake",
+                connected=True,
+                semantic_status="succeeded",
+            )
+
+    phone = OpeningSystemSearchPhone(scene)
 
     assert _tap_visible_settings_root_result_from_system_search(phone, scene)
-    assert phone.taps == [(74, 222)]
+    assert phone.taps == [(32, 222)]
+
+
+@pytest.mark.smoke
+def test_system_search_bootstrap_taps_settings_icon_above_label():
+    label = _el("Settings", 108, 238, w=44, h=10)
+
+    assert walkthrough._system_search_root_result_tap_point(
+        label,
+        label="Settings",
+        viewport_size=(644, 984),
+    ) == (130, 199)
+
+
+@pytest.mark.smoke
+def test_system_search_bootstrap_rejects_no_progress_after_semantic_success(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    scene = _scene(
+        _el("建议", 18, 98, w=36),
+        _el("App", 56, 152, w=34),
+        _el("通用", 56, 212, w=36, ty="button"),
+        _el("Q 搜索", 48, 912, w=62),
+    )
+
+    class NoProgressSystemSearchPhone(_NoNavigationPhone):
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            return ActionResult(
+                ok=True,
+                backend="fake",
+                connected=True,
+                semantic_status="succeeded",
+                semantic_reason="scene changed after action",
+            )
+
+    phone = NoProgressSystemSearchPhone(scene)
+
+    assert not _tap_visible_settings_root_result_from_system_search(phone, scene)
+    assert phone.taps == [(32, 222)]
 
 @pytest.mark.smoke
 def test_system_search_bootstrap_rejects_unsafe_settings_result():
