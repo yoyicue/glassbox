@@ -1755,8 +1755,16 @@ class IPadSettingsPolicy(SettingsPolicy):
         cx, cy = element.box.center
         if cy < int(h * 0.10) or cy > int(h * 0.96) or cx > sidebar_right:
             return None
-        if element.box.x2 > sidebar_right + max(8, int(w * 0.02)):
-            return None
+        max_sidebar_overflow = max(8, int(w * 0.02))
+        sidebar_overflow = element.box.x2 - sidebar_right
+        if sidebar_overflow > max_sidebar_overflow:
+            known_root_row = (
+                element.type in {"list_item", "button"}
+                and self.is_safe_known_navigation_label(text)
+                and sidebar_overflow <= max(40, int(w * 0.06))
+            )
+            if not known_root_row:
+                return None
         if cy <= int(h * 0.18) and (
             re.match(r"^[Qq]\s+", text)
             or self.is_settings_search_affordance_text(text)

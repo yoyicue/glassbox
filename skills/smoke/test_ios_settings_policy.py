@@ -1254,6 +1254,31 @@ def test_ipad_sidebar_candidates_skip_game_center_optional_social_root():
 
 
 @pytest.mark.smoke
+def test_ipad_sidebar_accepts_known_root_row_with_minor_right_overflow():
+    policy = IPadSettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 989),
+        page_id="settings/Screen Time",
+        scene_type="settings_detail",
+        elements=[
+            _el("Screen Time", 406, 44, w=86, h=14),
+            _el("Privacy & Security", 35, 720, w=271, h=27, ty="list_item"),
+            _el("Content & Privacy Restrictions", 281, 872, w=237, h=29, ty="list_item"),
+        ],
+    )
+
+    labels = [
+        (element.text or "").strip()
+        for element in policy.safe_navigation_candidates(scene, allow_sensitive_root_labels=True)
+    ]
+
+    assert "Privacy & Security" in labels
+    assert "Content & Privacy Restrictions" not in labels
+
+
+@pytest.mark.smoke
 def test_ios_settings_policy_counts_wallet_root_but_does_not_navigate_it():
     scene = _scene(
         _el("设置", 198, 72, w=48),
