@@ -591,6 +591,76 @@ def test_root_reground_only_uses_live_safe_root_candidates(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_root_crawl_taps_regrounded_sidebar_text_as_row_target(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root = _scene(
+        _el("Settings", 48, 72, w=70),
+        _el("Q Search", 36, 90, w=70, h=14),
+        _el("Camera", 66, 118, w=52, h=12, ty="text"),
+        _el("Control Centre", 35, 156, w=129, h=25, ty="list_item"),
+    )
+
+    class IPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return root
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def viewport_size(self):
+            return (640, 990)
+
+    tapped: list[UIElement] = []
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        scene_kind=lambda _scene, phone=None: "settings_root",
+        root_coverage_perceive=lambda phone, _depth: phone.perceive(),
+        canonical_expected_root_label=lambda _label: None,
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=lambda _scene, **_kwargs: [
+            _el("Camera", 66, 118, w=52, h=12, ty="text")
+        ],
+        tap_settings_row=lambda _phone, row: tapped.append(row) or True,
+        same_page_after_tap=lambda *_args, **_kwargs: False,
+        return_one_level=lambda *_args, **_kwargs: True,
+        crawl_current_page=lambda *_args, **_kwargs: None,
+        scroll_budget_for_depth=lambda _depth: 1,
+        root_coverage=lambda _visits, phone=None: {"visited": ["Camera"], "missing": []},
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        crawl_missing_root_pages_via_search=lambda *_args, **_kwargs: None,
+    )
+
+    settings_navigation.crawl_current_page(
+        IPadPhone(),
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert len(tapped) == 1
+    assert tapped[0].text == "Camera"
+    assert tapped[0].type == "list_item"
+    assert tapped[0].preferred_tap_point == (92, 124)
+    assert tapped[0].box.h >= 44
+
+
+@pytest.mark.smoke
 def test_search_result_picker_uses_top_visible_root_result():
     scene = _scene(
         _el("08:40", 48, 26, w=72, ty="status_bar"),

@@ -406,6 +406,10 @@ def open_visible_or_scroll_to_row(
 
 
 def settings_row_tap_point(phone, row_hit: UIElement) -> tuple[int, int]:
+    preferred = getattr(row_hit, "preferred_tap_point", None)
+    if preferred is not None:
+        x, y = preferred
+        return int(x), int(y)
     w, _ = phone.viewport_size()
     _, row_y = row_hit.box.center
     if _is_ipad_target(phone):
@@ -439,6 +443,14 @@ def settings_row_target_element(phone, scene, row_hit: UIElement) -> UIElement:
         "box": row_box,
         "preferred_tap_point": (x, y),
     })
+
+
+def _tap_candidate_for_scene(phone, scene, row_hit: UIElement) -> UIElement:
+    if scene is None or not callable(getattr(phone, "viewport_size", None)):
+        return row_hit
+    with contextlib.suppress(Exception):
+        return settings_row_target_element(phone, scene, row_hit)
+    return row_hit
 
 
 def _settings_row_page_id(label: str) -> str | None:
@@ -944,7 +956,8 @@ def crawl_current_page(
                 scene = current
             attempted.add(label)
             before_texts = actions.texts(scene)
-            if not actions.tap_settings_row(phone, cand):
+            tap_cand = _tap_candidate_for_scene(phone, scene, cand)
+            if not actions.tap_settings_row(phone, tap_cand):
                 if depth == 0 and actions.canonical_expected_root_label(label) is not None:
                     continue
                 actions.record_navigation_failure(
@@ -974,7 +987,10 @@ def crawl_current_page(
                 if (
                     retry_cand is not None
                     and not actions.is_settings_section_header(after, retry_cand)
-                    and actions.tap_settings_row(phone, retry_cand)
+                    and actions.tap_settings_row(
+                        phone,
+                        _tap_candidate_for_scene(phone, after, retry_cand),
+                    )
                 ):
                     time.sleep(1.0)
                     phone.invalidate_perceive_cache()
