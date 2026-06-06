@@ -246,6 +246,28 @@ def test_core_settings_root_row_annotator_uses_viewport_relative_band_for_ipad_s
 
 
 @pytest.mark.smoke
+def test_core_settings_root_row_annotator_skips_long_detail_copy_before_fuzzy_aliases():
+    scene = _scene(
+        _el("Settings", 372, 70, w=72),
+        _el("Touch ID & Passcode", 66, 118, w=150),
+        _el("Manage apps using Touch ID and other iPad", 35, 160, w=246),
+    )
+    scene.platform_scene_kind = "settings_detail"
+    scene.classification_evidence = ["ipad_split_view"]
+
+    updated = annotate_settings_root_row_intents(
+        scene,
+        viewport_size=(640, 990),
+        fuzzy_aliases=True,
+    )
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 1
+    assert by_text["Touch ID & Passcode"].intent_label == "Face ID与密码"
+    assert by_text["Manage apps using Touch ID and other iPad"].intent_label is None
+
+
+@pytest.mark.smoke
 def test_expected_root_labels_have_search_queries():
     assert set(ROOT_SEARCH_QUERIES) == set(EXPECTED_ROOT_NAV_TEXT_ZH)
     assert all(query.strip() for query in ROOT_SEARCH_QUERIES.values())
