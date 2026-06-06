@@ -93,6 +93,14 @@ GATE_RISE_METRICS = {
 }
 FLOOR_IDENTITY_CONFIG_KEYS = ("phone_model", "task_set", "language", "region")
 FLOOR_MIN_ROUNDS = 5
+IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL = "ios_settings_clean_hdmi"
+IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT = {
+    "voice_control_overlay": "off",
+    "fka_help_overlay": "absent",
+    "stage_manager": "off",
+    "settings_window_mode": "fullscreen",
+}
+VOICE_CONTROL_NUMERIC_MARKER_REJECT_THRESHOLD = 4
 
 
 def _json_default(value: Any) -> str:
@@ -1324,6 +1332,8 @@ def validate_floor_candidate(
     if candidate_rounds < required_rounds:
         reasons.append(f"config.rounds {candidate_rounds} < required {required_rounds}")
 
+    reasons.extend(_floor_candidate_environment_reasons(candidate))
+
     floor_metrics = current_floor.get("metrics") or {}
     candidate_metrics = candidate.get("metrics") or {}
     tol = float(tolerance)
@@ -1360,6 +1370,91 @@ def validate_floor_candidate(
         reasons.append("expected_state_coverage must be > 0 for a promoted L2 floor")
 
     return (1 if reasons else 0), reasons or ["OK"]
+
+
+def _floor_candidate_environment_reasons(candidate: Mapping[str, Any]) -> list[str]:
+    """Reject polluted/default-mismatched Settings floor candidates.
+
+    The default Settings floor is the clean HDMI cell. Voice Control overlay,
+    FKA help, and Stage Manager/windowed Settings are valid diagnostic or a11y
+    cells, but they change the observation distribution and must not silently
+    replace the ordinary floor.
+    """
+
+    config = candidate.get("config") if isinstance(candidate.get("config"), Mapping) else {}
+    if str(config.get("task_set") or "") != "ios_settings":
+        return []
+    reasons: list[str] = []
+    evaluation_cell = config.get("evaluation_cell")
+    if evaluation_cell != IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL:
+        reasons.append(
+            "config.evaluation_cell must be "
+            f"{IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL!r} for promoted Settings floors"
+        )
+    environment = config.get("environment")
+    env = environment if isinstance(environment, Mapping) else {}
+    if not isinstance(environment, Mapping):
+        reasons.append("config.environment must declare the clean HDMI Settings state")
+    for key, expected in IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT.items():
+        value = env.get(key)
+        if value != expected:
+            reasons.append(f"config.environment.{key} must be {expected!r}; got {value!r}")
+    reasons.extend(_observed_floor_environment_reasons(candidate))
+    return reasons
+
+
+def _observed_floor_environment_reasons(candidate: Mapping[str, Any]) -> list[str]:
+    tasks = candidate.get("tasks")
+    if not isinstance(tasks, list):
+        return []
+    reasons: list[str] = []
+    for task_index, task in enumerate(tasks):
+        if not isinstance(task, Mapping):
+            continue
+        final_state = task.get("final_state")
+        if not isinstance(final_state, Mapping):
+            continue
+        marker_count = _voice_control_numeric_marker_count(final_state)
+        if marker_count >= VOICE_CONTROL_NUMERIC_MARKER_REJECT_THRESHOLD:
+            reasons.append(
+                f"tasks[{task_index}].final_state has {marker_count} numeric Voice Control "
+                "overlay markers; default Settings floor requires Voice Control overlay off"
+            )
+    return reasons
+
+
+def _voice_control_numeric_marker_count(final_state: Mapping[str, Any]) -> int:
+    element_count = 0
+    elements = final_state.get("elements")
+    if isinstance(elements, list):
+        try:
+            from glassbox.cognition.base import UIElement
+            from glassbox.cognition.voice_control_overlay import parse_voice_control_overlay
+
+            ui_elements = [
+                UIElement.model_validate(element)
+                for element in elements
+                if isinstance(element, Mapping)
+            ]
+            element_count = len(parse_voice_control_overlay(ui_elements, mode="item_numbers"))
+        except Exception:
+            element_count = 0
+    text_count = 0
+    texts = final_state.get("visible_texts")
+    if isinstance(texts, list):
+        try:
+            from glassbox.cognition.voice_control_overlay import overlay_number
+
+            text_count = sum(1 for text in texts if overlay_number(str(text)) is not None)
+        except Exception:
+            text_count = 0
+    return max(element_count, text_count)
+
+
+def _evaluation_environment_for_cell(evaluation_cell: str) -> dict[str, str] | None:
+    if evaluation_cell == IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL:
+        return dict(IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT)
+    return None
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -1454,16 +1549,21 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
     from skills.regression.ios_settings.policy import EXPECTED_ROOT_NAV_TEXT_ZH
 
     try:
+        environment = _evaluation_environment_for_cell(str(args.evaluation_cell))
+        config = {
+            "rounds": args.rounds,
+            "task_set": "ios_settings",
+            "language": args.language,
+            "region": args.region,
+            "evaluation_cell": str(args.evaluation_cell),
+        }
+        if environment is not None:
+            config["environment"] = environment
         payload = aggregate_benchmark(
             run_dirs,
             task="settings_readonly_walkthrough",
             terminal_expected_state=terminal,
-            config={
-                "rounds": args.rounds,
-                "task_set": "ios_settings",
-                "language": args.language,
-                "region": args.region,
-            },
+            config=config,
             expected_root_pages=EXPECTED_ROOT_NAV_TEXT_ZH,
             root_coverages=root_coverages,
         )
@@ -1549,6 +1649,11 @@ def main(argv: list[str] | None = None) -> int:
     aggregate.add_argument("--out", type=Path, required=True)
     aggregate.add_argument("--task", default="computer_use_run")
     aggregate.add_argument("--terminal-expected-state", default=None)
+    aggregate.add_argument(
+        "--config",
+        default=None,
+        help="Optional JSON object merged into benchmark.config for explicit eval-cell metadata.",
+    )
 
     validate = sub.add_parser("validate", help="Validate a benchmark JSON artifact")
     validate.add_argument("benchmark", type=Path)
@@ -1575,6 +1680,15 @@ def main(argv: list[str] | None = None) -> int:
     run_settings.add_argument("--terminal-expected-state", default=None)
     run_settings.add_argument("--language", default=None)
     run_settings.add_argument("--region", default=None)
+    run_settings.add_argument(
+        "--evaluation-cell",
+        default=IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL,
+        help=(
+            "Benchmark cell label. The default clean HDMI Settings cell is the only "
+            "cell eligible for default floor promotion; a11y/Voice Control cells "
+            "must be reported separately."
+        ),
+    )
     run_settings.add_argument("--quick", action="store_true")
     run_settings.add_argument("--skip-diagnose", action="store_true")
     run_settings.add_argument("--skip-round-verify", action="store_true")
@@ -1601,6 +1715,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.run_dir:
                 print("ERROR: use either --task-manifest or --run-dir, not both")
                 return 1
+            if args.config is not None:
+                print("ERROR: --config is only supported with --run-dir; task manifests carry config")
+                return 1
             try:
                 payload = aggregate_benchmark_manifest(args.task_manifest)
             except ValueError as exc:
@@ -1616,7 +1733,17 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"ERROR: --terminal-expected-state: {exc}")
                 return 1
             try:
-                payload = aggregate_benchmark(args.run_dir, task=args.task, terminal_expected_state=terminal)
+                config = _parse_json_arg(args.config, {})
+            except (json.JSONDecodeError, ValueError) as exc:
+                print(f"ERROR: --config: {exc}")
+                return 1
+            try:
+                payload = aggregate_benchmark(
+                    args.run_dir,
+                    task=args.task,
+                    terminal_expected_state=terminal,
+                    config=config,
+                )
             except ValueError as exc:
                 print(f"ERROR: {exc}")
                 return 1

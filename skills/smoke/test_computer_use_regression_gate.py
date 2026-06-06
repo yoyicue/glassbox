@@ -32,6 +32,8 @@ import pytest
 
 from skills.regression.computer_use_success_rate import (
     _SCROLL_FILLER_OPS,
+    IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT,
+    IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL,
     _metrics,
     compare_benchmarks,
     main,
@@ -335,6 +337,61 @@ def test_floor_candidate_requires_expected_state_coverage_by_default():
     rc, lines = validate_floor_candidate(baseline, baseline, require_expected_state_coverage=False)
     assert rc == 0
     assert lines == ["OK"]
+
+
+@pytest.mark.smoke
+def test_floor_candidate_requires_clean_hdmi_settings_cell():
+    baseline = _baseline()
+    candidate = _with_expected_state_coverage(baseline, count=3)
+    candidate["config"]["evaluation_cell"] = "ios_settings_a11y_voice_control"
+    candidate["config"]["environment"] = {
+        **IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT,
+        "voice_control_overlay": "item_numbers",
+    }
+
+    rc, lines = validate_floor_candidate(baseline, candidate)
+
+    assert rc == 1
+    assert any(
+        line
+        == (
+            "config.evaluation_cell must be "
+            f"{IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL!r} for promoted Settings floors"
+        )
+        for line in lines
+    )
+    assert any(
+        line == "config.environment.voice_control_overlay must be 'off'; got 'item_numbers'"
+        for line in lines
+    )
+
+
+@pytest.mark.smoke
+def test_floor_candidate_rejects_observed_voice_control_numeric_overlay():
+    baseline = _baseline()
+    candidate = _with_expected_state_coverage(baseline, count=3)
+    candidate["tasks"][0]["final_state"]["elements"] = [
+        {
+            "type": "text",
+            "box": {"x": 8, "y": 80 + i * 24, "w": 14, "h": 12},
+            "text": str(i + 1),
+            "confidence": 1.0,
+            "element_id": i,
+        }
+        for i in range(6)
+    ]
+
+    rc, lines = validate_floor_candidate(baseline, candidate)
+
+    assert rc == 1
+    assert any(
+        line
+        == (
+            "tasks[0].final_state has 6 numeric Voice Control overlay markers; "
+            "default Settings floor requires Voice Control overlay off"
+        )
+        for line in lines
+    )
 
 
 @pytest.mark.smoke

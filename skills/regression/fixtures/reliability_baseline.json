@@ -10,6 +10,13 @@
     "task_set": "ios_settings",
     "language": "en",
     "region": "HK",
+    "evaluation_cell": "ios_settings_clean_hdmi",
+    "environment": {
+      "voice_control_overlay": "off",
+      "fka_help_overlay": "absent",
+      "stage_manager": "off",
+      "settings_window_mode": "fullscreen"
+    },
     "note": "committed regression floor — successful real iPad mini 7 (en/HK) full Settings read-only drill-down, n=5, task_completion_rate=1.0, task_completion_variance=0.0, root_pages_coverage=1.0; VLM and expected-state row verification did not fire on this path."
   },
   "tasks": [

@@ -1081,6 +1081,11 @@ def test_cli_aggregate_validate_and_compare(tmp_path):
     candidate = tmp_path / "candidate.json"
     manifest = tmp_path / "tasks.json"
     manifest_out = tmp_path / "manifest-benchmark.json"
+    config = {
+        "task_set": "ios_settings",
+        "evaluation_cell": success_rate.IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL,
+        "environment": success_rate.IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT,
+    }
     _write_json(
         manifest,
         {
@@ -1095,7 +1100,24 @@ def test_cli_aggregate_validate_and_compare(tmp_path):
         },
     )
 
-    assert main(["aggregate", "--run-dir", str(run_dir), "--out", str(baseline)]) == 0
+    assert main(
+        [
+            "aggregate",
+            "--run-dir",
+            str(run_dir),
+            "--out",
+            str(baseline),
+            "--config",
+            json.dumps(config),
+        ]
+    ) == 0
+    baseline_payload = json.loads(baseline.read_text(encoding="utf-8"))
+    assert baseline_payload["config"]["task_set"] == "ios_settings"
+    assert (
+        baseline_payload["config"]["evaluation_cell"]
+        == success_rate.IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL
+    )
+    assert baseline_payload["config"]["environment"] == success_rate.IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT
     assert main(["validate", str(baseline)]) == 0
     assert main(["aggregate", "--run-dir", str(run_dir), "--out", str(candidate)]) == 0
     assert main(["compare", str(baseline), str(candidate)]) == 0

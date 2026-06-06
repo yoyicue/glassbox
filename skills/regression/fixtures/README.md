@@ -49,9 +49,10 @@ It is load-bearing in two places:
   `skills/smoke/test_computer_use_regression_gate.py` also proves
   `compare_benchmarks` catches a regression (rc 1), rejects a malformed
   candidate (rc 2), validates the L2 expected-state snapshot, asserts it stays
-  scrubbed, and proves the real snapshot fails if expected-state coverage drops
-  to zero. `skills/smoke/test_human_baseline.py` validates the human
-  protocol/template and its metrics/PII checks. No hardware needed.
+  scrubbed, proves the real snapshot fails if expected-state coverage drops to
+  zero, and proves `validate-floor-candidate` rejects Settings candidates outside
+  the clean HDMI eval cell. `skills/smoke/test_human_baseline.py` validates the
+  human protocol/template and its metrics/PII checks. No hardware needed.
 - **On-rig (nightly, self-hosted):** `.github/workflows/rig-nightly.yml` runs the
   canonical primitives and the Settings drill-down on a real device, then
   `make regression-compare CANDIDATE=<fresh benchmark>` fails the run on any drop
@@ -77,10 +78,19 @@ Only a candidate that exits 0 should replace `reliability_baseline.json`. The
 current `l2_settings_expected_state_snapshot.json` intentionally exits 1 here:
 it is coverage-bearing evidence, not the completion floor.
 
+For the default iOS Settings floor, the candidate must declare
+`config.evaluation_cell="ios_settings_clean_hdmi"` and a clean
+`config.environment`: Voice Control overlay off, FKA/help overlay absent, Stage
+Manager off, and Settings fullscreen. `run-ios-settings` writes that metadata by
+default. If you aggregate existing run dirs directly, pass the config explicitly;
+`validate-floor-candidate` also rejects candidates whose final-state elements or
+visible texts show a cluster of Voice Control numeric overlay markers.
+
 ```bash
 uv run python -m skills.regression.computer_use_success_rate aggregate \
   --run-dir <the validated artifact run dir> \
   --task settings_readonly_walkthrough \
+  --config '{"task_set":"ios_settings","evaluation_cell":"ios_settings_clean_hdmi","environment":{"voice_control_overlay":"off","fka_help_overlay":"absent","stage_manager":"off","settings_window_mode":"fullscreen"}}' \
   --out skills/regression/fixtures/reliability_baseline.json
 # then re-pin run_id/started_at/git_sha/config.note for reviewability,
 # and `make regression-gate`.

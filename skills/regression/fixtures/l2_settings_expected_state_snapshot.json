@@ -10,6 +10,13 @@
     "task_set": "ios_settings",
     "language": "en",
     "region": "HK",
+    "evaluation_cell": "ios_settings_clean_hdmi",
+    "environment": {
+      "voice_control_overlay": "off",
+      "fka_help_overlay": "absent",
+      "stage_manager": "off",
+      "settings_window_mode": "fullscreen"
+    },
     "note": "L2 expected-state load-bearing snapshot — real iPad mini 7 (en/HK) full Settings read-only drill-down, n=5, code d9695ae, captured 2026-06-06; semantic Settings row/search taps carried page_id expected-state. This is not the committed completion floor because one sample failed; it preserves the coverage-bearing eval ledger."
   },
   "tasks": [
