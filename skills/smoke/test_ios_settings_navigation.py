@@ -2151,6 +2151,54 @@ def test_picokvm_ipad_settings_row_projection_stays_in_sidebar():
 
 
 @pytest.mark.smoke
+def test_picokvm_ipad_full_width_root_row_keeps_sidebar_preferred_point():
+    from glassbox.phone import Phone
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Phone:
+        device_geometry = _Geometry()
+        _last_scene = _scene(
+            _el("Settings", 35, 72, w=95, h=28),
+            _el("WLAN", 35, 263, w=75, h=26, ty="list_item"),
+        )
+        _last_scene.viewport_size = (640, 989)
+        _last_scene.platform_scene_kind = "settings_detail"
+        _last_scene.page_id = "settings/Touch ID & Passcode"
+        _last_scene.safe_actions = ("tap_root_row",)
+
+        def _effector_backend(self):
+            return "picokvm"
+
+        def effector_backend(self):
+            return self._effector_backend()
+
+        @property
+        def last_scene(self):
+            return self._last_scene
+
+        def viewport_size(self):
+            return self._viewport_size()
+
+        def _viewport_size(self):
+            return 640, 989
+
+    hit = _el("WLAN", 35, 263, w=75, h=26, ty="list_item")
+    hit.intent_label = "无线局域网"
+    hit.intent_source = "settings_root_lexicon"
+    hit.preferred_tap_point = (72, 276)
+    full_width_row = hit.model_copy(
+        update={
+            "box": Box(x=0, y=243, w=640, h=66),
+            "preferred_tap_point": (72, 276),
+        }
+    )
+
+    assert Phone._picokvm_settings_row_tap_point_for_element(_Phone(), full_width_row) == (72, 276)
+
+
+@pytest.mark.smoke
 def test_picokvm_ipad_detail_row_projection_moves_inside_detail_pane():
     from glassbox.phone import Phone
 

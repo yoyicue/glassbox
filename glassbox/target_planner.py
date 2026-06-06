@@ -19,6 +19,7 @@ from glassbox.action.actuation import (
 )
 from glassbox.cognition import UIElement
 from glassbox.cognition.text_match import compact_text
+from glassbox.ios.settings_rows import visible_settings_root_row_label
 
 _KEY_RETURN = 0x28
 _REGROUND_MIN_SHIFT_PX = 24
@@ -262,6 +263,18 @@ class TargetPlanner:
             from glassbox.ipados.scene import sidebar_right_x
 
             sidebar_right = sidebar_right_x(width)
+            preferred = el.preferred_tap_point
+            left_edge_in_sidebar = el.box.x <= max(16, int(width * 0.04))
+            known_root_row = visible_settings_root_row_label(
+                el,
+                viewport_size=(width, height),
+            ) is not None
+            if left_edge_in_sidebar and known_root_row:
+                hint_x = int(preferred[0]) if preferred is not None else min(cx, sidebar_right - 44)
+                return min(
+                    max(hint_x, int(width * 0.10)),
+                    max(int(width * 0.10), sidebar_right - 44),
+                ), cy
             if cx <= sidebar_right:
                 return min(max(cx, int(width * 0.10)), max(int(width * 0.10), sidebar_right - 44)), cy
             detail_x = min(
