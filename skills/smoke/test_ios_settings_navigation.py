@@ -2199,6 +2199,52 @@ def test_picokvm_ipad_full_width_root_row_keeps_sidebar_preferred_point():
 
 
 @pytest.mark.smoke
+def test_picokvm_ipad_extra_sidebar_row_keeps_sidebar_preferred_point():
+    from glassbox.phone import Phone
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Phone:
+        device_geometry = _Geometry()
+        _last_scene = _scene(
+            _el("Accessibility", 70, 80, w=110, h=22),
+            _el("Apple Pencil", 35, 494, w=232, h=25, ty="list_item"),
+        )
+        _last_scene.viewport_size = (640, 981)
+        _last_scene.platform_scene_kind = "settings_detail"
+        _last_scene.page_id = "settings/Accessibility"
+        _last_scene.safe_actions = ("tap_root_row",)
+
+        def _effector_backend(self):
+            return "picokvm"
+
+        def effector_backend(self):
+            return self._effector_backend()
+
+        @property
+        def last_scene(self):
+            return self._last_scene
+
+        def viewport_size(self):
+            return self._viewport_size()
+
+        def _viewport_size(self):
+            return 640, 981
+
+    hit = _el("Apple Pencil", 35, 494, w=232, h=25, ty="list_item")
+    hit.preferred_tap_point = (151, 506)
+    full_width_row = hit.model_copy(
+        update={
+            "box": Box(x=0, y=474, w=640, h=64),
+            "preferred_tap_point": (151, 506),
+        }
+    )
+
+    assert Phone._picokvm_settings_row_tap_point_for_element(_Phone(), full_width_row) == (151, 506)
+
+
+@pytest.mark.smoke
 def test_ipad_settings_row_plan_does_not_offset_sidebar_root_point():
     from glassbox.target_planner import TargetPlanner
 
@@ -2214,10 +2260,10 @@ def test_ipad_settings_row_plan_does_not_offset_sidebar_root_point():
         device_geometry = _Geometry()
         action_orchestrator = SimpleNamespace(actuation_profile=_Profile())
         effector = SimpleNamespace(tap=lambda _x, _y: None)
-        _last_scene = _scene(_el("Bluetooth", 35, 307, w=574, h=40, ty="switch"))
+        _last_scene = _scene(_el("Apple Pencil", 35, 494, w=232, h=25, ty="list_item"))
         _last_scene.viewport_size = (640, 979)
         _last_scene.platform_scene_kind = "settings_detail"
-        _last_scene.page_id = "settings/WLAN"
+        _last_scene.page_id = "settings/Accessibility"
         _last_scene.safe_actions = ("tap_root_row",)
 
         @property
@@ -2242,20 +2288,18 @@ def test_ipad_settings_row_plan_does_not_offset_sidebar_root_point():
         def picokvm_fresh_verify_kwargs(self, _action):
             return {}
 
-    row = _el("Bluetooth", 0, 287, w=640, h=56, ty="list_item")
-    row.intent_label = "蓝牙"
-    row.intent_source = "settings_root_lexicon"
-    row.preferred_tap_point = (237, 315)
+    row = _el("Apple Pencil", 0, 474, w=640, h=64, ty="list_item")
+    row.preferred_tap_point = (151, 506)
 
     plan, _metadata = TargetPlanner(_Phone()).target_tap_plan(
         element=row,
-        intent="settings.row:Bluetooth",
+        intent="settings.row:Apple Pencil",
         via="settings.tap_row",
-        target="Bluetooth",
+        target="Apple Pencil",
     )
 
     first = plan.candidate_target_points[0]
-    assert (first.x, first.y) == (237, 315)
+    assert (first.x, first.y) == (151, 506)
 
 
 @pytest.mark.smoke

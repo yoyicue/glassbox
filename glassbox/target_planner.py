@@ -263,8 +263,13 @@ class TargetPlanner:
             from glassbox.ipados.scene import sidebar_right_x
 
             sidebar_right = sidebar_right_x(width)
+            preferred = el.preferred_tap_point
+            if self._has_ipad_sidebar_preferred_point(el, viewport_size=(width, height)):
+                return min(
+                    max(int(preferred[0]), int(width * 0.10)),
+                    max(int(width * 0.10), sidebar_right - 44),
+                ), int(preferred[1])
             if self._is_ipad_sidebar_root_row_target(el, viewport_size=(width, height)):
-                preferred = el.preferred_tap_point
                 hint_x = int(preferred[0]) if preferred is not None else min(cx, sidebar_right - 44)
                 return min(
                     max(hint_x, int(width * 0.10)),
@@ -298,6 +303,27 @@ class TargetPlanner:
         if el.box.x > max(16, int(width * 0.04)):
             return False
         return visible_settings_root_row_label(el, viewport_size=(width, height)) is not None
+
+    def _has_ipad_sidebar_preferred_point(
+        self,
+        el: UIElement,
+        *,
+        viewport_size: tuple[int, int],
+    ) -> bool:
+        model = str(
+            getattr(getattr(self._phone, "device_geometry", None), "model", "") or ""
+        ).lower().replace("-", "_")
+        if not model.startswith("ipad"):
+            return False
+        width, _height = viewport_size
+        if el.box.x > max(16, int(width * 0.04)):
+            return False
+        preferred = el.preferred_tap_point
+        if preferred is None:
+            return False
+        from glassbox.ipados.scene import sidebar_right_x
+
+        return int(preferred[0]) <= sidebar_right_x(width)
 
     @staticmethod
     def pop_actuation_options(kwargs: dict) -> dict:
@@ -352,9 +378,9 @@ class TargetPlanner:
         viewport_size = self._viewport_size()
         preferred = self.tap_point_for_element(element)
         control_bucket = control_bucket_for_element(element, viewport_size=viewport_size)
-        skip_offset = via == "settings.tap_row" and self._is_ipad_sidebar_root_row_target(
-            element,
-            viewport_size=viewport_size,
+        skip_offset = via == "settings.tap_row" and (
+            self._has_ipad_sidebar_preferred_point(element, viewport_size=viewport_size)
+            or self._is_ipad_sidebar_root_row_target(element, viewport_size=viewport_size)
         )
         offset = None if skip_offset else self.actuation_offset(control_bucket)
         if offset is not None and offset.space == "frame_px":
