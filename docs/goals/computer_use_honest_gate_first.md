@@ -38,7 +38,7 @@ multi-round task-completion floor.
 | The load-bearing primitive was failing | old `scroll_success_rate=0.2222` (2/9 succeed, 7 unknown) — the mechanical reason that run never reached lower sections / root |
 | Key verification stages never fired | old `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`, `vlm_calls=0`; `strategy_switches=5`, so the ladder switched, but not with expected-state or VLM coverage |
 | The old task-completion gate could not fail on this floor | `compare` gate at `computer_use_success_rate.py:1184` tripped only on `delta < -tolerance` for `{task_completion_rate, action_success_rate, root_pages_coverage}`. A floor pinned at `task_completion_rate=0.0` could not reject another zero-completion candidate on task completion |
-| …and `make check` did not run that gate | `regression-gate` (`Makefile:36-38`) ran `validate` (schema-only) + `test_computer_use_regression_gate.py`, whose floor test (`test_committed_baseline_fixture_is_schema_valid`) checked **schema only**. `compare` ran only in `regression-compare`/`ab-semantic-plan` (`Makefile:45,64`), which need a live rig. **So the failed floor passed offline CI green.** |
+| …and `make check` did not run that gate | `regression-gate` ran `validate` (schema-only) + `test_computer_use_regression_gate.py`, whose floor test (`test_committed_baseline_fixture_is_schema_valid`) checked **schema only**. `compare` ran only in `regression-compare`/`ab-semantic-plan`, which need a live rig. **So the failed floor passed offline CI green.** |
 
 **Net:** the number being optimized and ratcheted (`action_success_rate`) did not
 measure task success and structurally masked failure; the gate guarding it could
@@ -230,7 +230,7 @@ floor's `outcome="failed"` / `task_completion_rate=0.0` /
 `scroll_success_rate=0.2222` / `action_success_rate=0.9553`; the old op
 breakdown (back 59 / tap 48 / scroll 9 / …); the gate logic at
 `computer_use_success_rate.py:1184`; that `regression-gate` previously ran
-`validate` + a schema-only smoke test and **not** `compare` (`Makefile:36-38`);
+`validate` + a schema-only smoke test and **not** `compare`;
 the crawler's `tap_xy` path (`navigation.py:163,254,455` → `phone.py:1613`);
 the fixture has **0** `entered_graph` fields; `config.py` has **26** `bool = False`
 vs **3** `bool = True`; the L1 A/B median table
@@ -249,7 +249,8 @@ committed in `skills/regression/fixtures/l2_settings_expected_state_snapshot.jso
 and guarded by `skills/smoke/test_computer_use_regression_gate.py`. The matching
 human-control template is committed at
 `skills/regression/fixtures/human_baseline_settings_template.json` and guarded by
-`skills/smoke/test_human_baseline.py`; it contains no human data yet.
+`make regression-gate` / `skills/smoke/test_human_baseline.py`; it contains no
+human data yet.
 
 **Relayed, re-confirm before acting:** `main` branch-protection status (a live `gh`
 check timed out on network; `code_health_roadmap.md:83` records it as unprotected —

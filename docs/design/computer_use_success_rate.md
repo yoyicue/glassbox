@@ -458,7 +458,8 @@ P3**:
    snapshot, not yet a human-baselined acceptance result or the committed
    completion floor. The matching human-control protocol now has a blank
    fixture and validator at `skills/regression/fixtures/human_baseline_settings_template.json`
-   and `skills.regression.human_baseline`; actual human trials are still pending.
+   and `skills.regression.human_baseline`, and `make regression-gate` validates
+   the template; actual human trials are still pending.
 3. **P1 — VLM gated escalation** — _implemented foundation + expected-state
    runtime integration._ The
    `VLMEscalationGate` implements the four triggers, confidence-missing

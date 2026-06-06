@@ -91,12 +91,12 @@ Signals: the `phone` / `_frame_source` fixtures `pytest.skip` on
 `RuntimeUnavailable`, so any test depending on them is rig-bound — think
 `regression`. `@pytest.mark.smoke` marks the offline suite; `@pytest.mark.regression`
 marks an on-rig acceptance test (e.g. `test_readonly_walkthrough.py`). Naming
-trap: `make regression-gate` runs only the *offline* half (baseline `validate`
-plus the `test_computer_use_regression_gate.py` smoke test) and is part of `make
-check`. The real on-rig suite runs via direct CLI (`run_full`) or the
-`rig-nightly.yml` workflow; `make regression-compare` is **not** a device run —
-it's the JSON-to-JSON gate that fails on a success-rate regression once a real
-run has produced a candidate benchmark.
+trap: `make regression-gate` runs only the *offline* half (completion-floor
+`validate`, human-control template `validate`, and the regression/human-baseline
+smoke tests) and is part of `make check`. The real on-rig suite runs via direct
+CLI (`run_full`) or the `rig-nightly.yml` workflow; `make regression-compare` is
+**not** a device run — it's the JSON-to-JSON gate that fails on a success-rate
+regression once a real run has produced a candidate benchmark.
 
 ## Defaults
 

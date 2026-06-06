@@ -1,4 +1,5 @@
 .PHONY: lint test check regression-gate regression-compare ab-semantic-plan \
+	human-baseline-template human-baseline-validate \
 	golden-harvest golden-audit \
 	computer-use-success-rate-ios-settings ipad-settings-state-machine ipad-settings-ab-matrix ios-settings-ab-matrix
 
@@ -31,13 +32,24 @@ computer-use-success-rate-ios-settings:
 		$(EXTRA_ARGS)
 
 # Offline half of the Step-0 reliability gate (folded into `make check`, runs in
-# CI with no hardware): prove the committed baseline floor is still schema-valid
-# and that the comparator catches a regression (rc 1) / rejects a malformed
-# candidate (rc 2). The on-rig time-series companion is rig-nightly.yml.
+# CI with no hardware): prove the committed completion floor and human-control
+# template are still schema-valid, and that the comparator catches a regression
+# (rc 1) / rejects a malformed candidate (rc 2). The on-rig time-series companion
+# is rig-nightly.yml.
 RELIABILITY_BASELINE ?= skills/regression/fixtures/reliability_baseline.json
+HUMAN_BASELINE ?= skills/regression/fixtures/human_baseline_settings_template.json
+HUMAN_BASELINE_VALIDATE_ARGS ?= --allow-template
+HUMAN_BASELINE_CLI ?= uv run python -m skills.regression.human_baseline
 regression-gate:
 	$(COMPUTER_USE_SUCCESS_RATE) validate "$(RELIABILITY_BASELINE)"
-	uv run pytest skills/smoke/test_computer_use_regression_gate.py -q
+	$(HUMAN_BASELINE_CLI) validate "$(HUMAN_BASELINE)" $(HUMAN_BASELINE_VALIDATE_ARGS)
+	uv run pytest skills/smoke/test_computer_use_regression_gate.py skills/smoke/test_human_baseline.py -q
+
+human-baseline-template:
+	$(HUMAN_BASELINE_CLI) template --out "$(HUMAN_BASELINE)"
+
+human-baseline-validate:
+	$(HUMAN_BASELINE_CLI) validate "$(HUMAN_BASELINE)" $(HUMAN_BASELINE_VALIDATE_ARGS)
 
 # Tier A (log-sim): harvest verifier golden-cases from run ledgers into the
 # committed corpus. Manual/dev target — re-run and commit when ledgers change.

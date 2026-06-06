@@ -40,13 +40,14 @@ identifiers such as names/emails/Apple-account/password text.
 
 It is load-bearing in two places:
 
-- **Offline (CI, every PR):** `make regression-gate` validates that this fixture
-  is a completed floor, is still schema-valid, and that `compare_benchmarks`
-  catches a regression (rc 1) and rejects a malformed candidate (rc 2). Pinned
-  by `skills/smoke/test_computer_use_regression_gate.py`. The same smoke module
-  also validates the L2 expected-state snapshot, asserts it stays scrubbed, and
-  proves the real snapshot fails `compare_benchmarks` if expected-state coverage
-  drops to zero. `skills/smoke/test_human_baseline.py` validates the human
+- **Offline (CI, every PR):** `make regression-gate` validates that
+  `reliability_baseline.json` is a completed floor and schema-valid, validates
+  the human-control template, and runs the regression/human-baseline smoke tests.
+  `skills/smoke/test_computer_use_regression_gate.py` also proves
+  `compare_benchmarks` catches a regression (rc 1), rejects a malformed
+  candidate (rc 2), validates the L2 expected-state snapshot, asserts it stays
+  scrubbed, and proves the real snapshot fails if expected-state coverage drops
+  to zero. `skills/smoke/test_human_baseline.py` validates the human
   protocol/template and its metrics/PII checks. No hardware needed.
 - **On-rig (nightly, self-hosted):** `.github/workflows/rig-nightly.yml` runs the
   canonical primitives and the Settings drill-down on a real device, then
