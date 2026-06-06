@@ -461,7 +461,15 @@ P3**:
    and `skills.regression.human_baseline`, and `make regression-gate` validates
    the template. `validate-floor-candidate` makes the floor-promotion policy
    executable and rejects the current 4/5 snapshot; actual human trials are still
-   pending.
+   pending. The ordinary HDMI Settings floor and the accessibility/Voice Control
+   experiments are separate evaluation cells: a floor-promotion candidate must
+   start from a clean, full-screen Settings surface with Voice Control continuous
+   overlay off, FKA/help overlays absent, and Stage Manager/windowed Settings not
+   visible. Runs captured with Voice Control item numbers, FKA help, or windowed
+   Settings are diagnostic artifacts only. Voice Control overlay can graduate
+   later as an explicit a11y-mode evaluation cell after its marker parser,
+   badge-to-target mapping, and reset recipe have their own labeled replay gate;
+   it must not be mixed into the default Settings floor.
 3. **P1 — VLM gated escalation** — _implemented foundation + expected-state
    runtime integration._ The
    `VLMEscalationGate` implements the four triggers, confidence-missing
