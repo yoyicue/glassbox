@@ -2199,6 +2199,66 @@ def test_picokvm_ipad_full_width_root_row_keeps_sidebar_preferred_point():
 
 
 @pytest.mark.smoke
+def test_ipad_settings_row_plan_does_not_offset_sidebar_root_point():
+    from glassbox.target_planner import TargetPlanner
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Profile:
+        @staticmethod
+        def offset_for_bucket(_bucket):
+            return SimpleNamespace(space="frame_px", mean=(-59, 0))
+
+    class _Phone:
+        device_geometry = _Geometry()
+        action_orchestrator = SimpleNamespace(actuation_profile=_Profile())
+        effector = SimpleNamespace(tap=lambda _x, _y: None)
+        _last_scene = _scene(_el("Bluetooth", 35, 307, w=574, h=40, ty="switch"))
+        _last_scene.viewport_size = (640, 979)
+        _last_scene.platform_scene_kind = "settings_detail"
+        _last_scene.page_id = "settings/WLAN"
+        _last_scene.safe_actions = ("tap_root_row",)
+
+        @property
+        def last_scene(self):
+            return self._last_scene
+
+        def viewport_size(self):
+            return 640, 979
+
+        def effector_backend(self):
+            return "picokvm"
+
+        def infer_input_coordinate_space(self):
+            return "cropped_px"
+
+        def effector_coordinate_space(self):
+            return "frame_px"
+
+        def to_phone_coordinates(self, x, y, *, coordinate_space=None):
+            return int(x), int(y)
+
+        def picokvm_fresh_verify_kwargs(self, _action):
+            return {}
+
+    row = _el("Bluetooth", 0, 287, w=640, h=56, ty="list_item")
+    row.intent_label = "蓝牙"
+    row.intent_source = "settings_root_lexicon"
+    row.preferred_tap_point = (237, 315)
+
+    plan, _metadata = TargetPlanner(_Phone()).target_tap_plan(
+        element=row,
+        intent="settings.row:Bluetooth",
+        via="settings.tap_row",
+        target="Bluetooth",
+    )
+
+    first = plan.candidate_target_points[0]
+    assert (first.x, first.y) == (237, 315)
+
+
+@pytest.mark.smoke
 def test_picokvm_ipad_detail_row_projection_moves_inside_detail_pane():
     from glassbox.phone import Phone
 
