@@ -445,7 +445,14 @@ P3**:
    expected-state coverage on the real row-opening path. The Settings crawler
    disables semantic-plan global recovery for those row/search taps so a failed
    page open returns to crawler policy instead of launching a Home recovery inside
-   the measured task.
+   the measured task. A 2026-06-06 iPad mini 7 snapshot (code `d9695ae`, artifact
+   `/tmp/glassbox-l2-rank2-full-20260606-164702/benchmark.json`, command:
+   `GLASSBOX_PHONE_MODEL=ipad_mini_7 ... run-ios-settings --rounds 5 --drill-down --language en --region HK`)
+   produced 5 samples: 4 succeeded, 1 failed, `task_completion_rate=0.8`,
+   `task_completion_variance=0.16`, `expected_state_coverage=0.976`,
+   `root_pages_coverage=0.983`, and `recoveries=0`. The remaining failed sample
+   missed `隐私与安全性`, so this is a real L2 outcome snapshot, not yet a frozen
+   floor or human-baselined acceptance result.
 3. **P1 — VLM gated escalation** — _implemented foundation + expected-state
    runtime integration._ The
    `VLMEscalationGate` implements the four triggers, confidence-missing
