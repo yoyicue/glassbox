@@ -438,9 +438,14 @@ P3**:
    binds runtime callables; the orchestrator can execute a semantic plan through
    the normal attempt/action artifact path; expected-state verification covers
    `page_id` (single `page_id` or `any_of` candidates), `visible_text`,
-   `element_appears`, and `element_gone`. Settings row taps now pass action-level
-   `page_id` expected-state through `tap_element`, so the success-rate harness
-   can measure expected-state coverage on the real row-opening path.
+   `element_appears`, and `element_gone`. `tap_element` now routes through the
+   semantic `tap` ladder when enabled while preserving element-specific actuation
+   metadata in the target strategy. Settings row and search-root-result taps pass
+   action-level `page_id` expected-state, so the success-rate harness can measure
+   expected-state coverage on the real row-opening path. The Settings crawler
+   disables semantic-plan global recovery for those row/search taps so a failed
+   page open returns to crawler policy instead of launching a Home recovery inside
+   the measured task.
 3. **P1 — VLM gated escalation** — _implemented foundation + expected-state
    runtime integration._ The
    `VLMEscalationGate` implements the four triggers, confidence-missing

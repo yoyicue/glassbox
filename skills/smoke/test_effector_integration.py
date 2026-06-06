@@ -139,6 +139,53 @@ def test_target_tap_entrypoints_record_action_plan_contract(mock_phone):
 
 
 @pytest.mark.smoke
+def test_tap_element_routes_to_semantic_plan_when_enabled(mock_phone, monkeypatch):
+    captured: dict = {}
+    element = UIElement(type="text", box=Box(x=30, y=40, w=20, h=10), text="Bluetooth", confidence=0.95)
+    expected_state = {
+        "kind": "page_id",
+        "payload": {"any_of": ["settings/Bluetooth", "settings/蓝牙"]},
+    }
+
+    monkeypatch.setattr(mock_phone, "_uses_semantic_plan", lambda op: op == "tap")
+    monkeypatch.setattr(
+        mock_phone,
+        "_picokvm_fresh_verify_kwargs",
+        lambda _op: {"settle_strategy": "stream_until_match"},
+    )
+
+    def fake_run_semantic_plan(op, **kwargs):
+        captured.update({"op": op, **kwargs})
+        return ActionResult(ok=True, backend="mock", connected=True, semantic_status="succeeded")
+
+    monkeypatch.setattr(mock_phone, "_run_semantic_plan", fake_run_semantic_plan)
+
+    result = mock_phone.tap_element(
+        element,
+        intent="settings.row:Bluetooth",
+        target="Bluetooth",
+        via="settings.tap_row",
+        retry_budget=2,
+        idempotent=True,
+        expected_state=expected_state,
+    )
+
+    assert result.semantic_status == "succeeded"
+    assert captured["op"] == "tap"
+    assert captured["expected_state"] == expected_state
+    assert captured["via"] == "settings.tap_row"
+    assert captured["policy_action"] == "tap"
+    assert captured["settle_strategy"] == "stream_until_match"
+    assert captured["params"]["element"] is element
+    assert captured["params"]["intent"] == "settings.row:Bluetooth"
+    assert captured["params"]["target"] == "Bluetooth"
+    assert captured["params"]["tap_element_expected_state"] == expected_state
+    assert captured["params"]["tap_element_options"]["retry_budget"] == 2
+    assert captured["params"]["tap_element_options"]["idempotent"] is True
+    assert captured["params"]["recovery"] == "recover_to_home_then_renavigate"
+
+
+@pytest.mark.smoke
 def test_phone_tap_text_hits_tab_bar_upper_region(mock_phone, monkeypatch):
     """Bottom tab OCR labels sit low; tap the tab's upper hit region instead."""
     monkeypatch.setattr(mock_phone, "_viewport_size", lambda: (448, 973))

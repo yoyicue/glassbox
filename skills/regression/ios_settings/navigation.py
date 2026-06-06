@@ -173,16 +173,15 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
                     polls=12,
                 )
         if hit is None and suggestion is not None:
-            cx, cy = suggestion.box.center
-            with actions.action_intent(
+            result = _tap_search_element(
                 phone,
-                "settings_search.tap_query_suggestion",
+                suggestion,
+                actions,
+                intent_name="settings_search.tap_query_suggestion",
                 label=label,
-                text=suggestion.text,
-                x=cx,
-                y=cy,
-            ):
-                result = phone.tap_xy(cx, cy)
+                target=suggestion.text or label,
+                expected_state=None,
+            )
             if not actions.record_action_verdict(phone, result):
                 return False
             time.sleep(0.8)
@@ -264,16 +263,15 @@ def _tap_search_result(
     *,
     intent_name: str,
 ) -> bool:
-    cx, cy = hit.box.center
-    with actions.action_intent(
+    result = _tap_search_element(
         phone,
-        intent_name,
+        hit,
+        actions,
+        intent_name=intent_name,
         label=label,
-        text=hit.text,
-        x=cx,
-        y=cy,
-    ):
-        result = phone.tap_xy(cx, cy)
+        target=label,
+        expected_state=_settings_row_expected_state(label, actions),
+    )
     if not actions.record_action_verdict(phone, result):
         return False
     time.sleep(1.2)
@@ -306,6 +304,39 @@ def _scene_title_matches_requested_label(
     if opened_label is not None:
         return False
     return compact_text(title).casefold() == compact_text(label).casefold()
+
+
+def _tap_search_element(
+    phone,
+    element: UIElement,
+    actions: SettingsNavigationActions,
+    *,
+    intent_name: str,
+    label: str,
+    target: str,
+    expected_state: dict[str, Any] | None,
+) -> Any:
+    cx, cy = element.box.center
+    with actions.action_intent(
+        phone,
+        intent_name,
+        label=label,
+        text=element.text,
+        x=cx,
+        y=cy,
+    ):
+        tap_element = getattr(phone, "tap_element", None)
+        if callable(tap_element):
+            return tap_element(
+                element,
+                intent=intent_name,
+                target=target,
+                via=intent_name,
+                expected_state=expected_state,
+                idempotent=True,
+                recovery=None,
+            )
+        return phone.tap_xy(cx, cy)
 
 
 def _wait_for_search_result_or_suggestion(
@@ -422,10 +453,11 @@ def _settings_row_page_id_candidates(
     label: str,
     actions: SettingsNavigationActions,
 ) -> tuple[str, ...]:
-    if actions.page_id_route_label_candidates is None:
+    label_candidates = getattr(actions, "page_id_route_label_candidates", None)
+    if label_candidates is None:
         labels: Sequence[str] = (label,)
     else:
-        labels = actions.page_id_route_label_candidates(label)
+        labels = label_candidates(label)
     candidates: list[str] = []
     for candidate_label in labels:
         page_id = _settings_row_page_id(str(candidate_label))
@@ -525,6 +557,7 @@ def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActio
             unknown_policy="retry",
             idempotent=True,
             expected_state=expected_state,
+            recovery=None,
         )
         accepted = actions.record_action_verdict(phone, result)
         if accepted:

@@ -182,6 +182,101 @@ def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
         "kind": "page_id",
         "payload": {"any_of": ["settings/Bluetooth", "settings/蓝牙"]},
     }
+    assert phone.tap_element_kwargs["recovery"] is None
+
+
+@pytest.mark.smoke
+def test_tap_search_result_uses_tap_element_with_page_id_expected_state(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+    opened_detail = _scene(_el("Bluetooth", 404, 44, w=90))
+    hit = _el("Bluetooth", 72, 160, w=88, ty="button")
+
+    class SearchPhone:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def tap_element(self, element, **kwargs):
+            self.calls.append({"element": element, **kwargs})
+            return ActionResult(ok=True, backend="mock", connected=True, semantic_status="succeeded")
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def perceive(self):
+            return opened_detail
+
+    phone = SearchPhone()
+    actions = replace(
+        walkthrough._navigation_actions(),
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        record_action_verdict=lambda _phone, _result: True,
+        page_title=lambda scene: "Bluetooth" if scene is opened_detail else "Search",
+        is_settings_search_scene=lambda _scene: False,
+    )
+
+    assert settings_navigation._tap_search_result(
+        phone,
+        "Bluetooth",
+        hit,
+        actions,
+        intent_name="settings_search.tap_root_result",
+    )
+    assert phone.calls == [
+        {
+            "element": hit,
+            "intent": "settings_search.tap_root_result",
+            "target": "Bluetooth",
+            "via": "settings_search.tap_root_result",
+            "expected_state": {
+                "kind": "page_id",
+                "payload": {"any_of": ["settings/Bluetooth", "settings/蓝牙"]},
+            },
+            "idempotent": True,
+            "recovery": None,
+        }
+    ]
+
+
+@pytest.mark.smoke
+def test_tap_search_query_suggestion_uses_tap_element_without_terminal_state():
+    suggestion = _el("1蜂窝网络", 142, 872, w=110, ty="button")
+
+    class SearchPhone:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def tap_element(self, element, **kwargs):
+            self.calls.append({"element": element, **kwargs})
+            return ActionResult(ok=True, backend="mock", connected=True, semantic_status="succeeded")
+
+    phone = SearchPhone()
+    actions = replace(
+        walkthrough._navigation_actions(),
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+    )
+
+    result = settings_navigation._tap_search_element(
+        phone,
+        suggestion,
+        actions,
+        intent_name="settings_search.tap_query_suggestion",
+        label="蜂窝网络",
+        target="1蜂窝网络",
+        expected_state=None,
+    )
+
+    assert result.semantic_status == "succeeded"
+    assert phone.calls == [
+        {
+            "element": suggestion,
+            "intent": "settings_search.tap_query_suggestion",
+            "target": "1蜂窝网络",
+            "via": "settings_search.tap_query_suggestion",
+            "expected_state": None,
+            "idempotent": True,
+            "recovery": None,
+        }
+    ]
 
 
 @pytest.mark.smoke

@@ -1582,6 +1582,7 @@ class Phone:
         unknown_policy: str | None = None,
         idempotent: bool | None = None,
         expected_state: dict[str, Any] | None = None,
+        recovery: str | None = "recover_to_home_then_renavigate",
     ) -> ActionResult:
         """Tap a known perceived element through target-bearing actuation feedback."""
         label = target or element.text or element.type or "element"
@@ -1600,6 +1601,27 @@ class Phone:
             actuation_options["unknown_policy"] = unknown_policy
         if idempotent is not None:
             actuation_options["idempotent"] = idempotent
+        if self._uses_semantic_plan("tap") and not self._in_semantic_plan:
+            params: dict[str, Any] = {
+                "element": element,
+                "intent": intent or label,
+                "target": label,
+                "via": via,
+                "tap_element_options": dict(actuation_options),
+            }
+            if expected_state is not None:
+                params["tap_element_expected_state"] = expected_state
+            if idempotent is not None:
+                params["idempotent"] = idempotent
+            params["recovery"] = recovery
+            return self._run_semantic_plan(
+                "tap",
+                expected_state=expected_state,
+                params=params,
+                via=via,
+                policy_action="tap",
+                **self._picokvm_fresh_verify_kwargs("tap"),
+            )
         op, plan, metadata = self._target_actuation_plan(
             element=element,
             intent=intent or label,

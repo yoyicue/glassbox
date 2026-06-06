@@ -560,14 +560,15 @@ def default_semantic_action_spec(
 def default_semantic_action_plan(
     phone: Any,
     op: Literal["home", "back", "launch_app", "tap", "scroll"],
-    expected_state: ExpectedState | None = None,
+    expected_state: ExpectedState | Mapping[str, Any] | None = None,
     **params: Any,
 ) -> SemanticActionPlan:
     """Bind the default core action spec to a phone-like runtime object."""
 
+    expected = _coerce_expected_state(expected_state)
     spec = default_semantic_action_spec(
         op,
-        expected_state,
+        expected,
         recovery=params.pop("recovery", "recover_to_home_then_renavigate"),
         idempotent=bool(params.pop("idempotent", True)),
     )
@@ -590,6 +591,14 @@ def default_semantic_action_plan(
         spec,
         lambda strategy: _bind_phone_strategy(phone, op, strategy, {**params, **strategy.params}),
     )
+
+
+def _coerce_expected_state(expected_state: ExpectedState | Mapping[str, Any] | None) -> ExpectedState | None:
+    if expected_state is None or isinstance(expected_state, ExpectedState):
+        return expected_state
+    if isinstance(expected_state, Mapping):
+        return ExpectedState.from_dict(expected_state)
+    raise TypeError(f"unsupported expected state payload: {type(expected_state).__name__}")
 
 
 def _default_strategy_params(op: str, strategy_name: str, params: Mapping[str, Any]) -> dict[str, Any]:
@@ -686,6 +695,22 @@ def _phone_nav_back_tap(phone: Any) -> ActionResult:
 
 
 def _phone_target_tap(phone: Any, params: Mapping[str, Any]) -> ActionResult:
+    element = params.get("element")
+    tap_element = getattr(phone, "tap_element", None)
+    if element is not None and callable(tap_element):
+        raw_options = params.get("tap_element_options")
+        options = dict(raw_options) if isinstance(raw_options, Mapping) else {}
+        target = params.get("target") or params.get("text") or params.get("label")
+        intent = params.get("intent") or target
+        if intent:
+            options["intent"] = str(intent)
+        if target:
+            options["target"] = str(target)
+        options["via"] = str(params.get("via") or options.get("via") or "semantic_plan.target_tap")
+        expected_state = params.get("tap_element_expected_state")
+        if isinstance(expected_state, Mapping):
+            options["expected_state"] = dict(expected_state)
+        return tap_element(element, **options)
     if params.get("x") is not None and params.get("y") is not None:
         px, py = phone.to_phone_coordinates(int(params["x"]), int(params["y"]))
         return phone.effector.tap(px, py)
