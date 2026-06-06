@@ -169,13 +169,27 @@ crawler path; semantic expected-state/VLM row-entry wiring remains future work.
   `vlm_action_coverage=0.0` and `expected_state_coverage=0.0` remain explicit
   caveats: this floor proves the deterministic crawler can complete the task, not
   that VLM/expected-state row verification is carrying it.
+- Expected-state load-bearing snapshot after semantic row/search tap routing
+  landed:
+  `skills/regression/fixtures/l2_settings_expected_state_snapshot.json` is a
+  scrubbed copy of `/tmp/glassbox-l2-rank2-full-20260606-164702/benchmark.json`
+  from code `d9695ae`. It validates with `rounds=5`, 4/5 task outcomes
+  `succeeded`, `task_completion_rate=0.8`, `task_completion_variance=0.16`,
+  `expected_state_coverage=0.976`, `vlm_action_coverage=0.086`,
+  `root_pages_coverage=0.983`, and `recoveries=0`; the failed sample missed
+  `隐私与安全性`. This snapshot is not the completion floor, but it proves the
+  semantic expected-state path is now on the measured row-entry path and is
+  protected by offline smoke tests.
 
 ### Phase 2 — Prune complexity (only after the number moves)
 
 - **2.1 Let the real per-task number decide.** Now — and only now — judge the
-  recovery/strategy/VLM machinery by whether it moves *this task's* number. To make
-  expected-state/VLM verification count for row entry, the crawler must route row taps through `phone.semantic` instead
-  of `tap_xy` — **a real architecture change, not a flag flip** (root cause #2).
+  recovery/strategy/VLM machinery by whether it moves *this task's* number.
+  The row-entry architecture change has landed for Settings row/search-result
+  taps: they route through `tap_element` into the semantic `tap` ladder with
+  `page_id` expected-state. The first n=5 result moves `expected_state_coverage`
+  from 0 to 0.976, but completion is 4/5; deciding whether and how to fold that
+  into the committed floor remains a floor-policy step.
   Whatever doesn't earn its place gets deleted.
 - **2.2 Delete for maintenance, not for determinism.** Removing dormant or
   low-yield branches may reduce drag, but will **not** by itself collapse
@@ -221,7 +235,10 @@ it validates successfully and reports `task_completion_rate=1.0`,
 `task_completion_variance=0.0`, five `succeeded` task outcomes,
 `root_pages_coverage=1.0`, `action_success_rate=1.0`, and `unknown_rate=0.0`.
 The fixture still has `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`,
-and `vlm_calls=0`, so expected-state/VLM row-entry claims remain unproven.
+and `vlm_calls=0`, so it remains the completion floor but not proof of
+expected-state/VLM row-entry carrying the run. That proof is now separately
+committed in `skills/regression/fixtures/l2_settings_expected_state_snapshot.json`
+and guarded by `skills/smoke/test_computer_use_regression_gate.py`.
 
 **Relayed, re-confirm before acting:** `main` branch-protection status (a live `gh`
 check timed out on network; `code_health_roadmap.md:83` records it as unprotected —

@@ -451,8 +451,12 @@ P3**:
    produced 5 samples: 4 succeeded, 1 failed, `task_completion_rate=0.8`,
    `task_completion_variance=0.16`, `expected_state_coverage=0.976`,
    `root_pages_coverage=0.983`, and `recoveries=0`. The remaining failed sample
-   missed `隐私与安全性`, so this is a real L2 outcome snapshot, not yet a frozen
-   floor or human-baselined acceptance result.
+   missed `隐私与安全性`. A scrubbed copy is committed at
+   `skills/regression/fixtures/l2_settings_expected_state_snapshot.json`; the
+   offline regression smoke suite validates it and proves `compare_benchmarks`
+   fails if its expected-state coverage drops to zero. It is a real L2 outcome
+   snapshot, not yet a human-baselined acceptance result or the committed
+   completion floor.
 3. **P1 — VLM gated escalation** — _implemented foundation + expected-state
    runtime integration._ The
    `VLMEscalationGate` implements the four triggers, confidence-missing

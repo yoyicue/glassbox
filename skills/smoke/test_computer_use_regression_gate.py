@@ -38,10 +38,20 @@ from skills.regression.computer_use_success_rate import (
 )
 
 _BASELINE_PATH = Path(__file__).resolve().parents[1] / "regression" / "fixtures" / "reliability_baseline.json"
+_EXPECTED_STATE_SNAPSHOT_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "regression"
+    / "fixtures"
+    / "l2_settings_expected_state_snapshot.json"
+)
 
 
 def _baseline() -> dict[str, Any]:
     return json.loads(_BASELINE_PATH.read_text(encoding="utf-8"))
+
+
+def _expected_state_snapshot() -> dict[str, Any]:
+    return json.loads(_EXPECTED_STATE_SNAPSHOT_PATH.read_text(encoding="utf-8"))
 
 
 def _flip_task_action_verdicts(
@@ -204,6 +214,30 @@ def test_committed_baseline_fixture_is_schema_valid():
 
 
 @pytest.mark.smoke
+def test_l2_expected_state_snapshot_fixture_is_load_bearing_and_scrubbed():
+    """The coverage-bearing L2 snapshot must stay real, multi-sample, and safe to
+    commit. It complements the 1.0 completion floor; it does not replace it."""
+    payload = _expected_state_snapshot()
+    raw = _EXPECTED_STATE_SNAPSHOT_PATH.read_text(encoding="utf-8")
+
+    assert validate_benchmark(payload) == []
+    assert payload["config"]["phone_model"] == "ipad_mini_7"
+    assert payload["config"]["rounds"] >= 5
+    assert len(payload["tasks"]) >= 5
+    assert payload["metrics"]["task_completion_rate"] > 0
+    assert payload["metrics"]["expected_state_coverage"] > 0
+    assert any(
+        action.get("expected_state", {}).get("kind") == "page_id"
+        for task in payload["tasks"]
+        for action in task["actions"]
+    )
+    assert all((task.get("final_state") or {}).get("visible_texts") == [] for task in payload["tasks"])
+    assert all("elements" not in (task.get("final_state") or {}) for task in payload["tasks"])
+    for forbidden in ("Da Li", "Apple Account and password", "You must enter both your"):
+        assert forbidden not in raw
+
+
+@pytest.mark.smoke
 def test_gate_passes_on_parity():
     rc, _ = compare_benchmarks(_baseline(), _baseline())
     assert rc == 0
@@ -247,6 +281,20 @@ def test_gate_fails_when_expected_state_coverage_drops():
     assert validate_benchmark(regressed) == []
     assert regressed["metrics"]["expected_state_coverage"] < baseline["metrics"]["expected_state_coverage"]
     rc, lines = compare_benchmarks(baseline, regressed)
+    assert rc == 1
+    assert any(line.startswith("expected_state_coverage:") and "delta=-" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_fails_when_real_l2_expected_state_snapshot_coverage_drops():
+    baseline = _expected_state_snapshot()
+    regressed = _with_expected_state_coverage(baseline, count=0)
+    assert baseline["metrics"]["expected_state_coverage"] > 0
+    assert validate_benchmark(regressed) == []
+    assert regressed["metrics"]["expected_state_coverage"] == 0
+
+    rc, lines = compare_benchmarks(baseline, regressed)
+
     assert rc == 1
     assert any(line.startswith("expected_state_coverage:") and "delta=-" in line for line in lines)
 
