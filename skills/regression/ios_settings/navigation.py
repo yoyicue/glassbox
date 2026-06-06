@@ -9,6 +9,7 @@ a compatibility facade.
 from __future__ import annotations
 
 import contextlib
+import re
 import time
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import AbstractContextManager
@@ -449,6 +450,16 @@ def _settings_row_page_id(label: str) -> str | None:
     return f"settings/{text}"
 
 
+def _settings_row_bundle_page_id(label: str) -> str | None:
+    text = str(label or "").strip()
+    if not text or text.startswith("settings/"):
+        return None
+    slug = re.sub(r"[^0-9a-z]+", "-", text.replace("&", " ").casefold()).strip("-")
+    if not slug:
+        return None
+    return f"com.apple.settings.{slug}"
+
+
 def _settings_row_page_id_candidates(
     label: str,
     actions: SettingsNavigationActions,
@@ -460,9 +471,12 @@ def _settings_row_page_id_candidates(
         labels = label_candidates(label)
     candidates: list[str] = []
     for candidate_label in labels:
-        page_id = _settings_row_page_id(str(candidate_label))
-        if page_id is not None and page_id not in candidates:
-            candidates.append(page_id)
+        for page_id in (
+            _settings_row_page_id(str(candidate_label)),
+            _settings_row_bundle_page_id(str(candidate_label)),
+        ):
+            if page_id is not None and page_id not in candidates:
+                candidates.append(page_id)
     return tuple(candidates)
 
 

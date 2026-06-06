@@ -180,7 +180,13 @@ def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
     assert phone.tap_element_kwargs is not None
     assert phone.tap_element_kwargs["expected_state"] == {
         "kind": "page_id",
-        "payload": {"any_of": ["settings/Bluetooth", "settings/蓝牙"]},
+        "payload": {
+            "any_of": [
+                "settings/Bluetooth",
+                "com.apple.settings.bluetooth",
+                "settings/蓝牙",
+            ],
+        },
     }
     assert phone.tap_element_kwargs["recovery"] is None
 
@@ -229,7 +235,13 @@ def test_tap_search_result_uses_tap_element_with_page_id_expected_state(monkeypa
             "via": "settings_search.tap_root_result",
             "expected_state": {
                 "kind": "page_id",
-                "payload": {"any_of": ["settings/Bluetooth", "settings/蓝牙"]},
+                "payload": {
+                    "any_of": [
+                        "settings/Bluetooth",
+                        "com.apple.settings.bluetooth",
+                        "settings/蓝牙",
+                    ],
+                },
             },
             "idempotent": True,
             "recovery": None,
@@ -320,6 +332,26 @@ def test_tap_settings_row_tries_page_id_route_alias_candidates_before_fallback()
 
     assert phone.page_ids == ["settings/通知", "settings/Notifications"]
     assert phone.tap_element_calls == 0
+
+
+@pytest.mark.smoke
+def test_settings_row_expected_state_accepts_bundle_style_page_id_alias():
+    actions = replace(
+        walkthrough._navigation_actions(),
+        page_id_route_label_candidates=lambda label: (label,),
+    )
+
+    expected = settings_navigation._settings_row_expected_state("Apple Pencil", actions)
+
+    assert expected == {
+        "kind": "page_id",
+        "payload": {
+            "any_of": [
+                "settings/Apple Pencil",
+                "com.apple.settings.apple-pencil",
+            ],
+        },
+    }
 
 
 @pytest.mark.smoke
