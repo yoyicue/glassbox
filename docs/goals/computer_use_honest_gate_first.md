@@ -180,6 +180,12 @@ crawler path; semantic expected-state/VLM row-entry wiring remains future work.
   `隐私与安全性`. This snapshot is not the completion floor, but it proves the
   semantic expected-state path is now on the measured row-entry path and is
   protected by offline smoke tests.
+- Matching human-control protocol after the L2 snapshot:
+  `skills.regression.human_baseline` now generates and validates
+  `skills/regression/fixtures/human_baseline_settings_template.json` against the
+  same Settings root-page vocabulary, recomputes human-control metrics, and
+  rejects obvious direct identifiers. It is only an empty protocol/template so
+  far; no completed human trial data has been committed.
 
 ### Phase 2 — Prune complexity (only after the number moves)
 
@@ -189,7 +195,9 @@ crawler path; semantic expected-state/VLM row-entry wiring remains future work.
   taps: they route through `tap_element` into the semantic `tap` ladder with
   `page_id` expected-state. The first n=5 result moves `expected_state_coverage`
   from 0 to 0.976, but completion is 4/5; deciding whether and how to fold that
-  into the committed floor remains a floor-policy step.
+  into the committed floor remains a floor-policy step. Human-control collection
+  now has a validator/template, but still needs real trials before it can be
+  cited as a baseline.
   Whatever doesn't earn its place gets deleted.
 - **2.2 Delete for maintenance, not for determinism.** Removing dormant or
   low-yield branches may reduce drag, but will **not** by itself collapse
@@ -238,7 +246,10 @@ The fixture still has `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`,
 and `vlm_calls=0`, so it remains the completion floor but not proof of
 expected-state/VLM row-entry carrying the run. That proof is now separately
 committed in `skills/regression/fixtures/l2_settings_expected_state_snapshot.json`
-and guarded by `skills/smoke/test_computer_use_regression_gate.py`.
+and guarded by `skills/smoke/test_computer_use_regression_gate.py`. The matching
+human-control template is committed at
+`skills/regression/fixtures/human_baseline_settings_template.json` and guarded by
+`skills/smoke/test_human_baseline.py`; it contains no human data yet.
 
 **Relayed, re-confirm before acting:** `main` branch-protection status (a live `gh`
 check timed out on network; `code_health_roadmap.md:83` records it as unprotected —

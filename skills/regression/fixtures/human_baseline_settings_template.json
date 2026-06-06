@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "protocol": {
+    "id": "ios_settings_readonly_walkthrough_en_hk_human_v1",
+    "task": "settings_readonly_walkthrough",
+    "benchmark_ref": "skills/regression/fixtures/l2_settings_expected_state_snapshot.json",
+    "device": {
+      "phone_model": "ipad_mini_7",
+      "language": "en",
+      "region": "HK"
+    },
+    "expected_root_pages": [
+      "无线局域网",
+      "蓝牙",
+      "蜂窝网络",
+      "通知",
+      "声音与触感",
+      "专注模式",
+      "屏幕使用时间",
+      "通用",
+      "辅助功能",
+      "Siri",
+      "操作按钮",
+      "待机显示",
+      "Face ID与密码",
+      "紧急 SOS",
+      "隐私与安全性",
+      "电池",
+      "钱包与 Apple Pay"
+    ],
+    "instructions": [
+      "Start each trial at the verified Settings root page.",
+      "Open each expected read-only root page once without changing settings.",
+      "Record blocked or unavailable pages separately from missing required pages.",
+      "Use only pseudonymous participant ids; do not record names, emails, or Apple IDs."
+    ]
+  },
+  "participants": [],
+  "trials": [],
+  "metrics": {
+    "trial_count": 0,
+    "succeeded": 0,
+    "failed": 0,
+    "aborted": 0,
+    "task_completion_rate": 0.0,
+    "task_completion_variance": 0.0,
+    "root_pages_coverage": 0.0,
+    "median_duration_ms": 0
+  }
+}
