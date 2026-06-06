@@ -34,7 +34,9 @@ from skills.regression.computer_use_success_rate import (
     _SCROLL_FILLER_OPS,
     _metrics,
     compare_benchmarks,
+    main,
     validate_benchmark,
+    validate_floor_candidate,
 )
 
 _BASELINE_PATH = Path(__file__).resolve().parents[1] / "regression" / "fixtures" / "reliability_baseline.json"
@@ -297,6 +299,56 @@ def test_gate_fails_when_real_l2_expected_state_snapshot_coverage_drops():
 
     assert rc == 1
     assert any(line.startswith("expected_state_coverage:") and "delta=-" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_floor_candidate_rejects_current_l2_snapshot_until_completion_non_regresses():
+    rc, lines = validate_floor_candidate(_baseline(), _expected_state_snapshot())
+
+    assert rc == 1
+    assert any(line.startswith("task_completion_rate would drop:") for line in lines)
+    assert any(line.startswith("root_pages_coverage would drop:") for line in lines)
+    assert any(line.startswith("unknown_rate would rise:") for line in lines)
+    assert not any("expected_state_coverage must be > 0" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_floor_candidate_accepts_non_regressing_coverage_bearing_candidate():
+    baseline = _baseline()
+    candidate = _with_expected_state_coverage(baseline, count=3)
+    assert candidate["metrics"]["expected_state_coverage"] > 0
+
+    rc, lines = validate_floor_candidate(baseline, candidate)
+
+    assert rc == 0
+    assert lines == ["OK"]
+
+
+@pytest.mark.smoke
+def test_floor_candidate_requires_expected_state_coverage_by_default():
+    baseline = _baseline()
+
+    rc, lines = validate_floor_candidate(baseline, baseline)
+
+    assert rc == 1
+    assert lines == ["expected_state_coverage must be > 0 for a promoted L2 floor"]
+    rc, lines = validate_floor_candidate(baseline, baseline, require_expected_state_coverage=False)
+    assert rc == 0
+    assert lines == ["OK"]
+
+
+@pytest.mark.smoke
+def test_floor_candidate_cli_rejects_current_l2_snapshot(capsys):
+    rc = main(
+        [
+            "validate-floor-candidate",
+            str(_BASELINE_PATH),
+            str(_EXPECTED_STATE_SNAPSHOT_PATH),
+        ]
+    )
+
+    assert rc == 1
+    assert "task_completion_rate would drop" in capsys.readouterr().out
 
 
 @pytest.mark.smoke

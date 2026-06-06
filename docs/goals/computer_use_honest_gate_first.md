@@ -194,10 +194,10 @@ crawler path; semantic expected-state/VLM row-entry wiring remains future work.
   The row-entry architecture change has landed for Settings row/search-result
   taps: they route through `tap_element` into the semantic `tap` ladder with
   `page_id` expected-state. The first n=5 result moves `expected_state_coverage`
-  from 0 to 0.976, but completion is 4/5; deciding whether and how to fold that
-  into the committed floor remains a floor-policy step. Human-control collection
-  now has a validator/template, but still needs real trials before it can be
-  cited as a baseline.
+  from 0 to 0.976, but completion is 4/5; `validate-floor-candidate` now makes
+  that floor-policy step executable and rejects this snapshot as a replacement
+  for the 5/5 floor. Human-control collection now has a validator/template, but
+  still needs real trials before it can be cited as a baseline.
   Whatever doesn't earn its place gets deleted.
 - **2.2 Delete for maintenance, not for determinism.** Removing dormant or
   low-yield branches may reduce drag, but will **not** by itself collapse

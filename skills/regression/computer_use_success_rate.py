@@ -91,6 +91,8 @@ GATE_RISE_METRICS = {
     "navigation_origin_precondition_failures",
     "unknown_rate",
 }
+FLOOR_IDENTITY_CONFIG_KEYS = ("phone_model", "task_set", "language", "region")
+FLOOR_MIN_ROUNDS = 5
 
 
 def _json_default(value: Any) -> str:
@@ -1289,6 +1291,77 @@ def compare_benchmarks(
     return rc, lines
 
 
+def validate_floor_candidate(
+    current_floor: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    *,
+    tolerance: float = 0.0,
+    require_expected_state_coverage: bool = True,
+) -> tuple[int, list[str]]:
+    """Validate whether `candidate` is eligible to replace `current_floor`."""
+    errors = [f"current_floor: {error}" for error in validate_benchmark(current_floor)]
+    errors.extend(f"candidate: {error}" for error in validate_benchmark(candidate))
+    if not _is_number(tolerance) or float(tolerance) < 0.0:
+        errors.append("tolerance must be a non-negative finite number")
+    if errors:
+        return 2, errors
+
+    reasons: list[str] = []
+    floor_config = current_floor.get("config") or {}
+    candidate_config = candidate.get("config") or {}
+    for key in FLOOR_IDENTITY_CONFIG_KEYS:
+        floor_value = floor_config.get(key)
+        candidate_value = candidate_config.get(key)
+        if floor_value != candidate_value:
+            reasons.append(
+                f"config.{key} mismatch: current_floor={floor_value!r} "
+                f"candidate={candidate_value!r}"
+            )
+
+    floor_rounds = int(floor_config.get("rounds", 0) or 0)
+    candidate_rounds = int(candidate_config.get("rounds", 0) or 0)
+    required_rounds = max(FLOOR_MIN_ROUNDS, floor_rounds)
+    if candidate_rounds < required_rounds:
+        reasons.append(f"config.rounds {candidate_rounds} < required {required_rounds}")
+
+    floor_metrics = current_floor.get("metrics") or {}
+    candidate_metrics = candidate.get("metrics") or {}
+    tol = float(tolerance)
+    for key in GATE_DROP_METRICS:
+        floor_value = float(floor_metrics.get(key, 0.0) or 0.0)
+        candidate_value = float(candidate_metrics.get(key, 0.0) or 0.0)
+        if candidate_value < floor_value - tol:
+            reasons.append(
+                f"{key} would drop: current_floor={floor_value:.6g} "
+                f"candidate={candidate_value:.6g}"
+            )
+    for key in GATE_RISE_METRICS:
+        floor_value = float(floor_metrics.get(key, 0.0) or 0.0)
+        candidate_value = float(candidate_metrics.get(key, 0.0) or 0.0)
+        if candidate_value > floor_value + tol:
+            reasons.append(
+                f"{key} would rise: current_floor={floor_value:.6g} "
+                f"candidate={candidate_value:.6g}"
+            )
+
+    floor_scroll = float(floor_metrics.get("scroll_action_count", 0.0) or 0.0)
+    candidate_scroll = float(candidate_metrics.get("scroll_action_count", 0.0) or 0.0)
+    if floor_scroll > 0.0 and candidate_scroll > 0.0:
+        floor_value = float(floor_metrics.get("scroll_success_rate", 0.0) or 0.0)
+        candidate_value = float(candidate_metrics.get("scroll_success_rate", 0.0) or 0.0)
+        if candidate_value < floor_value - tol:
+            reasons.append(
+                f"scroll_success_rate would drop: current_floor={floor_value:.6g} "
+                f"candidate={candidate_value:.6g}"
+            )
+
+    expected_state_coverage = float(candidate_metrics.get("expected_state_coverage", 0.0) or 0.0)
+    if require_expected_state_coverage and expected_state_coverage <= 0.0:
+        reasons.append("expected_state_coverage must be > 0 for a promoted L2 floor")
+
+    return (1 if reasons else 0), reasons or ["OK"]
+
+
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -1485,6 +1558,15 @@ def main(argv: list[str] | None = None) -> int:
     compare.add_argument("candidate", type=Path)
     compare.add_argument("--tolerance", type=float, default=0.0)
 
+    floor_candidate = sub.add_parser(
+        "validate-floor-candidate",
+        help="Validate whether a candidate benchmark can replace the committed floor",
+    )
+    floor_candidate.add_argument("current_floor", type=Path)
+    floor_candidate.add_argument("candidate", type=Path)
+    floor_candidate.add_argument("--tolerance", type=float, default=0.0)
+    floor_candidate.add_argument("--allow-zero-expected-state-coverage", action="store_true")
+
     run_settings = sub.add_parser("run-ios-settings", help="Run iOS Settings N times and aggregate")
     run_settings.add_argument("--rounds", type=int, default=1)
     run_settings.add_argument("--out", type=Path, required=True)
@@ -1563,6 +1645,19 @@ def main(argv: list[str] | None = None) -> int:
         rc, lines = compare_benchmarks(baseline, candidate, tolerance=args.tolerance)
         for line in lines:
             prefix = "ERROR: " if rc == 2 else ""
+            print(prefix + line)
+        return rc
+    if args.cmd == "validate-floor-candidate":
+        current_floor = _read_json(args.current_floor.expanduser().resolve())
+        candidate = _read_json(args.candidate.expanduser().resolve())
+        rc, lines = validate_floor_candidate(
+            current_floor,
+            candidate,
+            tolerance=args.tolerance,
+            require_expected_state_coverage=not args.allow_zero_expected_state_coverage,
+        )
+        for line in lines:
+            prefix = "ERROR: " if rc else ""
             print(prefix + line)
         return rc
     if args.cmd == "run-ios-settings":
