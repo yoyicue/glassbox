@@ -184,6 +184,7 @@ def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
             "any_of": [
                 "settings/Bluetooth",
                 "com.apple.settings.bluetooth",
+                "bluetooth_settings",
                 "settings/蓝牙",
             ],
         },
@@ -239,6 +240,7 @@ def test_tap_search_result_uses_tap_element_with_page_id_expected_state(monkeypa
                     "any_of": [
                         "settings/Bluetooth",
                         "com.apple.settings.bluetooth",
+                        "bluetooth_settings",
                         "settings/蓝牙",
                     ],
                 },
@@ -349,6 +351,7 @@ def test_settings_row_expected_state_accepts_bundle_style_page_id_alias():
             "any_of": [
                 "settings/Apple Pencil",
                 "com.apple.settings.apple-pencil",
+                "apple_pencil_settings",
             ],
         },
     }

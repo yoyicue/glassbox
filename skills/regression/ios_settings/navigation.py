@@ -460,6 +460,16 @@ def _settings_row_bundle_page_id(label: str) -> str | None:
     return f"com.apple.settings.{slug}"
 
 
+def _settings_row_vlm_page_id(label: str) -> str | None:
+    text = str(label or "").strip()
+    if not text or text.startswith("settings/"):
+        return None
+    slug = re.sub(r"[^0-9a-z]+", "_", text.replace("&", " ").casefold()).strip("_")
+    if not slug:
+        return None
+    return f"{slug}_settings"
+
+
 def _settings_row_page_id_candidates(
     label: str,
     actions: SettingsNavigationActions,
@@ -474,6 +484,7 @@ def _settings_row_page_id_candidates(
         for page_id in (
             _settings_row_page_id(str(candidate_label)),
             _settings_row_bundle_page_id(str(candidate_label)),
+            _settings_row_vlm_page_id(str(candidate_label)),
         ):
             if page_id is not None and page_id not in candidates:
                 candidates.append(page_id)
