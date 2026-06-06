@@ -112,6 +112,76 @@ def test_crawl_readonly_settings_report_keeps_trace_payload_after_success(monkey
 
 
 @pytest.mark.smoke
+def test_core_crawl_skips_initial_boundary_scroll_when_ipad_sidebar_is_visible(monkeypatch):
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(640, 990),
+        scene_type="settings_detail",
+        safe_actions=["tap_root_row", "scroll"],
+        elements=[
+            UIElement(
+                text="Touch ID & Passcode",
+                type="text",
+                box=Box(x=386, y=44, w=150, h=14),
+                confidence=1.0,
+            ),
+            UIElement(
+                text="WLAN",
+                type="list_item",
+                box=Box(x=35, y=156, w=100, h=26),
+                confidence=1.0,
+            ),
+        ],
+    )
+
+    class IPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return scene
+
+    scrolls: list[str] = []
+    crawled: list[tuple[str, ...]] = []
+
+    monkeypatch.setattr(settings_core, "_wrap_phone_with_trace_if_enabled", lambda phone: (phone, None))
+    monkeypatch.setattr(crawler, "_open_settings_from_home_if_visible", lambda phone: None)
+    monkeypatch.setattr(
+        crawler,
+        "_scroll_to_vertical_boundary",
+        lambda phone, *, direction: scrolls.append(direction),
+    )
+    monkeypatch.setattr(crawler, "_return_to_settings_root", lambda phone: None)
+    monkeypatch.setattr(settings_core, "_write_report", lambda *args, **kwargs: None)
+
+    def fake_crawl_current_page(
+        phone,
+        *,
+        path,
+        visits,
+        seen_sigs,
+        depth,
+        max_depth,
+        limits_hit,
+        blocked_pages,
+        rejected_candidates,
+        navigation_failures,
+    ):
+        del phone, seen_sigs, depth, max_depth, limits_hit, blocked_pages, rejected_candidates
+        del navigation_failures
+        crawled.append(path)
+        visits.append(settings_reporting.PageVisit(path=path, title="Settings", texts=("Settings",)))
+
+    monkeypatch.setattr(crawler, "_crawl_current_page", fake_crawl_current_page)
+
+    result = crawler._run_core_crawl(IPadPhone())
+
+    assert scrolls == []
+    assert crawled == [("Settings",)]
+    assert result.visits[0].path == ("Settings",)
+
+
+@pytest.mark.smoke
 def test_try_return_to_settings_root_absorbs_unreachable(monkeypatch):
     """The "try" variant must report False (not propagate) when the recovery
     raises its distinct SettingsRootUnreachable — return_to_settings_root no

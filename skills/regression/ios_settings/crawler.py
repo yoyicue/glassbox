@@ -258,7 +258,8 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
     report_written = False
     try:
         _open_settings_from_home_if_visible(phone)
-        _scroll_to_vertical_boundary(phone, direction="up")
+        if _initial_boundary_scroll_needed(phone):
+            _scroll_to_vertical_boundary(phone, direction="up")
         _crawl_current_page(
             phone,
             path=("Settings",),
@@ -318,6 +319,15 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
         rejected_candidates=rejected_candidates,
         navigation_failures=navigation_failures,
     )
+
+
+def _initial_boundary_scroll_needed(phone) -> bool:
+    with suppress(Exception):
+        if settings_core._is_ipad_target(phone):
+            scene = phone.perceive()
+            if settings_core._ipad_scene_has_root_sidebar(scene):
+                return False
+    return True
 
 
 def _open_target_root_page(phone, label: str) -> bool:
