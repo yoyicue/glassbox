@@ -214,8 +214,10 @@ glassbox 真正缺的、也是 SPA-Bench 替不了的，是那个 **screenshot-o
   `regression-gate`；`regression-compare`（nightly）；
   `reliability_baseline.json`（19 个 metrics）和
   `human_baseline_settings_template.json`（空白 human-control protocol）。
-- **现状**：⚠️ **存在但仍不诚实**。离线 gate 已能守住 coverage/process/scroll 回归；但 committed
-  地板仍由 `tap_xy` 爬虫产生（coverage 全 0），还不是 L2 outcome floor。
+- **现状**：⚠️ **存在但仍不诚实**。离线 gate 已能执行 coverage/process/scroll 棘轮；但 committed
+  地板仍由 `tap_xy` 爬虫产生，`task_completion_rate=1.0` 和 `root_pages_coverage=1.0` 是真实
+  completion/root coverage floor，`expected_state_coverage`、`vlm_action_coverage`、`strategy_switches`
+  与 `recoveries` 仍为 0，因此还不是 coverage-bearing L2 outcome floor。
 
 ### 旁路 — 漂移模拟（advisory，永不挡合并）
 
