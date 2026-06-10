@@ -54,6 +54,32 @@
    ]
   },
   {
+   "name": "wallpaper_clean_text_scrolled",
+   "marker_text": "Wallpaper",
+   "marker_center": [
+    129,
+    478
+   ],
+   "target_text": "Wallpaper",
+   "target_center": [
+    99,
+    450
+   ]
+  },
+  {
+   "name": "notifications_fullwidth_paren_scrolled",
+   "marker_text": "Notifications）",
+   "marker_center": [
+    130,
+    531
+   ],
+   "target_text": "Notifications",
+   "target_center": [
+    109,
+    502
+   ]
+  },
+  {
    "name": "sounds",
    "marker_text": "Sounds",
    "marker_center": [
