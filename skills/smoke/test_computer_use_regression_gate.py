@@ -316,8 +316,11 @@ def test_floor_candidate_rejects_current_l2_snapshot_until_completion_non_regres
 
 @pytest.mark.smoke
 def test_floor_candidate_accepts_non_regressing_coverage_bearing_candidate():
+    # The committed floor now bears real expected-state coverage, so a
+    # non-regressing candidate is one that holds (or exceeds) it. An identical
+    # copy of the floor is coverage-bearing and trivially non-regressing.
     baseline = _baseline()
-    candidate = _with_expected_state_coverage(baseline, count=3)
+    candidate = _baseline()
     assert candidate["metrics"]["expected_state_coverage"] > 0
 
     rc, lines = validate_floor_candidate(baseline, candidate)
@@ -328,13 +331,18 @@ def test_floor_candidate_accepts_non_regressing_coverage_bearing_candidate():
 
 @pytest.mark.smoke
 def test_floor_candidate_requires_expected_state_coverage_by_default():
-    baseline = _baseline()
+    # A zero-coverage candidate must be rejected by default. The committed floor
+    # now bears coverage, so derive a zero-coverage payload to exercise the rule.
+    zero_coverage = _with_expected_state_coverage(_baseline(), count=0)
+    assert zero_coverage["metrics"]["expected_state_coverage"] == 0
 
-    rc, lines = validate_floor_candidate(baseline, baseline)
+    rc, lines = validate_floor_candidate(zero_coverage, zero_coverage)
 
     assert rc == 1
     assert lines == ["expected_state_coverage must be > 0 for a promoted L2 floor"]
-    rc, lines = validate_floor_candidate(baseline, baseline, require_expected_state_coverage=False)
+    rc, lines = validate_floor_candidate(
+        zero_coverage, zero_coverage, require_expected_state_coverage=False
+    )
     assert rc == 0
     assert lines == ["OK"]
 
@@ -461,6 +469,14 @@ def test_gate_fails_when_scroll_success_rate_drops_with_scroll_samples():
 @pytest.mark.smoke
 def test_gate_does_not_scroll_gate_without_scroll_samples():
     baseline = _with_scroll_success(_baseline(), count=3)
+    # The committed floor's recovery events occur on scroll actions, so dropping
+    # all scroll actions would also drop `recoveries` (a gated metric) and mask
+    # what this test isolates. Zero recoveries first so removing scroll moves
+    # only the scroll axis.
+    for task in baseline["tasks"]:
+        for action in task["actions"]:
+            action["recovered"] = False
+    baseline["metrics"] = _metrics(baseline["tasks"])
     no_scroll_candidate = _without_scroll_actions(baseline)
     assert validate_benchmark(baseline) == []
     assert validate_benchmark(no_scroll_candidate) == []
