@@ -48,6 +48,7 @@ docstring 和本台账。
 | 8 | `GLASSBOX_MEMORY_LOCATE_PRIORS` / `page_id_route_enabled` | 重复跑同任务 | 步数/耗时 | ⚠️ 前置：效率指标（duration/steps）尚未进 metrics，先补 | 前置离线 |
 | 9 | canonical primitives 冻结 floor | canonical | （建立基线本身） | 夜间已跑只差 committed floor + 比对接线 | ~30min |
 | 10 | zh cell 建立 | 设置任务 zh-Hans/CN | （建立基线本身） | 需物理切设备语言（操作者在场） | ~60min+人 |
+| 11 | **反向 A/B**：`UI_LAYOUT_SEGMENTATION_ENABLED=0` | Clock cell（或任一不饱和格子） | completion、每轮耗时 | **默认开但无任务级证据**：翻默认依据是 App Store n≈1 的 under-bar 小赢；且它隐式跑图标检测器（绕过 `DETECT_ICONS_IN_PERCEIVE` 的门，omniparser 机器上=每帧 YOLO）。默认开的 flag 同样要有数字，否则是反方向的信仰 | ~75min |
 
 **红线**（沿用既有纪律）：VLM 计费且 opt-in；a11y cell 永不混入干净地板；
 "覆盖率不许跌"对救场类指标是反的（守护用机器探针，不用棘轮）；任何翻默认都
