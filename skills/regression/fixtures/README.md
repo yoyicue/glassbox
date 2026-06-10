@@ -6,15 +6,18 @@ benchmark aggregated from a recorded iOS-Settings rig run, with the provenance
 fields (`run_id` / `started_at` / `git_sha`) pinned so the fixture is
 deterministic and reviewable.
 
-Current floor: a **successful** real iPad mini 7 (en/HK) full Settings read-only
-drill-down, 5 rounds, captured on 2026-06-01 at `git_sha=15d592c`.
+Current floor: a **successful, expected-state-verified** real iPad mini 7
+(en/HK) full Settings read-only drill-down, 5 rounds, captured on 2026-06-10 at
+`git_sha=dd74fbb` (replacing the 2026-06-01 `15d592c` floor whose own note said
+expected-state verification did not fire on its `tap_xy` path).
 `task_completion_rate = 1.0`, `task_completion_variance = 0.0`, every task
-outcome is `succeeded`, and `root_pages_coverage = 1.0`. `action_success_rate =
-1.0` and `unknown_rate = 0.0` are secondary task-action ACK metrics, not the
-reliability headline. VLM and expected-state row verification did not fire on
-this crawler path (`vlm_action_coverage = 0.0`, `expected_state_coverage = 0.0`),
-so this floor proves completion reliability but not the semantic expected-state
-row-entry path.
+outcome is `succeeded`, `root_pages_coverage = 1.0`, and — unlike the old floor —
+the semantic row-entry machinery is exercised and visible:
+`expected_state_coverage = 0.978`, `recoveries = 2`, `scroll_action_count = 26`.
+`vlm_action_coverage = 0.0` and `strategy_switches = 0` are **honest zeros**: a
+clean run escalates nothing (VLM was off; every tap verified first-try). Those
+two paths are guarded by the blocking machinery probe (see below), not by this
+floor.
 
 `l2_settings_expected_state_snapshot.json` is the committed **coverage-bearing
 L2 eval snapshot** for that semantic expected-state row-entry path. It is a real
@@ -56,8 +59,19 @@ It is load-bearing in two places:
 - **On-rig (nightly, self-hosted):** `.github/workflows/rig-nightly.yml` runs the
   canonical primitives and the Settings drill-down on a real device, then
   `make regression-compare CANDIDATE=<fresh benchmark>` fails the run on any drop
-  in `task_completion_rate` / `action_success_rate` / `root_pages_coverage` or a
-  rise in `unknown_rate` beyond `TOLERANCE`.
+  in a `GATE_DROP_METRICS` metric (`task_completion_rate` /
+  `action_success_rate` / `root_pages_coverage` / `expected_state_coverage` /
+  `vlm_action_coverage` / `recoveries` / `strategy_switches`), a rise in
+  `unknown_rate` / `navigation_origin_precondition_failures`, or — when both
+  benchmarks carry scroll samples — a drop in `scroll_success_rate`, beyond
+  `TOLERANCE`. The nightly also runs the **blocking machinery probe**
+  (`make machinery-probe-gate`, iPad): a deliberate fault injection that fails
+  unless the strategy ladder and recovery actually fire — the honest guard for
+  the P2/P3 (and optionally P1) paths a clean floor legitimately leaves at zero.
+  A non-blocking advisory L2 coverage report
+  (`make regression-compare-l2-advisory`) prints VLM/strategy coverage drift vs
+  `l2_settings_expected_state_snapshot.json` for human inspection only — a
+  coverage drop can mean the path got *more* reliable, so it never gates.
 
 ## Raising the floor
 
@@ -95,6 +109,23 @@ uv run python -m skills.regression.computer_use_success_rate aggregate \
 # then re-pin run_id/started_at/git_sha/config.note for reviewability,
 # and `make regression-gate`.
 ```
+
+## Verifier alignment (SPA-Bench discipline)
+
+`verifier_alignment_settings_v1.json` is the committed verifier-vs-annotation
+alignment fixture: 78 samples extracted from 2026-06-10 iPad mini 7 rig runs
+(5 floor rounds + 3 machinery-probe rounds + 1 VLM-on run), blind-annotated
+from before/after frames with verifier verdicts hidden (provenance in
+`annotation_source` — AI frame-inspection annotation, NOT a blind human
+annotation; frames stay in local gitignored artifacts). Headline (snapshot,
+regenerate via `python -m skills.regression.verifier_alignment`):
+success-assertion precision 0.943 / recall 0.733 / F1 0.825;
+failure-assertion precision 1.0 / recall 0.364. Known weaknesses it surfaced:
+`scene_progressed` resolves nothing (0/29 — every unknown sat on a decidable
+outcome), and `tap_target_effect` can be fooled by the status-bar clock
+ticking ("scene changed after action"). The fixture must validate
+(`verifier_alignment validate`) and its metrics must exactly match
+recomputation — enforced by `skills/smoke/test_verifier_alignment.py`.
 
 ## Human-control protocol
 

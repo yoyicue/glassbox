@@ -100,6 +100,14 @@ def _static_frame_source_factory(*, cfg: AgentConfig):
     return StaticFrameSource([str(p) for p in pngs])
 
 
+def _replay_frame_source_factory(*, cfg: AgentConfig):
+    if not cfg.replay_dir:
+        raise ValueError("replay FrameSource requires GLASSBOX_REPLAY_DIR")
+    from glassbox.perception.recording_source import RecordingFrameSource
+
+    return RecordingFrameSource(cfg.replay_dir)
+
+
 def _avf_frame_source_factory(*, cfg: AgentConfig):
     src = AVFFrameSource(
         device_index=cfg.hdmi_index,
@@ -123,11 +131,17 @@ def _picokvm_frame_source_factory(*, cfg: AgentConfig):
 def select_frame_source_backend(cfg: AgentConfig) -> str:
     if cfg.picokvm:
         return "picokvm_stream"
+    if cfg.replay_dir:
+        return "replay"
     return "static" if cfg.frame_dir else "avf"
 
 
 def static_frame_source_registration() -> BackendRegistration:
     return BackendRegistration(name="static", factory=_static_frame_source_factory)
+
+
+def replay_frame_source_registration() -> BackendRegistration:
+    return BackendRegistration(name="replay", factory=_replay_frame_source_factory)
 
 
 def avf_frame_source_registration() -> BackendRegistration:
@@ -267,6 +281,7 @@ DEFAULT_FRAME_SOURCE_REGISTRY = BackendRegistry(
     entry_point_group="glassbox.frame_sources",
     registrations=(
         static_frame_source_registration(),
+        replay_frame_source_registration(),
         avf_frame_source_registration(),
         picokvm_frame_source_registration(),
     ),
@@ -314,6 +329,7 @@ __all__ = [
     "ocrmac_registration",
     "picokvm_effector_registration",
     "picokvm_frame_source_registration",
+    "replay_frame_source_registration",
     "select_effector_backend",
     "select_frame_source_backend",
     "select_ocr_backend",

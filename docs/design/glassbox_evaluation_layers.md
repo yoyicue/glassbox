@@ -10,6 +10,16 @@
 >
 > **核验**：本文的代码事实在 `5881a28` 上逐条核对过（`_metrics`、`_task_outcome`、
 > `compare_benchmarks`、Makefile 目标、Tier A/B/C 设计、`navigation.py` 调用点）。
+>
+> **状态增量（2026-06-10，main `b61f079`，已核验）**：Rank 3 已完成——committed floor 替换为
+> expected-state-verified 的 n=5 成功跑（`git_sha=dd74fbb`：completion/action/root 全 1.0、
+> `expected_state_coverage=0.978`、`recoveries=2`、scroll 样本 26），经 `validate-floor-candidate`
+> 通过后人工升格；nightly 新增**阻断式 machinery probe**（`make machinery-probe-gate`，故障注入后
+> 策略阶梯+恢复必须触发，否则 rc1）。这是 `vlm_action_coverage`/`strategy_switches` 的诚实守卫：
+> 干净地板上这两项为 0 是**诚实的**（无事可救），"覆盖率不许跌"对它们是反的（路径更可靠⇒救场更
+> 少），所以阻断牙是"注入故障后机器必须触发"，而 L2 快照的覆盖率对比只做 advisory
+> （`make regression-compare-l2-advisory`）。L2 余项 = 人类对照 trial 采集 + 多 cell（第二 App /
+> zh）。下文 §0/§2/§5 的旧状态标记按本条修正。
 
 ---
 
@@ -18,9 +28,9 @@
 ```
                   ▲ 保真度高 / 成本高 / 跑得稀
    ┌──────────────────────────────────────────────────────────┐
-   │ L2  能力层 (on-rig)      execution-based outcome、n≥5、多cell │  ❌ 缺失（最大的洞）= "评测"
+   │ L2  能力层 (on-rig)      execution-based outcome、n≥5、多cell │  🟡 单cell已跑通；缺人类对照+多cell
    ├──────────────────────────────────────────────────────────┤
-   │ L3  门禁层 (floor+gate)  从 L2 冻结地板、守回归                │  ⚠️ 存在但错位 = "冻结地板+门禁"
+   │ L3  门禁层 (floor+gate)  从 L2 冻结地板、守回归                │  ✅ 2026-06-10 诚实化（见状态增量）
    ├──────────────────────────────────────────────────────────┤
    │ L1  感知/组件层 (offline) 录制帧回放、grounding/场景/OCR       │  🟡 已设计未建 (Tier B)
    ├──────────────────────────────────────────────────────────┤
@@ -214,10 +224,11 @@ glassbox 真正缺的、也是 SPA-Bench 替不了的，是那个 **screenshot-o
   `regression-gate`；`regression-compare`（nightly）；
   `reliability_baseline.json`（19 个 metrics）和
   `human_baseline_settings_template.json`（空白 human-control protocol）。
-- **现状**：⚠️ **存在但仍不诚实**。离线 gate 已能执行 coverage/process/scroll 棘轮；但 committed
-  地板仍由 `tap_xy` 爬虫产生，`task_completion_rate=1.0` 和 `root_pages_coverage=1.0` 是真实
-  completion/root coverage floor，`expected_state_coverage`、`vlm_action_coverage`、`strategy_switches`
-  与 `recoveries` 仍为 0，因此还不是 coverage-bearing L2 outcome floor。
+- **现状**：✅ **已诚实化（2026-06-10，见页首状态增量）**。committed 地板已是 expected-state-verified
+  的 n=5 成功跑（`git_sha=dd74fbb`）：completion/action/root 全 1.0，`expected_state_coverage=0.978`、
+  `recoveries=2`、scroll 样本 26。`vlm_action_coverage=0`/`strategy_switches=0` 是干净跑的诚实零
+  （无事可救），由 nightly 阻断式 machinery probe（故障注入→机器必须触发）守护，而非地板棘轮；
+  L2 快照覆盖率对比仅 advisory。nightly `regression-compare` + machinery probe 均为阻断步骤。
 
 ### 旁路 — 漂移模拟（advisory，永不挡合并）
 
@@ -276,7 +287,7 @@ glassbox 真正缺的、也是 SPA-Bench 替不了的，是那个 **screenshot-o
 |---|---|---|---|---|
 | **Rank 1** | ✅ 把 coverage/process/scroll 指标接进 `compare_benchmarks` rc1（单边棘轮）+ smoke 合成回归断言 | L3 | 低·离线 | 2026-06-05 已落地 |
 | **Rank 2** | 🟡 承重代码：`tap_element` semantic ladder + Settings row/search-result `page_id` expected-state；iPad Settings n=5 snapshot 已完成并提交去敏 fixture（4/5 succeeded，`expected_state_coverage=0.976`）；floor-candidate policy 已落地并拒绝当前 4/5 snapshot，且强制 clean HDMI cell/environment；人类对照协议/模板/校验器已落地但 trial 数据待采集；剩余：真实人类 trial + 通过 floor policy 的新候选进入 nightly floor。Voice Control overlay 另走 a11y eval cell | L2 | 高·真机 | honest-gate；`_task_outcome:622` |
-| **Rank 3** | 从 L2 冻结诚实地板 + nightly `regression-compare` 阻塞化 + 抬门槛>0 | L3 | 中 | Makefile `regression-compare` |
+| **Rank 3** | ✅ 2026-06-10 完成：诚实地板（`dd74fbb` n=5，coverage-bearing）+ nightly 阻断（`regression-compare` + machinery probe）+ `validate-floor-candidate` 强制 coverage>0 | L3 | 中 | 页首状态增量 |
 | Rank 4 | canonical-primitive floor + gate `scroll_success_rate` | L2/L3 | 中·真机 | `run-canonical-primitives` |
 | Rank 5 | world-model spine memory ON/OFF A/B（操作性门，非 census） | L2 | 中·真机 | spine 文档 |
 | 后置 | Tier B 感知回放（L1）；Tier C / UTG sim（旁路） | L1/旁路 | 中·离线 | 无默认路径数字前模拟无对照 |

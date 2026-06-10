@@ -7,6 +7,8 @@ inputs/
 
 # Run artifacts
 recordings/
+# …but the committed Tier-B perception-replay corpus is golden data, not a run artifact
+!skills/golden/recordings/
 reports/
 artifacts/
 .cache/

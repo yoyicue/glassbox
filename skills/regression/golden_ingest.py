@@ -72,7 +72,14 @@ def _case_from_payload(payload: dict[str, Any]) -> VerifierGoldenCase:
 def replays_consistently(payload: dict[str, Any], registry: VerifierRegistry) -> bool:
     """True iff the recorded status reproduces under the test's reconstruction."""
     case = _case_from_payload(payload)
-    verifier = registry.resolve(case.action, case.metadata)
+    try:
+        verifier = registry.resolve(case.action, case.metadata)
+    except KeyError:
+        # Ledgers from the semantic tap path pin verifiers (e.g. expected_state /
+        # expected_state_vlm) that live in the orchestrator's expected-state
+        # machinery, not the offline verifier registry — they are L2's domain,
+        # not Tier-A golden material. Skip instead of crashing the harvest.
+        return False
     outcome = verifier.verify(case.verifier_input())
     if outcome.status != case.expected_status:
         return False

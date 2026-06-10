@@ -64,6 +64,12 @@ class AgentConfig(BaseSettings):
     frame_dir: str | None = None
     """Point at a png directory → use static images instead of HDMI frame grabbing (hardware-free dev / replay)."""
 
+    replay_dir: str | None = None
+    """Point at an obs/recorder run directory (events.jsonl + frames/) → replay
+    its recorded frames through the real perception stack (Tier B perception
+    replay, docs/design/log_sim_replay_regression.md §5). Mutually exclusive
+    with frame_dir; takes precedence over it. env GLASSBOX_REPLAY_DIR."""
+
     auto_recover_capture: bool = False
     """Automatically restart macOS CoreMediaIO camera daemons when the capture
     card appears locked. This can affect other camera clients, so it is opt-in.

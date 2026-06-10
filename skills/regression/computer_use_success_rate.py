@@ -1722,6 +1722,52 @@ def _validate_machinery_probe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_clock_tabs(args: argparse.Namespace) -> int:
+    """Run the Clock-tabs walkthrough N rounds and aggregate the second app
+    cell's benchmark (task_set=ipados_clock_tabs, execution-based via the
+    visible_text terminal)."""
+    from skills.regression.clock_tabs import build_clock_tabs_manifest, cell_profile_notes
+
+    artifact_root = args.artifact_root.expanduser().resolve()
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    run_dirs: list[Path] = []
+    repo_root = Path(__file__).resolve().parents[2]
+    for index in range(args.rounds):
+        before = {path for path in artifact_root.iterdir() if path.is_dir()}
+        cmd = [sys.executable, "-m", "skills.regression.clock_tabs"]
+        env = dict(os.environ)
+        env["GLASSBOX_COMPUTER_USE_ARTIFACT_DIR"] = str(artifact_root)
+        env.setdefault("GLASSBOX_PICOKVM_ROBUST_CAPTURE", "1")
+        # A round may legitimately fail (that is what the benchmark measures);
+        # only a missing artifact run is a harness error.
+        subprocess.run(cmd, cwd=repo_root, env=env)
+        new_dirs = _find_new_run_dirs(artifact_root, before)
+        if not new_dirs:
+            print(f"ERROR: round {index} wrote no computer-use artifact run")
+            return 1
+        run_dirs.append(new_dirs[-1])
+
+    manifest = build_clock_tabs_manifest(run_dirs, rounds=args.rounds)
+    manifest["config"]["cell_profile"] = dict(cell_profile_notes())
+    manifest_path = artifact_root / "clock_tabs_manifest.json"
+    _write_json(manifest_path, manifest)
+    try:
+        payload = aggregate_benchmark_manifest(manifest_path)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+    errors = validate_benchmark(payload)
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}")
+        return 1
+    for warning in coverage_warnings(payload):
+        print(f"WARNING: {warning}")
+    _write_json(args.out.expanduser().resolve(), payload)
+    print(args.out.expanduser().resolve())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Computer-use success-rate benchmark tools")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1820,6 +1866,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     validate_probe.add_argument("benchmark", type=Path)
 
+    run_clock = sub.add_parser(
+        "run-clock-tabs",
+        help="Run the Clock-tabs walkthrough (second app cell) N rounds and aggregate",
+    )
+    run_clock.add_argument("--rounds", type=int, default=1)
+    run_clock.add_argument("--out", type=Path, required=True)
+    run_clock.add_argument("--artifact-root", type=Path, required=True)
+
     args = parser.parse_args(argv)
     if args.cmd == "aggregate":
         if args.task_manifest is not None:
@@ -1915,6 +1969,11 @@ def main(argv: list[str] | None = None) -> int:
         return _run_machinery_probe(args)
     if args.cmd == "validate-machinery-probe":
         return _validate_machinery_probe(args)
+    if args.cmd == "run-clock-tabs":
+        if args.rounds <= 0:
+            print("ERROR: --rounds must be positive")
+            return 1
+        return _run_clock_tabs(args)
     raise AssertionError(args.cmd)
 
 

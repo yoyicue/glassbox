@@ -1,0 +1,4 @@
+{
+ "baseline_mac_ver": "26.5",
+ "note": "Apple Vision OCR output varies across macOS versions; the full text/IoU tolerances only hold where the baseline was generated. test_perception_replay applies the full profile only when platform.mac_ver() matches; elsewhere it gates classification (page_id + scene_type) which is cross-version stable."
+}
