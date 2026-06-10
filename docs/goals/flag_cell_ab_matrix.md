@@ -25,7 +25,7 @@ docstring 和本台账。
 
 | 格子 | 不饱和指标 | 现值 | fixture |
 |---|---|---|---|
-| a11y cell（overlay ON） | task_completion | 0.0 | `a11y_voice_control_cell_snapshot.json` |
+| a11y cell（overlay ON） | ~~task_completion 0.0~~ → **loop-2 后 1.0 已饱和**；剩 action_success 0.87 / unknown 0.11 | 见台账 loop-2 | `a11y_voice_control_cell_snapshot.json` |
 | 设置地板 scroll | scroll_success_rate | 0.077 | `reliability_baseline.json` |
 | Clock cell | task_completion / 每轮耗时 | 0.8 / ~14min（launch 占大头） | `clock_tabs_baseline.json` |
 | L2 快照 | task_completion | 0.8 | `l2_settings_expected_state_snapshot.json` |
@@ -126,9 +126,13 @@ docstring 和本台账。
 - 产物：`skills/regression/fixtures/a11y_voice_control_cell_snapshot.json`
 - 注意事项：第 5 轮采集流卡死被操作者终止（--keep-going 聚合）；永不作地板候选
 
-### 2026-06-10 badge 减除 = loop-2（代码 `94fa2fd`）— 进行中
+### 2026-06-10 badge 减除 = loop-2（代码 `94fa2fd`）
 - 类型：改动 A/B（唯一差异：感知层减除徽章元素）
 - 格子：a11y cell；n=5；与 loop-1 同命令
-- A 臂：loop-1 快照（completion 0.0）
-- B 臂：跑动中（早期信号：第 3 轮已能钻入 depth=1 详情页，loop-1 连根页都难出）
-- 判定 / 产物 / 注意事项：待跑完回填
+- A 臂：loop-1 快照（completion **0.0**，action 0.42，unknown 0.41，root 0.13，switches 21，recoveries 7）
+- B 臂：completion **1.0（5/5）**，action 0.87，unknown 0.11，root 1.0，switches 1，recoveries 0，
+  带 vc id 场景 351 → **1167**
+- 判定：**入库快照**（替换 loop-1 为 cell 现状；loop-1 数字保留在 note/台账作历史基线）
+- 产物：`skills/regression/fixtures/a11y_voice_control_cell_snapshot.json`（loop-2 版）
+- 注意事项：recoveries 0 是诚实零（不再需要救场）；scroll_success_rate 仍 0；
+  矩阵 #5（`WHITEBOX_HINT_SELECTION`）现在解锁——id 又多又对，该让选择器消费了
