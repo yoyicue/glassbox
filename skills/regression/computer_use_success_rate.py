@@ -101,6 +101,15 @@ IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT = {
     "settings_window_mode": "fullscreen",
 }
 VOICE_CONTROL_NUMERIC_MARKER_REJECT_THRESHOLD = 4
+# The a11y evaluation cell: same task, Voice Control "Item Names" continuous
+# overlay ON (+ the perceive-side producer flag). Reported separately from the
+# clean floor by design — validate-floor-candidate rejects this cell from
+# default floor promotion (the overlay changes the observation distribution).
+IOS_SETTINGS_A11Y_VOICE_CONTROL_EVALUATION_CELL = "ios_settings_a11y_voice_control"
+IOS_SETTINGS_A11Y_VOICE_CONTROL_ENVIRONMENT = {
+    **IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT,
+    "voice_control_overlay": "item_names",
+}
 
 
 def _json_default(value: Any) -> str:
@@ -1454,6 +1463,8 @@ def _voice_control_numeric_marker_count(final_state: Mapping[str, Any]) -> int:
 def _evaluation_environment_for_cell(evaluation_cell: str) -> dict[str, str] | None:
     if evaluation_cell == IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL:
         return dict(IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT)
+    if evaluation_cell == IOS_SETTINGS_A11Y_VOICE_CONTROL_EVALUATION_CELL:
+        return dict(IOS_SETTINGS_A11Y_VOICE_CONTROL_ENVIRONMENT)
     return None
 
 

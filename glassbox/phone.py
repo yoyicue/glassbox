@@ -100,6 +100,7 @@ class PhoneFeatureFlags:
     ai_scroll_prefer_wheel: bool = False
     vlm_reground_selection: bool = False
     whitebox_hint_selection: bool = False
+    voice_control_overlay_hints: bool = False
 
 
 @dataclass(frozen=True)
@@ -463,6 +464,10 @@ class Phone:
         # CUQ-2.1: inject no-text icon regions into perceive() so icon-only
         # controls become tap candidates. Flag-gated (default off).
         self._detect_icons_in_perceive = bool(feature_flags.detect_icons_in_perceive)
+        # A11Y-VC-1: write Voice Control Item-Names badge ids into
+        # WhiteboxHint.accessibility_id inside perceive(). Flag-gated
+        # (default off; a11y eval cell only).
+        self._voice_control_overlay_hints = bool(feature_flags.voice_control_overlay_hints)
         # CUQ-UI-LAYOUT: default-on Tier-A geometric UI graph builder. It needs
         # icon regions, so perceptor lets it trigger icon detection even if the
         # older icon-only flag is off.
@@ -842,6 +847,10 @@ class Phone:
     @property
     def detect_icons_in_perceive_enabled(self) -> bool:
         return self._detect_icons_in_perceive
+
+    @property
+    def voice_control_overlay_hints_enabled(self) -> bool:
+        return self._voice_control_overlay_hints
 
     @property
     def ui_layout_segmentation_enabled(self) -> bool:

@@ -87,6 +87,9 @@ regression-compare:
 # test_l2_expected_state_snapshot_fixture_is_load_bearing_and_scrubbed; the real
 # BLOCKING machinery-regression gate is the failure-injection eval, not this.
 L2_SNAPSHOT ?= skills/regression/fixtures/l2_settings_expected_state_snapshot.json
+# A11y cell snapshot (Voice Control overlay ON) — advisory-only readout; the
+# cell is never a floor candidate and never a regression-compare CANDIDATE.
+A11Y_VC_SNAPSHOT ?= skills/regression/fixtures/a11y_voice_control_cell_snapshot.json
 L2_CANDIDATE ?= artifacts/computer_use_success_rate/l2_benchmark.json
 regression-compare-l2-advisory:
 	@echo "=== ADVISORY L2 coverage report (non-blocking) — VLM/strategy deltas for inspection ==="

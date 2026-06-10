@@ -368,6 +368,18 @@ class AgentConfig(BaseSettings):
     perceive and changes the candidate set); validate on-rig before enabling.
     Scene classification is unaffected (icons are injected after classifiers)."""
 
+    voice_control_overlay_hints_enabled: bool = False
+    """A11Y-VC-1 (docs/design/glassbox_a11y_channels.md rank 1): when the
+    device's Voice Control "Item Names" continuous overlay is displayed,
+    perceive() parses the on-screen name badges and writes matched
+    ``vc:item-name:<slug>`` ids into ``WhiteboxHint.accessibility_id`` —
+    names only; Item Numbers/Grid stay frame-local and never enter UTG
+    identity. Default off: only meaningful in the dedicated a11y evaluation
+    cell where the overlay is actually on (the clean-HDMI floor cell requires
+    it off). Validated by the labeled-replay mapping gate (48 labels) and the
+    committed a11y-cell snapshot; promote-or-remove after the a11y cell has a
+    stable baseline."""
+
     ui_layout_segmentation_enabled: bool = True
     """CUQ-UI-LAYOUT: default ON. perceive() builds
     a geometric Tier-A element graph from OCR text plus icon regions: reading
