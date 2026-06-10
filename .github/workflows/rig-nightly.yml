@@ -87,6 +87,25 @@ jobs:
       - name: Regression gate vs committed floor
         run: make regression-compare CANDIDATE="$CANDIDATE" TOLERANCE="$TOLERANCE"
 
+      # BLOCKING P2/P3 (+ P1) machinery gate — iPad-only (the validated rig).
+      # Injects a controlled verification failure (tap a present row, declare an
+      # unreachable page) and FAILS the nightly if the strategy ladder + recovery
+      # did not fire (strategy_switches>=1 AND recoveries>=1). Deterministic on the
+      # iPad mini 7 (3 switches / 1 recovery / 1 VLM call per round). Set the ladder
+      # explicitly: a scheduled nightly leaves GLASSBOX_SEMANTIC_PLAN_OPS empty,
+      # which would disable the very machinery under test. Free (no --vlm needed
+      # for P2/P3). Unlike "coverage must not drop", "the machine must fire on an
+      # injected fault" is a true, non-flaky invariant.
+      - name: Machinery probe (P2/P3 fault injection, blocking)
+        if: ${{ matrix.device.name == 'ipad' }}
+        env:
+          GLASSBOX_SEMANTIC_PLAN_OPS: back,scroll,tap
+        run: |
+          make machinery-probe-gate \
+            ROUNDS="$ROUNDS" \
+            ARTIFACT_ROOT="$ARTIFACT_ROOT" \
+            MACHINERY_PROBE_OUT="artifacts/ci/${{ matrix.device.name }}/machinery_probe_benchmark.json"
+
       # OPT-IN, iPad-only, BILLED. Produces a fresh VLM-on Settings run and prints
       # an ADVISORY vlm_action_coverage / strategy_switches delta vs the committed
       # L2 snapshot. Non-blocking by design — a coverage DROP can mean the path got

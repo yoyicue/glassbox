@@ -1667,6 +1667,11 @@ def _run_machinery_probe(args: argparse.Namespace) -> int:
             cmd = [sys.executable, "-m", "skills.regression.machinery_probe", "--task", task.name]
             env = dict(os.environ)
             env["GLASSBOX_COMPUTER_USE_ARTIFACT_DIR"] = str(artifact_root)
+            # The probe's deliberately-failing action exhausts the ladder +
+            # recovery, which is long enough to hit a partial H.264 decode on the
+            # PicoKVM stream — survive it with the bounded reconnect path, as the
+            # Settings benchmark does.
+            env.setdefault("GLASSBOX_PICOKVM_ROBUST_CAPTURE", "1")
             if args.vlm:
                 env["GLASSBOX_ENABLE_VLM"] = "1"
             subprocess.run(cmd, cwd=repo_root, env=env)
