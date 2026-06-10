@@ -1642,6 +1642,81 @@ def _run_canonical_primitives(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_machinery_probe(args: argparse.Namespace) -> int:
+    """Run the P2/P3 fault-injection probe N rounds on the rig and assert the
+    strategy ladder + recovery machinery fired.
+
+    Unlike the reliability floor, this deliberately injects a controlled
+    verification failure; the probe SHOULD drive strategy_switches>=1 and
+    recoveries>=1. A drop to 0 means the ladder/recovery machinery regressed, so
+    this returns rc 1 (blocking)."""
+    from skills.regression.machinery_probe import (
+        MACHINERY_PROBE_TASKS,
+        build_machinery_probe_manifest,
+        machinery_fired_reasons,
+    )
+
+    artifact_root = args.artifact_root.expanduser().resolve()
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    run_dirs_by_task: dict[str, list[Path]] = {}
+    repo_root = Path(__file__).resolve().parents[2]
+    for task in MACHINERY_PROBE_TASKS:
+        run_dirs_by_task[task.name] = []
+        for index in range(args.rounds):
+            before = {path for path in artifact_root.iterdir() if path.is_dir()}
+            cmd = [sys.executable, "-m", "skills.regression.machinery_probe", "--task", task.name]
+            env = dict(os.environ)
+            env["GLASSBOX_COMPUTER_USE_ARTIFACT_DIR"] = str(artifact_root)
+            if args.vlm:
+                env["GLASSBOX_ENABLE_VLM"] = "1"
+            subprocess.run(cmd, cwd=repo_root, env=env)
+            new_dirs = _find_new_run_dirs(artifact_root, before)
+            if not new_dirs:
+                print(f"ERROR: {task.name} round {index} wrote no computer-use artifact run")
+                return 1
+            run_dirs_by_task[task.name].append(new_dirs[-1])
+
+    manifest = build_machinery_probe_manifest(run_dirs_by_task, rounds=args.rounds)
+    manifest_path = artifact_root / "machinery_probe_manifest.json"
+    _write_json(manifest_path, manifest)
+    try:
+        payload = aggregate_benchmark_manifest(manifest_path)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+    errors = validate_benchmark(payload)
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}")
+        return 1
+    _write_json(args.out.expanduser().resolve(), payload)
+    reasons = machinery_fired_reasons(payload)
+    for reason in reasons:
+        print(f"ERROR: machinery did not fire: {reason}")
+    print(args.out.expanduser().resolve())
+    return 1 if reasons else 0
+
+
+def _validate_machinery_probe(args: argparse.Namespace) -> int:
+    """Offline gate: assert a machinery-probe benchmark shows the ladder +
+    recovery fired (strategy_switches>=1 AND recoveries>=1)."""
+    from skills.regression.machinery_probe import machinery_fired_reasons
+
+    payload = _read_required_json(args.benchmark)
+    errors = validate_benchmark(payload)
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}")
+        return 2
+    reasons = machinery_fired_reasons(payload)
+    for reason in reasons:
+        print(f"ERROR: machinery did not fire: {reason}")
+    if reasons:
+        return 1
+    print("OK")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Computer-use success-rate benchmark tools")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1718,6 +1793,27 @@ def main(argv: list[str] | None = None) -> int:
     run_canonical.add_argument("--rounds", type=int, default=1)
     run_canonical.add_argument("--out", type=Path, required=True)
     run_canonical.add_argument("--artifact-root", type=Path, required=True)
+
+    run_probe = sub.add_parser(
+        "run-machinery-probe",
+        help="Run the P2/P3 fault-injection probe N rounds; rc 1 if the strategy "
+        "ladder + recovery did not fire on an unsatisfiable expectation",
+    )
+    run_probe.add_argument("--rounds", type=int, default=1)
+    run_probe.add_argument("--out", type=Path, required=True)
+    run_probe.add_argument("--artifact-root", type=Path, required=True)
+    run_probe.add_argument(
+        "--vlm",
+        action="store_true",
+        help="Also enable VLM (GLASSBOX_ENABLE_VLM=1) so the probe exercises P1 "
+        "escalation alongside the ladder/recovery.",
+    )
+
+    validate_probe = sub.add_parser(
+        "validate-machinery-probe",
+        help="Offline: assert a machinery-probe benchmark shows the ladder + recovery fired",
+    )
+    validate_probe.add_argument("benchmark", type=Path)
 
     args = parser.parse_args(argv)
     if args.cmd == "aggregate":
@@ -1807,6 +1903,13 @@ def main(argv: list[str] | None = None) -> int:
             print("ERROR: --rounds must be positive")
             return 1
         return _run_canonical_primitives(args)
+    if args.cmd == "run-machinery-probe":
+        if args.rounds <= 0:
+            print("ERROR: --rounds must be positive")
+            return 1
+        return _run_machinery_probe(args)
+    if args.cmd == "validate-machinery-probe":
+        return _validate_machinery_probe(args)
     raise AssertionError(args.cmd)
 
 

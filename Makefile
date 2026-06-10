@@ -1,4 +1,4 @@
-.PHONY: lint test check regression-gate regression-compare regression-compare-l2-advisory ab-semantic-plan \
+.PHONY: lint test check regression-gate regression-compare regression-compare-l2-advisory machinery-probe-gate ab-semantic-plan \
 	human-baseline-template human-baseline-validate \
 	golden-harvest golden-audit \
 	computer-use-success-rate-ios-settings ipad-settings-state-machine ipad-settings-ab-matrix ios-settings-ab-matrix
@@ -91,6 +91,22 @@ regression-compare-l2-advisory:
 	@echo "=== ADVISORY L2 coverage report (non-blocking) — VLM/strategy deltas for inspection ==="
 	-$(COMPUTER_USE_SUCCESS_RATE) compare "$(L2_SNAPSHOT)" "$(L2_CANDIDATE)" --tolerance $(TOLERANCE)
 	@echo "=== advisory only: a coverage DROP may mean the path got more reliable, not a regression ==="
+
+# P2/P3 machinery probe — the BLOCKING teeth for the strategy ladder + recovery
+# the clean floor can't see. Injects a controlled verification failure on the rig
+# (tap a present row, declare an unreachable page) and FAILS (rc 1) unless the
+# ladder advanced (strategy_switches>=1) AND recovery fired (recoveries>=1). Unlike
+# the perverse "coverage must not drop", "the machine must fire on an injected
+# fault" is a true, non-flaky invariant. Rig-only; needs the strategy ladder
+# enabled (GLASSBOX_SEMANTIC_PLAN_OPS). The gate logic is unit-tested offline in
+# test_machinery_probe.py. Add `--vlm` via EXTRA to also probe P1 escalation.
+MACHINERY_PROBE_OUT ?= artifacts/computer_use_success_rate/machinery_probe_benchmark.json
+machinery-probe-gate:
+	$(COMPUTER_USE_SUCCESS_RATE) run-machinery-probe \
+		--rounds $(ROUNDS) \
+		--out "$(MACHINERY_PROBE_OUT)" \
+		--artifact-root "$(ARTIFACT_ROOT)" \
+		$(EXTRA_ARGS)
 
 # One-command on-rig A/B for the P1/P2 strategy ladder (CUQ-0.1: back/scroll/tap
 # route through default_semantic_action_plan with verified-failure strategy
