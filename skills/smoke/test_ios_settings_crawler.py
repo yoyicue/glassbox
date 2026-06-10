@@ -112,7 +112,16 @@ def test_crawl_readonly_settings_report_keeps_trace_payload_after_success(monkey
 
 
 @pytest.mark.smoke
-def test_core_crawl_skips_initial_boundary_scroll_when_ipad_sidebar_is_visible(monkeypatch):
+def test_core_crawl_runs_initial_boundary_scroll_on_ipad_sidebar(monkeypatch):
+    """The startup boundary scroll must run on iPad too.
+
+    Regression guard for the iPad sidebar root-row bug: a *restored* sidebar
+    scroll position leaves the top rows (e.g. Camera / Control Centre) jammed
+    against scrolled-off content, where a tap scrolls the sidebar instead of
+    selecting the row. 9ddc8c4 skipped the startup scroll whenever an iPad root
+    sidebar was visible, which surfaced that bug; the crawler now scrolls to the
+    top boundary unconditionally (idempotent once at the boundary).
+    """
     scene = Scene(
         frame_id=0,
         timestamp=0.0,
@@ -176,7 +185,7 @@ def test_core_crawl_skips_initial_boundary_scroll_when_ipad_sidebar_is_visible(m
 
     result = crawler._run_core_crawl(IPadPhone())
 
-    assert scrolls == []
+    assert scrolls == ["up"]
     assert crawled == [("Settings",)]
     assert result.visits[0].path == ("Settings",)
 

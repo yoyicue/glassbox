@@ -258,8 +258,15 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
     report_written = False
     try:
         _open_settings_from_home_if_visible(phone)
-        if _initial_boundary_scroll_needed(phone):
-            _scroll_to_vertical_boundary(phone, direction="up")
+        # Always scroll the list/sidebar to its top boundary before drilling.
+        # 9ddc8c4 skipped this on iPad whenever a root sidebar was visible, but a
+        # *restored* sidebar scroll position leaves the top rows (e.g. Camera,
+        # Control Centre) jammed against scrolled-off content, where a tap scrolls
+        # the sidebar instead of selecting the row (the detail pane never
+        # navigates). The pre-branch known-good en/HK run scrolled unconditionally;
+        # scroll_to_vertical_boundary is idempotent once at the boundary, so this is
+        # a no-op when the sidebar is already at the top.
+        _scroll_to_vertical_boundary(phone, direction="up")
         _crawl_current_page(
             phone,
             path=("Settings",),
@@ -319,15 +326,6 @@ def _run_core_crawl(phone) -> SettingsCrawlResult:
         rejected_candidates=rejected_candidates,
         navigation_failures=navigation_failures,
     )
-
-
-def _initial_boundary_scroll_needed(phone) -> bool:
-    with suppress(Exception):
-        if settings_core._is_ipad_target(phone):
-            scene = phone.perceive()
-            if settings_core._ipad_scene_has_root_sidebar(scene):
-                return False
-    return True
 
 
 def _open_target_root_page(phone, label: str) -> bool:
