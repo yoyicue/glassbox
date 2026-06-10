@@ -39,10 +39,10 @@ docstring 和本台账。
 | # | Flag / 改动 | 测试格子 | 看的数字 | 机制对位 | 估算机时 |
 |---|---|---|---|---|---|
 | 1 | （进行中）badge 减除（`VOICE_CONTROL_OVERLAY_HINTS` 行为扩展） | a11y cell | completion vs 0.0 | 徽章伪影毒化行匹配/验证器 → 感知层减除 | ~90min |
-| 2 | `GLASSBOX_DETECT_ICONS_IN_PERCEIVE` × 后端（**双维 A/B**） | Clock cell | completion vs 0.8；每轮耗时 vs ~14min | launch_app 靠主屏找图标，纯 OCR 读不到图标本体。**后端是独立维度**：`GLASSBOX_ICON_DETECTOR=omniparser` vs `classical` 各跑一臂——"omniparser 肯定有帮助"是待验证假设（正面：主屏全是图标；反面实测：设置场景 185 帧 0 图标产出 + 每帧 5-10× 延迟）。注意 omniparser 臂的两个环境坑：worktree 需手拷插件、`uv sync` 会剪掉 AGPL runtime 需重装。另：`ui_layout`（默认开）会隐式按当前后端每帧跑图标检测，omniparser 臂 = 全程每帧 YOLO，耗时数字要连这笔账一起读 | ~75min ×2 臂 |
-| 3 | `GLASSBOX_AI_SCROLL_PREFER_WHEEL` | 设置地板 | scroll_success_rate vs 0.077 | iPad 滚轮精确已验证（picokvm_ipad_wheel） | ~45min |
+| 2 | `GLASSBOX_DETECT_ICONS_IN_PERCEIVE` × 后端（**双维 A/B**） | Clock cell | completion vs 0.8；每轮耗时 vs ~14min | launch_app 靠主屏找图标，纯 OCR 读不到图标本体。**后端是独立维度**：`GLASSBOX_ICON_DETECTOR=omniparser` vs `classical` 各跑一臂。**✅已测 06-10：假设获正向支持但不充分**——omniparser（主屏 31 区域 vs classical 17）把 Clock completion **0.8→1.0**（修第 4 轮错启动），代价 **+~17% 每轮耗时**；但 n=5 仅一轮之差 + omniparser 是 AGPL 不能进核心默认 → **committed 默认仍 classical**，omniparser 作本地 opt-in 正向信号待更大 n 复验（详见台账）。omniparser 臂两个环境坑：worktree 需手拷插件、`uv sync` 会剪掉 AGPL runtime 需重装。`ui_layout`（默认开）隐式按当前后端每帧跑检测 → omniparser 臂 = 全程每帧 YOLO，+17% 是这笔账 | ~75min ×2 臂 |
+| 3 | `GLASSBOX_AI_SCROLL_PREFER_WHEEL` | 设置地板 | scroll_success_rate vs 0.077 | iPad 滚轮精确已验证（picokvm_ipad_wheel）。**✅已测 06-10：保持关**——flag 唯一读取点 `ai.py:655`，设置地板走侧栏 drag 够不到；受控同页 facade 滚动 wheel==swipe（详见台账） | ~45min |
 | 4 | `GLASSBOX_ENABLE_VLM`（P1 升级） | Clock cell 失败轮 / a11y cell | completion、unknown_rate | VLM 只在低置信/找不到目标时触发——必须在会失败的格子测 | ~90min+计费 |
-| 5 | `GLASSBOX_WHITEBOX_HINT_SELECTION` | a11y cell（badge 减除之后） | completion、误点 | producer 已写 vc id，让选择器消费它 | ~90min |
+| 5 | `GLASSBOX_WHITEBOX_HINT_SELECTION` | a11y cell（badge 减除之后） | completion、误点 | producer 已写 vc id，让选择器消费它。**✅已测 06-10：保持关**——离线 replay 1198 场景：爬虫不调 `expect_text`（flag 唯一读取点）+ 带 badge 行 100% 已有干净 OCR 文本 → 净恢复 0/25193，反带 4.2% slug 噪声（详见台账） | ~90min→离线 |
 | 6 | `GLASSBOX_RECOVER_THEN_RETRY` | 任一会失败的格子 | completion | 机器探针已证恢复触发；问"恢复后重试能否救完成率" | ~60min |
 | 7 | `GLASSBOX_STRICT_TARGET_MATCHING` / `REVERIFY_FRESH_FRAME` | unknown_rate>0 的格子 | unknown_rate、误点 | 鲁棒性类，干净格子无感 | ~60min |
 | 8 | `GLASSBOX_MEMORY_LOCATE_PRIORS` / `page_id_route_enabled` | 重复跑同任务 | 步数/耗时 | ⚠️ 前置：效率指标（duration/steps）尚未进 metrics，先补 | 前置离线 |
@@ -136,3 +136,62 @@ docstring 和本台账。
 - 产物：`skills/regression/fixtures/a11y_voice_control_cell_snapshot.json`（loop-2 版）
 - 注意事项：recoveries 0 是诚实零（不再需要救场）；scroll_success_rate 仍 0；
   矩阵 #5（`WHITEBOX_HINT_SELECTION`）现在解锁——id 又多又对，该让选择器消费了
+
+### 2026-06-10 矩阵 #3 滚轮 flag A/B（`GLASSBOX_AI_SCROLL_PREFER_WHEEL`，代码 `efcf262`）
+- 类型：flag A/B（scroll 机制：swipe-fling vs 精确 wheel）
+- 格子：iPad Settings 详情页（`Privacy & Security`，同页受控）；每臂 n=1，单步 `scroll("down", max_steps=1)` ×6；
+  命令：`set -a; source .env; set +a; GLASSBOX_PHONE_MODEL=ipad_mini_7 GLASSBOX_STABLE_DIFF_THRESHOLD=0.09 [GLASSBOX_AI_SCROLL_PREFER_WHEEL=1] uv run python scroll_probe.py {swipe|wheel}`
+- **先决发现（脱靶）**：地板里的 `scroll_success_rate=0.077` 来自 Settings 基准，其滚动走的是
+  `skills/regression/ios_settings/scrolling.py:68` 的**侧栏 drag**（iPad 恒走 `_settings_sidebar_drag`），
+  根本不经过 `AIPhone.scroll`。该 flag 全仓**唯一读取点**是 `glassbox/ai.py:655`
+  （`ai_scroll_prefer_wheel_enabled and supports("scroll_wheel")`）——所以它**够不到那块地板**。
+  早先 `/tmp/ab3-wheel` 的 Settings 跑（completion 1.0、scroll 0.0 vs 0.077）只是 drag 路径的run-to-run抖动，非 flag 效应。
+- A 臂（swipe，默认）：同页 6/6 每步推进，distinct=49
+- B 臂（wheel，flag on）：`wheel_flag=True supports_wheel=True`（**确实进了 wheel 分支，非 no-op**）；同页 6/6，distinct=49
+- 判定：**保持关**。在 flag 真正经过的 facade 路径上，受控同页单步滚动 **wheel == swipe（49==49，皆 6/6）**，
+  无可测增益；且它够不到 Settings 地板。无翻默认理由。
+- 产物：`/tmp/probe-swipe.out`、`/tmp/probe-wheel.out`（探针输出，未入库）；探针脚本 `scroll_probe.py`（未提交）
+- 注意事项：n=1/臂、单页、`max_steps=1`——wheel 的理论优势（无 fling 过冲、精确定位）只会在
+  多步/滚到目标任务上显现，本探针没压到那一面。先决条件踩了两个坑：① `open_phone()` 不自动加载 `.env`
+  → 默认落 `NoOpEffector`（`supports` 全 False），**facade 探针必须 `source .env`**；
+  ② 真机视频有 ~6% h264 噪声 → 默认 `stable_diff_threshold=0.005` 会 `wait_stable` 超时，探针调到 0.09。
+
+### 2026-06-10 矩阵 #5 白盒选择 flag A/B（`GLASSBOX_WHITEBOX_HINT_SELECTION`，离线 replay，代码 `efcf262`）
+- 类型：flag A/B（白盒 id 选择 vs OCR 文本选择）；**离线 scene replay**（不占机器）
+- 格子：a11y cell loop-2 录制场景；样本 = 5 轮 × ~240 场景 = **1198 场景 / 25193 个带 vc id 的元素观测**；
+  命令：`set -a; source .env; set +a; uv run python wb5_replay.py`（replay `find_text` vs `find_by_whitebox_hint`）
+- **先决发现①（脱靶，离线可证）**：该 flag 全仓**唯一读取点**是 `glassbox/element_selector.py:179`
+  （`expect_text` 内的 OCR-失败-兜底）。而 a11y cell 的 ios_settings 爬虫走 **tap_xy**（`navigation.py`），
+  **从不调用 `expect_text`**（全仓只有 `ai_native_example.py:16` 用 `expect_visible`，非本 cell）。
+  → 在 cell 当前路径上该 flag **根本不被询问**（与 #3 同型的"机器对格子不可见"陷阱）。
+- A 臂（flag off，OCR 文本选择）：25193 次选择里 OCR 正确命中 23701
+- B 臂（flag on，白盒兜底）：**whitebox 独有恢复 = 0**；whitebox 返回**错行 = 30**（风险）；
+  → **flag 净恢复 = 0/25193 = 0.00%**
+- **数据发现②（即便接上 expect_text 也无收益）**：带 badge 的行 **100% 已有干净 OCR 文本**（empty=0），
+  所以"OCR 失败才兜底"的 whitebox 分支**永无触发机会**；反而 producer 的 vc slug 自带 **4.2% OCR 噪声**
+  （`accessibiity`/`accesssibility`）——白盒 id 并不比 OCR 文本更干净。
+- 判定：**保持关**。矩阵原备注"id 又多又对，该让选择器消费"被数据**证伪**：id 是多（25193），
+  但与已干净的 OCR 文本**冗余**且更**脏**（4.2% garble），消费它零收益 + 微风险。该 flag 的真正用武之地是
+  **Tier-1 profiled app（有真 accessibility id 且无 OCR 文本）**，不是这种 OCR-over-HDMI、文本恒在的 a11y cell。
+- 产物：`/tmp/wb5_replay.py`（replay 脚本，未提交）；输入 = `/tmp/glassbox-a11y2/runs/*/scenes`（loop-2 录制，本地未入库）
+- 注意事项：`neither=1462` 是 `find_text` 对截断标签（`Analytics &`/`Access Within Apps`）的自匹配严格度，
+  与本 flag 正交（whitebox 同样救不了）；本测离线确定性可复跑，比 n=1 真机探针更稳——故不再占机器单跑 #5。
+
+### 2026-06-10 矩阵 #2 图标后端 A/B（`GLASSBOX_ICON_DETECTOR=omniparser` vs `classical`，代码 `efcf262`）
+- 类型：flag A/B（图标检测后端，验证假设"打开图标检测器肯定有帮助"）
+- 格子：ipados_clock_tabs；每臂 n=5；
+  命令：`set -a; source .env; set +a; GLASSBOX_PHONE_MODEL=ipad_mini_7 GLASSBOX_ICON_DETECTOR=omniparser uv run python -m skills.regression.computer_use_success_rate run-clock-tabs --rounds 5 --out ... --artifact-root ...`
+- A 臂（基线 classical，committed `89a3bed`）：completion **0.8**（第 4 轮 `open_app(Clock)` 落到 `settings/All Devices`，
+  期望 "Sunrise" → **启动 grounding 错位/启错 App**），action 0.974，coverage 0.447，~14 min/轮
+- B 臂（omniparser）：completion **1.0（5/5，修了那一轮错启动）**，action **1.0**，coverage 0.444，
+  每轮 18.0/16.4/13.5/16.9/17.3 → 均 **~16.4 min/轮（+~17% 耗时）**
+- **机制已核验**（同一主屏帧 `frm_000000`，强制后端对比）：omniparser **31** 个图标区域 vs classical **17** 个；
+  `_get_model()->YOLO` 真加载（`~/.cache/glassbox/omniparser-icon-detect.pt`）；运行日志每轮 springboard regions=30-31
+  → **B 臂确系 omniparser**（classical 只会给 ~17）。更密的图标候选 → Clock 图标消歧更稳 → 5/5 启动正确，机制自洽。
+- 判定：**假设获正向支持但不充分；committed 默认仍 classical**。理由：① n=5、0.8→1.0 仅一轮之差，不能算稳赢；
+  ② omniparser 是 **AGPL、git-ignored、不在默认 deps**——按 AGENTS.md"AGPL 不进 MIT 核心"，**再赢也不能翻默认后端**。
+  → 作为**本地 opt-in** 有真实正向信号（这是该假设的首份正面证据），值得在更大 n 上复验后写进 reference（非 flip default）。
+- 产物：`/tmp/ab2-omni/benchmark.json`（B 臂 benchmark，未入库）；A 臂 = committed `clock_tabs_baseline.json`
+- 注意事项：**本机 `.env` 已 pin `GLASSBOX_ICON_DETECTOR=omniparser`**，故默认跑本就是 omniparser；classical 基线是显式 override 出来的——
+  读这条对比时别把"本机默认"当 classical。`ui_layout`（默认开）令该后端每帧都跑，故 +17% 是"全程 YOLO"的账，非仅 launch。
+  detect_icons_in_perceive 维度未单跑：ui_layout 默认开已隐式按当前后端每帧检测，再 `DETECT_ICONS_IN_PERCEIVE=1` 近乎冗余（省一臂机时）。
