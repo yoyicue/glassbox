@@ -17,8 +17,7 @@ Baseline + tolerance provenance (B.0 characterization, 2026-06-10):
 - Two tolerance profiles, set per recording in ``expected_scenes.jsonl``:
   - ``full`` (640x990 pre-cropped recording): repeated perceives of the same
     frame were exactly deterministic (text jaccard 1.0, box IoU 1.0, count
-    delta 0), so the tolerances below are margin for OCR-model drift across
-    macOS versions, not observed noise.
+    delta 0) on the baseline host.
   - ``classification_only`` (raw 1920x1080 recording): letterbox-crop
     detection jitters a few px between perceives, flapping edge OCR (observed
     same-frame jaccard as low as 0.51) — so only ``page_id``/``scene_type``
@@ -26,6 +25,13 @@ Baseline + tolerance provenance (B.0 characterization, 2026-06-10):
     payload: it freezes the fixed behavior (``page_id=None`` /
     ``scene_type='unknown'``); reintroducing the first-match settings cascade
     bug flips it back to ``settings/Apps`` and fails this test.
+- Apple Vision's OCR output is NOT stable across macOS versions (CI's
+  macos-latest produced same-frame jaccard 0.59 against a macOS 26.5
+  baseline while page_id/scene_type held). Each recording carries the
+  baseline host's version in ``baseline_env.json``; the ``full`` text/IoU
+  profile applies only where ``platform.mac_ver()`` matches — elsewhere every
+  recording is gated on classification (page_id + scene_type), which is the
+  cross-version-stable, verifier-relevant contract.
 """
 from __future__ import annotations
 
@@ -67,6 +73,19 @@ def _recording_dirs() -> list[Path]:
 def _expected_entries(rec_dir: Path) -> list[dict]:
     lines = (rec_dir / "expected_scenes.jsonl").read_text(encoding="utf-8").splitlines()
     return [json.loads(line) for line in lines if line.strip()]
+
+
+def _baseline_env_matches(rec_dir: Path) -> bool:
+    """True when this host's macOS matches the baseline generation host —
+    only then are the full text/IoU tolerances meaningful (Vision OCR output
+    differs across macOS versions)."""
+    import platform
+
+    env_path = rec_dir / "baseline_env.json"
+    if not env_path.exists():
+        return False
+    baseline = json.loads(env_path.read_text(encoding="utf-8")).get("baseline_mac_ver")
+    return bool(baseline) and platform.mac_ver()[0] == baseline
 
 
 def _vision_ocr_available() -> bool:
@@ -132,6 +151,7 @@ def test_recorded_frames_reconstruct_expected_scenes(rec_dir):
 
     failures: list[str] = []
     expected_by_seq = {e["snapshot_seq"]: e for e in _expected_entries(rec_dir)}
+    full_profile_valid = _baseline_env_matches(rec_dir)
     while True:
         seq = src.current_seq
         entry = expected_by_seq[seq]
@@ -139,7 +159,8 @@ def test_recorded_frames_reconstruct_expected_scenes(rec_dir):
         if hasattr(phone, "invalidate_perceive_cache"):
             phone.invalidate_perceive_cache()
         replayed = phone.perceive()
-        tol = PROFILE_TOLERANCES[entry["profile"]]
+        profile = entry["profile"] if full_profile_valid else "classification_only"
+        tol = PROFILE_TOLERANCES[profile]
         report = compare_scenes(expected_scene, replayed, tol)
         if not report.ok:
             failures.append(f"seq {seq}:\n{report.explain()}")
