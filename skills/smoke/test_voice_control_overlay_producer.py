@@ -13,6 +13,9 @@ The producer is the flag-gated perceive() step that writes matched
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -140,3 +143,40 @@ def test_config_flag_defaults_off():
         AgentConfig(_env_file=None, voice_control_overlay_hints_enabled=True).voice_control_overlay_hints_enabled
         is True
     )
+
+
+_A11Y_SNAPSHOT = (
+    Path(__file__).resolve().parents[1]
+    / "regression"
+    / "fixtures"
+    / "a11y_voice_control_cell_snapshot.json"
+)
+
+
+@pytest.mark.smoke
+def test_committed_a11y_cell_snapshot_is_labeled_scrubbed_and_honest():
+    """The a11y-cell snapshot must stay what it claims to be: the overlay-ON
+    cell (correct label + environment), scrubbed (no raw OCR dumps), and
+    honest (it records the overlay's measured COST — it must never quietly
+    morph into a success story or a floor candidate)."""
+    if not _A11Y_SNAPSHOT.exists():
+        pytest.skip("no committed a11y cell snapshot yet")
+    payload = json.loads(_A11Y_SNAPSHOT.read_text(encoding="utf-8"))
+    raw = _A11Y_SNAPSHOT.read_text(encoding="utf-8")
+
+    from skills.regression.computer_use_success_rate import validate_benchmark
+
+    assert validate_benchmark(payload) == []
+    assert payload["config"]["evaluation_cell"] == IOS_SETTINGS_A11Y_VOICE_CONTROL_EVALUATION_CELL
+    assert payload["config"]["environment"] == IOS_SETTINGS_A11Y_VOICE_CONTROL_ENVIRONMENT
+    assert payload["config"]["rounds"] >= 5
+    assert len(payload["tasks"]) >= 5
+    # scrubbed like the L2 snapshot
+    assert all((t.get("final_state") or {}).get("visible_texts") == [] for t in payload["tasks"])
+    assert all("elements" not in (t.get("final_state") or {}) for t in payload["tasks"])
+    for forbidden in ("Da Li", "Apple Account and password"):
+        assert forbidden not in raw
+    # honest-coverage invariants: the run exercised the machinery for real
+    assert payload["metrics"]["strategy_switches"] >= 1
+    assert payload["metrics"]["recoveries"] >= 1
+    assert payload["metrics"]["expected_state_coverage"] > 0

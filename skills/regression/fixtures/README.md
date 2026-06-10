@@ -144,3 +144,21 @@ part of a human baseline. Use pseudonymous participant IDs only. A completed
 human-control payload should have at least five trials for this Settings task and
 should remain separate from the agent completion floor unless a future floor
 policy explicitly includes human-control data.
+
+## A11y cell snapshot (Voice Control Item Names)
+
+`a11y_voice_control_cell_snapshot.json` is the committed snapshot of the
+**a11y evaluation cell** (`ios_settings_a11y_voice_control`): the same iPad
+mini 7 (en/HK) Settings drill-down, but with the Voice Control "Item Names"
+continuous overlay ON and the perceive-side producer
+(`GLASSBOX_VOICE_CONTROL_OVERLAY_HINTS_ENABLED=1`) writing
+`vc:item-name:<slug>` ids into `WhiteboxHint.accessibility_id` (verified live
+on the run: 351 scenes carry ids). Headline (snapshot, n=5):
+`task_completion_rate = 0.0` vs the clean floor's 1.0 — the overlay's badges
+poison row matching and the navigation verifiers (action_success 0.42,
+unknown 0.41, root coverage 0.13) while the reliability machinery worked hard
+(strategy_switches 21, recoveries 7). The cell exists to make that cost
+measurable: it is the baseline any badge-aware navigation improvement must
+beat, and it is NEVER a floor candidate (`validate-floor-candidate` rejects
+the cell by design). Guarded by
+`skills/smoke/test_voice_control_overlay_producer.py`.
