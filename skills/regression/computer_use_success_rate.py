@@ -1532,6 +1532,8 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
         # the bounded reconnect/garble-rejection path while preserving explicit
         # caller overrides.
         env.setdefault("GLASSBOX_PICOKVM_ROBUST_CAPTURE", "1")
+        if args.vlm:
+            env["GLASSBOX_ENABLE_VLM"] = "1"
         result = subprocess.run(cmd, cwd=Path(__file__).resolve().parents[2], env=env)
         if result.returncode != 0 and not args.keep_going:
             return result.returncode
@@ -1556,6 +1558,7 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
             "language": args.language,
             "region": args.region,
             "evaluation_cell": str(args.evaluation_cell),
+            "vlm_enabled": bool(args.vlm),
         }
         if environment is not None:
             config["environment"] = environment
@@ -1699,6 +1702,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Open each root section's detail page and screenshot it (real entry, "
         "not root-row visibility).",
+    )
+    run_settings.add_argument(
+        "--vlm",
+        action="store_true",
+        help="Enable the VLM escalation backend (GLASSBOX_ENABLE_VLM=1) for this run "
+        "and stamp config.vlm_enabled=true. Billed/experimental — use for the L2 "
+        "coverage cell, not the free OCR-only completion floor.",
     )
 
     run_canonical = sub.add_parser(

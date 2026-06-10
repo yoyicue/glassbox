@@ -26,6 +26,9 @@ on:
       tolerance:
         description: "Allowed success-rate drop vs the committed floor before failing"
         default: "0.0"
+      l2_vlm_advisory:
+        description: "Also run a VLM-on Settings L2 run (iPad only) + print an ADVISORY coverage delta vs the committed L2 snapshot. Billed; needs VLM credentials on the runner."
+        default: "false"
 
 concurrency:
   group: rig-nightly-${{ github.ref }}
@@ -83,6 +86,27 @@ jobs:
 
       - name: Regression gate vs committed floor
         run: make regression-compare CANDIDATE="$CANDIDATE" TOLERANCE="$TOLERANCE"
+
+      # OPT-IN, iPad-only, BILLED. Produces a fresh VLM-on Settings run and prints
+      # an ADVISORY vlm_action_coverage / strategy_switches delta vs the committed
+      # L2 snapshot. Non-blocking by design — a coverage DROP can mean the path got
+      # more reliable (fewer escalations), not a regression. Needs VLM backend
+      # credentials (GLASSBOX_VLM + provider API key) on the self-hosted runner;
+      # those are intentionally NOT repo secrets, so this runs only when you
+      # trigger it (workflow_dispatch) from a credentialed runner. The real
+      # blocking machinery-regression gate is the failure-injection eval, not this.
+      - name: VLM-on L2 advisory coverage report (opt-in, iPad)
+        if: ${{ github.event.inputs.l2_vlm_advisory == 'true' && matrix.device.name == 'ipad' }}
+        run: |
+          uv run python -m skills.regression.computer_use_success_rate run-ios-settings \
+            --rounds "$ROUNDS" \
+            --drill-down \
+            --vlm \
+            --out "artifacts/ci/${{ matrix.device.name }}/l2_benchmark.json" \
+            --artifact-root "$ARTIFACT_ROOT" \
+            --report-dir "artifacts/ci/${{ matrix.device.name }}/l2-reports"
+          make regression-compare-l2-advisory \
+            L2_CANDIDATE="artifacts/ci/${{ matrix.device.name }}/l2_benchmark.json"
 
       - name: Archive benchmarks (cross-commit time series)
         if: always()

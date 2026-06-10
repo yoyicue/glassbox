@@ -220,7 +220,13 @@ def test_committed_baseline_fixture_is_schema_valid():
 @pytest.mark.smoke
 def test_l2_expected_state_snapshot_fixture_is_load_bearing_and_scrubbed():
     """The coverage-bearing L2 snapshot must stay real, multi-sample, and safe to
-    commit. It complements the 1.0 completion floor; it does not replace it."""
+    commit. It complements the 1.0 completion floor; it does not replace it.
+
+    It is the ONLY committed fixture that exercises the P1 VLM gate and the P2
+    strategy ladder (the clean completion floor has both at 0 by design), so it
+    must keep non-zero vlm_action_coverage and strategy_switches — otherwise the
+    coverage path could be silently replaced with a degraded, zero-coverage run.
+    """
     payload = _expected_state_snapshot()
     raw = _EXPECTED_STATE_SNAPSHOT_PATH.read_text(encoding="utf-8")
 
@@ -230,6 +236,8 @@ def test_l2_expected_state_snapshot_fixture_is_load_bearing_and_scrubbed():
     assert len(payload["tasks"]) >= 5
     assert payload["metrics"]["task_completion_rate"] > 0
     assert payload["metrics"]["expected_state_coverage"] > 0
+    assert payload["metrics"]["vlm_action_coverage"] > 0
+    assert payload["metrics"]["strategy_switches"] > 0
     assert any(
         action.get("expected_state", {}).get("kind") == "page_id"
         for task in payload["tasks"]

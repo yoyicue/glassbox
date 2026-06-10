@@ -1,4 +1,4 @@
-.PHONY: lint test check regression-gate regression-compare ab-semantic-plan \
+.PHONY: lint test check regression-gate regression-compare regression-compare-l2-advisory ab-semantic-plan \
 	human-baseline-template human-baseline-validate \
 	golden-harvest golden-audit \
 	computer-use-success-rate-ios-settings ipad-settings-state-machine ipad-settings-ab-matrix ios-settings-ab-matrix
@@ -72,6 +72,25 @@ CANDIDATE ?= artifacts/computer_use_success_rate/benchmark.json
 TOLERANCE ?= 0.0
 regression-compare:
 	$(COMPUTER_USE_SUCCESS_RATE) compare "$(RELIABILITY_BASELINE)" "$(CANDIDATE)" --tolerance $(TOLERANCE)
+
+# ADVISORY L2 coverage report (NON-blocking on purpose). Compare a fresh VLM-on
+# Settings run ($(L2_CANDIDATE), produce it with
+# `make computer-use-success-rate-ios-settings EXTRA_ARGS="--vlm --drill-down --language en --region HK" OUT=$(L2_CANDIDATE)`
+# on a rig with VLM credentials) against the committed L2 coverage snapshot, and
+# PRINT the vlm_action_coverage / strategy_switches deltas for human inspection.
+#
+# It deliberately does NOT fail the build (`-` prefix ignores the compare rc): a
+# DROP in these "machine-escalated" metrics can mean the path got MORE reliable
+# (fewer escalations needed), not a regression — blocking on it would be perverse.
+# The committed snapshot's coverage is guarded offline by
+# test_l2_expected_state_snapshot_fixture_is_load_bearing_and_scrubbed; the real
+# BLOCKING machinery-regression gate is the failure-injection eval, not this.
+L2_SNAPSHOT ?= skills/regression/fixtures/l2_settings_expected_state_snapshot.json
+L2_CANDIDATE ?= artifacts/computer_use_success_rate/l2_benchmark.json
+regression-compare-l2-advisory:
+	@echo "=== ADVISORY L2 coverage report (non-blocking) — VLM/strategy deltas for inspection ==="
+	-$(COMPUTER_USE_SUCCESS_RATE) compare "$(L2_SNAPSHOT)" "$(L2_CANDIDATE)" --tolerance $(TOLERANCE)
+	@echo "=== advisory only: a coverage DROP may mean the path got more reliable, not a regression ==="
 
 # One-command on-rig A/B for the P1/P2 strategy ladder (CUQ-0.1: back/scroll/tap
 # route through default_semantic_action_plan with verified-failure strategy
