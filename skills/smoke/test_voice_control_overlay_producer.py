@@ -91,15 +91,38 @@ def test_flag_on_requires_frame_img():
 
 
 @pytest.mark.smoke
-def test_flag_on_writes_item_name_id_to_matched_target():
+def test_flag_on_writes_item_name_id_and_subtracts_the_badge():
     scene = _scene()
     frame = _badge_frame(scene)
     _perceptor(True).maybe_apply_voice_control_overlay(scene, frame)
     ids = {el.element_id: (el.whitebox_hint.accessibility_id if el.whitebox_hint else None) for el in scene.elements}
-    # the row gains the vc id; the badge itself and the unrelated image do not
+    # the row gains the vc id; the unrelated image is untouched
     assert ids[2] == "vc:item-name:general"
-    assert not ids[1]
     assert not ids[3]
+    # the badge OCR artifact is SUBTRACTED from the element stream (overlay
+    # layer vs content layer): downstream row matching / verifiers / signatures
+    # must not see the duplicate text.
+    assert 1 not in ids
+    assert len(scene.elements) == 2
+
+
+@pytest.mark.smoke
+def test_unmatched_badges_are_also_subtracted():
+    """A badge with no text target (e.g. the Dictate pill) is still an overlay
+    artifact — it must leave the element stream even though nothing gains an id."""
+    scene = Scene(
+        frame_id=1,
+        timestamp=1.0,
+        viewport_size=(640, 400),
+        elements=[
+            UIElement(text="Dictate", type="text", box=Box(x=420, y=120, w=50, h=14), confidence=0.9, element_id=1),
+            UIElement(text="Battery", type="text", box=Box(x=80, y=300, w=70, h=18), confidence=0.9, element_id=2),
+        ],
+    )
+    frame = _badge_frame(scene)  # dark pill under element 1 only
+    _perceptor(True).maybe_apply_voice_control_overlay(scene, frame)
+    remaining = [el.element_id for el in scene.elements]
+    assert remaining == [2]
 
 
 @pytest.mark.smoke
