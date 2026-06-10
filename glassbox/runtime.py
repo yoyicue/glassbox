@@ -746,6 +746,7 @@ def build_phone(
             ai_scroll_prefer_wheel=cfg.ai_scroll_prefer_wheel,
             vlm_reground_selection=cfg.vlm_reground_selection,
             whitebox_hint_selection=cfg.whitebox_hint_selection,
+            voice_control_overlay_hints=cfg.voice_control_overlay_hints_enabled,
         ),
         semantic_plan_ops=frozenset(
             op.strip() for op in (cfg.semantic_plan_ops or "").split(",") if op.strip()

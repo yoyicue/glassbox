@@ -624,6 +624,7 @@ class Perceptor:
         self.apply_scene_classifiers(scene, frame.img)
         self.maybe_detect_icons(scene, frame.img)
         self.maybe_segment_layout(scene, frame.img)
+        self.maybe_apply_voice_control_overlay(scene, frame.img)
         host.perceive_cache_stats["misses"] += 1
         self.observe_memory(scene, frame.img)
         context.cache_frame = frame
@@ -763,6 +764,35 @@ class Perceptor:
             segment_layout(scene, viewport_size=viewport_size)
         except Exception as exc:
             logger.warning(f"layout segmentation failed: {exc}")
+
+    def maybe_apply_voice_control_overlay(self, scene: Scene, frame_img) -> None:
+        """A11Y-VC-1 (flag-gated, default off): parse Voice Control Item-Names
+        badges from the finished element set and write matched
+        ``vc:item-name:<slug>`` ids into ``WhiteboxHint.accessibility_id``.
+
+        Names only — Item Numbers/Grid are frame-local action anchors and are
+        deliberately never written into UTG identity. ``frame_img`` is required:
+        without the dark-badge pixel gate, ordinary row text would be
+        misparsed as badges. Runs after icon/layout stages (the element set is
+        final) and before memory observation + the perceive-cache write, so
+        hints reach memory, cached scenes, consumers, and recorded artifacts.
+        """
+        host = self._phone
+        if not host.voice_control_overlay_hints_enabled or frame_img is None:
+            return
+        try:
+            from glassbox.cognition.voice_control_overlay import (
+                apply_voice_control_overlay_hints,
+                parse_voice_control_overlay,
+            )
+
+            markers = parse_voice_control_overlay(
+                scene.elements, mode="item_names", frame_img=frame_img
+            )
+            if markers:
+                apply_voice_control_overlay_hints(scene, markers, include_names=True)
+        except Exception as exc:
+            logger.warning(f"voice-control overlay hints failed: {exc}")
 
     def perceive_voted(
         self,
@@ -909,6 +939,7 @@ class Perceptor:
         self.apply_scene_classifiers(scene, frame_img)
         self.maybe_detect_icons(scene, frame_img)
         self.maybe_segment_layout(scene, frame_img)
+        self.maybe_apply_voice_control_overlay(scene, frame_img)
         context.cache_frame = None
         context.cache_scene = None
         context.cache_scope = frame_scope
