@@ -711,3 +711,40 @@ configured Voice Control overlay mode.
   experimental name mapping or frame-local number anchors.
 - Real Voice Control speech recognition is out of scope for HDMI-only probing;
   that needs audio injection or human speech.
+
+## 2026-06-10 follow-up: v2 captures (General pane + scrolled sidebar)
+
+Two further Item Names captures on the same iPad mini 7 rig (overlay enabled
+via coordinate taps, then restored: overlay None + Voice Control toggle OFF,
+pixel-verified). Frames/scenes stay in local artifacts (`/tmp/vc-captures`,
+sidebar-at-top frames show the account row, so frames are NOT committed);
+label manifests are committed as
+`voice_control_overlay_itemnames_labels_general_v2.json` (17 labels — General
+detail pane with the right-of-target badge geometry + 4 sidebar pairs +
+2 negatives) and `..._scrolled_v2.json` (15 labels — sidebar scrolled to a
+mid position, including two heavily garbled markers `M Touch n9` /
+`Ne wallet ns` that the matcher correctly bridges to Touch ID / Wallet).
+Both replay 17/17 and 15/15 against the real captured scenes and are now part
+of the committed mapping-contract smoke gate (44 labels over 3 captures).
+
+**Known matcher gaps surfaced by the v2 captures (worklist, deliberately NOT
+committed as labels so the gate asserts only current behavior):**
+
+1. `ADOUt` badge → `About` row (pane, marker (446,299) → target (337,327)):
+   compact-similarity 0.80 sits just under the 0.82 SequenceMatcher floor in
+   `_name_text_matches` — a 1-substitution OCR typo on a 5-char label fails.
+2. `AutOFiI` badge → `AutoFill & Passwords` (pane, (444,708) → (384,735)):
+   badge text is a truncated garble of a long row label; neither substring,
+   token-intersection, nor ratio bridges it.
+3. `Wallpaper` badge → `Wallpaper` row at the SCROLLED sidebar position
+   ((129,478) → (99,450)): text identical yet `target_missing` — the same
+   pair maps fine at the top position (v2 general, (131,848) → (101,820)).
+4. `Notifications）` badge → `Notifications` row (scrolled, (130,531) →
+   (109,502)): same pattern as 3 (text compacts to equality, geometry within
+   bounds, still `target_missing`).
+
+3/4 suggest the scrolled-position failures are not text matching but target
+candidate filtering (possibly the row text region failing/passing the
+dark-badge pixel gate differently mid-scroll); reproduce offline with the
+saved scenes via `voice_control_overlay_labeled_replay --labels <draft>` —
+the failing draft labels are preserved in the local capture directory.

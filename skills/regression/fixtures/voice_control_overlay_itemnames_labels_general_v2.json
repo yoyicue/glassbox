@@ -1,0 +1,218 @@
+{
+ "mode": "item_names",
+ "labels": [
+  {
+   "name": "software_update",
+   "marker_text": "Software",
+   "marker_center": [
+    446,
+    345
+   ],
+   "target_text": "Software Update",
+   "target_center": [
+    370,
+    373
+   ]
+  },
+  {
+   "name": "ipad_storage",
+   "marker_text": "IPad",
+   "marker_center": [
+    446,
+    390
+   ],
+   "target_text": "iPad Storage",
+   "target_center": [
+    357,
+    419
+   ]
+  },
+  {
+   "name": "applecare",
+   "marker_text": "AppleCare",
+   "marker_center": [
+    444,
+    466
+   ],
+   "target_text": "AppleCare & Warranty",
+   "target_center": [
+    388,
+    494
+   ]
+  },
+  {
+   "name": "airdrop",
+   "marker_text": "AirDrog",
+   "marker_center": [
+    444,
+    543
+   ],
+   "target_text": "AirDrop",
+   "target_center": [
+    341,
+    569
+   ]
+  },
+  {
+   "name": "airplay",
+   "marker_text": "AirPlay",
+   "marker_center": [
+    445,
+    587
+   ],
+   "target_text": "AirPlay & Continuity",
+   "target_center": [
+    381,
+    615
+   ]
+  },
+  {
+   "name": "screen_capture",
+   "marker_text": "Screen",
+   "marker_center": [
+    445,
+    631
+   ],
+   "target_text": "Screen Capture",
+   "target_center": [
+    367,
+    660
+   ]
+  },
+  {
+   "name": "background_refresh",
+   "marker_text": "Background",
+   "marker_center": [
+    444,
+    754
+   ],
+   "target_text": "Background App Refresh",
+   "target_center": [
+    399,
+    782
+   ]
+  },
+  {
+   "name": "date_time",
+   "marker_text": "Date",
+   "marker_center": [
+    445,
+    798
+   ],
+   "target_text": "Date& Time",
+   "target_center": [
+    357,
+    826
+   ]
+  },
+  {
+   "name": "dictionary",
+   "marker_text": "Dictionary",
+   "marker_center": [
+    445,
+    845
+   ],
+   "target_text": "Dictionary",
+   "target_center": [
+    350,
+    871
+   ]
+  },
+  {
+   "name": "fonts",
+   "marker_text": "Fonts",
+   "marker_center": [
+    444,
+    888
+   ],
+   "target_text": "Fonts",
+   "target_center": [
+    333,
+    918
+   ]
+  },
+  {
+   "name": "keyboard",
+   "marker_text": "Keyboard",
+   "marker_center": [
+    445,
+    933
+   ],
+   "target_text": "Keyboard",
+   "target_center": [
+    347,
+    963
+   ]
+  },
+  {
+   "name": "sidebar_accessibility",
+   "marker_text": "Accessibility",
+   "marker_center": [
+    129,
+    436
+   ],
+   "target_text": "Accessibility",
+   "target_center": [
+    106,
+    408
+   ]
+  },
+  {
+   "name": "sidebar_battery",
+   "marker_text": "Battery",
+   "marker_center": [
+    130,
+    338
+   ],
+   "target_text": "Battery",
+   "target_center": [
+    90,
+    309
+   ]
+  },
+  {
+   "name": "sidebar_camera",
+   "marker_text": "Camera",
+   "marker_center": [
+    130,
+    524
+   ],
+   "target_text": "Camera",
+   "target_center": [
+    92,
+    496
+   ]
+  },
+  {
+   "name": "sidebar_wallpaper",
+   "marker_text": "Wallpaper",
+   "marker_center": [
+    131,
+    848
+   ],
+   "target_text": "Wallpaper",
+   "target_center": [
+    101,
+    820
+   ]
+  },
+  {
+   "name": "dictate_badge_no_text_target",
+   "marker_text": "Dictate",
+   "marker_center": [
+    216,
+    83
+   ],
+   "expect_mapped": false
+  },
+  {
+   "name": "fused_phone_review",
+   "marker_text": "phone nun Review",
+   "marker_center": [
+    94,
+    127
+   ],
+   "expect_mapped": false
+  }
+ ]
+}

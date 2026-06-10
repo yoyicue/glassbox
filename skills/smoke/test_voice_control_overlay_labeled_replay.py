@@ -14,12 +14,14 @@ from skills.regression.voice_control_overlay_labeled_replay import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ITEM_NAMES_LABELS = (
-    REPO_ROOT
-    / "skills"
-    / "regression"
-    / "fixtures"
-    / "voice_control_overlay_itemnames_labels_v1.json"
+_FIXTURES = REPO_ROOT / "skills" / "regression" / "fixtures"
+ITEM_NAMES_LABELS = _FIXTURES / "voice_control_overlay_itemnames_labels_v1.json"
+# Every committed item-names label manifest must replay clean. v2 manifests
+# (2026-06-10, iPad mini 7) extend coverage beyond the v1 Overlay page to the
+# General detail pane (right-of-target badge geometry) and a SCROLLED sidebar
+# position, including garbled-marker pairs the matcher is known to bridge.
+ALL_ITEM_NAMES_MANIFESTS = sorted(
+    _FIXTURES.glob("voice_control_overlay_itemnames_labels_*.json")
 )
 
 
@@ -185,9 +187,12 @@ def test_labeled_replay_reports_expected_unmapped_pass():
 
 
 @pytest.mark.smoke
-def test_committed_item_names_fixture_replays_against_labeled_mapping_contract():
+@pytest.mark.parametrize(
+    "manifest_path", ALL_ITEM_NAMES_MANIFESTS, ids=lambda p: p.stem.split("labels_")[-1]
+)
+def test_committed_item_names_fixtures_replay_against_labeled_mapping_contract(manifest_path):
     label_set = VoiceControlOverlayReplayLabelSet.model_validate_json(
-        ITEM_NAMES_LABELS.read_text(encoding="utf-8")
+        manifest_path.read_text(encoding="utf-8")
     )
     elements: list[UIElement] = []
     markers: list[VoiceControlOverlayMarker] = []
@@ -227,6 +232,18 @@ def test_committed_item_names_fixture_replays_against_labeled_mapping_contract()
         label_set,
     )
 
-    assert report.total == 12
+    assert report.total == len(label_set.labels)
     assert report.failed == 0
     assert report.passed == report.total
+
+
+@pytest.mark.smoke
+def test_committed_item_names_corpus_keeps_growing():
+    """v1 (Overlay page) had 12 labels on one frame; the committed corpus must
+    not silently shrink below the v1+v2 coverage (3 captures, 44 labels)."""
+    assert len(ALL_ITEM_NAMES_MANIFESTS) >= 3
+    total = sum(
+        len(VoiceControlOverlayReplayLabelSet.model_validate_json(p.read_text(encoding="utf-8")).labels)
+        for p in ALL_ITEM_NAMES_MANIFESTS
+    )
+    assert total >= 44

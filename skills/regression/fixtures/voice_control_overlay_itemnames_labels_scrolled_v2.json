@@ -1,0 +1,192 @@
+{
+ "mode": "item_names",
+ "labels": [
+  {
+   "name": "control_centre",
+   "marker_text": "Control",
+   "marker_center": [
+    130,
+    198
+   ],
+   "target_text": "Control Centre",
+   "target_center": [
+    115,
+    170
+   ]
+  },
+  {
+   "name": "display_garbled_target",
+   "marker_text": "Display",
+   "marker_center": [
+    130,
+    243
+   ],
+   "target_text": "Display w onghtness",
+   "target_center": [
+    134,
+    216
+   ]
+  },
+  {
+   "name": "multitasking",
+   "marker_text": "Multitasking",
+   "marker_center": [
+    129,
+    344
+   ],
+   "target_text": "Multitasking & Gestures",
+   "target_center": [
+    145,
+    315
+   ]
+  },
+  {
+   "name": "search",
+   "marker_text": "Search",
+   "marker_center": [
+    129,
+    388
+   ],
+   "target_text": "Search",
+   "target_center": [
+    89,
+    360
+   ]
+  },
+  {
+   "name": "sounds",
+   "marker_text": "Sounds",
+   "marker_center": [
+    131,
+    574
+   ],
+   "target_text": "Sounds",
+   "target_center": [
+    92,
+    546
+   ]
+  },
+  {
+   "name": "focus_typo_marker",
+   "marker_text": "Focus.",
+   "marker_center": [
+    131,
+    618
+   ],
+   "target_text": "Focus",
+   "target_center": [
+    87,
+    591
+   ]
+  },
+  {
+   "name": "screen_time",
+   "marker_text": "Screen Time",
+   "marker_center": [
+    129,
+    664
+   ],
+   "target_text": "Screen Time",
+   "target_center": [
+    108,
+    635
+   ]
+  },
+  {
+   "name": "privacy",
+   "marker_text": "Privacy",
+   "marker_center": [
+    130,
+    763
+   ],
+   "target_text": "Privacy &Security",
+   "target_center": [
+    125,
+    735
+   ]
+  },
+  {
+   "name": "game_center",
+   "marker_text": "Game",
+   "marker_center": [
+    131,
+    814
+   ],
+   "target_text": "Game Center",
+   "target_center": [
+    111,
+    787
+   ]
+  },
+  {
+   "name": "icloud",
+   "marker_text": "ICloud",
+   "marker_center": [
+    128,
+    859
+   ],
+   "target_text": "iCloud",
+   "target_center": [
+    87,
+    831
+   ]
+  },
+  {
+   "name": "apps",
+   "marker_text": "ApPS",
+   "marker_center": [
+    130,
+    958
+   ],
+   "target_text": "Apps",
+   "target_center": [
+    83,
+    930
+   ]
+  },
+  {
+   "name": "touch_id_garbled_marker_still_maps",
+   "marker_text": "M Touch n9",
+   "marker_center": [
+    129,
+    716
+   ],
+   "target_text": "Touch ID & Passcode",
+   "target_center": [
+    136,
+    689
+   ]
+  },
+  {
+   "name": "wallet_garbled_marker_still_maps",
+   "marker_text": "Ne wallet ns",
+   "marker_center": [
+    129,
+    902
+   ],
+   "target_text": "Wallet & Apple Pay",
+   "target_center": [
+    128,
+    877
+   ]
+  },
+  {
+   "name": "fused_came_camera",
+   "marker_text": "Came Camera",
+   "marker_center": [
+    110,
+    126
+   ],
+   "expect_mapped": false
+  },
+  {
+   "name": "dictate_badge_no_text_target",
+   "marker_text": "Dictate",
+   "marker_center": [
+    216,
+    84
+   ],
+   "expect_mapped": false
+  }
+ ]
+}
