@@ -1,0 +1,1558 @@
+{
+  "schema_version": 1,
+  "annotation_source": "Blind AI frame-inspection annotation (Claude Opus 4.8 agents, 2026-06-10): annotators saw op/intent/target/expected_state + before/after frames only — verifier verdicts were hidden to avoid anchoring; cant_tell labels and a random spot-check subset got an independent second review. NOT a blind HUMAN annotation; frames live in local gitignored artifacts, so the repo carries verdicts+annotations+scoring, not re-verifiable pixels.",
+  "samples": [
+    {
+      "sample_id": "run_2026_06_10_10_30_48_905129/act_000001",
+      "run_dir": "run_2026_06_10_10_30_48_905129",
+      "action_id": "act_000001",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state_vlm",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got 'ios_settings_app_clips' after VLM escalation",
+      "before_frame": "frm_000005",
+      "after_frame": "frm_000018",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page '__machinery_probe_unreachable__' cannot exist; after frame clearly shows the same 'App Clips' detail pane as before, so the probe goal was not achieved."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_30_48_905129/act_000003",
+      "run_dir": "run_2026_06_10_10_30_48_905129",
+      "action_id": "act_000003",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got 'settings/App Clips'",
+      "before_frame": "frm_000020",
+      "after_frame": "frm_000025",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page '__machinery_probe_unreachable__' cannot exist; after frame still shows the 'App Clips' pane unchanged from before."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_30_48_905129/act_000005",
+      "run_dir": "run_2026_06_10_10_30_48_905129",
+      "action_id": "act_000005",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got ''",
+      "before_frame": "frm_000030",
+      "after_frame": "frm_000043",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page '__machinery_probe_unreachable__' cannot exist; both before and after frames show the iPad Home Screen (app grid/dock), not any Settings page."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_30_48_905129/act_000007",
+      "run_dir": "run_2026_06_10_10_30_48_905129",
+      "action_id": "act_000007",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got ''",
+      "before_frame": "frm_000045",
+      "after_frame": "frm_000050",
+      "annotation": "not_achieved",
+      "annotation_rationale": "[re-reviewed] Confirmed: expected page 'settings/__machinery_probe_unreachable__' is unreachable by construction, and both frames clearly show the iPad Home Screen (widget stack, app grid, dock) with no Settings detail pane or title visible — the after frame is essentially identical to the before frame."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_32_25_480261/act_000001",
+      "run_dir": "run_2026_06_10_10_32_25_480261",
+      "action_id": "act_000001",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state_vlm",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got 'lock_screen' after VLM escalation",
+      "before_frame": "frm_000005",
+      "after_frame": "frm_000010",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page '__machinery_probe_unreachable__' cannot exist; after frame shows the Lock Screen with clock '10:32', not any Settings detail pane."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_32_25_480261/act_000003",
+      "run_dir": "run_2026_06_10_10_32_25_480261",
+      "action_id": "act_000003",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got 'settings/App Clips'",
+      "before_frame": "frm_000012",
+      "after_frame": "frm_000016",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page '__machinery_probe_unreachable__' cannot exist; after frame shows the 'App Clips' Settings pane (before was the Lock Screen), not the probe page."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_32_25_480261/act_000005",
+      "run_dir": "run_2026_06_10_10_32_25_480261",
+      "action_id": "act_000005",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got ''",
+      "before_frame": "frm_000021",
+      "after_frame": "frm_000026",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page '__machinery_probe_unreachable__' cannot exist; after frame shows the Lock Screen with clock '10:34' (before was the Home Screen), not the probe page."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_32_25_480261/act_000007",
+      "run_dir": "run_2026_06_10_10_32_25_480261",
+      "action_id": "act_000007",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got ''",
+      "before_frame": "frm_000028",
+      "after_frame": "frm_000033",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page '__machinery_probe_unreachable__' cannot exist; after frame shows the iPad Home Screen (before was the Lock Screen at '10:34'), not the probe page."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_34_39_427213/act_000001",
+      "run_dir": "run_2026_06_10_10_34_39_427213",
+      "action_id": "act_000001",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state_vlm",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got 'com.apple.settings.app-clips' after VLM escalation",
+      "before_frame": "frm_000005",
+      "after_frame": "frm_000018",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page '__machinery_probe_unreachable__' cannot exist; after frame still shows the 'App Clips' detail pane identical to before."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_34_39_427213/act_000003",
+      "run_dir": "run_2026_06_10_10_34_39_427213",
+      "action_id": "act_000003",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got 'settings/App Clips'",
+      "before_frame": "frm_000020",
+      "after_frame": "frm_000025",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page '__machinery_probe_unreachable__' cannot exist; both frames show the unchanged 'App Clips' pane, so the goal was not achieved."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_34_39_427213/act_000005",
+      "run_dir": "run_2026_06_10_10_34_39_427213",
+      "action_id": "act_000005",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got ''",
+      "before_frame": "frm_000030",
+      "after_frame": "frm_000043",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page 'settings/__machinery_probe_unreachable__' cannot exist; both frames clearly show the iPad Home Screen (widgets + app grid), so the goal is unreachable and not met."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_34_39_427213/act_000007",
+      "run_dir": "run_2026_06_10_10_34_39_427213",
+      "action_id": "act_000007",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "page_id": "settings/__machinery_probe_unreachable__"
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "failed",
+      "verifier_reason": "page_id mismatch: expected one of ('settings/__machinery_probe_unreachable__',), got ''",
+      "before_frame": "frm_000045",
+      "after_frame": "frm_000050",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Expected page 'settings/__machinery_probe_unreachable__' is unreachable by construction; before and after frames both show the Home Screen app grid, no Settings page opened."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000000",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000000",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000001",
+      "after_frame": "frm_000002",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar scrolled from mid-list (top row 'Camera') to list top revealing new rows (the account header row, 'Airplane Mode', 'WLAN', 'Bluetooth') in the after frame — content clearly shifted with different rows visible."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000001",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000001",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000004",
+      "after_frame": "frm_000005",
+      "annotation": "not_achieved",
+      "annotation_rationale": "[re-reviewed] Confirmed: sidebar is at top (the account header row below Search) in both frames and the after frame only shows a ~30-35px downward rubber-band displacement (blank gap opens under Search, 'Wallpaper' merely clipped at bottom) with the identical row set [account-row] through Wallpaper — no different rows became visible, so the list did not actually scroll."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000002",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000002",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000007",
+      "after_frame": "frm_000008",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Same row set ([account-row] account header down to Wallpaper) in both frames with only a ~34px overscroll offset; list stayed pinned at top, no new content revealed."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000003",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000003",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000010",
+      "after_frame": "frm_000011",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Before and after both show the sidebar at top with identical rows ([account-row] ... Wallpaper); measured shift is only ~24px bounce, so no visible scroll of content."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000031",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000031",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000110",
+      "after_frame": "frm_000111",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar clearly scrolled down: before tops at the the account header row, after tops at 'Control Centre' and newly reveals 'Notifications', 'Sounds', 'Focus', 'Screen Time', 'Touch ID & Passcode', 'Privacy & Security', 'Game Center', 'iCloud', 'Wallet & Apple Pay', 'Apps'."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_08_31_428565/act_000000",
+      "run_dir": "run_2026_06_10_08_08_31_428565",
+      "action_id": "act_000000",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000001",
+      "after_frame": "frm_000002",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar scrolled from mid-list (top row 'Camera', 'Privacy & Security' highlighted) to list top, newly revealing the the account header row, 'Airplane Mode', 'WLAN', 'Bluetooth', 'Battery' rows."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_08_31_428565/act_000001",
+      "run_dir": "run_2026_06_10_08_08_31_428565",
+      "action_id": "act_000001",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000004",
+      "after_frame": "frm_000005",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Both frames show the sidebar at top with the same rows ([account-row] header through Wallpaper); after frame is only displaced ~35px by rubber-band, no different rows visible."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_08_31_428565/act_000002",
+      "run_dir": "run_2026_06_10_08_08_31_428565",
+      "action_id": "act_000002",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000007",
+      "after_frame": "frm_000008",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Identical row set ([account-row] ... Wallpaper) in before and after with only a ~34px overscroll bounce; the list did not actually scroll to new content."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_08_31_428565/act_000027",
+      "run_dir": "run_2026_06_10_08_08_31_428565",
+      "action_id": "act_000027",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000094",
+      "after_frame": "frm_000095",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar visibly scrolled: before shows top rows (Airplane Mode, WLAN, Bluetooth) while after reveals new rows (Notifications, Sounds, Focus, Screen Time, Privacy & Security, Apps) alongside the unchanged Siri pane."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_11_45_233584/act_000000",
+      "run_dir": "run_2026_06_10_08_11_45_233584",
+      "action_id": "act_000000",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000001",
+      "after_frame": "frm_000002",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar content shifted from a mid-list view (Camera, Control Centre … Apps) to the top of the list ([account-row] profile, Airplane Mode, WLAN) — different rows visible."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_11_45_233584/act_000001",
+      "run_dir": "run_2026_06_10_08_11_45_233584",
+      "action_id": "act_000001",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000004",
+      "after_frame": "frm_000005",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Sidebar is already at top in both frames showing the identical row set ([account-row] → Wallpaper); only a ~17px offset with no new rows, so no scroll occurred."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_11_45_233584/act_000002",
+      "run_dir": "run_2026_06_10_08_11_45_233584",
+      "action_id": "act_000002",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "frame changed but OCR/page identity did not; semantic target not proven",
+      "before_frame": "frm_000007",
+      "after_frame": "frm_000008",
+      "annotation": "not_achieved",
+      "annotation_rationale": "[re-reviewed] After frame shows the identical row set ([account-row], Airplane Mode, WLAN ... Siri, Wallpaper) merely displaced ~15-20 px downward with the top still pinned and 'Wallpaper' now clipped at the bottom — a rubber-band overscroll revealing no different rows, so the sidebar did not actually scroll; confirms the previous 'not_achieved'."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_11_45_233584/act_000003",
+      "run_dir": "run_2026_06_10_08_11_45_233584",
+      "action_id": "act_000003",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000010",
+      "after_frame": "frm_000011",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Identical top-of-list sidebar rows ([account-row] → Wallpaper) in both frames, only a tiny pixel shift — content did not scroll."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_11_45_233584/act_000004",
+      "run_dir": "run_2026_06_10_08_11_45_233584",
+      "action_id": "act_000004",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000013",
+      "after_frame": "frm_000014",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Sidebar remains at the top with the same visible rows ([account-row], Airplane Mode … Wallpaper) before and after; no new rows appear."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_11_45_233584/act_000029",
+      "run_dir": "run_2026_06_10_08_11_45_233584",
+      "action_id": "act_000029",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000100",
+      "after_frame": "frm_000101",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar scrolled down: before shows top rows (Airplane Mode, WLAN) while after shows new rows (Notifications, Sounds, Focus, Screen Time, Touch ID & Passcode, Wallet & Apple Pay, Apps) with Siri pane unchanged."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_15_09_944828/act_000000",
+      "run_dir": "run_2026_06_10_08_15_09_944828",
+      "action_id": "act_000000",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000001",
+      "after_frame": "frm_000002",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar scrolled from a mid-list position (Camera … Apps, Privacy & Security highlighted) to the top ([account-row] profile, Airplane Mode, WLAN) — clearly different rows."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_15_09_944828/act_000001",
+      "run_dir": "run_2026_06_10_08_15_09_944828",
+      "action_id": "act_000001",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000004",
+      "after_frame": "frm_000005",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Both frames show the same top-pinned sidebar rows ([account-row] → Wallpaper) with only a slight offset; no new content was revealed."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_15_09_944828/act_000002",
+      "run_dir": "run_2026_06_10_08_15_09_944828",
+      "action_id": "act_000002",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000007",
+      "after_frame": "frm_000008",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Sidebar shows the identical row set ([account-row], Airplane Mode … Wallpaper) before and after with only a small pixel shift — no scroll happened."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_15_09_944828/act_000027",
+      "run_dir": "run_2026_06_10_08_15_09_944828",
+      "action_id": "act_000027",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000094",
+      "after_frame": "frm_000095",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar visibly scrolled: before shows 'Airplane Mode…Wallpaper', after shows 'Control Centre…Apps' with new rows (Notifications, Sounds, Privacy & Security, iCloud) beside the unchanged 'Siri' detail pane."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000000",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000000",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000001",
+      "after_frame": "frm_000002",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar scrolled back to top: before shows 'Camera…Apps' (Privacy & Security highlighted), after shows '[account-row] / Airplane Mode…Wallpaper' — clearly different rows beside the 'Privacy & Security' pane."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000001",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000001",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000004",
+      "after_frame": "frm_000005",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Before and after both show the identical top-of-sidebar rows ('[account-row]', 'Airplane Mode'…'Wallpaper') with only a few-pixel rubber-band offset — no different rows visible."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000002",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000002",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000007",
+      "after_frame": "frm_000008",
+      "annotation": "not_achieved",
+      "annotation_rationale": "[re-reviewed] Confirmed: the after frame's sidebar shows the identical row set ('[account-row]', 'Airplane Mode' ... 'Wallpaper') next to the unchanged 'Privacy & Security' pane, with the whole list merely offset ~7px down (Wallpaper clipped at the bottom edge, scrollbar/rubber-band visible) — a top-of-list bounce with no new rows revealed, so the sidebar did not actually scroll."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000003",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000003",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000010",
+      "after_frame": "frm_000011",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Sidebar rows identical before and after ('[account-row]' through 'Wallpaper') with only a small pixel shift — content did not scroll to reveal different rows."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000031",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000031",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000110",
+      "after_frame": "frm_000111",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar visibly scrolled: before shows top rows ('[account-row]', 'Airplane Mode'…), after shows 'Control Centre…Apps' with new rows (Notifications, Focus, Screen Time, Touch ID & Passcode) beside the 'Siri' pane."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_30_48_905129/act_000002",
+      "run_dir": "run_2026_06_10_10_30_48_905129",
+      "action_id": "act_000002",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": "10:31AM Wed 10 Jun",
+      "expected_state": null,
+      "verifier": "tap_target_effect",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000007",
+      "after_frame": "frm_000013",
+      "annotation": "not_achieved",
+      "annotation_rationale": "The 'App Clips' page is pixel-identical before and after the tap on the status-bar time '10:31AM Wed 10 Jun'; only the pointer dot moved, no navigation or UI effect visible."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_34_39_427213/act_000002",
+      "run_dir": "run_2026_06_10_10_34_39_427213",
+      "action_id": "act_000002",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": "10:34 AM Wed 10 Jun",
+      "expected_state": null,
+      "verifier": "tap_target_effect",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000007",
+      "after_frame": "frm_000012",
+      "annotation": "not_achieved",
+      "annotation_rationale": "After frame shows the same unchanged 'App Clips' page as before; the tap on '10:34 AM Wed 10 Jun' produced no visible UI change beyond the pointer dot."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_39_45_267249/act_000001",
+      "run_dir": "run_2026_06_10_10_39_45_267249",
+      "action_id": "act_000001",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000004",
+      "after_frame": "frm_000005",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Sidebar shows the same rows ('[account-row]', 'Airplane Mode'…'Wallpaper') before and after beside the 'App Clips' pane; only a ~20px settle shift, no different rows revealed."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_39_45_267249/act_000002",
+      "run_dir": "run_2026_06_10_10_39_45_267249",
+      "action_id": "act_000002",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed only in a likely transient carousel/review region",
+      "before_frame": "frm_000007",
+      "after_frame": "frm_000008",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Before and after frames show identical sidebar content ('[account-row]' through 'Wallpaper') next to the 'App Clips' pane — the drag did not scroll the list to different rows."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_39_45_267249/act_000003",
+      "run_dir": "run_2026_06_10_10_39_45_267249",
+      "action_id": "act_000003",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000010",
+      "after_frame": "frm_000011",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar content visibly shifted down ~36px between frames (pixel-diff confirms; 'Wallpaper' row now clipped at bottom and a scrollbar appears) on the 'App Clips' page, so the list scrolled."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_39_45_267249/act_000004",
+      "run_dir": "run_2026_06_10_10_39_45_267249",
+      "action_id": "act_000004",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000013",
+      "after_frame": "frm_000014",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Before and after frames are pixel-identical (best vertical shift = 0, 0.06% diff) — same sidebar rows '[account-row]' through 'Wallpaper' at the same positions, so nothing scrolled."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_39_45_267249/act_000029",
+      "run_dir": "run_2026_06_10_10_39_45_267249",
+      "action_id": "act_000029",
+      "op": "drag",
+      "intent": "settings_sidebar_drag",
+      "target": null,
+      "expected_state": null,
+      "verifier": "scene_progressed",
+      "verifier_status": "unknown",
+      "verifier_reason": "scene text changed but page identity is unchanged (same-page scroll/reflow)",
+      "before_frame": "frm_000100",
+      "after_frame": "frm_000101",
+      "annotation": "achieved",
+      "annotation_rationale": "Sidebar clearly scrolled: before shows rows ending at 'Wallpaper', after reveals new rows 'Notifications', 'Sounds', 'Focus', 'Screen Time', 'Privacy & Security', 'Apps' with 'Siri' highlighted."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000004",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000004",
+      "op": "home",
+      "intent": "home",
+      "target": null,
+      "expected_state": null,
+      "verifier": "ios_home_screen_visible",
+      "verifier_status": "succeeded",
+      "verifier_reason": "after scene classified as SpringBoard",
+      "before_frame": "frm_000013",
+      "after_frame": "frm_000014",
+      "annotation": "achieved",
+      "annotation_rationale": "[re-reviewed] Before shows Settings with the detail pane titled 'Privacy & Security'; after shows the iPad Home Screen (widget stack, full app icon grid, and dock at the bottom), exactly satisfying the op=home goal — confirming the prior 'achieved' label."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000006",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000006",
+      "op": "tap",
+      "intent": "tap_xy",
+      "target": null,
+      "expected_state": null,
+      "verifier": "tap_target_effect",
+      "verifier_status": "succeeded",
+      "verifier_reason": "scene changed after action",
+      "before_frame": "frm_000019",
+      "after_frame": "frm_000024",
+      "annotation": "achieved",
+      "annotation_rationale": "Tap from the Home Screen search overlay ('Siri Suggestions') visibly navigated the UI: after frame shows Settings open at the 'Location Services' page."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000004",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000004",
+      "op": "home",
+      "intent": "home",
+      "target": null,
+      "expected_state": null,
+      "verifier": "ios_home_screen_visible",
+      "verifier_status": "succeeded",
+      "verifier_reason": "after scene classified as SpringBoard",
+      "before_frame": "frm_000013",
+      "after_frame": "frm_000014",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows Settings 'Privacy & Security'; after shows the iOS Home Screen (widgets, app grid, dock)."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000006",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000006",
+      "op": "tap",
+      "intent": "tap_xy",
+      "target": null,
+      "expected_state": null,
+      "verifier": "tap_target_effect",
+      "verifier_status": "succeeded",
+      "verifier_reason": "scene changed after action",
+      "before_frame": "frm_000019",
+      "after_frame": "frm_000024",
+      "annotation": "achieved",
+      "annotation_rationale": "Tap from the Home Screen search overlay landed in Settings with the 'Location Services' detail pane open — a clear UI navigation."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_30_48_905129/act_000000",
+      "run_dir": "run_2026_06_10_10_30_48_905129",
+      "action_id": "act_000000",
+      "op": "open_app",
+      "intent": "open_app",
+      "target": null,
+      "expected_state": null,
+      "verifier": "foreground_app_matches",
+      "verifier_status": "succeeded",
+      "verifier_reason": "matched Settings foreground identity: page_id=settings/App Clips",
+      "before_frame": "frm_000001",
+      "after_frame": "frm_000002",
+      "annotation": "achieved",
+      "annotation_rationale": "Before is the Home Screen; after shows the Settings app foregrounded full-screen at the 'App Clips' page, so an app was opened."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_30_48_905129/act_000004",
+      "run_dir": "run_2026_06_10_10_30_48_905129",
+      "action_id": "act_000004",
+      "op": "home",
+      "intent": "home",
+      "target": null,
+      "expected_state": null,
+      "verifier": "ios_home_screen_visible",
+      "verifier_status": "succeeded",
+      "verifier_reason": "after scene classified as SpringBoard",
+      "before_frame": "frm_000027",
+      "after_frame": "frm_000028",
+      "annotation": "achieved",
+      "annotation_rationale": "Before is Settings 'App Clips'; after is the iPad Home Screen with widgets, app grid and dock."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_30_48_905129/act_000006",
+      "run_dir": "run_2026_06_10_10_30_48_905129",
+      "action_id": "act_000006",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": "10:31AM Wed 10 Jun",
+      "expected_state": null,
+      "verifier": "tap_target_effect",
+      "verifier_status": "succeeded",
+      "verifier_reason": "scene changed after action",
+      "before_frame": "frm_000032",
+      "after_frame": "frm_000038",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Tap on status-bar text '10:31AM Wed 10 Jun' produced no visible effect: after frame is the same Home Screen, with pixel-diff showing only diffuse capture noise (no panel, no navigation)."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_32_25_480261/act_000000",
+      "run_dir": "run_2026_06_10_10_32_25_480261",
+      "action_id": "act_000000",
+      "op": "open_app",
+      "intent": "open_app",
+      "target": null,
+      "expected_state": null,
+      "verifier": "foreground_app_matches",
+      "verifier_status": "succeeded",
+      "verifier_reason": "matched Settings foreground identity: page_id=settings/App Clips",
+      "before_frame": "frm_000001",
+      "after_frame": "frm_000002",
+      "annotation": "achieved",
+      "annotation_rationale": "Before is the iPad Home Screen; after shows the Settings app foregrounded (sidebar + 'App Clips' detail pane), so an app was clearly opened."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_32_25_480261/act_000002",
+      "run_dir": "run_2026_06_10_10_32_25_480261",
+      "action_id": "act_000002",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": "10:32AM Wed10 Jun",
+      "expected_state": null,
+      "verifier": "tap_target_effect",
+      "verifier_status": "succeeded",
+      "verifier_reason": "scene changed after action",
+      "before_frame": "frm_000007",
+      "after_frame": "frm_000009",
+      "annotation": "achieved",
+      "annotation_rationale": "Tapping the status-bar date/time target visibly navigated from the Settings 'App Clips' page to the cover-sheet/Notification Center showing the big clock 'Wed 10 Jun 10:32'."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_32_25_480261/act_000004",
+      "run_dir": "run_2026_06_10_10_32_25_480261",
+      "action_id": "act_000004",
+      "op": "home",
+      "intent": "home",
+      "target": null,
+      "expected_state": null,
+      "verifier": "ios_home_screen_visible",
+      "verifier_status": "succeeded",
+      "verifier_reason": "after scene classified as SpringBoard",
+      "before_frame": "frm_000018",
+      "after_frame": "frm_000019",
+      "annotation": "achieved",
+      "annotation_rationale": "Before is Settings ('App Clips'); after shows the iOS Home Screen with widget grid, app icons and dock."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_32_25_480261/act_000006",
+      "run_dir": "run_2026_06_10_10_32_25_480261",
+      "action_id": "act_000006",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": "10:32AM Wed10 Jun",
+      "expected_state": null,
+      "verifier": "tap_target_effect",
+      "verifier_status": "succeeded",
+      "verifier_reason": "scene changed after action",
+      "before_frame": "frm_000023",
+      "after_frame": "frm_000025",
+      "annotation": "achieved",
+      "annotation_rationale": "[re-reviewed] Before frame is the Home Screen with the status-bar clock '10:32 Wed 10 Jun' (the named target); after frame shows the cover sheet/Notification Center with 'Wed 10 Jun' and a large '10:33' full-screen — the tap on the date/time element visibly navigated the UI, confirming the prior 'achieved' label."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_34_39_427213/act_000000",
+      "run_dir": "run_2026_06_10_10_34_39_427213",
+      "action_id": "act_000000",
+      "op": "open_app",
+      "intent": "open_app",
+      "target": null,
+      "expected_state": null,
+      "verifier": "foreground_app_matches",
+      "verifier_status": "succeeded",
+      "verifier_reason": "matched Settings foreground identity: page_id=settings/App Clips",
+      "before_frame": "frm_000001",
+      "after_frame": "frm_000002",
+      "annotation": "achieved",
+      "annotation_rationale": "Before is the Home Screen; after shows the Settings app foregrounded ('App Clips' page with sidebar), so an app was opened."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_34_39_427213/act_000004",
+      "run_dir": "run_2026_06_10_10_34_39_427213",
+      "action_id": "act_000004",
+      "op": "home",
+      "intent": "home",
+      "target": null,
+      "expected_state": null,
+      "verifier": "ios_home_screen_visible",
+      "verifier_status": "succeeded",
+      "verifier_reason": "after scene classified as SpringBoard",
+      "before_frame": "frm_000027",
+      "after_frame": "frm_000028",
+      "annotation": "achieved",
+      "annotation_rationale": "Before is Settings ('App Clips'); after shows the iOS Home Screen (widgets, app grid, dock)."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_34_39_427213/act_000006",
+      "run_dir": "run_2026_06_10_10_34_39_427213",
+      "action_id": "act_000006",
+      "op": "tap",
+      "intent": "tap_text",
+      "target": "10:34 AM Wed 10 Jun",
+      "expected_state": null,
+      "verifier": "tap_target_effect",
+      "verifier_status": "succeeded",
+      "verifier_reason": "scene changed after action",
+      "before_frame": "frm_000032",
+      "after_frame": "frm_000038",
+      "annotation": "not_achieved",
+      "annotation_rationale": "Before and after frames both show the identical Home Screen — the tap on '10:34 AM Wed 10 Jun' produced no visible UI change (no cover sheet/clock screen appeared)."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_39_45_267249/act_000000",
+      "run_dir": "run_2026_06_10_10_39_45_267249",
+      "action_id": "act_000000",
+      "op": "open_app",
+      "intent": "open_app",
+      "target": null,
+      "expected_state": null,
+      "verifier": "foreground_app_matches",
+      "verifier_status": "succeeded",
+      "verifier_reason": "matched Settings foreground identity: page_id=settings/App Clips",
+      "before_frame": "frm_000001",
+      "after_frame": "frm_000002",
+      "annotation": "achieved",
+      "annotation_rationale": "Before is the Home Screen; after shows the Settings app foregrounded ('App Clips' detail pane with the Settings sidebar)."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000025",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000025",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/Home Screen &",
+            "com.apple.settings.home-screen",
+            "settings/Home Screen & App Library",
+            "com.apple.settings.home-screen-app-library"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Home Screen & App Library",
+      "before_frame": "frm_000089",
+      "after_frame": "frm_000094",
+      "annotation": "achieved",
+      "annotation_rationale": "After frame's detail pane title is 'Home Screen & App Library' (Use Large App Icons, Dock, Notification Badges), matching the expected page_id; before showed 'Display & Brightness'."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000037",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000037",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": "专注模式",
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/专注模式",
+            "settings/Focus",
+            "com.apple.settings.focus"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Focus",
+      "before_frame": "frm_000129",
+      "after_frame": "frm_000131",
+      "annotation": "achieved",
+      "annotation_rationale": "After frame's detail pane title is 'Focus' (Do Not Disturb / Personal / Work, Share Across Devices), matching expected settings/Focus; before showed 'Sounds'."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000014",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000014",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": "通用",
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/通用",
+            "settings/General",
+            "com.apple.settings.general"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/General",
+      "before_frame": "frm_000049",
+      "after_frame": "frm_000051",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows the Battery pane; after's detail pane is titled \"General\" with About/Software Update/iPad Storage rows and the sidebar General row highlighted, matching settings/General."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_39_45_267249/act_000013",
+      "run_dir": "run_2026_06_10_10_39_45_267249",
+      "action_id": "act_000013",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/辅助功能",
+            "settings/Accessibility",
+            "com.apple.settings.accessibility"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Accessibility",
+      "before_frame": "frm_000044",
+      "after_frame": "frm_000049",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows General; after's pane is titled \"Accessibility\" with VoiceOver/Zoom/Hover Text rows and Accessibility highlighted in the sidebar, matching settings/Accessibility."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_08_31_428565/act_000039",
+      "run_dir": "run_2026_06_10_08_08_31_428565",
+      "action_id": "act_000039",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": "隐私与安全性",
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/隐私与安全性",
+            "settings/Privacy & Security",
+            "com.apple.settings.privacy-security"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Privacy & Security",
+      "before_frame": "frm_000134",
+      "after_frame": "frm_000136",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows Touch ID & Passcode; after's pane is titled \"Privacy & Security\" with Location Services/Tracking rows and that sidebar row highlighted, matching settings/Privacy & Security."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_08_31_428565/act_000031",
+      "run_dir": "run_2026_06_10_08_08_31_428565",
+      "action_id": "act_000031",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": "声音与触感",
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/声音与触感",
+            "settings/Sounds",
+            "com.apple.settings.sounds"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Sounds",
+      "before_frame": "frm_000106",
+      "after_frame": "frm_000108",
+      "annotation": "achieved",
+      "annotation_rationale": "[re-reviewed] Confirmed: before pane is titled \"Notifications\"; after pane is titled \"Sounds\" with Silent Mode, Input, \"Ringtone and Alerts\" slider, Ringtone/Text Tone rows, and the sidebar highlight moved to the Sounds row — matching expected settings/Sounds."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_08_31_428565/act_000023",
+      "run_dir": "run_2026_06_10_08_08_31_428565",
+      "action_id": "act_000023",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/Multitasking & Gestures",
+            "com.apple.settings.multitasking-gestures"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Multitasking & Gestures",
+      "before_frame": "frm_000080",
+      "after_frame": "frm_000085",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows Home Screen & App Library; after's pane is titled \"Multitasking & Gestures\" with Full-Screen Apps/Stage Manager options, matching settings/Multitasking & Gestures."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000042",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000042",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/隐私与安全性",
+            "settings/Privacy & Security",
+            "com.apple.settings.privacy-security"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Privacy & Security",
+      "before_frame": "frm_000148",
+      "after_frame": "frm_000153",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows Touch ID & Passcode; after's pane is titled \"Privacy & Security\" with Location Services/Tracking and the Privacy & Security sidebar row highlighted."
+    },
+    {
+      "sample_id": "run_2026_06_10_10_39_45_267249/act_000014",
+      "run_dir": "run_2026_06_10_10_39_45_267249",
+      "action_id": "act_000014",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": "辅助功能",
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/辅助功能",
+            "settings/Accessibility",
+            "com.apple.settings.accessibility"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Accessibility",
+      "before_frame": "frm_000046",
+      "after_frame": "frm_000048",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows General; after's pane is titled \"Accessibility\" with VoiceOver/Zoom/Hover Text rows and Accessibility highlighted, matching settings/Accessibility."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000035",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000035",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": "声音与触感",
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/声音与触感",
+            "settings/Sounds",
+            "com.apple.settings.sounds"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Sounds",
+      "before_frame": "frm_000122",
+      "after_frame": "frm_000124",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows Notifications; after's pane is titled \"Sounds\" with Silent Mode/Ringtone and Alerts and Sounds highlighted in the sidebar, matching settings/Sounds."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000036",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000036",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/专注模式",
+            "settings/Focus",
+            "com.apple.settings.focus"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Focus",
+      "before_frame": "frm_000127",
+      "after_frame": "frm_000132",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows Sounds; after's pane is titled \"Focus\" with Do Not Disturb/Personal/Work and Share Across Devices, with Focus highlighted in the sidebar, matching settings/Focus."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_15_09_944828/act_000034",
+      "run_dir": "run_2026_06_10_08_15_09_944828",
+      "action_id": "act_000034",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/屏幕使用时间",
+            "settings/Screen Time",
+            "com.apple.settings.screen-time"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Screen Time",
+      "before_frame": "frm_000118",
+      "after_frame": "frm_000123",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows Focus; after's pane is titled \"Screen Time\" with Daily Average/Downtime/App Limits and Screen Time highlighted in the sidebar, matching settings/Screen Time."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000030",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000030",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": "Siri",
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/Siri",
+            "com.apple.settings.siri"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Siri",
+      "before_frame": "frm_000105",
+      "after_frame": "frm_000107",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows 'Multitasking & Gestures'; after detail pane is titled 'Siri' with 'Siri is an intelligent assistant...' header and Siri Requests/Suggestions sections, matching settings/Siri."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_18_26_004054/act_000013",
+      "run_dir": "run_2026_06_10_08_18_26_004054",
+      "action_id": "act_000013",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/通用",
+            "settings/General",
+            "com.apple.settings.general"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/General",
+      "before_frame": "frm_000047",
+      "after_frame": "frm_000052",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows the 'Battery' pane; after detail pane is titled 'General' with About/Software Update/iPad Storage rows, matching settings/General."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_15_09_944828/act_000004",
+      "run_dir": "run_2026_06_10_08_15_09_944828",
+      "action_id": "act_000004",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": "无线局域网",
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/无线局域网",
+            "settings/Wi-Fi",
+            "com.apple.settings.wi-fi",
+            "settings/WLAN",
+            "com.apple.settings.wlan"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/WLAN",
+      "before_frame": "frm_000012",
+      "after_frame": "frm_000014",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows 'Privacy & Security'; after detail pane is titled 'WLAN' with the WLAN toggle and Networks list, matching settings/WLAN in the expected any_of."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000016",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000016",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": "辅助功能",
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/辅助功能",
+            "settings/Accessibility",
+            "com.apple.settings.accessibility"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Accessibility",
+      "before_frame": "frm_000056",
+      "after_frame": "frm_000058",
+      "annotation": "achieved",
+      "annotation_rationale": "[re-reviewed] After frame's detail pane title reads 'Accessibility' with the accessibility header, Vision section (VoiceOver/Zoom/Hover Text) and Physical and Motor section (Touch/Switch Control), and the sidebar highlight moved from 'General' (before) to 'Accessibility' — matching expected page settings/Accessibility; previous annotator confirmed."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000013",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000013",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/通用",
+            "settings/General",
+            "com.apple.settings.general"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/General",
+      "before_frame": "frm_000047",
+      "after_frame": "frm_000052",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows the 'Battery' pane; after detail pane is titled 'General' with About/Software Update/iPad Storage rows, matching settings/General."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_04_48_290819/act_000029",
+      "run_dir": "run_2026_06_10_08_04_48_290819",
+      "action_id": "act_000029",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/Siri",
+            "com.apple.settings.siri"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Siri",
+      "before_frame": "frm_000103",
+      "after_frame": "frm_000108",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows 'Multitasking & Gestures'; after detail pane is titled 'Siri' with Siri Requests/Talk to Siri/Voice rows, matching settings/Siri."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_08_31_428565/act_000021",
+      "run_dir": "run_2026_06_10_08_08_31_428565",
+      "action_id": "act_000021",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/Home Screen &",
+            "com.apple.settings.home-screen",
+            "settings/Home Screen & App Library",
+            "com.apple.settings.home-screen-app-library"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Home Screen & App Library",
+      "before_frame": "frm_000073",
+      "after_frame": "frm_000078",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows 'Display & Brightness'; after detail pane is titled 'Home Screen & App Library' with Use Large App Icons/Dock/Notification Badges sections, matching the expected page."
+    },
+    {
+      "sample_id": "run_2026_06_10_08_08_31_428565/act_000025",
+      "run_dir": "run_2026_06_10_08_08_31_428565",
+      "action_id": "act_000025",
+      "op": "tap",
+      "intent": "settings.tap_row",
+      "target": null,
+      "expected_state": {
+        "kind": "page_id",
+        "payload": {
+          "any_of": [
+            "settings/Siri",
+            "com.apple.settings.siri"
+          ]
+        }
+      },
+      "verifier": "expected_state",
+      "verifier_status": "succeeded",
+      "verifier_reason": "page_id matched: settings/Siri",
+      "before_frame": "frm_000087",
+      "after_frame": "frm_000092",
+      "annotation": "achieved",
+      "annotation_rationale": "Before shows 'Multitasking & Gestures'; after detail pane is titled 'Siri' with the Siri header and Siri Requests/Suggestions sections, matching settings/Siri."
+    }
+  ],
+  "metrics": {
+    "n_samples": 78,
+    "n_annotated": 78,
+    "n_decided": 78,
+    "confusion": {
+      "succeeded": {
+        "achieved": 33,
+        "not_achieved": 2,
+        "cant_tell": 0
+      },
+      "failed": {
+        "achieved": 0,
+        "not_achieved": 12,
+        "cant_tell": 0
+      },
+      "unknown": {
+        "achieved": 12,
+        "not_achieved": 19,
+        "cant_tell": 0
+      }
+    },
+    "success_assertion": {
+      "tp": 33,
+      "fp": 2,
+      "fn": 12,
+      "precision": 0.942857,
+      "recall": 0.733333,
+      "f1": 0.825
+    },
+    "failure_assertion": {
+      "tp": 12,
+      "fp": 0,
+      "fn": 21,
+      "precision": 1.0,
+      "recall": 0.363636,
+      "f1": 0.533333
+    },
+    "per_verifier_agreement": {
+      "expected_state_vlm": {
+        "n": 3,
+        "agree": 3
+      },
+      "expected_state": {
+        "n": 29,
+        "agree": 29
+      },
+      "scene_progressed": {
+        "n": 29,
+        "agree": 0
+      },
+      "tap_target_effect": {
+        "n": 8,
+        "agree": 4
+      },
+      "ios_home_screen_visible": {
+        "n": 5,
+        "agree": 5
+      },
+      "foreground_app_matches": {
+        "n": 4,
+        "agree": 4
+      }
+    }
+  }
+}

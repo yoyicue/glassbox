@@ -110,6 +110,23 @@ uv run python -m skills.regression.computer_use_success_rate aggregate \
 # and `make regression-gate`.
 ```
 
+## Verifier alignment (SPA-Bench discipline)
+
+`verifier_alignment_settings_v1.json` is the committed verifier-vs-annotation
+alignment fixture: 78 samples extracted from 2026-06-10 iPad mini 7 rig runs
+(5 floor rounds + 3 machinery-probe rounds + 1 VLM-on run), blind-annotated
+from before/after frames with verifier verdicts hidden (provenance in
+`annotation_source` — AI frame-inspection annotation, NOT a blind human
+annotation; frames stay in local gitignored artifacts). Headline (snapshot,
+regenerate via `python -m skills.regression.verifier_alignment`):
+success-assertion precision 0.943 / recall 0.733 / F1 0.825;
+failure-assertion precision 1.0 / recall 0.364. Known weaknesses it surfaced:
+`scene_progressed` resolves nothing (0/29 — every unknown sat on a decidable
+outcome), and `tap_target_effect` can be fooled by the status-bar clock
+ticking ("scene changed after action"). The fixture must validate
+(`verifier_alignment validate`) and its metrics must exactly match
+recomputation — enforced by `skills/smoke/test_verifier_alignment.py`.
+
 ## Human-control protocol
 
 The blank human-control template can be regenerated and validated with:
