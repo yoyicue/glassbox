@@ -22,6 +22,7 @@ from skills.regression.golden_ingest import (
     HARVESTED_ROOT,
     harvest,
     has_source_ledgers,
+    replays_consistently,
 )
 
 _HARVESTED = str(HARVESTED_ROOT)
@@ -73,3 +74,20 @@ def test_harvest_is_idempotent(tmp_path):
         f"harvest drift — run `make golden-harvest` and commit. "
         f"added={sorted(fresh - committed)} removed={sorted(committed - fresh)}"
     )
+
+
+@pytest.mark.smoke
+def test_replays_consistently_skips_unreplayable_verifier_instead_of_crashing():
+    """Semantic-tap ledgers pin orchestrator-side verifiers (expected_state /
+    expected_state_vlm) that the offline registry cannot replay. Harvest must
+    treat them as not-replayable (skip), not crash with KeyError — otherwise
+    `make check` breaks on any machine whose artifacts/ holds such a run."""
+    payload = {
+        "case_id": "expected_state_deadbeef",
+        "action": "tap",
+        "expected_status": "succeeded",
+        "before_texts": ["General"],
+        "after_texts": ["About"],
+        "metadata": {"verifier": "expected_state"},
+    }
+    assert replays_consistently(payload, VerifierRegistry()) is False
