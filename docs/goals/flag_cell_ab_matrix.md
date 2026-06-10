@@ -39,7 +39,7 @@ docstring 和本台账。
 | # | Flag / 改动 | 测试格子 | 看的数字 | 机制对位 | 估算机时 |
 |---|---|---|---|---|---|
 | 1 | （进行中）badge 减除（`VOICE_CONTROL_OVERLAY_HINTS` 行为扩展） | a11y cell | completion vs 0.0 | 徽章伪影毒化行匹配/验证器 → 感知层减除 | ~90min |
-| 2 | `GLASSBOX_DETECT_ICONS_IN_PERCEIVE` | Clock cell | completion vs 0.8；每轮耗时 vs ~14min | launch_app 靠主屏找图标，纯 OCR 读不到图标 | ~75min |
+| 2 | `GLASSBOX_DETECT_ICONS_IN_PERCEIVE` × 后端（**双维 A/B**） | Clock cell | completion vs 0.8；每轮耗时 vs ~14min | launch_app 靠主屏找图标，纯 OCR 读不到图标本体。**后端是独立维度**：`GLASSBOX_ICON_DETECTOR=omniparser` vs `classical` 各跑一臂——"omniparser 肯定有帮助"是待验证假设（正面：主屏全是图标；反面实测：设置场景 185 帧 0 图标产出 + 每帧 5-10× 延迟）。注意 omniparser 臂的两个环境坑：worktree 需手拷插件、`uv sync` 会剪掉 AGPL runtime 需重装。另：`ui_layout`（默认开）会隐式按当前后端每帧跑图标检测，omniparser 臂 = 全程每帧 YOLO，耗时数字要连这笔账一起读 | ~75min ×2 臂 |
 | 3 | `GLASSBOX_AI_SCROLL_PREFER_WHEEL` | 设置地板 | scroll_success_rate vs 0.077 | iPad 滚轮精确已验证（picokvm_ipad_wheel） | ~45min |
 | 4 | `GLASSBOX_ENABLE_VLM`（P1 升级） | Clock cell 失败轮 / a11y cell | completion、unknown_rate | VLM 只在低置信/找不到目标时触发——必须在会失败的格子测 | ~90min+计费 |
 | 5 | `GLASSBOX_WHITEBOX_HINT_SELECTION` | a11y cell（badge 减除之后） | completion、误点 | producer 已写 vc id，让选择器消费它 | ~90min |
