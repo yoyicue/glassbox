@@ -103,6 +103,25 @@ def test_parse_item_names_uses_dark_badge_visual_filter_and_slugs_label():
 
 
 @pytest.mark.smoke
+def test_parse_item_names_drops_nearby_row_text_misread_as_badge():
+    target = _el("Wallpaper", x=40, y=40, w=70, h=17, element_id=31)
+    badge = _el("Wallpaper", x=70, y=68, w=66, h=17, element_id=33)
+    frame = np.full((140, 180, 3), 235, dtype=np.uint8)
+    frame[35:62, 35:115] = 110
+    frame[63:90, 65:140] = 45
+
+    markers = parse_voice_control_overlay(
+        [target, badge],
+        mode="item_names",
+        frame_img=frame,
+    )
+
+    assert [(marker.text, marker.source_element_id) for marker in markers] == [
+        ("Wallpaper", 33)
+    ]
+
+
+@pytest.mark.smoke
 def test_parse_item_names_filters_status_bar_badges_from_real_overlay_frame():
     status = _el("2:07PM Thu 4 Jun", x=10, y=12, w=120, element_id=1)
     overlay = _el("Voice", x=100, y=70, w=45, element_id=2)
@@ -421,6 +440,50 @@ def test_apply_item_name_hint_accepts_typo_without_shifting_to_next_row():
 
     assert target.whitebox_hint == WhiteboxHint(accessibility_id="vc:item-name:notfications")
     assert next_row.whitebox_hint is None
+
+
+@pytest.mark.smoke
+def test_apply_item_name_hint_accepts_short_one_edit_ocr_typo():
+    target = _el("About", x=316, y=320, w=42, h=14, element_id=21)
+    badge = _el("ADOUt", x=426, y=294, w=40, h=10, element_id=19)
+    marker = VoiceControlOverlayMarker(
+        kind="item_name",
+        text="ADOUt",
+        box=badge.box,
+        confidence=0.9,
+        source_element_id=19,
+        accessibility_id="vc:item-name:adout",
+    )
+
+    apply_voice_control_overlay_hints(
+        _scene(badge, target),
+        [marker],
+        include_names=True,
+    )
+
+    assert target.whitebox_hint == WhiteboxHint(accessibility_id="vc:item-name:adout")
+
+
+@pytest.mark.smoke
+def test_apply_item_name_hint_accepts_garbled_first_token():
+    target = _el("AutoFill & Passwords", x=316, y=728, w=136, h=14, element_id=54)
+    badge = _el("AutOFiI", x=420, y=700, w=48, h=16, element_id=52)
+    marker = VoiceControlOverlayMarker(
+        kind="item_name",
+        text="AutOFiI",
+        box=badge.box,
+        confidence=0.9,
+        source_element_id=52,
+        accessibility_id="vc:item-name:autofii",
+    )
+
+    apply_voice_control_overlay_hints(
+        _scene(badge, target),
+        [marker],
+        include_names=True,
+    )
+
+    assert target.whitebox_hint == WhiteboxHint(accessibility_id="vc:item-name:autofii")
 
 
 @pytest.mark.smoke

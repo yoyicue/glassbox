@@ -19,7 +19,8 @@ ITEM_NAMES_LABELS = _FIXTURES / "voice_control_overlay_itemnames_labels_v1.json"
 # Every committed item-names label manifest must replay clean. v2 manifests
 # (2026-06-10, iPad mini 7) extend coverage beyond the v1 Overlay page to the
 # General detail pane (right-of-target badge geometry) and a SCROLLED sidebar
-# position, including garbled-marker pairs the matcher is known to bridge.
+# position, including garbled-marker pairs and marker/target disambiguation
+# cases the matcher is known to bridge.
 ALL_ITEM_NAMES_MANIFESTS = sorted(
     _FIXTURES.glob("voice_control_overlay_itemnames_labels_*.json")
 )
@@ -240,10 +241,10 @@ def test_committed_item_names_fixtures_replay_against_labeled_mapping_contract(m
 @pytest.mark.smoke
 def test_committed_item_names_corpus_keeps_growing():
     """v1 (Overlay page) had 12 labels on one frame; the committed corpus must
-    not silently shrink below the v1+v2 coverage (3 captures, 44 labels)."""
+    not silently shrink below the v1+v2 coverage (3 captures, 48 labels)."""
     assert len(ALL_ITEM_NAMES_MANIFESTS) >= 3
     total = sum(
         len(VoiceControlOverlayReplayLabelSet.model_validate_json(p.read_text(encoding="utf-8")).labels)
         for p in ALL_ITEM_NAMES_MANIFESTS
     )
-    assert total >= 44
+    assert total >= 48

@@ -28,6 +28,9 @@ _TARGET_TYPE_PENALTY = {
     "image": 16.0,
     "status_bar": 1_000.0,
 }
+_ITEM_NAME_COLLISION_MAX_VERTICAL_GAP = 36
+_ITEM_NAME_COLLISION_MAX_HORIZONTAL_GAP = 24
+_ITEM_NAME_BADGE_SCORE_DELTA = 0.12
 
 
 class VoiceControlOverlayMarker(BaseModel):
@@ -102,6 +105,8 @@ def parse_voice_control_overlay(
                     accessibility_id=f"vc:item-name:{_accessibility_slug(normalized)}",
                 )
             )
+    if mode == "item_names" and frame_img is not None:
+        markers = _resolve_item_name_marker_collisions(markers, frame_img)
     return sorted(markers, key=lambda marker: (marker.box.y, marker.box.x))
 
 
@@ -353,9 +358,17 @@ def _name_text_matches(marker_text: str | None, target_text: str | None) -> bool
         marker_variants.add(marker[1:])
     if any(value and (value in target or target in value) for value in marker_variants):
         return True
+    if _short_label_one_edit_match(marker, target):
+        return True
     marker_tokens = _label_tokens(marker_text)
     target_tokens = _label_tokens(target_text)
     if marker_tokens & target_tokens:
+        return True
+    target_token_sequence = _label_token_sequence(target_text)
+    if (
+        target_token_sequence
+        and _ocr_confusable_token_match(marker, target_token_sequence[0])
+    ):
         return True
     return SequenceMatcher(None, marker, target).ratio() >= 0.82
 
@@ -365,11 +378,60 @@ def _compact_label(text: str | None) -> str:
 
 
 def _label_tokens(text: str | None) -> set[str]:
-    return {
+    return set(_label_token_sequence(text))
+
+
+def _label_token_sequence(text: str | None) -> tuple[str, ...]:
+    return tuple(
         token
         for token in re.split(r"[^0-9a-z]+", _clean_text(text).lower())
         if len(token) > 2
-    }
+    )
+
+
+def _short_label_one_edit_match(marker: str, target: str) -> bool:
+    if min(len(marker), len(target)) < 4 or max(len(marker), len(target)) > 6:
+        return False
+    return _edit_distance_at_most_one(marker, target)
+
+
+def _edit_distance_at_most_one(left: str, right: str) -> bool:
+    if abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) == len(right):
+        return sum(
+            left_ch != right_ch
+            for left_ch, right_ch in zip(left, right, strict=True)
+        ) <= 1
+
+    longer, shorter = (left, right) if len(left) > len(right) else (right, left)
+    long_index = 0
+    short_index = 0
+    edits = 0
+    while long_index < len(longer) and short_index < len(shorter):
+        if longer[long_index] == shorter[short_index]:
+            long_index += 1
+            short_index += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        long_index += 1
+    return True
+
+
+def _ocr_confusable_token_match(marker: str, target_token: str) -> bool:
+    if min(len(marker), len(target_token)) < 4:
+        return False
+    if abs(len(marker) - len(target_token)) > 2:
+        return False
+    marker_folded = _fold_ocr_confusables(marker)
+    target_folded = _fold_ocr_confusables(target_token)
+    return SequenceMatcher(None, marker_folded, target_folded).ratio() >= 0.90
+
+
+def _fold_ocr_confusables(text: str) -> str:
+    return text.translate(str.maketrans({"l": "i", "1": "i"}))
 
 
 def _horizontal_gap(left: Box, right: Box) -> int:
@@ -378,6 +440,79 @@ def _horizontal_gap(left: Box, right: Box) -> int:
     if right.x2 < left.x:
         return left.x - right.x2
     return 0
+
+
+def _resolve_item_name_marker_collisions(
+    markers: list[VoiceControlOverlayMarker],
+    frame_img: np.ndarray,
+) -> list[VoiceControlOverlayMarker]:
+    """Drop row text that visually qualifies as a badge only because a badge is nearby."""
+
+    if len(markers) < 2:
+        return markers
+
+    suppressed: set[int] = set()
+    for left_index, left in enumerate(markers):
+        if left_index in suppressed:
+            continue
+        for right_index in range(left_index + 1, len(markers)):
+            if right_index in suppressed:
+                continue
+            right = markers[right_index]
+            if not _same_item_name_marker_collision(left, right):
+                continue
+
+            left_score = _dark_badge_score(frame_img, left.box)
+            right_score = _dark_badge_score(frame_img, right.box)
+            if abs(left_score - right_score) < _ITEM_NAME_BADGE_SCORE_DELTA:
+                continue
+            if left_score > right_score:
+                suppressed.add(right_index)
+            else:
+                suppressed.add(left_index)
+                break
+
+    return [
+        marker
+        for index, marker in enumerate(markers)
+        if index not in suppressed
+    ]
+
+
+def _same_item_name_marker_collision(
+    left: VoiceControlOverlayMarker,
+    right: VoiceControlOverlayMarker,
+) -> bool:
+    left_label = _compact_label(left.text)
+    right_label = _compact_label(right.text)
+    if len(left_label) < 3 or left_label != right_label:
+        return False
+    if _horizontal_gap(left.box, right.box) > _ITEM_NAME_COLLISION_MAX_HORIZONTAL_GAP:
+        return False
+    return (
+        _item_name_vertical_gap(
+            left.box,
+            right.box,
+            max_y_delta=_ITEM_NAME_COLLISION_MAX_VERTICAL_GAP,
+        )
+        is not None
+    )
+
+
+def _dark_badge_score(frame_img: np.ndarray, box: Box) -> float:
+    best = 0.0
+    for pad in (5, 10, 16):
+        crop = _padded_crop(frame_img, box, pad=pad)
+        if crop.size == 0:
+            continue
+        if crop.ndim == 3:
+            luminance = crop.astype(np.float32).mean(axis=2)
+        else:
+            luminance = crop.astype(np.float32)
+        dark_ratio = float((luminance < 120.0).mean())
+        mean = float(luminance.mean())
+        best = max(best, dark_ratio + max(0.0, (190.0 - mean) / 190.0))
+    return best
 
 
 def _overlay_whitebox_hint(

@@ -2,6 +2,19 @@
  "mode": "item_names",
  "labels": [
   {
+   "name": "about_typo_badge",
+   "marker_text": "ADOUt",
+   "marker_center": [
+    446,
+    299
+   ],
+   "target_text": "About",
+   "target_center": [
+    337,
+    327
+   ]
+  },
+  {
    "name": "software_update",
    "marker_text": "Software",
    "marker_center": [
@@ -77,6 +90,19 @@
    "target_center": [
     367,
     660
+   ]
+  },
+  {
+   "name": "autofill_garbled_badge",
+   "marker_text": "AutOFiI",
+   "marker_center": [
+    444,
+    708
+   ],
+   "target_text": "AutoFill & Passwords",
+   "target_center": [
+    384,
+    735
    ]
   },
   {
