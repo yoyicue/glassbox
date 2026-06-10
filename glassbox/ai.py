@@ -401,6 +401,7 @@ class AIPhone:
         x2: int,
         y2: int,
         *,
+        coordinate_space: str | None = None,
         steps: int = 20,
         end_hold_ms: int = 100,
         expect_visible: str | None = None,
@@ -423,6 +424,8 @@ class AIPhone:
                 sample_interval_ms=_seconds_to_ms(sample_interval_s),
                 max_stream_frames=_max_frames(expect_timeout_s, sample_interval_s),
             )
+        if coordinate_space is not None:
+            wait_kwargs["coordinate_space"] = coordinate_space
         result = self._phone.swipe_xy(
             int(x1),
             int(y1),
@@ -440,6 +443,57 @@ class AIPhone:
             timeout_s=expect_timeout_s,
             sample_interval_s=sample_interval_s,
         )
+
+    def scroll_wheel(
+        self,
+        ticks: int,
+        *,
+        focus_x: int | None = None,
+        focus_y: int | None = None,
+        coordinate_space: str | None = None,
+        focus_click: bool = False,
+        interval_ms: int | None = None,
+        expect_visible: str | None = None,
+        expect_page: str | None = None,
+    ) -> ActionOutcome:
+        kwargs: dict[str, Any] = {"focus_click": bool(focus_click)}
+        if focus_x is not None:
+            kwargs["focus_x"] = int(focus_x)
+        if focus_y is not None:
+            kwargs["focus_y"] = int(focus_y)
+        if coordinate_space is not None:
+            kwargs["coordinate_space"] = coordinate_space
+        if interval_ms is not None:
+            kwargs["interval_ms"] = int(interval_ms)
+        result = self._phone.scroll_wheel(int(ticks), **kwargs)
+        outcome = self._action_outcome("scroll_wheel", f"wheel:{int(ticks)}", result)
+        return self._apply_expectation(outcome, expect_visible=expect_visible, expect_page=expect_page)
+
+    def type_text(
+        self,
+        text: str,
+        *,
+        verify: bool | None = None,
+        expect_visible: str | Sequence[str] | None = None,
+        expect_page: str | None = None,
+        expect_timeout_s: float = _AI_DEFAULT_EXPECT_TIMEOUT_S,
+        sample_interval_s: float = _AI_DEFAULT_SAMPLE_INTERVAL_S,
+    ) -> ActionOutcome:
+        typed_text = str(text)
+        result = self._phone.type(typed_text, verify=verify)
+        outcome = self._action_outcome("type_text", typed_text, result)
+        target_texts = _text_targets(expect_visible if expect_visible is not None else typed_text)
+        return self._apply_expectation(
+            outcome,
+            expect_visible=target_texts,
+            expect_page=expect_page,
+            timeout_s=expect_timeout_s,
+            sample_interval_s=sample_interval_s,
+        )
+
+    def key(self, modifier: int, keycode: int) -> ActionOutcome:
+        result = self._phone.key(int(modifier), int(keycode))
+        return self._action_outcome("key", f"{int(modifier)}:{int(keycode)}", result)
 
     def launch_app(
         self,
@@ -1427,8 +1481,8 @@ class AIPhone:
         return any(self._labels_match(visible, text) for visible in obs.visible_texts)
 
     def _labels_match(self, left: str, right: str) -> bool:
-        lhs = left.strip()
-        rhs = right.strip()
+        lhs = left.strip().casefold()
+        rhs = right.strip().casefold()
         return bool(lhs and rhs and (lhs == rhs or lhs in rhs or rhs in lhs))
 
     def _actuation_attribution(self) -> str:

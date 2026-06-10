@@ -10,6 +10,7 @@ import pytest
 
 from glassbox.cognition import Box, UIElement
 from glassbox.effector import ActionResult
+from glassbox.perception.letterbox import LetterboxCrop
 from glassbox.perception.source import Frame
 
 
@@ -71,7 +72,14 @@ def test_phone_tap_text_drives_effector(mock_phone):
 def test_target_tap_entrypoints_record_action_plan_contract(mock_phone):
     """P6: high-level tap entrypoints preserve plan metadata in ActionRecord."""
 
-    def assert_last_action(*, x: int, y: int, via: str, target: str) -> None:
+    def assert_last_action(
+        *,
+        x: int,
+        y: int,
+        via: str,
+        target: str,
+        expected_state: dict | None = None,
+    ) -> None:
         last = mock_phone.effector.last()
         assert last is not None
         assert last.op == "tap"
@@ -88,6 +96,10 @@ def test_target_tap_entrypoints_record_action_plan_contract(mock_phone):
         assert record.params["actuation_attempt_index"] == 0
         assert record.params["regrounded"] is False
         assert record.params["action_ok"] is True
+        if expected_state is None:
+            assert "expected_state" not in record.params
+        else:
+            assert record.params["expected_state"] == expected_state
 
     mock_phone.ocr.elements = [
         UIElement(type="text", box=Box(x=10, y=20, w=20, h=10), text="Login", confidence=0.95)
@@ -96,8 +108,15 @@ def test_target_tap_entrypoints_record_action_plan_contract(mock_phone):
     assert_last_action(x=20, y=25, via="tap_text", target="Login")
 
     element = UIElement(type="text", box=Box(x=30, y=40, w=20, h=10), text="Next", confidence=0.95)
-    mock_phone.tap_element(element)
-    assert_last_action(x=40, y=45, via="tap_element", target="Next")
+    expected_state = {"kind": "visible_text", "payload": {"any_of": ["Done"]}}
+    mock_phone.tap_element(element, expected_state=expected_state)
+    assert_last_action(
+        x=40,
+        y=45,
+        via="tap_element",
+        target="Next",
+        expected_state=expected_state,
+    )
 
     mock_phone.ocr.elements = [
         UIElement(type="button", box=Box(x=50, y=60, w=30, h=12), text="Save", confidence=0.95)
@@ -117,6 +136,53 @@ def test_target_tap_entrypoints_record_action_plan_contract(mock_phone):
     mock_phone.tap_intent("Confirm Payment")
     assert_last_action(x=85, y=86, via="tap_intent", target="Confirm Payment")
     assert mock_phone._pending_actions_for_memory[-1].params["selection_source"] == "vlm"
+
+
+@pytest.mark.smoke
+def test_tap_element_routes_to_semantic_plan_when_enabled(mock_phone, monkeypatch):
+    captured: dict = {}
+    element = UIElement(type="text", box=Box(x=30, y=40, w=20, h=10), text="Bluetooth", confidence=0.95)
+    expected_state = {
+        "kind": "page_id",
+        "payload": {"any_of": ["settings/Bluetooth", "settings/蓝牙"]},
+    }
+
+    monkeypatch.setattr(mock_phone, "_uses_semantic_plan", lambda op: op == "tap")
+    monkeypatch.setattr(
+        mock_phone,
+        "_picokvm_fresh_verify_kwargs",
+        lambda _op: {"settle_strategy": "stream_until_match"},
+    )
+
+    def fake_run_semantic_plan(op, **kwargs):
+        captured.update({"op": op, **kwargs})
+        return ActionResult(ok=True, backend="mock", connected=True, semantic_status="succeeded")
+
+    monkeypatch.setattr(mock_phone, "_run_semantic_plan", fake_run_semantic_plan)
+
+    result = mock_phone.tap_element(
+        element,
+        intent="settings.row:Bluetooth",
+        target="Bluetooth",
+        via="settings.tap_row",
+        retry_budget=2,
+        idempotent=True,
+        expected_state=expected_state,
+    )
+
+    assert result.semantic_status == "succeeded"
+    assert captured["op"] == "tap"
+    assert captured["expected_state"] == expected_state
+    assert captured["via"] == "settings.tap_row"
+    assert captured["policy_action"] == "tap"
+    assert captured["settle_strategy"] == "stream_until_match"
+    assert captured["params"]["element"] is element
+    assert captured["params"]["intent"] == "settings.row:Bluetooth"
+    assert captured["params"]["target"] == "Bluetooth"
+    assert captured["params"]["tap_element_expected_state"] == expected_state
+    assert captured["params"]["tap_element_options"]["retry_budget"] == 2
+    assert captured["params"]["tap_element_options"]["idempotent"] is True
+    assert captured["params"]["recovery"] == "recover_to_home_then_renavigate"
 
 
 @pytest.mark.smoke
@@ -318,6 +384,25 @@ def test_phone_wheel_scroll_wrappers_are_not_swipes(mock_phone):
         "focus_y": 110,
     }
     assert actions[1].kwargs["ticks"] == -7
+
+
+@pytest.mark.smoke
+def test_phone_scroll_wheel_accepts_explicit_coordinate_space(mock_phone):
+    mock_phone.crop = LetterboxCrop(
+        crop_bbox=(100, 200, 300, 400),
+        frame_size=(800, 600),
+        phone_size=(300, 400),
+    )
+    mock_phone._last_frame = Frame(img=np.zeros((600, 800, 3), dtype=np.uint8), ts=0.0)
+
+    mock_phone.scroll_wheel(5, focus_x=10, focus_y=20, coordinate_space="cropped_px")
+
+    action = mock_phone.effector.actions[-1]
+    assert action.op == "scroll_wheel"
+    assert action.kwargs["focus_x"] == 110
+    assert action.kwargs["focus_y"] == 220
+    record = mock_phone._pending_actions_for_memory[-1]
+    assert record.params["target_point_frame"] == {"x": 10, "y": 20, "space": "cropped_px"}
 
 
 @pytest.mark.smoke

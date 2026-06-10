@@ -288,7 +288,7 @@ class ExpectedState:
     kind: Literal["page_id", "visible_text", "element_appears", "element_gone"]
     payload: dict[str, Any]   # typed variants are fine instead of a raw dict
     # payload shape per kind:
-    #   page_id         -> {"page_id": "settings/root"}
+    #   page_id         -> {"page_id": "settings/root"} or {"any_of": ["settings/root", ...]}
     #   visible_text    -> {"any_of": [...], "all_of": [...]}
     #   element_appears -> {"role": "...", "text": "...", "box": [x,y,w,h]?}
     #   element_gone    -> {"target_identity": {...}}   # needs the original target id
@@ -437,7 +437,40 @@ P3**:
    `StrategySpec` / `ExpectedState` round-trip as JSON; `SemanticActionPlan`
    binds runtime callables; the orchestrator can execute a semantic plan through
    the normal attempt/action artifact path; expected-state verification covers
-   `page_id`, `visible_text`, `element_appears`, and `element_gone`.
+   `page_id` (single `page_id` or `any_of` candidates), `visible_text`,
+   `element_appears`, and `element_gone`. `tap_element` now routes through the
+   semantic `tap` ladder when enabled while preserving element-specific actuation
+   metadata in the target strategy. Settings row and search-root-result taps pass
+   action-level `page_id` expected-state, so the success-rate harness can measure
+   expected-state coverage on the real row-opening path. The Settings crawler
+   disables semantic-plan global recovery for those row/search taps so a failed
+   page open returns to crawler policy instead of launching a Home recovery inside
+   the measured task. A 2026-06-06 iPad mini 7 snapshot (code `d9695ae`, artifact
+   `/tmp/glassbox-l2-rank2-full-20260606-164702/benchmark.json`, command:
+   `GLASSBOX_PHONE_MODEL=ipad_mini_7 ... run-ios-settings --rounds 5 --drill-down --language en --region HK`)
+   produced 5 samples: 4 succeeded, 1 failed, `task_completion_rate=0.8`,
+   `task_completion_variance=0.16`, `expected_state_coverage=0.976`,
+   `root_pages_coverage=0.983`, and `recoveries=0`. The remaining failed sample
+   missed `隐私与安全性`. A scrubbed copy is committed at
+   `skills/regression/fixtures/l2_settings_expected_state_snapshot.json`; the
+   offline regression smoke suite validates it and proves `compare_benchmarks`
+   fails if its expected-state coverage drops to zero. It is a real L2 outcome
+   snapshot, not yet a human-baselined acceptance result or the committed
+   completion floor. The matching human-control protocol now has a blank
+   fixture and validator at `skills/regression/fixtures/human_baseline_settings_template.json`
+   and `skills.regression.human_baseline`, and `make regression-gate` validates
+   the template. `validate-floor-candidate` makes the floor-promotion policy
+   executable and rejects the current 4/5 snapshot; actual human trials are still
+   pending. The ordinary HDMI Settings floor and the accessibility/Voice Control
+   experiments are separate evaluation cells: `validate-floor-candidate` now
+   requires floor candidates to declare the clean HDMI Settings cell/environment
+   (Voice Control continuous overlay off, FKA/help overlays absent, no Stage
+   Manager/windowed Settings) and rejects observed clusters of Voice Control
+   numeric overlay markers. Runs captured with Voice Control item numbers, FKA
+   help, or windowed Settings are diagnostic artifacts only. Voice Control
+   overlay can graduate later as an explicit a11y-mode evaluation cell after its
+   marker parser, badge-to-target mapping, and reset recipe have their own
+   labeled replay gate; it must not be mixed into the default Settings floor.
 3. **P1 — VLM gated escalation** — _implemented foundation + expected-state
    runtime integration._ The
    `VLMEscalationGate` implements the four triggers, confidence-missing

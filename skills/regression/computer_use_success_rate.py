@@ -57,6 +57,50 @@ IOS_SETTINGS_TERMINAL_EXPECTED_STATE = {
     "kind": "root_coverage_complete",
     "payload": {},
 }
+COMPARE_METRIC_KEYS = (
+    "task_completion_rate",
+    "task_completion_variance",
+    "navigation_origin_precondition_failures",
+    "action_success_rate",
+    "unknown_rate",
+    "task_action_count",
+    "scroll_action_count",
+    "scroll_success_rate",
+    "expected_state_coverage",
+    "vlm_action_coverage",
+    "root_pages_coverage",
+    "recoveries",
+    "strategy_switches",
+    "retries",
+    "vlm_calls",
+    "vlm_calls_per_task",
+    "vlm_cache_hits",
+    "vlm_cache_misses",
+    "vlm_cache_hit_rate",
+)
+GATE_DROP_METRICS = {
+    "task_completion_rate",
+    "action_success_rate",
+    "expected_state_coverage",
+    "vlm_action_coverage",
+    "root_pages_coverage",
+    "recoveries",
+    "strategy_switches",
+}
+GATE_RISE_METRICS = {
+    "navigation_origin_precondition_failures",
+    "unknown_rate",
+}
+FLOOR_IDENTITY_CONFIG_KEYS = ("phone_model", "task_set", "language", "region")
+FLOOR_MIN_ROUNDS = 5
+IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL = "ios_settings_clean_hdmi"
+IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT = {
+    "voice_control_overlay": "off",
+    "fka_help_overlay": "absent",
+    "stage_manager": "off",
+    "settings_window_mode": "fullscreen",
+}
+VOICE_CONTROL_NUMERIC_MARKER_REJECT_THRESHOLD = 4
 
 
 def _json_default(value: Any) -> str:
@@ -373,8 +417,8 @@ def _terminal_expected_state_met(
     payload = terminal_expected_state.get("payload")
     payload = payload if isinstance(payload, Mapping) else {}
     if kind == "page_id":
-        wanted = str(payload.get("page_id") or "")
-        return bool(wanted) and final_state.get("page_id") == wanted
+        wanted = _expected_page_ids(payload)
+        return bool(wanted) and str(final_state.get("page_id") or "") in wanted
     if kind == "visible_text":
         texts = [str(text) for text in final_state.get("visible_texts", []) or []]
         any_of = [str(item) for item in payload.get("any_of", []) or []]
@@ -387,6 +431,22 @@ def _terminal_expected_state_met(
         matched = _final_state_element_matches(final_state, query)
         return matched if kind == "element_appears" else not matched
     return None
+
+
+def _expected_page_ids(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    wanted: list[str] = []
+
+    def add(value: Any) -> None:
+        page_id = str(value or "").strip()
+        if page_id and page_id not in wanted:
+            wanted.append(page_id)
+
+    any_of = payload.get("any_of")
+    if isinstance(any_of, list):
+        for item in any_of:
+            add(item)
+    add(payload.get("page_id"))
+    return tuple(wanted)
 
 
 def _final_state_element_matches(final_state: Mapping[str, Any], query: Mapping[str, Any]) -> bool:
@@ -1220,38 +1280,181 @@ def compare_benchmarks(
     cand_metrics = candidate.get("metrics") or {}
     lines: list[str] = []
     rc = 0
-    for key in (
-        "task_completion_rate",
-        "task_completion_variance",
-        "navigation_origin_precondition_failures",
-        "action_success_rate",
-        "unknown_rate",
-        "task_action_count",
-        "scroll_action_count",
-        "scroll_success_rate",
-        "expected_state_coverage",
-        "vlm_action_coverage",
-        "root_pages_coverage",
-        "recoveries",
-        "strategy_switches",
-        "retries",
-        "vlm_calls",
-        "vlm_calls_per_task",
-        "vlm_cache_hits",
-        "vlm_cache_misses",
-        "vlm_cache_hit_rate",
-    ):
+    for key in COMPARE_METRIC_KEYS:
         base = float(base_metrics.get(key, 0.0) or 0.0)
         cand = float(cand_metrics.get(key, 0.0) or 0.0)
         delta = cand - base
         lines.append(f"{key}: baseline={base:.6g} candidate={cand:.6g} delta={delta:+.6g}")
-        if key in {"task_completion_rate", "action_success_rate", "root_pages_coverage"} and delta < -tolerance:
+        if key in GATE_DROP_METRICS and delta < -tolerance:
             rc = 1
-        if key == "navigation_origin_precondition_failures" and delta > tolerance:
+        if key in GATE_RISE_METRICS and delta > tolerance:
             rc = 1
-        if key == "unknown_rate" and delta > tolerance:
+        if (
+            key == "scroll_success_rate"
+            and float(base_metrics.get("scroll_action_count", 0.0) or 0.0) > 0.0
+            and float(cand_metrics.get("scroll_action_count", 0.0) or 0.0) > 0.0
+            and delta < -tolerance
+        ):
             rc = 1
     return rc, lines
+
+
+def validate_floor_candidate(
+    current_floor: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    *,
+    tolerance: float = 0.0,
+    require_expected_state_coverage: bool = True,
+) -> tuple[int, list[str]]:
+    """Validate whether `candidate` is eligible to replace `current_floor`."""
+    errors = [f"current_floor: {error}" for error in validate_benchmark(current_floor)]
+    errors.extend(f"candidate: {error}" for error in validate_benchmark(candidate))
+    if not _is_number(tolerance) or float(tolerance) < 0.0:
+        errors.append("tolerance must be a non-negative finite number")
+    if errors:
+        return 2, errors
+
+    reasons: list[str] = []
+    floor_config = current_floor.get("config") or {}
+    candidate_config = candidate.get("config") or {}
+    for key in FLOOR_IDENTITY_CONFIG_KEYS:
+        floor_value = floor_config.get(key)
+        candidate_value = candidate_config.get(key)
+        if floor_value != candidate_value:
+            reasons.append(
+                f"config.{key} mismatch: current_floor={floor_value!r} "
+                f"candidate={candidate_value!r}"
+            )
+
+    floor_rounds = int(floor_config.get("rounds", 0) or 0)
+    candidate_rounds = int(candidate_config.get("rounds", 0) or 0)
+    required_rounds = max(FLOOR_MIN_ROUNDS, floor_rounds)
+    if candidate_rounds < required_rounds:
+        reasons.append(f"config.rounds {candidate_rounds} < required {required_rounds}")
+
+    reasons.extend(_floor_candidate_environment_reasons(candidate))
+
+    floor_metrics = current_floor.get("metrics") or {}
+    candidate_metrics = candidate.get("metrics") or {}
+    tol = float(tolerance)
+    for key in GATE_DROP_METRICS:
+        floor_value = float(floor_metrics.get(key, 0.0) or 0.0)
+        candidate_value = float(candidate_metrics.get(key, 0.0) or 0.0)
+        if candidate_value < floor_value - tol:
+            reasons.append(
+                f"{key} would drop: current_floor={floor_value:.6g} "
+                f"candidate={candidate_value:.6g}"
+            )
+    for key in GATE_RISE_METRICS:
+        floor_value = float(floor_metrics.get(key, 0.0) or 0.0)
+        candidate_value = float(candidate_metrics.get(key, 0.0) or 0.0)
+        if candidate_value > floor_value + tol:
+            reasons.append(
+                f"{key} would rise: current_floor={floor_value:.6g} "
+                f"candidate={candidate_value:.6g}"
+            )
+
+    floor_scroll = float(floor_metrics.get("scroll_action_count", 0.0) or 0.0)
+    candidate_scroll = float(candidate_metrics.get("scroll_action_count", 0.0) or 0.0)
+    if floor_scroll > 0.0 and candidate_scroll > 0.0:
+        floor_value = float(floor_metrics.get("scroll_success_rate", 0.0) or 0.0)
+        candidate_value = float(candidate_metrics.get("scroll_success_rate", 0.0) or 0.0)
+        if candidate_value < floor_value - tol:
+            reasons.append(
+                f"scroll_success_rate would drop: current_floor={floor_value:.6g} "
+                f"candidate={candidate_value:.6g}"
+            )
+
+    expected_state_coverage = float(candidate_metrics.get("expected_state_coverage", 0.0) or 0.0)
+    if require_expected_state_coverage and expected_state_coverage <= 0.0:
+        reasons.append("expected_state_coverage must be > 0 for a promoted L2 floor")
+
+    return (1 if reasons else 0), reasons or ["OK"]
+
+
+def _floor_candidate_environment_reasons(candidate: Mapping[str, Any]) -> list[str]:
+    """Reject polluted/default-mismatched Settings floor candidates.
+
+    The default Settings floor is the clean HDMI cell. Voice Control overlay,
+    FKA help, and Stage Manager/windowed Settings are valid diagnostic or a11y
+    cells, but they change the observation distribution and must not silently
+    replace the ordinary floor.
+    """
+
+    config = candidate.get("config") if isinstance(candidate.get("config"), Mapping) else {}
+    if str(config.get("task_set") or "") != "ios_settings":
+        return []
+    reasons: list[str] = []
+    evaluation_cell = config.get("evaluation_cell")
+    if evaluation_cell != IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL:
+        reasons.append(
+            "config.evaluation_cell must be "
+            f"{IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL!r} for promoted Settings floors"
+        )
+    environment = config.get("environment")
+    env = environment if isinstance(environment, Mapping) else {}
+    if not isinstance(environment, Mapping):
+        reasons.append("config.environment must declare the clean HDMI Settings state")
+    for key, expected in IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT.items():
+        value = env.get(key)
+        if value != expected:
+            reasons.append(f"config.environment.{key} must be {expected!r}; got {value!r}")
+    reasons.extend(_observed_floor_environment_reasons(candidate))
+    return reasons
+
+
+def _observed_floor_environment_reasons(candidate: Mapping[str, Any]) -> list[str]:
+    tasks = candidate.get("tasks")
+    if not isinstance(tasks, list):
+        return []
+    reasons: list[str] = []
+    for task_index, task in enumerate(tasks):
+        if not isinstance(task, Mapping):
+            continue
+        final_state = task.get("final_state")
+        if not isinstance(final_state, Mapping):
+            continue
+        marker_count = _voice_control_numeric_marker_count(final_state)
+        if marker_count >= VOICE_CONTROL_NUMERIC_MARKER_REJECT_THRESHOLD:
+            reasons.append(
+                f"tasks[{task_index}].final_state has {marker_count} numeric Voice Control "
+                "overlay markers; default Settings floor requires Voice Control overlay off"
+            )
+    return reasons
+
+
+def _voice_control_numeric_marker_count(final_state: Mapping[str, Any]) -> int:
+    element_count = 0
+    elements = final_state.get("elements")
+    if isinstance(elements, list):
+        try:
+            from glassbox.cognition.base import UIElement
+            from glassbox.cognition.voice_control_overlay import parse_voice_control_overlay
+
+            ui_elements = [
+                UIElement.model_validate(element)
+                for element in elements
+                if isinstance(element, Mapping)
+            ]
+            element_count = len(parse_voice_control_overlay(ui_elements, mode="item_numbers"))
+        except Exception:
+            element_count = 0
+    text_count = 0
+    texts = final_state.get("visible_texts")
+    if isinstance(texts, list):
+        try:
+            from glassbox.cognition.voice_control_overlay import overlay_number
+
+            text_count = sum(1 for text in texts if overlay_number(str(text)) is not None)
+        except Exception:
+            text_count = 0
+    return max(element_count, text_count)
+
+
+def _evaluation_environment_for_cell(evaluation_cell: str) -> dict[str, str] | None:
+    if evaluation_cell == IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL:
+        return dict(IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT)
+    return None
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -1329,6 +1532,8 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
         # the bounded reconnect/garble-rejection path while preserving explicit
         # caller overrides.
         env.setdefault("GLASSBOX_PICOKVM_ROBUST_CAPTURE", "1")
+        if args.vlm:
+            env["GLASSBOX_ENABLE_VLM"] = "1"
         result = subprocess.run(cmd, cwd=Path(__file__).resolve().parents[2], env=env)
         if result.returncode != 0 and not args.keep_going:
             return result.returncode
@@ -1346,16 +1551,22 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
     from skills.regression.ios_settings.policy import EXPECTED_ROOT_NAV_TEXT_ZH
 
     try:
+        environment = _evaluation_environment_for_cell(str(args.evaluation_cell))
+        config = {
+            "rounds": args.rounds,
+            "task_set": "ios_settings",
+            "language": args.language,
+            "region": args.region,
+            "evaluation_cell": str(args.evaluation_cell),
+            "vlm_enabled": bool(args.vlm),
+        }
+        if environment is not None:
+            config["environment"] = environment
         payload = aggregate_benchmark(
             run_dirs,
             task="settings_readonly_walkthrough",
             terminal_expected_state=terminal,
-            config={
-                "rounds": args.rounds,
-                "task_set": "ios_settings",
-                "language": args.language,
-                "region": args.region,
-            },
+            config=config,
             expected_root_pages=EXPECTED_ROOT_NAV_TEXT_ZH,
             root_coverages=root_coverages,
         )
@@ -1431,6 +1642,86 @@ def _run_canonical_primitives(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_machinery_probe(args: argparse.Namespace) -> int:
+    """Run the P2/P3 fault-injection probe N rounds on the rig and assert the
+    strategy ladder + recovery machinery fired.
+
+    Unlike the reliability floor, this deliberately injects a controlled
+    verification failure; the probe SHOULD drive strategy_switches>=1 and
+    recoveries>=1. A drop to 0 means the ladder/recovery machinery regressed, so
+    this returns rc 1 (blocking)."""
+    from skills.regression.machinery_probe import (
+        MACHINERY_PROBE_TASKS,
+        build_machinery_probe_manifest,
+        machinery_fired_reasons,
+    )
+
+    artifact_root = args.artifact_root.expanduser().resolve()
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    run_dirs_by_task: dict[str, list[Path]] = {}
+    repo_root = Path(__file__).resolve().parents[2]
+    for task in MACHINERY_PROBE_TASKS:
+        run_dirs_by_task[task.name] = []
+        for index in range(args.rounds):
+            before = {path for path in artifact_root.iterdir() if path.is_dir()}
+            cmd = [sys.executable, "-m", "skills.regression.machinery_probe", "--task", task.name]
+            env = dict(os.environ)
+            env["GLASSBOX_COMPUTER_USE_ARTIFACT_DIR"] = str(artifact_root)
+            # The probe's deliberately-failing action exhausts the ladder +
+            # recovery, which is long enough to hit a partial H.264 decode on the
+            # PicoKVM stream — survive it with the bounded reconnect path, as the
+            # Settings benchmark does.
+            env.setdefault("GLASSBOX_PICOKVM_ROBUST_CAPTURE", "1")
+            if args.vlm:
+                env["GLASSBOX_ENABLE_VLM"] = "1"
+            subprocess.run(cmd, cwd=repo_root, env=env)
+            new_dirs = _find_new_run_dirs(artifact_root, before)
+            if not new_dirs:
+                print(f"ERROR: {task.name} round {index} wrote no computer-use artifact run")
+                return 1
+            run_dirs_by_task[task.name].append(new_dirs[-1])
+
+    manifest = build_machinery_probe_manifest(run_dirs_by_task, rounds=args.rounds)
+    manifest_path = artifact_root / "machinery_probe_manifest.json"
+    _write_json(manifest_path, manifest)
+    try:
+        payload = aggregate_benchmark_manifest(manifest_path)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+    errors = validate_benchmark(payload)
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}")
+        return 1
+    _write_json(args.out.expanduser().resolve(), payload)
+    reasons = machinery_fired_reasons(payload)
+    for reason in reasons:
+        print(f"ERROR: machinery did not fire: {reason}")
+    print(args.out.expanduser().resolve())
+    return 1 if reasons else 0
+
+
+def _validate_machinery_probe(args: argparse.Namespace) -> int:
+    """Offline gate: assert a machinery-probe benchmark shows the ladder +
+    recovery fired (strategy_switches>=1 AND recoveries>=1)."""
+    from skills.regression.machinery_probe import machinery_fired_reasons
+
+    payload = _read_required_json(args.benchmark)
+    errors = validate_benchmark(payload)
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}")
+        return 2
+    reasons = machinery_fired_reasons(payload)
+    for reason in reasons:
+        print(f"ERROR: machinery did not fire: {reason}")
+    if reasons:
+        return 1
+    print("OK")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Computer-use success-rate benchmark tools")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1441,6 +1732,11 @@ def main(argv: list[str] | None = None) -> int:
     aggregate.add_argument("--out", type=Path, required=True)
     aggregate.add_argument("--task", default="computer_use_run")
     aggregate.add_argument("--terminal-expected-state", default=None)
+    aggregate.add_argument(
+        "--config",
+        default=None,
+        help="Optional JSON object merged into benchmark.config for explicit eval-cell metadata.",
+    )
 
     validate = sub.add_parser("validate", help="Validate a benchmark JSON artifact")
     validate.add_argument("benchmark", type=Path)
@@ -1450,6 +1746,15 @@ def main(argv: list[str] | None = None) -> int:
     compare.add_argument("candidate", type=Path)
     compare.add_argument("--tolerance", type=float, default=0.0)
 
+    floor_candidate = sub.add_parser(
+        "validate-floor-candidate",
+        help="Validate whether a candidate benchmark can replace the committed floor",
+    )
+    floor_candidate.add_argument("current_floor", type=Path)
+    floor_candidate.add_argument("candidate", type=Path)
+    floor_candidate.add_argument("--tolerance", type=float, default=0.0)
+    floor_candidate.add_argument("--allow-zero-expected-state-coverage", action="store_true")
+
     run_settings = sub.add_parser("run-ios-settings", help="Run iOS Settings N times and aggregate")
     run_settings.add_argument("--rounds", type=int, default=1)
     run_settings.add_argument("--out", type=Path, required=True)
@@ -1458,6 +1763,15 @@ def main(argv: list[str] | None = None) -> int:
     run_settings.add_argument("--terminal-expected-state", default=None)
     run_settings.add_argument("--language", default=None)
     run_settings.add_argument("--region", default=None)
+    run_settings.add_argument(
+        "--evaluation-cell",
+        default=IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL,
+        help=(
+            "Benchmark cell label. The default clean HDMI Settings cell is the only "
+            "cell eligible for default floor promotion; a11y/Voice Control cells "
+            "must be reported separately."
+        ),
+    )
     run_settings.add_argument("--quick", action="store_true")
     run_settings.add_argument("--skip-diagnose", action="store_true")
     run_settings.add_argument("--skip-round-verify", action="store_true")
@@ -1469,6 +1783,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Open each root section's detail page and screenshot it (real entry, "
         "not root-row visibility).",
     )
+    run_settings.add_argument(
+        "--vlm",
+        action="store_true",
+        help="Enable the VLM escalation backend (GLASSBOX_ENABLE_VLM=1) for this run "
+        "and stamp config.vlm_enabled=true. Billed/experimental — use for the L2 "
+        "coverage cell, not the free OCR-only completion floor.",
+    )
 
     run_canonical = sub.add_parser(
         "run-canonical-primitives",
@@ -1478,11 +1799,35 @@ def main(argv: list[str] | None = None) -> int:
     run_canonical.add_argument("--out", type=Path, required=True)
     run_canonical.add_argument("--artifact-root", type=Path, required=True)
 
+    run_probe = sub.add_parser(
+        "run-machinery-probe",
+        help="Run the P2/P3 fault-injection probe N rounds; rc 1 if the strategy "
+        "ladder + recovery did not fire on an unsatisfiable expectation",
+    )
+    run_probe.add_argument("--rounds", type=int, default=1)
+    run_probe.add_argument("--out", type=Path, required=True)
+    run_probe.add_argument("--artifact-root", type=Path, required=True)
+    run_probe.add_argument(
+        "--vlm",
+        action="store_true",
+        help="Also enable VLM (GLASSBOX_ENABLE_VLM=1) so the probe exercises P1 "
+        "escalation alongside the ladder/recovery.",
+    )
+
+    validate_probe = sub.add_parser(
+        "validate-machinery-probe",
+        help="Offline: assert a machinery-probe benchmark shows the ladder + recovery fired",
+    )
+    validate_probe.add_argument("benchmark", type=Path)
+
     args = parser.parse_args(argv)
     if args.cmd == "aggregate":
         if args.task_manifest is not None:
             if args.run_dir:
                 print("ERROR: use either --task-manifest or --run-dir, not both")
+                return 1
+            if args.config is not None:
+                print("ERROR: --config is only supported with --run-dir; task manifests carry config")
                 return 1
             try:
                 payload = aggregate_benchmark_manifest(args.task_manifest)
@@ -1499,7 +1844,17 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"ERROR: --terminal-expected-state: {exc}")
                 return 1
             try:
-                payload = aggregate_benchmark(args.run_dir, task=args.task, terminal_expected_state=terminal)
+                config = _parse_json_arg(args.config, {})
+            except (json.JSONDecodeError, ValueError) as exc:
+                print(f"ERROR: --config: {exc}")
+                return 1
+            try:
+                payload = aggregate_benchmark(
+                    args.run_dir,
+                    task=args.task,
+                    terminal_expected_state=terminal,
+                    config=config,
+                )
             except ValueError as exc:
                 print(f"ERROR: {exc}")
                 return 1
@@ -1530,6 +1885,19 @@ def main(argv: list[str] | None = None) -> int:
             prefix = "ERROR: " if rc == 2 else ""
             print(prefix + line)
         return rc
+    if args.cmd == "validate-floor-candidate":
+        current_floor = _read_json(args.current_floor.expanduser().resolve())
+        candidate = _read_json(args.candidate.expanduser().resolve())
+        rc, lines = validate_floor_candidate(
+            current_floor,
+            candidate,
+            tolerance=args.tolerance,
+            require_expected_state_coverage=not args.allow_zero_expected_state_coverage,
+        )
+        for line in lines:
+            prefix = "ERROR: " if rc else ""
+            print(prefix + line)
+        return rc
     if args.cmd == "run-ios-settings":
         if args.rounds <= 0:
             print("ERROR: --rounds must be positive")
@@ -1540,6 +1908,13 @@ def main(argv: list[str] | None = None) -> int:
             print("ERROR: --rounds must be positive")
             return 1
         return _run_canonical_primitives(args)
+    if args.cmd == "run-machinery-probe":
+        if args.rounds <= 0:
+            print("ERROR: --rounds must be positive")
+            return 1
+        return _run_machinery_probe(args)
+    if args.cmd == "validate-machinery-probe":
+        return _validate_machinery_probe(args)
     raise AssertionError(args.cmd)
 
 

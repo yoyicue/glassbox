@@ -9,6 +9,7 @@ a compatibility facade.
 from __future__ import annotations
 
 import contextlib
+import re
 import time
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import AbstractContextManager
@@ -173,16 +174,15 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
                     polls=12,
                 )
         if hit is None and suggestion is not None:
-            cx, cy = suggestion.box.center
-            with actions.action_intent(
+            result = _tap_search_element(
                 phone,
-                "settings_search.tap_query_suggestion",
+                suggestion,
+                actions,
+                intent_name="settings_search.tap_query_suggestion",
                 label=label,
-                text=suggestion.text,
-                x=cx,
-                y=cy,
-            ):
-                result = phone.tap_xy(cx, cy)
+                target=suggestion.text or label,
+                expected_state=None,
+            )
             if not actions.record_action_verdict(phone, result):
                 return False
             time.sleep(0.8)
@@ -264,16 +264,15 @@ def _tap_search_result(
     *,
     intent_name: str,
 ) -> bool:
-    cx, cy = hit.box.center
-    with actions.action_intent(
+    result = _tap_search_element(
         phone,
-        intent_name,
+        hit,
+        actions,
+        intent_name=intent_name,
         label=label,
-        text=hit.text,
-        x=cx,
-        y=cy,
-    ):
-        result = phone.tap_xy(cx, cy)
+        target=label,
+        expected_state=_settings_row_expected_state(label, actions),
+    )
     if not actions.record_action_verdict(phone, result):
         return False
     time.sleep(1.2)
@@ -306,6 +305,39 @@ def _scene_title_matches_requested_label(
     if opened_label is not None:
         return False
     return compact_text(title).casefold() == compact_text(label).casefold()
+
+
+def _tap_search_element(
+    phone,
+    element: UIElement,
+    actions: SettingsNavigationActions,
+    *,
+    intent_name: str,
+    label: str,
+    target: str,
+    expected_state: dict[str, Any] | None,
+) -> Any:
+    cx, cy = element.box.center
+    with actions.action_intent(
+        phone,
+        intent_name,
+        label=label,
+        text=element.text,
+        x=cx,
+        y=cy,
+    ):
+        tap_element = getattr(phone, "tap_element", None)
+        if callable(tap_element):
+            return tap_element(
+                element,
+                intent=intent_name,
+                target=target,
+                via=intent_name,
+                expected_state=expected_state,
+                idempotent=True,
+                recovery=None,
+            )
+        return phone.tap_xy(cx, cy)
 
 
 def _wait_for_search_result_or_suggestion(
@@ -374,6 +406,10 @@ def open_visible_or_scroll_to_row(
 
 
 def settings_row_tap_point(phone, row_hit: UIElement) -> tuple[int, int]:
+    preferred = getattr(row_hit, "preferred_tap_point", None)
+    if preferred is not None:
+        x, y = preferred
+        return int(x), int(y)
     w, _ = phone.viewport_size()
     _, row_y = row_hit.box.center
     if _is_ipad_target(phone):
@@ -409,6 +445,14 @@ def settings_row_target_element(phone, scene, row_hit: UIElement) -> UIElement:
     })
 
 
+def _tap_candidate_for_scene(phone, scene, row_hit: UIElement) -> UIElement:
+    if scene is None or not callable(getattr(phone, "viewport_size", None)):
+        return row_hit
+    with contextlib.suppress(Exception):
+        return settings_row_target_element(phone, scene, row_hit)
+    return row_hit
+
+
 def _settings_row_page_id(label: str) -> str | None:
     text = str(label or "").strip()
     if not text:
@@ -418,20 +462,46 @@ def _settings_row_page_id(label: str) -> str | None:
     return f"settings/{text}"
 
 
+def _settings_row_bundle_page_id(label: str) -> str | None:
+    text = str(label or "").strip()
+    if not text or text.startswith("settings/"):
+        return None
+    slug = re.sub(r"[^0-9a-z]+", "-", text.replace("&", " ").casefold()).strip("-")
+    if not slug:
+        return None
+    return f"com.apple.settings.{slug}"
+
+
 def _settings_row_page_id_candidates(
     label: str,
     actions: SettingsNavigationActions,
 ) -> tuple[str, ...]:
-    if actions.page_id_route_label_candidates is None:
+    label_candidates = getattr(actions, "page_id_route_label_candidates", None)
+    if label_candidates is None:
         labels: Sequence[str] = (label,)
     else:
-        labels = actions.page_id_route_label_candidates(label)
+        labels = label_candidates(label)
     candidates: list[str] = []
     for candidate_label in labels:
-        page_id = _settings_row_page_id(str(candidate_label))
-        if page_id is not None and page_id not in candidates:
-            candidates.append(page_id)
+        for page_id in (
+            _settings_row_page_id(str(candidate_label)),
+            _settings_row_bundle_page_id(str(candidate_label)),
+        ):
+            if page_id is not None and page_id not in candidates:
+                candidates.append(page_id)
     return tuple(candidates)
+
+
+def _settings_row_expected_state(
+    label: str,
+    actions: SettingsNavigationActions,
+) -> dict[str, Any] | None:
+    page_ids = _settings_row_page_id_candidates(label, actions)
+    if not page_ids:
+        return None
+    if len(page_ids) == 1:
+        return {"kind": "page_id", "payload": {"page_id": page_ids[0]}}
+    return {"kind": "page_id", "payload": {"any_of": list(page_ids)}}
 
 
 def _try_settings_row_page_id_route(
@@ -492,6 +562,7 @@ def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActio
     page_id_routed = _try_settings_row_page_id_route(phone, label, actions)
     if page_id_routed is not None:
         return page_id_routed
+    expected_state = _settings_row_expected_state(label, actions)
     tap_element = getattr(phone, "tap_element", None)
     if callable(tap_element):
         # Delegate to glassbox's actuation: same settings-aware first tap, but it
@@ -511,6 +582,8 @@ def tap_settings_row(phone, row_hit: UIElement, actions: SettingsNavigationActio
             retry_budget=2,
             unknown_policy="retry",
             idempotent=True,
+            expected_state=expected_state,
+            recovery=None,
         )
         accepted = actions.record_action_verdict(phone, result)
         if accepted:
@@ -872,7 +945,8 @@ def crawl_current_page(
                 scene = current
             attempted.add(label)
             before_texts = actions.texts(scene)
-            if not actions.tap_settings_row(phone, cand):
+            tap_cand = _tap_candidate_for_scene(phone, scene, cand)
+            if not actions.tap_settings_row(phone, tap_cand):
                 if depth == 0 and actions.canonical_expected_root_label(label) is not None:
                     continue
                 actions.record_navigation_failure(
@@ -902,7 +976,10 @@ def crawl_current_page(
                 if (
                     retry_cand is not None
                     and not actions.is_settings_section_header(after, retry_cand)
-                    and actions.tap_settings_row(phone, retry_cand)
+                    and actions.tap_settings_row(
+                        phone,
+                        _tap_candidate_for_scene(phone, after, retry_cand),
+                    )
                 ):
                     time.sleep(1.0)
                     phone.invalidate_perceive_cache()

@@ -112,6 +112,7 @@ HOME_SCREEN_MARKERS = (
     "游戏",
     "设置",
 )
+SETTINGS_APP_LABELS = {"settings", "设置", "com.apple.preferences"}
 NAV_BACK_TEXTS = ("<", "‹", "〈", "返回", "Back")
 TRANSIENT_CAROUSEL_MARKERS = (
     "评价",
@@ -352,6 +353,23 @@ def _contains_any(texts: list[str], markers: tuple[str, ...] | list[str]) -> lis
 
 def _looks_like_home_texts(texts: list[str]) -> bool:
     return len(set(_contains_any(texts, HOME_SCREEN_MARKERS))) >= 3
+
+
+def _targets_settings_app(candidates: list[str]) -> bool:
+    return any(candidate.strip().casefold() in SETTINGS_APP_LABELS for candidate in candidates)
+
+
+def _settings_foreground_evidence(scene: Scene | None) -> str | None:
+    if scene is None:
+        return None
+    page_id = str(scene.page_id or "").strip()
+    if page_id == "settings" or page_id.startswith("settings/"):
+        return f"page_id={page_id}"
+    for field_name in ("scene_type", "semantic_scene_type", "platform_scene_kind"):
+        value = str(getattr(scene, field_name, "") or "").strip()
+        if "settings" in value.casefold():
+            return f"{field_name}={value}"
+    return None
 
 
 def _action_text_values(action: dict[str, Any], *keys: str) -> list[str]:
@@ -754,6 +772,24 @@ class ForegroundAppMatchesVerifier(SceneProgressedVerifier):
             return disqualified
         candidates = _action_text_values(input.action, "app", "label", "target")
         if candidates:
+            if _targets_settings_app(candidates):
+                for index, scene in enumerate(input.after_scenes):
+                    evidence = _settings_foreground_evidence(scene)
+                    if evidence is None:
+                        continue
+                    return SemanticOutcome(
+                        status="succeeded",
+                        verifier=self.name,
+                        reason=f"matched Settings foreground identity: {evidence}",
+                        confidence=0.9,
+                        verifier_version=self.version,
+                        verifier_hash=_source_hash(self.__class__),
+                        matched_evidence=[evidence],
+                        matched_frame_id=_after_frame_id(input, index),
+                        matched_scene_id=_after_scene_id(input, index),
+                        deterministic=False,
+                        observation_match=input.matched_by_observation,
+                    )
             for index, scene in enumerate(input.after_scenes):
                 hits = _contains_any(_texts(scene), candidates)
                 if not hits:

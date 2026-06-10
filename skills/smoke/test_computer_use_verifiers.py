@@ -32,10 +32,16 @@ def test_compute_frame_diff_shape_mismatch_is_indeterminate_not_full_change():
     assert real is not None and real.changed is True and real.diff_ratio == pytest.approx(1.0)
 
 
-def _scene(*texts: str, page_id: str | None = None, kind: str | None = None) -> Scene:
+def _scene(
+    *texts: str,
+    page_id: str | None = None,
+    kind: str | None = None,
+    scene_type: str | None = None,
+) -> Scene:
     scene = Scene(
         frame_id=1,
         timestamp=1.0,
+        scene_type=scene_type,
         page_id=page_id,
         platform_scene_kind=kind,
         elements=[
@@ -549,6 +555,26 @@ def test_app_crash_disqualifying_state_forbids_retry():
     assert outcome.status == "blocked"  # CUQ-3.19: safety stop, not a task failure
     assert outcome.disqualifying_state == "app_crashed_or_terminated"
     assert outcome.retry_allowed is False
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    ("scene", "evidence"),
+    [
+        (_scene("Touch ID & Passcode", page_id="settings/Touch ID & Passcode"), "page_id="),
+        (_scene("Touch ID & Passcode", scene_type="settings_detail"), "scene_type="),
+        (_scene("Touch ID & Passcode", kind="settings_detail"), "platform_scene_kind="),
+    ],
+)
+def test_open_app_settings_matches_settings_scene_identity(scene, evidence):
+    registry = VerifierRegistry()
+    verifier = registry.resolve("open_app", {"app": "设置", "aliases": ["Settings"]})
+
+    outcome = verifier.verify(_input("open_app", scene, metadata={"app": "设置"}))
+
+    assert outcome.status == "succeeded"
+    assert outcome.matched_evidence
+    assert outcome.matched_evidence[0].startswith(evidence)
 
 
 @pytest.mark.smoke

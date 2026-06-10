@@ -589,6 +589,20 @@ def test_task_completion_rate_uses_terminal_expected_state(tmp_path):
     assert payload["metrics"]["action_success_rate"] == 1.0
 
 
+def test_task_completion_rate_supports_page_id_any_of_terminal_state(tmp_path):
+    payload = aggregate_benchmark(
+        [_run_dir(tmp_path, status="succeeded")],
+        terminal_expected_state={
+            "kind": "page_id",
+            "payload": {"any_of": ["settings/about", "settings/root"]},
+        },
+    )
+
+    assert validate_benchmark(payload) == []
+    assert payload["tasks"][0]["outcome"] == "succeeded"
+    assert payload["metrics"]["task_completion_rate"] == 1.0
+
+
 def test_task_completion_rate_supports_visible_text_terminal_state(tmp_path):
     payload = aggregate_benchmark(
         [_run_dir(tmp_path, status="succeeded")],
@@ -1015,7 +1029,7 @@ def test_compare_benchmarks_respects_success_rate_regression_tolerance(tmp_path)
     baseline = aggregate_benchmark(
         [
             _run_dir(tmp_path / "baseline-a", status="succeeded"),
-            _run_dir(tmp_path / "baseline-b", status="succeeded_recovered"),
+            _run_dir(tmp_path / "baseline-b", status="succeeded"),
         ]
     )
     candidate = aggregate_benchmark(
@@ -1024,6 +1038,11 @@ def test_compare_benchmarks_respects_success_rate_regression_tolerance(tmp_path)
             _run_dir(tmp_path / "candidate-b", status="unknown"),
         ]
     )
+    for action in candidate["tasks"][1]["actions"]:
+        action["vlm_calls"] = 1
+        action["vlm_cache_misses"] = 1
+        action["strategy_switches"] = 1
+    candidate["metrics"] = success_rate._metrics(candidate["tasks"])
 
     tolerated_rc, tolerated_lines = compare_benchmarks(baseline, candidate, tolerance=0.5)
     strict_rc, strict_lines = compare_benchmarks(baseline, candidate, tolerance=0.49)
@@ -1062,6 +1081,11 @@ def test_cli_aggregate_validate_and_compare(tmp_path):
     candidate = tmp_path / "candidate.json"
     manifest = tmp_path / "tasks.json"
     manifest_out = tmp_path / "manifest-benchmark.json"
+    config = {
+        "task_set": "ios_settings",
+        "evaluation_cell": success_rate.IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL,
+        "environment": success_rate.IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT,
+    }
     _write_json(
         manifest,
         {
@@ -1076,7 +1100,24 @@ def test_cli_aggregate_validate_and_compare(tmp_path):
         },
     )
 
-    assert main(["aggregate", "--run-dir", str(run_dir), "--out", str(baseline)]) == 0
+    assert main(
+        [
+            "aggregate",
+            "--run-dir",
+            str(run_dir),
+            "--out",
+            str(baseline),
+            "--config",
+            json.dumps(config),
+        ]
+    ) == 0
+    baseline_payload = json.loads(baseline.read_text(encoding="utf-8"))
+    assert baseline_payload["config"]["task_set"] == "ios_settings"
+    assert (
+        baseline_payload["config"]["evaluation_cell"]
+        == success_rate.IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL
+    )
+    assert baseline_payload["config"]["environment"] == success_rate.IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT
     assert main(["validate", str(baseline)]) == 0
     assert main(["aggregate", "--run-dir", str(run_dir), "--out", str(candidate)]) == 0
     assert main(["compare", str(baseline), str(candidate)]) == 0

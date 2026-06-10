@@ -38,7 +38,7 @@ multi-round task-completion floor.
 | The load-bearing primitive was failing | old `scroll_success_rate=0.2222` (2/9 succeed, 7 unknown) — the mechanical reason that run never reached lower sections / root |
 | Key verification stages never fired | old `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`, `vlm_calls=0`; `strategy_switches=5`, so the ladder switched, but not with expected-state or VLM coverage |
 | The old task-completion gate could not fail on this floor | `compare` gate at `computer_use_success_rate.py:1184` tripped only on `delta < -tolerance` for `{task_completion_rate, action_success_rate, root_pages_coverage}`. A floor pinned at `task_completion_rate=0.0` could not reject another zero-completion candidate on task completion |
-| …and `make check` did not run that gate | `regression-gate` (`Makefile:36-38`) ran `validate` (schema-only) + `test_computer_use_regression_gate.py`, whose floor test (`test_committed_baseline_fixture_is_schema_valid`) checked **schema only**. `compare` ran only in `regression-compare`/`ab-semantic-plan` (`Makefile:45,64`), which need a live rig. **So the failed floor passed offline CI green.** |
+| …and `make check` did not run that gate | `regression-gate` ran `validate` (schema-only) + `test_computer_use_regression_gate.py`, whose floor test (`test_committed_baseline_fixture_is_schema_valid`) checked **schema only**. `compare` ran only in `regression-compare`/`ab-semantic-plan`, which need a live rig. **So the failed floor passed offline CI green.** |
 
 **Net:** the number being optimized and ratcheted (`action_success_rate`) did not
 measure task success and structurally masked failure; the gate guarding it could
@@ -169,13 +169,35 @@ crawler path; semantic expected-state/VLM row-entry wiring remains future work.
   `vlm_action_coverage=0.0` and `expected_state_coverage=0.0` remain explicit
   caveats: this floor proves the deterministic crawler can complete the task, not
   that VLM/expected-state row verification is carrying it.
+- Expected-state load-bearing snapshot after semantic row/search tap routing
+  landed:
+  `skills/regression/fixtures/l2_settings_expected_state_snapshot.json` is a
+  scrubbed copy of `/tmp/glassbox-l2-rank2-full-20260606-164702/benchmark.json`
+  from code `d9695ae`. It validates with `rounds=5`, 4/5 task outcomes
+  `succeeded`, `task_completion_rate=0.8`, `task_completion_variance=0.16`,
+  `expected_state_coverage=0.976`, `vlm_action_coverage=0.086`,
+  `root_pages_coverage=0.983`, and `recoveries=0`; the failed sample missed
+  `隐私与安全性`. This snapshot is not the completion floor, but it proves the
+  semantic expected-state path is now on the measured row-entry path and is
+  protected by offline smoke tests.
+- Matching human-control protocol after the L2 snapshot:
+  `skills.regression.human_baseline` now generates and validates
+  `skills/regression/fixtures/human_baseline_settings_template.json` against the
+  same Settings root-page vocabulary, recomputes human-control metrics, and
+  rejects obvious direct identifiers. It is only an empty protocol/template so
+  far; no completed human trial data has been committed.
 
 ### Phase 2 — Prune complexity (only after the number moves)
 
 - **2.1 Let the real per-task number decide.** Now — and only now — judge the
-  recovery/strategy/VLM machinery by whether it moves *this task's* number. To make
-  expected-state/VLM verification count for row entry, the crawler must route row taps through `phone.semantic` instead
-  of `tap_xy` — **a real architecture change, not a flag flip** (root cause #2).
+  recovery/strategy/VLM machinery by whether it moves *this task's* number.
+  The row-entry architecture change has landed for Settings row/search-result
+  taps: they route through `tap_element` into the semantic `tap` ladder with
+  `page_id` expected-state. The first n=5 result moves `expected_state_coverage`
+  from 0 to 0.976, but completion is 4/5; `validate-floor-candidate` now makes
+  that floor-policy step executable and rejects this snapshot as a replacement
+  for the 5/5 floor. Human-control collection now has a validator/template, but
+  still needs real trials before it can be cited as a baseline.
   Whatever doesn't earn its place gets deleted.
 - **2.2 Delete for maintenance, not for determinism.** Removing dormant or
   low-yield branches may reduce drag, but will **not** by itself collapse
@@ -208,7 +230,7 @@ floor's `outcome="failed"` / `task_completion_rate=0.0` /
 `scroll_success_rate=0.2222` / `action_success_rate=0.9553`; the old op
 breakdown (back 59 / tap 48 / scroll 9 / …); the gate logic at
 `computer_use_success_rate.py:1184`; that `regression-gate` previously ran
-`validate` + a schema-only smoke test and **not** `compare` (`Makefile:36-38`);
+`validate` + a schema-only smoke test and **not** `compare`;
 the crawler's `tap_xy` path (`navigation.py:163,254,455` → `phone.py:1613`);
 the fixture has **0** `entered_graph` fields; `config.py` has **26** `bool = False`
 vs **3** `bool = True`; the L1 A/B median table
@@ -221,7 +243,14 @@ it validates successfully and reports `task_completion_rate=1.0`,
 `task_completion_variance=0.0`, five `succeeded` task outcomes,
 `root_pages_coverage=1.0`, `action_success_rate=1.0`, and `unknown_rate=0.0`.
 The fixture still has `expected_state_coverage=0.0`, `vlm_action_coverage=0.0`,
-and `vlm_calls=0`, so expected-state/VLM row-entry claims remain unproven.
+and `vlm_calls=0`, so it remains the completion floor but not proof of
+expected-state/VLM row-entry carrying the run. That proof is now separately
+committed in `skills/regression/fixtures/l2_settings_expected_state_snapshot.json`
+and guarded by `skills/smoke/test_computer_use_regression_gate.py`. The matching
+human-control template is committed at
+`skills/regression/fixtures/human_baseline_settings_template.json` and guarded by
+`make regression-gate` / `skills/smoke/test_human_baseline.py`; it contains no
+human data yet.
 
 **Relayed, re-confirm before acting:** `main` branch-protection status (a live `gh`
 check timed out on network; `code_health_roadmap.md:83` records it as unprotected —

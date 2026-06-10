@@ -163,6 +163,10 @@ def test_tap_settings_row_uses_canonical_root_label_target():
     assert settings_navigation.tap_settings_row(phone, row, walkthrough._navigation_actions())
     assert phone.calls[0]["target"] == "待机显示"
     assert phone.calls[0]["intent"] == "settings.row:待机显示"
+    assert set(phone.calls[0]["expected_state"]["payload"]["any_of"]) >= {
+        "settings/待机显示",
+        "settings/StandBy",
+    }
     assert row.intent_label == "待机显示"
 
 
@@ -239,6 +243,28 @@ def test_core_settings_root_row_annotator_uses_viewport_relative_band_for_ipad_s
     by_text = {element.text: element for element in scene.elements}
     assert updated == 1
     assert by_text["Mobile Service"].intent_label == "蜂窝网络"
+
+
+@pytest.mark.smoke
+def test_core_settings_root_row_annotator_skips_long_detail_copy_before_fuzzy_aliases():
+    scene = _scene(
+        _el("Settings", 372, 70, w=72),
+        _el("Touch ID & Passcode", 66, 118, w=150),
+        _el("Manage apps using Touch ID and other iPad", 35, 160, w=246),
+    )
+    scene.platform_scene_kind = "settings_detail"
+    scene.classification_evidence = ["ipad_split_view"]
+
+    updated = annotate_settings_root_row_intents(
+        scene,
+        viewport_size=(640, 990),
+        fuzzy_aliases=True,
+    )
+
+    by_text = {element.text: element for element in scene.elements}
+    assert updated == 1
+    assert by_text["Touch ID & Passcode"].intent_label == "Face ID与密码"
+    assert by_text["Manage apps using Touch ID and other iPad"].intent_label is None
 
 
 @pytest.mark.smoke

@@ -1,4 +1,5 @@
-.PHONY: lint test check regression-gate regression-compare ab-semantic-plan \
+.PHONY: lint test check regression-gate regression-compare regression-compare-l2-advisory machinery-probe-gate ab-semantic-plan \
+	human-baseline-template human-baseline-validate \
 	golden-harvest golden-audit \
 	computer-use-success-rate-ios-settings ipad-settings-state-machine ipad-settings-ab-matrix ios-settings-ab-matrix
 
@@ -31,13 +32,24 @@ computer-use-success-rate-ios-settings:
 		$(EXTRA_ARGS)
 
 # Offline half of the Step-0 reliability gate (folded into `make check`, runs in
-# CI with no hardware): prove the committed baseline floor is still schema-valid
-# and that the comparator catches a regression (rc 1) / rejects a malformed
-# candidate (rc 2). The on-rig time-series companion is rig-nightly.yml.
+# CI with no hardware): prove the committed completion floor and human-control
+# template are still schema-valid, and that the comparator catches a regression
+# (rc 1) / rejects a malformed candidate (rc 2). The on-rig time-series companion
+# is rig-nightly.yml.
 RELIABILITY_BASELINE ?= skills/regression/fixtures/reliability_baseline.json
+HUMAN_BASELINE ?= skills/regression/fixtures/human_baseline_settings_template.json
+HUMAN_BASELINE_VALIDATE_ARGS ?= --allow-template
+HUMAN_BASELINE_CLI ?= uv run python -m skills.regression.human_baseline
 regression-gate:
 	$(COMPUTER_USE_SUCCESS_RATE) validate "$(RELIABILITY_BASELINE)"
-	uv run pytest skills/smoke/test_computer_use_regression_gate.py -q
+	$(HUMAN_BASELINE_CLI) validate "$(HUMAN_BASELINE)" $(HUMAN_BASELINE_VALIDATE_ARGS)
+	uv run pytest skills/smoke/test_computer_use_regression_gate.py skills/smoke/test_human_baseline.py -q
+
+human-baseline-template:
+	$(HUMAN_BASELINE_CLI) template --out "$(HUMAN_BASELINE)"
+
+human-baseline-validate:
+	$(HUMAN_BASELINE_CLI) validate "$(HUMAN_BASELINE)" $(HUMAN_BASELINE_VALIDATE_ARGS)
 
 # Tier A (log-sim): harvest verifier golden-cases from run ledgers into the
 # committed corpus. Manual/dev target — re-run and commit when ledgers change.
@@ -60,6 +72,41 @@ CANDIDATE ?= artifacts/computer_use_success_rate/benchmark.json
 TOLERANCE ?= 0.0
 regression-compare:
 	$(COMPUTER_USE_SUCCESS_RATE) compare "$(RELIABILITY_BASELINE)" "$(CANDIDATE)" --tolerance $(TOLERANCE)
+
+# ADVISORY L2 coverage report (NON-blocking on purpose). Compare a fresh VLM-on
+# Settings run ($(L2_CANDIDATE), produce it with
+# `make computer-use-success-rate-ios-settings EXTRA_ARGS="--vlm --drill-down --language en --region HK" OUT=$(L2_CANDIDATE)`
+# on a rig with VLM credentials) against the committed L2 coverage snapshot, and
+# PRINT the vlm_action_coverage / strategy_switches deltas for human inspection.
+#
+# It deliberately does NOT fail the build (`-` prefix ignores the compare rc): a
+# DROP in these "machine-escalated" metrics can mean the path got MORE reliable
+# (fewer escalations needed), not a regression — blocking on it would be perverse.
+# The committed snapshot's coverage is guarded offline by
+# test_l2_expected_state_snapshot_fixture_is_load_bearing_and_scrubbed; the real
+# BLOCKING machinery-regression gate is the failure-injection eval, not this.
+L2_SNAPSHOT ?= skills/regression/fixtures/l2_settings_expected_state_snapshot.json
+L2_CANDIDATE ?= artifacts/computer_use_success_rate/l2_benchmark.json
+regression-compare-l2-advisory:
+	@echo "=== ADVISORY L2 coverage report (non-blocking) — VLM/strategy deltas for inspection ==="
+	-$(COMPUTER_USE_SUCCESS_RATE) compare "$(L2_SNAPSHOT)" "$(L2_CANDIDATE)" --tolerance $(TOLERANCE)
+	@echo "=== advisory only: a coverage DROP may mean the path got more reliable, not a regression ==="
+
+# P2/P3 machinery probe — the BLOCKING teeth for the strategy ladder + recovery
+# the clean floor can't see. Injects a controlled verification failure on the rig
+# (tap a present row, declare an unreachable page) and FAILS (rc 1) unless the
+# ladder advanced (strategy_switches>=1) AND recovery fired (recoveries>=1). Unlike
+# the perverse "coverage must not drop", "the machine must fire on an injected
+# fault" is a true, non-flaky invariant. Rig-only; needs the strategy ladder
+# enabled (GLASSBOX_SEMANTIC_PLAN_OPS). The gate logic is unit-tested offline in
+# test_machinery_probe.py. Add `--vlm` via EXTRA to also probe P1 escalation.
+MACHINERY_PROBE_OUT ?= artifacts/computer_use_success_rate/machinery_probe_benchmark.json
+machinery-probe-gate:
+	$(COMPUTER_USE_SUCCESS_RATE) run-machinery-probe \
+		--rounds $(ROUNDS) \
+		--out "$(MACHINERY_PROBE_OUT)" \
+		--artifact-root "$(ARTIFACT_ROOT)" \
+		$(EXTRA_ARGS)
 
 # One-command on-rig A/B for the P1/P2 strategy ladder (CUQ-0.1: back/scroll/tap
 # route through default_semantic_action_plan with verified-failure strategy

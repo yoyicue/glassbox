@@ -436,10 +436,63 @@ def _tap_visible_settings_root_result_from_system_search(phone, scene) -> bool:
     if result is None:
         return False
     target, label = result
+    x, y = _system_search_root_result_tap_point(
+        target,
+        label=label,
+        viewport_size=viewport_size or getattr(scene, "viewport_size", None),
+    )
+    with _action_intent(phone, "settings_bootstrap.tap_system_search_root_result", label=label, text=target.text, x=x, y=y):
+        tap_result = phone.tap_xy(x, y)
+    if not _record_action_verdict(phone, tap_result):
+        return False
+    return _wait_for_settings_after_system_search_tap(phone)
+
+
+def _system_search_root_result_tap_point(
+    target: UIElement,
+    *,
+    label: str,
+    viewport_size: tuple[int, int] | None = None,
+) -> tuple[int, int]:
     cx, cy = target.box.center
-    with _action_intent(phone, "settings_bootstrap.tap_system_search_root_result", label=label, text=target.text, x=cx, y=cy):
-        result = phone.tap_xy(cx, cy)
-    return _record_action_verdict(phone, result)
+    if (target.text or "").strip() in {"Open", "打开"}:
+        return cx, cy
+    if label in ROOT_TITLE:
+        return _system_search_icon_label_tap_point(target, viewport_size=viewport_size)
+    return max(24, target.box.x - 24), cy
+
+
+def _system_search_icon_label_tap_point(
+    target: UIElement,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+) -> tuple[int, int]:
+    w, h = viewport_size or (max(target.box.x2, 440), max(target.box.y2, 956))
+    cx, _cy = target.box.center
+    if w >= 600:
+        offset = max(28, int(h * 0.030)) if target.box.center[1] > h * 0.75 else max(28, int(h * 0.040))
+    else:
+        offset = max(70, int(h * 0.09)) if target.box.center[1] > h * 0.75 else max(28, int(h * 0.045))
+    tap_y = max(int(h * 0.05), target.box.y - offset)
+    tap_x = min(max(cx, int(w * 0.05)), int(w * 0.95))
+    return int(tap_x), int(tap_y)
+
+
+def _wait_for_settings_after_system_search_tap(phone) -> bool:
+    for attempt in range(5):
+        if attempt:
+            time.sleep(0.4)
+        with suppress(Exception):
+            phone.invalidate_perceive_cache()
+        after = phone.perceive()
+        if _scene_is_settings_root(after) or _scene_looks_like_settings_detail(after):
+            return True
+        kind = _scene_kind(after, phone=phone)
+        if kind.startswith("settings"):
+            return True
+        if kind not in {"system_search", "unknown", "springboard", "springboard_or_app_library"}:
+            return False
+    return False
 
 
 def _return_from_settings_detail_state(phone, scene) -> bool:
@@ -760,7 +813,7 @@ def _enter_settings_search(phone) -> bool:
     if not _scene_is_settings_root(scene):
         _return_to_settings_root(phone)
         scene = phone.perceive()
-    search_tab = DEFAULT_SETTINGS_POLICY.find_root_search_tab(scene)
+    search_tab = _find_root_search_tab(scene)
     if search_tab is None:
         return False
     is_ipad_top_search = _is_ipad_top_search_field(phone, search_tab)
@@ -794,6 +847,10 @@ def _enter_settings_search(phone) -> bool:
     if is_ipad_top_search and _scene_is_settings_root(opened):
         return True
     return _is_settings_search_scene(opened)
+
+
+def _find_root_search_tab(scene) -> UIElement | None:
+    return DEFAULT_SETTINGS_POLICY.find_root_search_tab(scene)
 
 
 def _tap_search_field(phone, scene) -> bool:

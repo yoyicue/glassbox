@@ -490,6 +490,65 @@ def test_open_app_from_springboard_scans_horizontal_pages(monkeypatch):
 
 
 @pytest.mark.smoke
+def test_open_app_from_springboard_uses_account_verification_settings_button(monkeypatch):
+    monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
+
+    home_with_account_sheet = _scene(
+        _el("Files", 112, 460, w=28),
+        _el("Camera", 879, 698, w=42),
+        _el("Videos", 879, 818, w=39),
+        _el("Settings", 358, 772, w=46, h=12),
+        _el("Search", 940, 1010, w=54),
+        _el("Apple Account Verification", 206, 442, w=186, h=18),
+        _el("Enter the password for", 210, 470, w=160, h=16),
+        _el("in Settings.", 250, 492, w=90, h=16),
+        _el("Not Now", 228, 528, w=60, h=14),
+        _el("Settings", 352, 528, w=62, h=18),
+    )
+    home_with_account_sheet.viewport_size = (642, 990)
+    home_with_account_sheet.platform_scene_kind = "springboard"
+    settings_page = _scene(
+        _el("Settings", 280, 70, w=82),
+        _el("Wi-Fi", 60, 218, w=54),
+        _el("Bluetooth", 60, 272, w=88),
+    )
+
+    class FakePhone:
+        def __init__(self):
+            self.actions: list[tuple[str, tuple[int, int] | None]] = []
+            self.opened = False
+
+        def viewport_size(self):
+            return 642, 990
+
+        def home(self):
+            self.actions.append(("home", None))
+
+        def perceive(self):
+            return settings_page if self.opened else home_with_account_sheet
+
+        def invalidate_perceive_cache(self):
+            self.actions.append(("invalidate", None))
+
+        def tap_xy(self, x: int, y: int):
+            self.actions.append(("tap", (x, y)))
+            if (x, y) == (383, 537):
+                self.opened = True
+
+        def swipe_right(self):
+            self.actions.append(("swipe_right", None))
+
+        def swipe_left(self):
+            self.actions.append(("swipe_left", None))
+
+    phone = FakePhone()
+
+    assert open_app_from_springboard(phone, ("Settings", "设置"), max_pages=0, settle_s=0.0)
+    assert [action for action in phone.actions if action[0] == "tap"] == [("tap", (383, 537))]
+    assert [op for op, _ in phone.actions] == ["tap", "invalidate"]
+
+
+@pytest.mark.smoke
 def test_open_app_from_springboard_opens_target_inside_home_folder(monkeypatch):
     monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
 

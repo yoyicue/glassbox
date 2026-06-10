@@ -146,6 +146,7 @@ def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
     class RoutePhone:
         def __init__(self) -> None:
             self.tap_element_calls = 0
+            self.tap_element_kwargs: dict | None = None
 
         def navigate_to_page(self, *_args, **_kwargs):
             return SimpleNamespace(
@@ -158,6 +159,7 @@ def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
 
         def tap_element(self, *_args, **_kwargs):
             self.tap_element_calls += 1
+            self.tap_element_kwargs = dict(_kwargs)
             return ActionResult(
                 ok=True,
                 backend="mock",
@@ -175,6 +177,118 @@ def test_tap_settings_row_falls_back_when_page_id_route_has_no_path():
     assert settings_navigation.tap_settings_row(phone, _el("Bluetooth", 72, 344), actions)
 
     assert phone.tap_element_calls == 1
+    assert phone.tap_element_kwargs is not None
+    assert phone.tap_element_kwargs["expected_state"] == {
+        "kind": "page_id",
+        "payload": {
+            "any_of": [
+                "settings/Bluetooth",
+                "com.apple.settings.bluetooth",
+                "settings/蓝牙",
+            ],
+        },
+    }
+    assert phone.tap_element_kwargs["recovery"] is None
+
+
+@pytest.mark.smoke
+def test_tap_search_result_uses_tap_element_with_page_id_expected_state(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+    opened_detail = _scene(_el("Bluetooth", 404, 44, w=90))
+    hit = _el("Bluetooth", 72, 160, w=88, ty="button")
+
+    class SearchPhone:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def tap_element(self, element, **kwargs):
+            self.calls.append({"element": element, **kwargs})
+            return ActionResult(ok=True, backend="mock", connected=True, semantic_status="succeeded")
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def perceive(self):
+            return opened_detail
+
+    phone = SearchPhone()
+    actions = replace(
+        walkthrough._navigation_actions(),
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        record_action_verdict=lambda _phone, _result: True,
+        page_title=lambda scene: "Bluetooth" if scene is opened_detail else "Search",
+        is_settings_search_scene=lambda _scene: False,
+    )
+
+    assert settings_navigation._tap_search_result(
+        phone,
+        "Bluetooth",
+        hit,
+        actions,
+        intent_name="settings_search.tap_root_result",
+    )
+    assert phone.calls == [
+        {
+            "element": hit,
+            "intent": "settings_search.tap_root_result",
+            "target": "Bluetooth",
+            "via": "settings_search.tap_root_result",
+            "expected_state": {
+                "kind": "page_id",
+                "payload": {
+                    "any_of": [
+                        "settings/Bluetooth",
+                        "com.apple.settings.bluetooth",
+                        "settings/蓝牙",
+                    ],
+                },
+            },
+            "idempotent": True,
+            "recovery": None,
+        }
+    ]
+
+
+@pytest.mark.smoke
+def test_tap_search_query_suggestion_uses_tap_element_without_terminal_state():
+    suggestion = _el("1蜂窝网络", 142, 872, w=110, ty="button")
+
+    class SearchPhone:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def tap_element(self, element, **kwargs):
+            self.calls.append({"element": element, **kwargs})
+            return ActionResult(ok=True, backend="mock", connected=True, semantic_status="succeeded")
+
+    phone = SearchPhone()
+    actions = replace(
+        walkthrough._navigation_actions(),
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+    )
+
+    result = settings_navigation._tap_search_element(
+        phone,
+        suggestion,
+        actions,
+        intent_name="settings_search.tap_query_suggestion",
+        label="蜂窝网络",
+        target="1蜂窝网络",
+        expected_state=None,
+    )
+
+    assert result.semantic_status == "succeeded"
+    assert phone.calls == [
+        {
+            "element": suggestion,
+            "intent": "settings_search.tap_query_suggestion",
+            "target": "1蜂窝网络",
+            "via": "settings_search.tap_query_suggestion",
+            "expected_state": None,
+            "idempotent": True,
+            "recovery": None,
+        }
+    ]
 
 
 @pytest.mark.smoke
@@ -218,6 +332,26 @@ def test_tap_settings_row_tries_page_id_route_alias_candidates_before_fallback()
 
     assert phone.page_ids == ["settings/通知", "settings/Notifications"]
     assert phone.tap_element_calls == 0
+
+
+@pytest.mark.smoke
+def test_settings_row_expected_state_accepts_bundle_style_page_id_alias():
+    actions = replace(
+        walkthrough._navigation_actions(),
+        page_id_route_label_candidates=lambda label: (label,),
+    )
+
+    expected = settings_navigation._settings_row_expected_state("Apple Pencil", actions)
+
+    assert expected == {
+        "kind": "page_id",
+        "payload": {
+            "any_of": [
+                "settings/Apple Pencil",
+                "com.apple.settings.apple-pencil",
+            ],
+        },
+    }
 
 
 @pytest.mark.smoke
@@ -451,6 +585,76 @@ def test_root_reground_only_uses_live_safe_root_candidates(monkeypatch):
 
     assert safe_calls >= 2
     assert taps == []
+
+
+@pytest.mark.smoke
+def test_root_crawl_taps_regrounded_sidebar_text_as_row_target(monkeypatch):
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root = _scene(
+        _el("Settings", 48, 72, w=70),
+        _el("Q Search", 36, 90, w=70, h=14),
+        _el("Camera", 66, 118, w=52, h=12, ty="text"),
+        _el("Control Centre", 35, 156, w=129, h=25, ty="list_item"),
+    )
+
+    class IPadPhone:
+        device_geometry = SimpleNamespace(model="ipad_mini_7")
+
+        def perceive(self):
+            return root
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def viewport_size(self):
+            return (640, 990)
+
+    tapped: list[UIElement] = []
+
+    actions = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: True,
+        scene_kind=lambda _scene, phone=None: "settings_root",
+        root_coverage_perceive=lambda phone, _depth: phone.perceive(),
+        canonical_expected_root_label=lambda _label: None,
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=lambda _scene, **_kwargs: [
+            _el("Camera", 66, 118, w=52, h=12, ty="text")
+        ],
+        tap_settings_row=lambda _phone, row: tapped.append(row) or True,
+        same_page_after_tap=lambda *_args, **_kwargs: False,
+        return_one_level=lambda *_args, **_kwargs: True,
+        crawl_current_page=lambda *_args, **_kwargs: None,
+        scroll_budget_for_depth=lambda _depth: 1,
+        root_coverage=lambda _visits, phone=None: {"visited": ["Camera"], "missing": []},
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        crawl_missing_root_pages_via_search=lambda *_args, **_kwargs: None,
+    )
+
+    settings_navigation.crawl_current_page(
+        IPadPhone(),
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert len(tapped) == 1
+    assert tapped[0].text == "Camera"
+    assert tapped[0].type == "list_item"
+    assert tapped[0].preferred_tap_point == (92, 124)
+    assert tapped[0].box.h >= 44
 
 
 @pytest.mark.smoke
@@ -1941,6 +2145,158 @@ def test_picokvm_ipad_settings_row_projection_stays_in_sidebar():
     hit = _el("通用", 72, 332, w=44, h=24)
 
     assert Phone._picokvm_settings_row_tap_point_for_element(_Phone(), hit) == (94, 344)
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_full_width_root_row_keeps_sidebar_preferred_point():
+    from glassbox.phone import Phone
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Phone:
+        device_geometry = _Geometry()
+        _last_scene = _scene(
+            _el("Settings", 35, 72, w=95, h=28),
+            _el("WLAN", 35, 263, w=75, h=26, ty="list_item"),
+        )
+        _last_scene.viewport_size = (640, 989)
+        _last_scene.platform_scene_kind = "settings_detail"
+        _last_scene.page_id = "settings/Touch ID & Passcode"
+        _last_scene.safe_actions = ("tap_root_row",)
+
+        def _effector_backend(self):
+            return "picokvm"
+
+        def effector_backend(self):
+            return self._effector_backend()
+
+        @property
+        def last_scene(self):
+            return self._last_scene
+
+        def viewport_size(self):
+            return self._viewport_size()
+
+        def _viewport_size(self):
+            return 640, 989
+
+    hit = _el("WLAN", 35, 263, w=75, h=26, ty="list_item")
+    hit.intent_label = "无线局域网"
+    hit.intent_source = "settings_root_lexicon"
+    hit.preferred_tap_point = (72, 276)
+    full_width_row = hit.model_copy(
+        update={
+            "box": Box(x=0, y=243, w=640, h=66),
+            "preferred_tap_point": (72, 276),
+        }
+    )
+
+    assert Phone._picokvm_settings_row_tap_point_for_element(_Phone(), full_width_row) == (72, 276)
+
+
+@pytest.mark.smoke
+def test_picokvm_ipad_extra_sidebar_row_keeps_sidebar_preferred_point():
+    from glassbox.phone import Phone
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Phone:
+        device_geometry = _Geometry()
+        _last_scene = _scene(
+            _el("Accessibility", 70, 80, w=110, h=22),
+            _el("Apple Pencil", 35, 494, w=232, h=25, ty="list_item"),
+        )
+        _last_scene.viewport_size = (640, 981)
+        _last_scene.platform_scene_kind = "settings_detail"
+        _last_scene.page_id = "settings/Accessibility"
+        _last_scene.safe_actions = ("tap_root_row",)
+
+        def _effector_backend(self):
+            return "picokvm"
+
+        def effector_backend(self):
+            return self._effector_backend()
+
+        @property
+        def last_scene(self):
+            return self._last_scene
+
+        def viewport_size(self):
+            return self._viewport_size()
+
+        def _viewport_size(self):
+            return 640, 981
+
+    hit = _el("Apple Pencil", 35, 494, w=232, h=25, ty="list_item")
+    hit.preferred_tap_point = (151, 506)
+    full_width_row = hit.model_copy(
+        update={
+            "box": Box(x=0, y=474, w=640, h=64),
+            "preferred_tap_point": (151, 506),
+        }
+    )
+
+    assert Phone._picokvm_settings_row_tap_point_for_element(_Phone(), full_width_row) == (151, 506)
+
+
+@pytest.mark.smoke
+def test_ipad_settings_row_plan_does_not_offset_sidebar_root_point():
+    from glassbox.target_planner import TargetPlanner
+
+    class _Geometry:
+        model = "ipad_mini_7"
+
+    class _Profile:
+        @staticmethod
+        def offset_for_bucket(_bucket):
+            return SimpleNamespace(space="frame_px", mean=(-59, 0))
+
+    class _Phone:
+        device_geometry = _Geometry()
+        action_orchestrator = SimpleNamespace(actuation_profile=_Profile())
+        effector = SimpleNamespace(tap=lambda _x, _y: None)
+        _last_scene = _scene(_el("Apple Pencil", 35, 494, w=232, h=25, ty="list_item"))
+        _last_scene.viewport_size = (640, 979)
+        _last_scene.platform_scene_kind = "settings_detail"
+        _last_scene.page_id = "settings/Accessibility"
+        _last_scene.safe_actions = ("tap_root_row",)
+
+        @property
+        def last_scene(self):
+            return self._last_scene
+
+        def viewport_size(self):
+            return 640, 979
+
+        def effector_backend(self):
+            return "picokvm"
+
+        def infer_input_coordinate_space(self):
+            return "cropped_px"
+
+        def effector_coordinate_space(self):
+            return "frame_px"
+
+        def to_phone_coordinates(self, x, y, *, coordinate_space=None):
+            return int(x), int(y)
+
+        def picokvm_fresh_verify_kwargs(self, _action):
+            return {}
+
+    row = _el("Apple Pencil", 0, 474, w=640, h=64, ty="list_item")
+    row.preferred_tap_point = (151, 506)
+
+    plan, _metadata = TargetPlanner(_Phone()).target_tap_plan(
+        element=row,
+        intent="settings.row:Apple Pencil",
+        via="settings.tap_row",
+        target="Apple Pencil",
+    )
+
+    first = plan.candidate_target_points[0]
+    assert (first.x, first.y) == (151, 506)
 
 
 @pytest.mark.smoke

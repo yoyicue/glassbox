@@ -148,6 +148,49 @@ def test_default_semantic_action_plan_binds_core_phone_entrypoints():
 
 
 @pytest.mark.smoke
+def test_tap_plan_target_strategy_preserves_runtime_element_tap_options():
+    element = UIElement(type="text", box=Box(x=30, y=40, w=20, h=10), text="Bluetooth", confidence=0.95)
+    expected_payload = {
+        "kind": "page_id",
+        "payload": {"any_of": ["settings/Bluetooth", "settings/蓝牙"]},
+    }
+    calls: list[dict] = []
+
+    class PhoneLike:
+        def tap_element(self, tapped_element, **kwargs):
+            calls.append({"element": tapped_element, **kwargs})
+            return _ok()
+
+    plan = default_semantic_action_plan(
+        PhoneLike(),
+        "tap",
+        ExpectedState.from_dict(expected_payload),
+        element=element,
+        intent="settings.row:Bluetooth",
+        target="Bluetooth",
+        via="settings.tap_row",
+        tap_element_options={"retry_budget": 2, "idempotent": True},
+        tap_element_expected_state=expected_payload,
+    )
+
+    assert plan.metadata()["semantic_action_spec"]["strategies"][0]["params"] == {
+        "target": "Bluetooth"
+    }
+    assert plan.bound[0].call().ok is True
+    assert calls == [
+        {
+            "element": element,
+            "intent": "settings.row:Bluetooth",
+            "target": "Bluetooth",
+            "via": "settings.tap_row",
+            "retry_budget": 2,
+            "idempotent": True,
+            "expected_state": expected_payload,
+        }
+    ]
+
+
+@pytest.mark.smoke
 def test_scroll_plan_ladder_is_direction_aware_wheel_then_swipe():
     """CUQ-0.1: the scroll plan ladders wheel -> swipe. The wheel sign follows the
     direction, and the swipe fallback uses the backend's preset gesture (down =
@@ -245,6 +288,24 @@ def test_default_semantic_action_plan_serializes_runtime_strategy_params():
     }
     assert tap_params == {"x": 4, "y": 5, "label": "Done"}
     assert scroll_params == {"ticks": 7, "horizontal": 1, "x1": 1, "y1": 2, "x2": 3, "y2": 4}
+
+
+def test_default_semantic_action_plan_accepts_expected_state_dict():
+    class Effector:
+        def tap(self, _x, _y):
+            return _ok()
+
+    class PhoneLike:
+        effector = Effector()
+
+        def to_phone_coordinates(self, x, y):
+            return x, y
+
+    expected = {"kind": "page_id", "payload": {"page_id": "settings/Bluetooth"}}
+
+    plan = default_semantic_action_plan(PhoneLike(), "tap", expected, x=4, y=5)
+
+    assert plan.metadata()["semantic_action_spec"]["expected_state"] == expected
 
 
 def test_runner_switches_to_next_strategy_on_failed_expected_state():
@@ -493,9 +554,26 @@ def test_verify_expected_state_page_id_and_visible_text():
         ],
     )
 
-    assert verify_expected_state(ExpectedState("page_id", {"page_id": "settings/root"}), scene).status == "succeeded"
-    assert verify_expected_state(ExpectedState("visible_text", {"any_of": ["通用"]}), scene).status == "succeeded"
-    assert verify_expected_state(ExpectedState("visible_text", {"all_of": ["通用", "不存在"]}), scene).status == "failed"
+    assert (
+        verify_expected_state(ExpectedState("page_id", {"page_id": "settings/root"}), scene).status
+        == "succeeded"
+    )
+    assert (
+        verify_expected_state(
+            ExpectedState("page_id", {"any_of": ["settings/about", "settings/root"]}), scene
+        ).status
+        == "succeeded"
+    )
+    assert (
+        verify_expected_state(ExpectedState("visible_text", {"any_of": ["通用"]}), scene).status
+        == "succeeded"
+    )
+    assert (
+        verify_expected_state(
+            ExpectedState("visible_text", {"all_of": ["通用", "不存在"]}), scene
+        ).status
+        == "failed"
+    )
 
 
 def test_verify_expected_state_element_appears_and_gone():

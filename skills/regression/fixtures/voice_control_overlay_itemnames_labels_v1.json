@@ -1,0 +1,87 @@
+{
+  "mode": "item_names",
+  "labels": [
+    {
+      "name": "search_field",
+      "marker_text": "Searchfield",
+      "marker_center": [130, 76],
+      "target_text": "Search",
+      "target_center": [70, 97]
+    },
+    {
+      "name": "dictate_badge_has_no_text_target",
+      "marker_text": "Dictate",
+      "marker_center": [216, 84],
+      "expect_mapped": false
+    },
+    {
+      "name": "none_option",
+      "marker_text": "None",
+      "marker_center": [444, 89],
+      "target_text": "None",
+      "target_center": [299, 116]
+    },
+    {
+      "name": "camera_row_fused_with_badge",
+      "marker_text": "Came Camera",
+      "marker_center": [110, 126],
+      "expect_mapped": false
+    },
+    {
+      "name": "item_numbers_option",
+      "marker_text": "Item Numbers",
+      "marker_center": [445, 134],
+      "target_text": "Item Numbers",
+      "target_center": [327, 162]
+    },
+    {
+      "name": "item_names_option",
+      "marker_text": "UItem Names",
+      "marker_center": [443, 181],
+      "target_text": "Item Names",
+      "target_center": [319, 211]
+    },
+    {
+      "name": "numbered_grid_option",
+      "marker_text": "WNumbered",
+      "marker_center": [444, 227],
+      "target_text": "Numbered Grid",
+      "target_center": [331, 253]
+    },
+    {
+      "name": "sidebar_search",
+      "marker_text": "Search",
+      "marker_center": [130, 388],
+      "target_text": "Search",
+      "target_center": [89, 360]
+    },
+    {
+      "name": "sidebar_siri",
+      "marker_text": "Sii",
+      "marker_center": [130, 433],
+      "target_text": "Siri",
+      "target_center": [76, 404]
+    },
+    {
+      "name": "sidebar_wallpaper",
+      "marker_text": "Wallpaper",
+      "marker_center": [132, 477],
+      "target_text": "Wallpaper",
+      "target_center": [99, 450]
+    },
+    {
+      "name": "sidebar_notifications",
+      "marker_text": "Notfications",
+      "marker_center": [130, 530],
+      "target_text": "Notifications",
+      "target_center": [109, 501]
+    },
+    {
+      "name": "sidebar_apps",
+      "marker_text": "AppS",
+      "marker_center": [130, 958],
+      "target_text": "Apps",
+      "target_center": [83, 930]
+    }
+  ]
+}

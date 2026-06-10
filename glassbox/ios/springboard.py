@@ -38,6 +38,13 @@ NON_HOME_APP_MARKERS = (
     "桥已连接", "已连接 8C1822", "标定",
     "World Clock", "Alarms", "Stopwatch", "Timers",
 )
+APPLE_ACCOUNT_VERIFICATION_MARKER_GROUPS = (
+    ("Apple Account Verification",),
+    ("Enter the password for", "Enter password for"),
+    ("in Settings",),
+)
+APPLE_ACCOUNT_DISMISS_LABELS = ("Not Now", "以后", "以后再说", "稍后")
+APPLE_ACCOUNT_SETTINGS_LABELS = ("Settings", "设置")
 _MOD_META_LEFT = 0x08
 _KEY_A = 0x04
 _KEY_BACKSPACE = 0x2A
@@ -614,6 +621,65 @@ def _tap_icon_any(
         phone, scene, labels, icon_map=icon_map, settle_s=settle_s)
 
 
+def _handle_account_verification_or_continue(
+    phone,
+    scene: Scene,
+    labels: tuple[str, ...],
+    *,
+    settle_s: float,
+) -> tuple[bool, Scene]:
+    texts = [_text(el) for el in scene.elements if _text(el)]
+    if not all(
+        any(_matches(text, markers, fuzzy=0.82) for text in texts)
+        for markers in APPLE_ACCOUNT_VERIFICATION_MARKER_GROUPS
+    ):
+        return False, scene
+    target_is_settings = any(
+        _matches(str(label), APPLE_ACCOUNT_SETTINGS_LABELS, fuzzy=0.86)
+        for label in labels
+    )
+    button = _find_account_verification_button(
+        scene,
+        APPLE_ACCOUNT_SETTINGS_LABELS if target_is_settings else APPLE_ACCOUNT_DISMISS_LABELS,
+        target_is_settings=target_is_settings,
+    )
+    if button is None:
+        print("[sb] account-verification: no actionable button found", flush=True)
+        return False, scene
+    print(f"[sb] account-verification: tap {_text(button)!r} @{button.box.center}", flush=True)
+    phone.tap_xy(*button.box.center)
+    after = _perceive_after_settle(phone, settle_s)
+    if target_is_settings and _opened_expected_app_or_recover(phone, after, labels, settle_s=settle_s):
+        print("[sb] account-verification: opened Settings OK", flush=True)
+        return True, after
+    return False, after
+
+
+def _find_account_verification_button(
+    scene: Scene,
+    labels: Iterable[str],
+    *,
+    target_is_settings: bool,
+) -> UIElement | None:
+    w, h = _scene_size(scene, scene.viewport_size)
+    candidates: list[UIElement] = []
+    for el in scene.elements:
+        text = _text(el)
+        if not text or not _matches(text, labels, fuzzy=0.86):
+            continue
+        cx, cy = el.box.center
+        if not (h * 0.35 <= cy <= h * 0.70):
+            continue
+        if target_is_settings and cx < w * 0.45:
+            continue
+        if not target_is_settings and cx > w * 0.55:
+            continue
+        candidates.append(el)
+    if not candidates:
+        return None
+    return min(candidates, key=lambda el: abs(el.box.center[1] - h * 0.54))
+
+
 def _tap_target_inside_home_folder_if_visible(
     phone,
     scene: Scene,
@@ -1032,6 +1098,9 @@ def open_app_from_springboard(
             print("[sb] could not reach Home → spotlight fallback", flush=True)
             return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
         scene = waited
+    opened, scene = _handle_account_verification_or_continue(phone, scene, app_labels, settle_s=settle_s)
+    if opened:
+        return True
     if _looks_like_today_widget_surface(scene, viewport_size=_viewport_size(phone)):
         print("[sb] widget surface without icon grid → spotlight fallback", flush=True)
         return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
@@ -1053,6 +1122,9 @@ def open_app_from_springboard(
         previous = springboard_signature(scene)
         phone.swipe_right()
         scene = _perceive_after_settle(phone, settle_s)
+        opened, scene = _handle_account_verification_or_continue(phone, scene, app_labels, settle_s=settle_s)
+        if opened:
+            return True
         if _tap_icon_any(phone, scene, app_labels, icon_map=icon_map, settle_s=settle_s):
             return True
         if _tap_target_inside_home_folder_if_visible(
@@ -1073,6 +1145,9 @@ def open_app_from_springboard(
         previous = springboard_signature(scene)
         phone.swipe_left()
         scene = _perceive_after_settle(phone, settle_s)
+        opened, scene = _handle_account_verification_or_continue(phone, scene, app_labels, settle_s=settle_s)
+        if opened:
+            return True
         if _tap_icon_any(phone, scene, app_labels, icon_map=icon_map, settle_s=settle_s):
             return True
         if _tap_target_inside_home_folder_if_visible(

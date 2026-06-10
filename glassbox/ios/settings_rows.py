@@ -212,6 +212,8 @@ def visible_settings_root_row_label(
     text = (element.text or "").strip()
     if not text:
         return None
+    if len(text) > 32:
+        return None
     cy = element.box.center[1]
     if viewport_size is not None:
         _w, h = viewport_size
