@@ -766,16 +766,27 @@ class Perceptor:
             logger.warning(f"layout segmentation failed: {exc}")
 
     def maybe_apply_voice_control_overlay(self, scene: Scene, frame_img) -> None:
-        """A11Y-VC-1 (flag-gated, default off): parse Voice Control Item-Names
-        badges from the finished element set and write matched
-        ``vc:item-name:<slug>`` ids into ``WhiteboxHint.accessibility_id``.
+        """A11Y-VC-1 (flag-gated, default off): overlay-aware perception.
 
-        Names only — Item Numbers/Grid are frame-local action anchors and are
-        deliberately never written into UTG identity. ``frame_img`` is required:
-        without the dark-badge pixel gate, ordinary row text would be
-        misparsed as badges. Runs after icon/layout stages (the element set is
-        final) and before memory observation + the perceive-cache write, so
-        hints reach memory, cached scenes, consumers, and recorded artifacts.
+        Two steps on the finished element set:
+        1. parse Voice Control Item-Names badges and write matched
+           ``vc:item-name:<slug>`` ids into ``WhiteboxHint.accessibility_id``
+           (names only — Item Numbers/Grid are frame-local action anchors and
+           are deliberately never written into UTG identity);
+        2. SUBTRACT the badge elements from the scene (the a11y doc's
+           "overlay text layer vs content layer" split): badges duplicate row
+           labels as extra OCR elements, which the first a11y-cell snapshot
+           measured poisoning row matching, the navigation verifiers, stuck
+           signatures and UTG node identity (task_completion 0.0). The badge's
+           information lives on as the target's accessibility_id; the badge
+           OCR artifacts themselves leave the element stream, so every
+           downstream consumer sees a near-clean scene.
+
+        ``frame_img`` is required: without the dark-badge pixel gate, ordinary
+        row text would be misparsed as badges (and wrongly subtracted). Runs
+        after icon/layout stages and before memory observation + the
+        perceive-cache write, so the cleaned, hinted scene is what memory,
+        cached scenes, consumers and recordings all see.
         """
         host = self._phone
         if not host.voice_control_overlay_hints_enabled or frame_img is None:
@@ -789,8 +800,20 @@ class Perceptor:
             markers = parse_voice_control_overlay(
                 scene.elements, mode="item_names", frame_img=frame_img
             )
-            if markers:
-                apply_voice_control_overlay_hints(scene, markers, include_names=True)
+            if not markers:
+                return
+            apply_voice_control_overlay_hints(scene, markers, include_names=True)
+            badge_ids = {
+                marker.source_element_id
+                for marker in markers
+                if marker.source_element_id is not None
+            }
+            if badge_ids:
+                scene.elements = [
+                    element
+                    for element in scene.elements
+                    if element.element_id not in badge_ids
+                ]
         except Exception as exc:
             logger.warning(f"voice-control overlay hints failed: {exc}")
 

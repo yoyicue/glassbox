@@ -149,16 +149,17 @@ policy explicitly includes human-control data.
 
 `a11y_voice_control_cell_snapshot.json` is the committed snapshot of the
 **a11y evaluation cell** (`ios_settings_a11y_voice_control`): the same iPad
-mini 7 (en/HK) Settings drill-down, but with the Voice Control "Item Names"
+mini 7 (en/HK) Settings drill-down with the Voice Control "Item Names"
 continuous overlay ON and the perceive-side producer
-(`GLASSBOX_VOICE_CONTROL_OVERLAY_HINTS_ENABLED=1`) writing
-`vc:item-name:<slug>` ids into `WhiteboxHint.accessibility_id` (verified live
-on the run: 351 scenes carry ids). Headline (snapshot, n=5):
-`task_completion_rate = 0.0` vs the clean floor's 1.0 — the overlay's badges
-poison row matching and the navigation verifiers (action_success 0.42,
-unknown 0.41, root coverage 0.13) while the reliability machinery worked hard
-(strategy_switches 21, recoveries 7). The cell exists to make that cost
-measurable: it is the baseline any badge-aware navigation improvement must
-beat, and it is NEVER a floor candidate (`validate-floor-candidate` rejects
-the cell by design). Guarded by
+(`GLASSBOX_VOICE_CONTROL_OVERLAY_HINTS_ENABLED=1`). Current snapshot =
+**loop-2 (badge-aware perception)**: the producer writes `vc:item-name:<slug>`
+ids AND subtracts the badge elements from the perceived scene. Headline (n=5):
+`task_completion_rate = 1.0`, action_success 0.87, unknown 0.11, root coverage
+1.0, with 1167 scenes carrying vc ids. The loop-1 baseline (code `ac58ab6`,
+same command, no subtraction) scored **0.0** — badges poisoned row matching
+and the navigation verifiers (action 0.42, unknown 0.41, root 0.13,
+strategy_switches 21, recoveries 7); the single perception-layer change
+(badge subtraction, `94fa2fd`) recovered full completion while tripling the
+identity-channel yield. The cell is NEVER a floor candidate
+(`validate-floor-candidate` rejects it by design). Guarded by
 `skills/smoke/test_voice_control_overlay_producer.py`.
