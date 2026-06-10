@@ -43,7 +43,8 @@ HUMAN_BASELINE_CLI ?= uv run python -m skills.regression.human_baseline
 regression-gate:
 	$(COMPUTER_USE_SUCCESS_RATE) validate "$(RELIABILITY_BASELINE)"
 	$(HUMAN_BASELINE_CLI) validate "$(HUMAN_BASELINE)" $(HUMAN_BASELINE_VALIDATE_ARGS)
-	uv run pytest skills/smoke/test_computer_use_regression_gate.py skills/smoke/test_human_baseline.py -q
+	uv run pytest skills/smoke/test_computer_use_regression_gate.py skills/smoke/test_human_baseline.py \
+		skills/smoke/test_clock_tabs_floor.py skills/smoke/test_verifier_alignment.py -q
 
 human-baseline-template:
 	$(HUMAN_BASELINE_CLI) template --out "$(HUMAN_BASELINE)"
