@@ -183,7 +183,10 @@ def test_committed_a11y_cell_snapshot_is_labeled_scrubbed_and_honest():
     honest (it records the overlay's measured COST — it must never quietly
     morph into a success story or a floor candidate)."""
     if not _A11Y_SNAPSHOT.exists():
-        pytest.skip("no committed a11y cell snapshot yet")
+        pytest.fail(
+            f"committed a11y cell snapshot missing: {_A11Y_SNAPSHOT} — it is "
+            "gate-load-bearing; deleting it must not merge green (was a silent pytest.skip)"
+        )
     payload = json.loads(_A11Y_SNAPSHOT.read_text(encoding="utf-8"))
     raw = _A11Y_SNAPSHOT.read_text(encoding="utf-8")
 

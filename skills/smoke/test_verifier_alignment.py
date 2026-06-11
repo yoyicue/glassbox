@@ -145,7 +145,10 @@ def test_extract_from_synthetic_run_dir(tmp_path):
 @pytest.mark.smoke
 def test_committed_alignment_fixture_validates_and_metrics_reproduce():
     if not _FIXTURE.exists():
-        pytest.skip("no committed verifier-alignment fixture yet")
+        pytest.fail(
+            f"committed verifier-alignment fixture missing: {_FIXTURE} — it is "
+            "gate-load-bearing; deleting it must not merge green (was a silent pytest.skip)"
+        )
     payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     assert validate_manifest(payload) == []
     assert payload["metrics"] == score_manifest(payload)
