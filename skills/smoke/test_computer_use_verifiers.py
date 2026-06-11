@@ -7,7 +7,7 @@ from glassbox.cognition import Box, Scene, UIElement
 from glassbox.verification.diff import compute_frame_diff
 from glassbox.verification.golden import iter_golden_cases
 from glassbox.verification.registry import VerifierRegistry
-from glassbox.verification.verifiers import VerifierInput
+from glassbox.verification.verifiers import ForegroundAppMatchesVerifier, VerifierInput
 
 GOLDEN_ROOT = "skills/golden/computer_use"
 
@@ -677,3 +677,52 @@ def test_scene_progressed_verifier_still_succeeds_on_real_navigation():
     )
     outcome = verifier.verify(input_)
     assert outcome.status == "succeeded"
+
+
+@pytest.mark.smoke
+def test_foreground_app_vetoes_bare_token_inside_settings_surface():
+    """Live false positive (2026-06-11, A/B matrix #11 attempt): Settings →
+    Screen Time lists app names, and the bare token 'Clock' asserted a
+    successful Clock launch at 0.9 confidence while the device never left
+    Settings. An app-name token in the BODY of a Settings surface is identity
+    noise — the verifier must abstain, not assert."""
+    verifier = ForegroundAppMatchesVerifier()
+
+    screen_time = _scene(
+        "Accessibility",
+        "All Devices",
+        "Devices",
+        "Week",
+        "Day",
+        "Screen Time",
+        "Clock",  # ← the usage list names the target app
+        kind="settings_detail",
+    )
+    outcome = verifier.verify(
+        _input("open_app", screen_time, metadata={"app": "Clock", "aliases": ["时钟"]})
+    )
+    assert outcome.status == "unknown"
+    assert "vetoed" in outcome.reason
+    assert outcome.missing_evidence
+
+    # The same token in a NON-settings scene still proves foreground.
+    clock = _scene("World Clock", "Alarms", "Stopwatch", "Timers", "Clock")
+    outcome = verifier.verify(
+        _input("open_app", clock, metadata={"app": "Clock", "aliases": ["时钟"]})
+    )
+    assert outcome.status == "succeeded"
+
+    # Settings as the TARGET keeps matching inside Settings: the dedicated
+    # identity branch fires first, the veto never applies to it.
+    settings = _scene("General", "设置", kind="settings_root")
+    outcome = verifier.verify(
+        _input("open_app", settings, metadata={"app": "Settings", "aliases": ["设置"]})
+    )
+    assert outcome.status == "succeeded"
+
+    # page_id-based Settings identity vetoes too (not only the kind field).
+    by_page_id = _scene("Clock", page_id="settings/Screen Time")
+    outcome = verifier.verify(
+        _input("open_app", by_page_id, metadata={"app": "Clock", "aliases": ["时钟"]})
+    )
+    assert outcome.status == "unknown"
