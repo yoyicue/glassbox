@@ -29,7 +29,7 @@ docstring 和本台账。
 | 设置地板 scroll | scroll_success_rate | 0.077 | `reliability_baseline.json` |
 | Clock cell | task_completion / 每轮耗时 | 0.8 / ~14min（launch 占大头） | `clock_tabs_baseline.json` |
 | L2 快照 | task_completion | 0.8 | `l2_settings_expected_state_snapshot.json` |
-| canonical primitives | （无 committed floor） | 夜间只存档 | — |
+| canonical primitives | task_completion / scroll_success_rate | **0.9 / 0.957**（2026-06-11 入库,见台账） | `canonical_primitives_baseline.json` |
 | zh cell | （不存在） | 需物理切语言 | — |
 
 ---
@@ -46,7 +46,7 @@ docstring 和本台账。
 | 6 | `GLASSBOX_RECOVER_THEN_RETRY` | 任一会失败的格子 | completion | 机器探针已证恢复触发；问"恢复后重试能否救完成率" | ~60min |
 | 7 | `GLASSBOX_STRICT_TARGET_MATCHING` / `REVERIFY_FRESH_FRAME` | unknown_rate>0 的格子 | unknown_rate、误点 | 鲁棒性类，干净格子无感 | ~60min |
 | 8 | `GLASSBOX_MEMORY_LOCATE_PRIORS` / `page_id_route_enabled` | 重复跑同任务 | 步数/耗时 | ⚠️ 前置：效率指标（duration/steps）尚未进 metrics，先补 | 前置离线 |
-| 9 | canonical primitives 冻结 floor | canonical | （建立基线本身） | 夜间已跑只差 committed floor + 比对接线 | ~30min |
+| 9 | canonical primitives 冻结 floor | canonical | （建立基线本身） | **✅已完成 2026-06-11**：floor 入库 `canonical_primitives_baseline.json`（completion 0.9, n=5, iPad）+ 夜间 iPad lane 阻断比对接线（详见台账） | ~30min |
 | 10 | zh cell 建立 | 设置任务 zh-Hans/CN | （建立基线本身） | 需物理切设备语言（操作者在场） | ~60min+人 |
 | 11 | **反向 A/B**：`UI_LAYOUT_SEGMENTATION_ENABLED=0` | Clock cell（或任一不饱和格子） | completion、每轮耗时 | **默认开但无任务级证据**：翻默认依据是 App Store n≈1 的 under-bar 小赢；且它隐式跑图标检测器（绕过 `DETECT_ICONS_IN_PERCEIVE` 的门，omniparser 机器上=每帧 YOLO）。默认开的 flag 同样要有数字，否则是反方向的信仰 | ~75min |
 
@@ -72,6 +72,16 @@ docstring 和本台账。
 ---
 
 ## 3. 测试报告台账
+
+### 2026-06-11 canonical primitives 首个 committed floor（矩阵 #9,fixture 入库）
+- 类型：基线建立
+- 格子：canonical primitives;n=5(20 task-rounds);命令:`GLASSBOX_PHONE_MODEL=ipad_mini_7 GLASSBOX_LANGUAGE=en GLASSBOX_REGION=HK GLASSBOX_PICOKVM_ROBUST_CAPTURE=1 GLASSBOX_PICOKVM_OPEN_RETRY_ATTEMPTS=8 uv run python -m skills.regression.computer_use_success_rate run-canonical-primitives --rounds 5 --out … --artifact-root …`
+- A 臂（基线）：无（首个 floor）
+- B 臂（候选）：task_completion **0.9**(go_home 5/5、launch_app 5/5、back 5/5、scroll 3/5+1 unknown+1 failed)、action_success 1.0、unknown 0.0、precondition 失败 **0/20**(全部 verified-Home origin,`ios_home_screen_visible`)、scroll_success 0.957(45/47 wheel)、strategy_switches 7、~27.2s/任务轮
+- 判定：入库 floor + 夜间 iPad lane 阻断比对接线(config-identity 匹配;iPhone lane 无 floor 不比对)
+- 产物：`skills/regression/fixtures/canonical_primitives_baseline.json`(final_state 按公共 fixture 惯例清空 visible_texts/elements——go_home 终态是机主主屏 widget 内容);守卫 `skills/smoke/test_canonical_floor.py`
+- 注意事项：**本次跑通耗费 6 次尝试,前 5 次暴露并修复了 3 个真实缺陷**(#75 流打开无重试、#76 facade home 走未验证捷径 → 20/20 precondition_failed、#77 终态词表 iPad 不存在 → 动作全部语义验证成功但任务 0/5);scroll 的 1 failed + 1 unknown 是诚实方差保留可见;expected_state_coverage=0(canonical 原语不带 expect=,P2 由机器探针守护,非此格子职责)
+
 
 ### 2026-05-29 语义策略阶梯 A/B（代码见 runbook）
 - 类型：flag A/B（`GLASSBOX_SEMANTIC_PLAN_OPS=back,scroll,tap`）

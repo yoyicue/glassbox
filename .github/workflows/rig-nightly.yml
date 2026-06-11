@@ -45,6 +45,10 @@ jobs:
           - { name: ipad,   model: ipad_mini_7,       language: en,      region: HK }
     env:
       GLASSBOX_PICOKVM: "1"
+      # The single-consumer stream intermittently refuses fresh opens when
+      # benchmark drivers cycle one Phone per task-round; the canonical floor
+      # run needed an 8-attempt budget once (2026-06-11). Harmless elsewhere.
+      GLASSBOX_PICOKVM_OPEN_RETRY_ATTEMPTS: "8"
       # PicoKVM base URL + credentials come from the self-hosted runner's
       # environment / repo secrets; the rig is not reachable from hosted runners.
       GLASSBOX_PICOKVM_BASE_URL: ${{ secrets.GLASSBOX_PICOKVM_BASE_URL }}
@@ -79,6 +83,19 @@ jobs:
             --rounds "$ROUNDS" \
             --out "artifacts/ci/${{ matrix.device.name }}/canonical_benchmark.json" \
             --artifact-root "$ARTIFACT_ROOT"
+
+      # The committed canonical floor is iPad-only (first promoted 2026-06-11,
+      # n=5, completion 0.9) — the comparator's config-identity check refuses a
+      # cross-device gate, so only the iPad lane compares. Open-retry budget
+      # matters for the consumer-cycle stream wedge the canonical driver's
+      # one-Phone-per-round pattern provokes.
+      - name: Canonical floor gate (iPad, config-matched, blocking)
+        if: ${{ matrix.device.name == 'ipad' }}
+        run: |
+          make regression-compare \
+            RELIABILITY_BASELINE=skills/regression/fixtures/canonical_primitives_baseline.json \
+            CANDIDATE="artifacts/ci/${{ matrix.device.name }}/canonical_benchmark.json" \
+            TOLERANCE="$TOLERANCE"
 
       - name: iOS Settings drill-down benchmark
         run: |
