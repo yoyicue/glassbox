@@ -25,6 +25,14 @@ uv run ruff check glassbox skills     # lint (line-length 100, target py311)
 
 - `make check` is **device-independent** (no PicoKVM/rig) and is what CI runs on
   every PR. Run it before you push.
+- **Working in a `git worktree`? Create it with `make worktree DEST=../gb-foo
+  BRANCH=feature/foo`** (or `scripts/new-worktree.sh`). A bare `git worktree add`
+  does **not** copy gitignored local config, so the worktree silently misses `.env`
+  (→ `cfg.picokvm` false → effector selected as **NoOp**: no HID, plus icon/VLM
+  fall back) and the AGPL omniparser plugin; `.env` is read **relative to the
+  package root**, not CWD, so it must exist at the worktree's own root. The helper
+  symlinks both. Each worktree still needs its own `uv sync --extra dev` (separate
+  `.venv`; for omniparser also `uv pip install ultralytics torch huggingface_hub`).
 - `main` is branch-protected: merging needs a PR whose `check` status check (the
   CI job that runs `make check`) is green, with the branch up to date with `main`
   first (strict). The rule is enforced for admins too and requires no review

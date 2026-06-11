@@ -1,4 +1,4 @@
-.PHONY: lint test check regression-gate regression-compare regression-compare-l2-advisory machinery-probe-gate ab-semantic-plan \
+.PHONY: lint test check worktree regression-gate regression-compare regression-compare-l2-advisory machinery-probe-gate ab-semantic-plan \
 	human-baseline-template human-baseline-validate \
 	golden-harvest golden-audit \
 	computer-use-success-rate-ios-settings ipad-settings-state-machine ipad-settings-ab-matrix ios-settings-ab-matrix
@@ -13,6 +13,15 @@ test:
 	uv run pytest skills/smoke -q
 
 check: lint test regression-gate golden-audit
+
+# Create a git worktree pre-linked with the gitignored local-only config that
+# `git worktree add` otherwise silently omits — `.env` (without it the effector
+# is selected as NoOp: no HID) and the AGPL omniparser plugin. Symlinks, single
+# source of truth. Each worktree still needs its own `uv sync --extra dev`
+# (separate .venv). See scripts/new-worktree.sh. Usage:
+#   make worktree DEST=../gb-foo BRANCH=feature/foo
+worktree:
+	scripts/new-worktree.sh "$(DEST)" "$(BRANCH)"
 
 ROUNDS ?= 1
 OUT ?= artifacts/computer_use_success_rate/benchmark.json
