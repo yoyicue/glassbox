@@ -14658,6 +14658,8 @@
     "vlm_calls_per_task": 2.0,
     "vlm_cache_hits": 0,
     "vlm_cache_misses": 10,
-    "vlm_cache_hit_rate": 0.0
+    "vlm_cache_hit_rate": 0.0,
+    "action_duration_ms_total": 672809,
+    "action_duration_ms_per_task": 134561.8
   }
 }

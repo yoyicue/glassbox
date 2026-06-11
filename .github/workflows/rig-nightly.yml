@@ -84,8 +84,22 @@ jobs:
             --artifact-root "$ARTIFACT_ROOT" \
             --report-dir "artifacts/ci/${{ matrix.device.name }}/reports"
 
-      - name: Regression gate vs committed floor
+      # The committed floor is en-iPad — only the iPad lane is config-matched,
+      # so only it gates. The zh-iPhone lane used to gate against that same
+      # floor, comparing two different observation distributions; the comparator
+      # now refuses cross-config gating, so the iPhone lane is an explicitly
+      # labelled advisory readout until a device-matched iPhone floor exists
+      # (docs/goals/project_health_snapshot.md item 2).
+      - name: Regression gate vs committed floor (config-matched, blocking)
+        if: ${{ matrix.device.name == 'ipad' }}
         run: make regression-compare CANDIDATE="$CANDIDATE" TOLERANCE="$TOLERANCE"
+
+      - name: Cross-config floor readout (advisory, never gates)
+        if: ${{ matrix.device.name != 'ipad' }}
+        continue-on-error: true
+        run: |
+          make regression-compare CANDIDATE="$CANDIDATE" TOLERANCE="$TOLERANCE" \
+            REGRESSION_COMPARE_FLAGS=--allow-config-mismatch
 
       # BLOCKING P2/P3 (+ P1) machinery gate — iPad-only (the validated rig).
       # Injects a controlled verification failure (tap a present row, declare an

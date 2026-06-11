@@ -1120,7 +1120,29 @@ def test_cli_aggregate_validate_and_compare(tmp_path):
     assert baseline_payload["config"]["environment"] == success_rate.IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT
     assert main(["validate", str(baseline)]) == 0
     assert main(["aggregate", "--run-dir", str(run_dir), "--out", str(candidate)]) == 0
-    assert main(["compare", str(baseline), str(candidate)]) == 0
+    # The bare aggregate carries no task_set/evaluation_cell config — gating it
+    # against the ios_settings baseline would be a cross-config comparison, so
+    # the comparator refuses (rc 2); the explicit flag downgrades the same call
+    # to a labelled advisory readout.
+    assert main(["compare", str(baseline), str(candidate)]) == 2
+    assert main(["compare", str(baseline), str(candidate), "--allow-config-mismatch"]) == 0
+    # A config-matched candidate gates normally.
+    matched = tmp_path / "candidate_matched.json"
+    assert (
+        main(
+            [
+                "aggregate",
+                "--run-dir",
+                str(run_dir),
+                "--out",
+                str(matched),
+                "--config",
+                json.dumps(config),
+            ]
+        )
+        == 0
+    )
+    assert main(["compare", str(baseline), str(matched)]) == 0
     assert main(["aggregate", "--task-manifest", str(manifest), "--out", str(manifest_out)]) == 0
     assert validate_benchmark(json.loads(manifest_out.read_text(encoding="utf-8"))) == []
 
