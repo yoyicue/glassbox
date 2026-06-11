@@ -73,6 +73,15 @@ docstring 和本台账。
 
 ## 3. 测试报告台账
 
+### 2026-06-11 矩阵 #11 ui_layout 反向 A/B —— 两次中止,产出一个核心发现（未采数据）
+- 类型：flag A/B（**中止**,数据无效但发现入账）
+- 格子：Clock cell;计划 n=5 ×2 臂;命令同 Clock 基线 + `GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED=0`（B 臂）
+- 尝试 1（无效）：worktree AGPL 陷阱原样复现——`.env` 软链带入 `GLASSBOX_ICON_DETECTOR=omniparser` 但 worktree venv 无 ultralytics/torch → 5/5 轮 open_app 直接异常。教训:worktree 跑 rig 必须显式钉 `GLASSBOX_ICON_DETECTOR=classical`(对 #11 本来就该如此——问题问的是 committed 默认配置)
+- 尝试 2（无效,但**核心发现**）：completion 0.2(4 failed/1 succeeded)——失败轮的 `open_app(Clock)` 是**假阳性**:设备停在 Settings→Screen Time(此前 canonical back 轮遗留),`foreground_app_matches` 凭裸 token 'Clock' 匹配到 **Screen Time 应用使用列表里的 "Clock" 字样**,以 0.9 置信度宣布启动成功(matched_evidence=['Clock']),实际从未离开 Settings;随后 `expect_text('Alarms')` 如实超时。与 App-Store-误分类同一缺陷类(裸 token 身份判定)
+- 判定：**不采纳本次数据;#11 推迟**到 foreground_app verifier 修复后(候选修法与 settings-detail 假阳性同款:veto+anchor+abstain——settings chrome 可见时拒绝裸 token 前台断言)。修复本身是测量仪器变更,必须先于 A/B 合入
+- 产物：无 fixture;失败 ledger 在本地 artifacts(worktree 已清理,arm A JSON 未入库)
+- 注意事项：尝试 2 的 launch 成功轮(round 4,完整走完 4 tab)证明流程本身可行;设备已复位 verified-Home;同日 #76 的 facade home 修复在复位时再次真机验证(`ios_home_screen_visible` succeeded)
+
 ### 2026-06-11 canonical primitives 首个 committed floor（矩阵 #9,fixture 入库）
 - 类型：基线建立
 - 格子：canonical primitives;n=5(20 task-rounds);命令:`GLASSBOX_PHONE_MODEL=ipad_mini_7 GLASSBOX_LANGUAGE=en GLASSBOX_REGION=HK GLASSBOX_PICOKVM_ROBUST_CAPTURE=1 GLASSBOX_PICOKVM_OPEN_RETRY_ATTEMPTS=8 uv run python -m skills.regression.computer_use_success_rate run-canonical-primitives --rounds 5 --out … --artifact-root …`
