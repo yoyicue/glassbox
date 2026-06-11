@@ -1127,6 +1127,15 @@ def open_app_from_springboard(
         opened, scene = _handle_account_verification_or_continue(phone, scene, app_labels, settle_s=settle_s)
         if opened:
             return True
+        # Surface gate (third instance of the bare-token defect class, live
+        # 2026-06-11): on iPad a sweep swipe can fire the bottom-edge
+        # previous-app gesture and bounce back into the foregrounded app —
+        # the scan then "finds" the app label inside foreign UI (Settings →
+        # Screen Time's usage list names every app) and taps it. Never
+        # OCR-tap off the Home surface; bail to the designed fallback.
+        if not is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
+            logger.warning("[sb] page sweep left the Home surface → spotlight fallback")
+            return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
         if _tap_icon_any(phone, scene, app_labels, icon_map=icon_map, settle_s=settle_s):
             return True
         if _tap_target_inside_home_folder_if_visible(
@@ -1150,6 +1159,10 @@ def open_app_from_springboard(
         opened, scene = _handle_account_verification_or_continue(phone, scene, app_labels, settle_s=settle_s)
         if opened:
             return True
+        # Same surface gate as the backward sweep above.
+        if not is_ios_home_screen(scene, viewport_size=_viewport_size(phone)):
+            logger.warning("[sb] page sweep left the Home surface → spotlight fallback")
+            return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
         if _tap_icon_any(phone, scene, app_labels, icon_map=icon_map, settle_s=settle_s):
             return True
         if _tap_target_inside_home_folder_if_visible(
