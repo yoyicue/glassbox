@@ -46,7 +46,9 @@ glassbox-show-screen = "glassbox.demo.show_screen:main"
 glassbox-list-devices = "glassbox.demo.list_devices:main"
 glassbox-ai-session = "glassbox.ai_session:main"
 glassbox-mcp-server = "glassbox.mcp.server:main"
-glassbox-computer-use-success-rate = "skills.regression.computer_use_success_rate:main"
+# The computer-use success-rate harness lives in skills/ (not shipped in the
+# wheel), so it must not be a console script — in-repo callers use
+# `python -m skills.regression.computer_use_success_rate` (see the Makefile).
 
 [project.entry-points."glassbox.app_policies"]
 ios_settings = "glassbox.app_policies:ios_settings_app_policy"
@@ -72,8 +74,11 @@ moonshot = "glassbox.backend_registry:moonshot_vlm_registration"
 siliconflow = "glassbox.backend_registry:siliconflow_vlm_registration"
 
 [project.entry-points."glassbox.crawl_policies"]
+# Only checkout-independent policies are advertised to installed consumers.
+# The ios_settings/ipados_settings adapters wrap the in-repo regression
+# harness (skills.*, not shipped in the wheel) and are registered directly on
+# DEFAULT_CRAWL_POLICY_REGISTRY for repo checkouts instead.
 generic = "glassbox.crawl_policies:generic_crawl_policy_registration"
-ios_settings = "glassbox.crawl_policies:ios_settings_crawl_policy_registration"
 
 [project.entry-points."glassbox.verifiers"]
 foreground_app = "glassbox.verification.registry:foreground_app_verifier_registration"
@@ -92,6 +97,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["glassbox"]
+
+[tool.hatch.build.targets.sdist]
+# Build from an explicit allow-list — a default hatchling sdist also hoovers
+# any untracked working-tree file (local notes, scratch dirs) into a public
+# artifact.
+only-include = ["glassbox", "README.md", "ONBOARDING.md", "LICENSE", ".env.example"]
 
 # ─── pytest ────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]

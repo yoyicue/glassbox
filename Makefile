@@ -1,6 +1,6 @@
 .PHONY: lint test check worktree regression-gate regression-compare regression-compare-l2-advisory machinery-probe-gate ab-semantic-plan \
 	human-baseline-template human-baseline-validate \
-	golden-harvest golden-audit \
+	golden-harvest golden-audit packaging-smoke \
 	computer-use-success-rate-ios-settings ipad-settings-state-machine ipad-settings-ab-matrix ios-settings-ab-matrix
 
 # CUQ-3.3: the reliability merge gate. `make check` is device-independent (no
@@ -12,7 +12,23 @@ lint:
 test:
 	uv run pytest skills/smoke -q
 
-check: lint test regression-gate golden-audit
+check: lint test regression-gate golden-audit packaging-smoke
+
+# Wheel-install packaging smoke: build the wheel and probe it from an isolated
+# env WITHOUT the repo on sys.path — console scripts resolve, advertised entry
+# points load, checkout-only crawl policies degrade with an actionable error,
+# py.typed ships. The editable dev install masks this entire breakage class
+# (the repo root rides sys.path), which is how a core→skills import shipped
+# broken in the published wheel. Needs the uv cache (or network) for the
+# wheel's dependencies — CI has both.
+PACKAGING_SMOKE_DIST ?= dist/_packaging_smoke
+PACKAGING_SMOKE_PYTHON ?= 3.11
+packaging-smoke:
+	rm -rf "$(PACKAGING_SMOKE_DIST)"
+	uv build --wheel --out-dir "$(PACKAGING_SMOKE_DIST)" >/dev/null
+	uv venv --python $(PACKAGING_SMOKE_PYTHON) "$(PACKAGING_SMOKE_DIST)/venv" >/dev/null
+	uv pip install --python "$(PACKAGING_SMOKE_DIST)/venv" --quiet $(PACKAGING_SMOKE_DIST)/*.whl
+	"$(PACKAGING_SMOKE_DIST)/venv/bin/python" skills/regression/packaging_probe.py
 
 # Create a git worktree pre-linked with the gitignored local-only config that
 # `git worktree add` otherwise silently omits — `.env` (without it the effector

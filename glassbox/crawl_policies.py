@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import Any
 
+from loguru import logger
+
 from glassbox.cognition.candidates import ocr_tap_candidates
 
 
@@ -60,8 +62,19 @@ class CrawlPolicyRegistry:
         except TypeError:
             selected = entry_points().get("glassbox.crawl_policies", ())
         for entry_point in selected:
-            loaded = entry_point.load()
-            for registration in _coerce_registrations(loaded):
+            # One broken plugin must not poison the registry: load failures used
+            # to propagate out of the first names()/create() call AND silently
+            # drop every later entry point. Skip loudly, keep loading.
+            try:
+                registrations = tuple(_coerce_registrations(entry_point.load()))
+            except Exception as exc:
+                logger.warning(
+                    "crawl-policy entry point {!r} failed to load; skipping: {}",
+                    getattr(entry_point, "name", entry_point),
+                    exc,
+                )
+                continue
+            for registration in registrations:
                 self.register(registration)
 
 
@@ -183,14 +196,27 @@ def _generic_crawl_policy_factory(**_kwargs) -> GenericCrawlPolicyAdapter:
     return GenericCrawlPolicyAdapter()
 
 
+_CHECKOUT_ONLY_POLICY_MSG = (
+    "crawl policy {name!r} adapts the in-repo Settings regression harness "
+    "(skills.regression.ios_settings), which is not shipped in the wheel — it "
+    "needs a repo checkout. Use the 'generic' policy from an installed package."
+)
+
+
 def _ios_settings_crawl_policy_factory(**kwargs) -> SettingsCrawlPolicyAdapter:
-    from skills.regression.ios_settings.policy import settings_policy_for_config
+    try:
+        from skills.regression.ios_settings.policy import settings_policy_for_config
+    except ImportError as exc:
+        raise RuntimeError(_CHECKOUT_ONLY_POLICY_MSG.format(name="ios_settings")) from exc
 
     return SettingsCrawlPolicyAdapter(settings_policy_for_config(kwargs.get("cfg")))
 
 
 def _ipados_settings_crawl_policy_factory(**_kwargs) -> SettingsCrawlPolicyAdapter:
-    from skills.regression.ios_settings.policy import IPadSettingsPolicy
+    try:
+        from skills.regression.ios_settings.policy import IPadSettingsPolicy
+    except ImportError as exc:
+        raise RuntimeError(_CHECKOUT_ONLY_POLICY_MSG.format(name="ipados_settings")) from exc
 
     return SettingsCrawlPolicyAdapter(IPadSettingsPolicy())
 

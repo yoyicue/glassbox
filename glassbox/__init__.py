@@ -25,12 +25,16 @@ Top-level modules:
 
 
 def _load_dotenv_once() -> None:
-    """Automatically load the repo-root .env on `import glassbox` (API keys
-    and other sensitive config).
+    """Automatically load a .env on `import glassbox` (API keys and other
+    sensitive config).
 
-    .env is not committed to git (see .gitignore); the template is in
-    .env.example. If python-dotenv is missing or .env does not exist, this
-    silently skips — real environment variables still take effect.
+    Resolution order: the package-root .env wins — in a repo checkout that is
+    the repo root (template in .env.example). On a wheel install the "package
+    root" is site-packages, where no .env can sensibly live, so fall back to
+    the current working directory's .env — but only when it actually carries
+    GLASSBOX_ keys, so an unrelated project's .env is never hoovered up. If
+    python-dotenv is missing or no .env is found, this silently skips — real
+    environment variables still take effect.
     """
     try:
         from pathlib import Path
@@ -41,6 +45,15 @@ def _load_dotenv_once() -> None:
     env_file = Path(__file__).resolve().parents[1] / ".env"
     if env_file.exists():
         load_dotenv(env_file)
+        return
+    cwd_env = Path.cwd() / ".env"
+    try:
+        if cwd_env.is_file() and "GLASSBOX_" in cwd_env.read_text(
+            encoding="utf-8", errors="ignore"
+        ):
+            load_dotenv(cwd_env)
+    except OSError:
+        pass
 
 
 _load_dotenv_once()
