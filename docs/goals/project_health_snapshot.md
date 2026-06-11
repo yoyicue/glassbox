@@ -177,10 +177,15 @@ likewise a floor. Owner:
 **Remediation: PARTIAL (PR #69).** Raw counts now gate per round (a 2-round
 candidate is no longer a fake regression against the 5-round floor), and every
 vacuous drop-gate announces itself on each compare run — "printed and gated"
-can no longer read as "protected". **Remaining:** the vacuity itself ends only
-when a floor with non-zero `strategy_switches`/`vlm_action_coverage` is
-promoted (a rig run); until then the L2-snapshot pin + nightly machinery probe
-stay the real teeth.
+can no longer read as "protected". **Remaining — reframed (2026-06-11):** the
+earlier "promote a VLM-on floor to end the vacuity" idea is WRONG by the
+repo's own landed three-cell design: a clean VLM-on run also scores
+`vlm_action_coverage≈0` (every tap verifies first-try — an honest zero), and
+a messier run with completion < 1.0 is rejected by `validate_floor_candidate`
+anyway. Escalation-count coverage on the *floor* is a perverse target; the
+L2-snapshot `>0` pin + the blocking nightly machinery probe ARE the designed
+teeth for those two metrics, and the per-compare vacuity warning keeps the
+residual visible rather than hidden.
 
 ```bash
 sed -n '81,97p' skills/regression/computer_use_success_rate.py
