@@ -36,7 +36,6 @@ ocr = [
 dev = [
     "pytest>=8.0",
     "pytest-html>=4.1",
-    "pytest-rerunfailures>=14.0",
     "allure-pytest>=2.13",
     "ruff>=0.4",
 ]

@@ -51,16 +51,37 @@ from glassbox.runtime import (
 GLASSBOX_ROOT = Path(__file__).resolve().parent.parent
 
 
+# Non-GLASSBOX_-prefixed env vars glassbox reads, all resolved in
+# glassbox/cognition/vlm_kimi.py: per-backend API keys (_require_api_key) and
+# the VLM backend/model selectors (make_vlm_client / MoonshotAnthropicVLM).
+# A contributor's .env routinely sets these, and they would otherwise leak into
+# tests that assert default behavior (e.g. the missing-API-key contract).
+_VLM_ENV_KEYS = (
+    "MOONSHOT_API_KEY",
+    "SILICONFLOW_API_KEY",
+    "KIMI_ANTHROPIC_MODEL",
+    "VLM_BACKEND",
+    "KIMI_BACKEND",
+    "VLM_MODEL",
+    "KIMI_MODEL",
+)
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _isolate_glassbox_env():
     """Run the suite against true config defaults.
 
     ``import glassbox`` auto-loads the repo-root ``.env`` (for local device runs
-    and API keys), which would otherwise leak ``GLASSBOX_*`` overrides into tests
-    that assert default configuration. Strip them for the session and restore
-    afterwards so a contributor's local ``.env`` cannot break the suite.
+    and API keys), which would otherwise leak ``GLASSBOX_*`` overrides — plus the
+    non-prefixed VLM keys/selectors above — into tests that assert default
+    configuration. Strip them for the session and restore afterwards so a
+    contributor's local ``.env`` cannot break the suite.
     """
-    saved = {key: os.environ.pop(key) for key in list(os.environ) if key.startswith("GLASSBOX_")}
+    saved = {
+        key: os.environ.pop(key)
+        for key in list(os.environ)
+        if key.startswith("GLASSBOX_") or key in _VLM_ENV_KEYS
+    }
     get_config.cache_clear()
     try:
         yield

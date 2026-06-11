@@ -11,6 +11,11 @@ on:
   push:
     branches: [main]
 
+# Least privilege: the gate only checks out and tests — it never writes back
+# to the repo, so the GITHUB_TOKEN gets read-only contents.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

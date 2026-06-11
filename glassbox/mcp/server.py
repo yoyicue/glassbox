@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from glassbox.ai import AI_API_VERSION, open_phone
+from glassbox.ai import AI_API_VERSION, observation_payload, open_phone
 
 JSON = dict[str, Any]
 REPO_GLASSBOX_ROOT = Path(__file__).resolve().parents[2]
@@ -250,37 +250,16 @@ class HarnessMCPService:
             obs = phone.observe()
             artifacts = phone.save_report()
             self._remember_run(args, artifacts.run_id, artifacts.run_dir, kind="observe_summary")
-            return {
+            # Shared wire format (glassbox.ai.observation_payload) + the MCP
+            # layer: run_id/report_path and run-dir-relative artifact paths.
+            payload = observation_payload(obs)
+            payload.update({
                 "run_id": artifacts.run_id,
-                "summary": obs.summary,
-                "page_id": obs.page_id,
-                "viewport_size": list(obs.viewport_size) if obs.viewport_size else None,
-                "coordinate_space": obs.coordinate_space,
-                "crop_bbox": list(obs.crop_bbox) if obs.crop_bbox else None,
-                "platform_scene_kind": obs.platform_scene_kind,
-                "current_vc": obs.current_vc,
-                "whitebox_evaluated": obs.whitebox_evaluated,
-                "app_state": obs.app_state or {},
-                "elements": [
-                    {
-                        "id": element.element_id,
-                        "type": element.type,
-                        "text": element.text,
-                        "box": {
-                            "x": element.box.x,
-                            "y": element.box.y,
-                            "w": element.box.w,
-                            "h": element.box.h,
-                            "center": list(element.box.center),
-                        },
-                        "confidence": element.confidence,
-                    }
-                    for element in obs.elements
-                ],
                 "scene_path": _rel_to(artifacts.run_dir, obs.scene_path),
                 "screenshot_path": _rel_to(artifacts.run_dir, obs.screenshot_path),
                 "report_path": _rel_to(artifacts.run_dir, artifacts.report_path),
-            }
+            })
+            return payload
 
     def explore(self, args: JSON) -> JSON:
         goal = str(args.get("goal") or "")
