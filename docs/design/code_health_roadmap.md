@@ -79,10 +79,12 @@ prose.**
    revertable, changes no observable behavior, and lands green: `make check`
    (lint + tests + regression gate) must pass, and the committed reliability floor
    (`skills/regression/fixtures/reliability_baseline.json`) must not regress.
-3. **`main` is NOT branch-protected.** So each step must be *self-verifying* before
-   merge. Anything that touches action *timing/perception* (P1/P2) additionally
-   needs one rig A/B (iPad mini 7 + iPhone) before it counts as done — a refactor
-   that "passes offline" can still shift live nav reliability.
+3. **`main` is branch-protected (since 2026-06-04: required `check` status,
+   strict up-to-date, enforced for admins) — but with 0 review approvals.** CI
+   is the only independent check, so each step must still be *self-verifying*
+   before merge. Anything that touches action *timing/perception* (P1/P2)
+   additionally needs one rig A/B (iPad mini 7 + iPhone) before it counts as
+   done — a refactor that "passes offline" can still shift live nav reliability.
 4. **Don't trust a single grep, metric, or stale assessment.** Two findings in the
    first draft were wrong: the "10 dead flags" was a word-splitting artifact (all 10
    are live), and "no platform recovery-provider seam" was already false (the seam

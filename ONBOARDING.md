@@ -107,6 +107,15 @@ uv run python -m skills.regression.ios_settings.diagnose --json
 uv run python -m skills.regression.ios_settings.run_full --quick
 ```
 
+> **VLM note:** unlike plain `open_phone()` runs (OCR-only and free by
+> default), the `run_full` harness defaults **VLM on** for live cold-start
+> runs (`skills/regression/ios_settings/config.py` sets
+> `GLASSBOX_ENABLE_VLM=1`) — its SpringBoard icon-grounding fallback needs it.
+> Without a VLM API key in `.env` (e.g. `MOONSHOT_API_KEY`, see
+> `.env.example`) a first cold-start run can die with `Missing API key`.
+> Either put the key in `.env`, or run OCR-only with
+> `GLASSBOX_ENABLE_VLM=0` (deterministic-path misses then go unrecovered).
+
 `diagnose` prints a readiness report. Key fields when something is wrong:
 
 | `code` / error | Meaning | First thing to check |

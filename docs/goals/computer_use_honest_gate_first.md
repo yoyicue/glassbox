@@ -1,6 +1,20 @@
 # Goal — Honest-gate-first redirection (fix the compass before the engine)
 
-Status: **implemented and verified (2026-06-01).**
+Status: **implemented and verified (2026-06-01); Ranks 1–3 landed (update
+2026-06-11).** Since this doc's diagnosis was written, its prescriptions have
+shipped: Rank 1 — the comparator gates the coverage metrics
+(`GATE_DROP_METRICS` incl. `expected_state_coverage` / `vlm_action_coverage` /
+`recoveries` / `strategy_switches`, `e430d92`), now with config-identity
+refusal, per-round count scaling, and vacuity warnings (PR #69); Rank 2 — the
+Settings crawler's row taps route through
+`phone.tap_element(expected_state=...)` → the orchestrator's semantic plan
+(`d9695ae`), and the committed floor is coverage-bearing
+(`expected_state_coverage≈0.978`, `571e568`); Rank 3 as-built — the nightly
+runs a blocking fault-injection machinery probe (`f1f22a7`/`4b0c110`; the
+nightly itself never gates merges — self-hosted). `main` IS branch-protected
+(required `check`, strict, enforced for admins, 0 review approvals).
+Present-tense claims below describe the **pre-fix state being diagnosed**;
+where a specific claim has since flipped it is marked ⟦fixed⟧.
 Phase 0 and the first Phase-1 floor replacement have landed in-tree: the offline
 smoke gate rejects a zero-completion committed floor, the fixture headline leads
 with `task_completion_rate`, and the committed baseline has been replaced with a
@@ -53,11 +67,14 @@ physical-ceiling / scope) plus 4 adversarial verdicts converged on:
 1. **Broken compass (above).** Metric uncorrelated with goal + un-failable gate.
    This is lever #1: until it's fixed, no other work can be trusted.
 2. **The strongest capabilities are off the default path — and the crawler bypasses
-   the orchestrator entirely.** The Settings crawler navigates via
-   `phone.tap_xy(cx,cy)` (`skills/regression/ios_settings/navigation.py:163,254,455`
+   the orchestrator entirely.** ⟦fixed by `d9695ae` (2026-06-06): row taps route
+   through `phone.tap_element(expected_state=...)` → the semantic plan; raw
+   `tap_xy` survives only as mock fallbacks, and the `571e568` floor carries
+   `expected_state_coverage≈0.978`⟧ The Settings crawler navigated via
+   `phone.tap_xy(cx,cy)` (then `skills/regression/ios_settings/navigation.py:163,254,455`
    → `glassbox/phone.py:1613` → gesture executor), **bypassing**
    `default_semantic_action_plan` and expected-state verification for those row
-   taps. That is why the floor shows `vlm_calls=0` / `expected_state_coverage=0`,
+   taps. That is why the floor showed `vlm_calls=0` / `expected_state_coverage=0`,
    even though `strategy_switches=5` on other primitives. Much of the
    recovery/strategy/VLM machinery is *not on the path that actually matters for
    row entry.* Of 29 bool config flags, **26 default False**
@@ -76,7 +93,9 @@ physical-ceiling / scope) plus 4 adversarial verdicts converged on:
    rig-A/B'd ship-negative (en/HK B `task_completion` **1/3** with `entered_graph` 7
    but crash 2/3; A `task_completion` 2/3 but `entered_graph` 0; zh runs are
    broken/contaminated — `ipad_settings_l1_rig_ab_handoff.md:39-46,103-105`). `main`
-   is not branch-protected (`../design/code_health_roadmap.md:83`).
+   was not branch-protected then ⟦fixed — protected since 2026-06-04: required
+   `check` status, strict, enforced for admins; see
+   `../design/code_health_roadmap.md`⟧.
 
 ## 3. The plan
 

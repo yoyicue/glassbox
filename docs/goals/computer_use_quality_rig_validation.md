@@ -248,10 +248,13 @@ The flag-gated reliability work is shipped (Phases A–D enumerate every flag). 
 (the test would be vacuous, the file is off-limits, or it's a rig-coupled
 rewrite), so they are the rig session's job:
 
-1. **CUQ-0.1 rest — `tap` / `launch_app` onto the strategy ladder.** `back` and
-   `scroll` are shipped (flag-gated); `tap`/`launch_app` need the CUQ-0.8
-   nested-orchestration suppression (their strategy callables re-enter the
-   orchestrator). `home` already ladders bespoke. Validate per-op on the rig.
+1. **CUQ-0.1 rest — `launch_app` onto the strategy ladder.** ⟦update
+   2026-06-11: `tap` shipped and is DEFAULT-ON — `semantic_plan_ops` defaults
+   to `"back,scroll,tap"` (`glassbox/config.py`), rig-validated via the
+   machinery probe⟧ `back` and `scroll` are shipped; `launch_app` still needs
+   the CUQ-0.8 nested-orchestration suppression (its strategy callables
+   re-enter the orchestrator). `home` already ladders bespoke. Validate per-op
+   on the rig.
 2. **CUQ-0.12 — let recovery alter the current action's outcome.** Today recovery
    runs *after* the group finalizes (so it primes the next action, not this one);
    moving it in-flight is a finalization-semantics rewrite whose value (does
