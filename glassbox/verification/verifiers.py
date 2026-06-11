@@ -765,6 +765,9 @@ class SceneProgressedVerifier(BaseTextVerifier):
 
 class ForegroundAppMatchesVerifier(SceneProgressedVerifier):
     name = "foreground_app_matches"
+    # 2026-06-11.1: bare-token matches inside Settings surfaces are vetoed
+    # (Screen Time usage lists name apps — live false positive, A/B matrix #11).
+    version = "2026-06-11.1"
 
     def verify(self, input: VerifierInput) -> SemanticOutcome:
         texts = _all_texts(input.after_scenes)
@@ -790,9 +793,24 @@ class ForegroundAppMatchesVerifier(SceneProgressedVerifier):
                         deterministic=False,
                         observation_match=input.matched_by_observation,
                     )
+            vetoed_hits: list[str] = []
+            vetoed_evidence: str | None = None
             for index, scene in enumerate(input.after_scenes):
                 hits = _contains_any(_texts(scene), candidates)
                 if not hits:
+                    continue
+                # Veto (same defect class as the App Store misclassification
+                # fix): an app-name token in the BODY of a Settings surface is
+                # identity noise, not foreground evidence — Settings → Screen
+                # Time lists app names, and the bare token "Clock" asserted a
+                # successful Clock launch at 0.9 confidence while the device
+                # never left Settings (live, 2026-06-11). When the after scene
+                # itself carries Settings identity and the target is NOT
+                # Settings, abstain instead of asserting success.
+                settings_evidence = _settings_foreground_evidence(scene)
+                if settings_evidence is not None:
+                    vetoed_hits = hits
+                    vetoed_evidence = settings_evidence
                     continue
                 return SemanticOutcome(
                     status="succeeded",
@@ -804,6 +822,22 @@ class ForegroundAppMatchesVerifier(SceneProgressedVerifier):
                     matched_evidence=hits,
                     matched_frame_id=_after_frame_id(input, index),
                     matched_scene_id=_after_scene_id(input, index),
+                    deterministic=False,
+                    observation_match=input.matched_by_observation,
+                )
+            if vetoed_hits:
+                return SemanticOutcome(
+                    status="unknown",
+                    verifier=self.name,
+                    reason=(
+                        f"app markers {vetoed_hits} found only inside a Settings surface "
+                        f"({vetoed_evidence}) — bare-token match vetoed (Settings body text "
+                        "names apps, e.g. Screen Time usage lists); foreground not proven"
+                    ),
+                    confidence=0.4,
+                    verifier_version=self.version,
+                    verifier_hash=_source_hash(self.__class__),
+                    missing_evidence=candidates,
                     deterministic=False,
                     observation_match=input.matched_by_observation,
                 )
