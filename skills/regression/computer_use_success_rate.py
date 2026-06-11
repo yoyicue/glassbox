@@ -77,6 +77,11 @@ COMPARE_METRIC_KEYS = (
     "vlm_cache_hits",
     "vlm_cache_misses",
     "vlm_cache_hit_rate",
+    # Speed visibility (snapshot item 2): printed in every compare so latency
+    # cannot regress invisibly. Never gated — observed action duration is
+    # host/rig-dependent and reliability-first explicitly buys it.
+    "action_duration_ms_total",
+    "action_duration_ms_per_task",
 )
 GATE_DROP_METRICS = {
     "task_completion_rate",
@@ -91,6 +96,10 @@ GATE_RISE_METRICS = {
     "navigation_origin_precondition_failures",
     "unknown_rate",
 }
+# Raw run-total counts in the gate set are only scale-comparable per round: a
+# clean 3-round candidate would otherwise read as a "drop" against a 5-round
+# floor that needed 2 recoveries. Rates/ratios are left untouched.
+GATE_COUNT_METRICS_PER_ROUND = {"recoveries", "strategy_switches"}
 FLOOR_IDENTITY_CONFIG_KEYS = ("phone_model", "task_set", "language", "region")
 FLOOR_MIN_ROUNDS = 5
 IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL = "ios_settings_clean_hdmi"
@@ -770,6 +779,7 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
         _metric_int(action, "vlm_cache_misses")
         for action in all_actions
     )
+    action_duration_ms_total = sum(_metric_int(action, "duration_ms") for action in all_actions)
     return {
         "task_completion_rate": task_completion_rate,
         "task_completion_variance": task_completion_variance,
@@ -801,6 +811,10 @@ def _metrics(tasks: list[dict[str, Any]]) -> dict[str, Any]:
             vlm_cache_hits / (vlm_cache_hits + vlm_cache_misses)
             if (vlm_cache_hits + vlm_cache_misses)
             else 0.0
+        ),
+        "action_duration_ms_total": action_duration_ms_total,
+        "action_duration_ms_per_task": (
+            action_duration_ms_total / task_count if task_count else 0.0
         ),
     }
 
@@ -1278,6 +1292,7 @@ def compare_benchmarks(
     candidate: Mapping[str, Any],
     *,
     tolerance: float = 0.0,
+    allow_config_mismatch: bool = False,
 ) -> tuple[int, list[str]]:
     errors = [f"baseline: {error}" for error in validate_benchmark(baseline)]
     errors.extend(f"candidate: {error}" for error in validate_benchmark(candidate))
@@ -1285,17 +1300,64 @@ def compare_benchmarks(
         errors.append("tolerance must be a non-negative finite number")
     if errors:
         return 2, errors
+
+    base_config = baseline.get("config") or {}
+    cand_config = candidate.get("config") or {}
+    lines: list[str] = []
+    # Config-identity check (snapshot item 2): a zh-iPhone run gated against an
+    # en-iPad floor compares two different observation distributions — the
+    # verdict is meaningless either way it falls. Refuse by default; an explicit
+    # opt-out keeps the readout available as labelled-advisory output.
+    identity_mismatches = [
+        f"config.{key} mismatch: baseline={base_config.get(key)!r} "
+        f"candidate={cand_config.get(key)!r}"
+        for key in FLOOR_IDENTITY_CONFIG_KEYS
+        if base_config.get(key) != cand_config.get(key)
+    ]
+    if identity_mismatches:
+        if not allow_config_mismatch:
+            return 2, [
+                *identity_mismatches,
+                "cross-config benchmarks are not comparable for gating (different "
+                "device/locale/task distributions); produce a config-matched baseline, "
+                "or pass --allow-config-mismatch for an explicitly advisory readout",
+            ]
+        lines.append(
+            "WARNING: cross-config comparison — deltas below are an advisory readout, "
+            "not a gate verdict:"
+        )
+        lines.extend(f"  {mismatch}" for mismatch in identity_mismatches)
+
+    base_rounds = int(base_config.get("rounds", 0) or 0)
+    cand_rounds = int(cand_config.get("rounds", 0) or 0)
     base_metrics = baseline.get("metrics") or {}
     cand_metrics = candidate.get("metrics") or {}
-    lines: list[str] = []
     rc = 0
     for key in COMPARE_METRIC_KEYS:
         base = float(base_metrics.get(key, 0.0) or 0.0)
         cand = float(cand_metrics.get(key, 0.0) or 0.0)
-        delta = cand - base
-        lines.append(f"{key}: baseline={base:.6g} candidate={cand:.6g} delta={delta:+.6g}")
-        if key in GATE_DROP_METRICS and delta < -tolerance:
-            rc = 1
+        gate_base, gate_cand = base, cand
+        if key in GATE_COUNT_METRICS_PER_ROUND and base_rounds > 0 and cand_rounds > 0:
+            gate_base = base / base_rounds
+            gate_cand = cand / cand_rounds
+            delta = gate_cand - gate_base
+            lines.append(
+                f"{key}: baseline={base:.6g} candidate={cand:.6g} "
+                f"per_round={gate_base:.6g}->{gate_cand:.6g} delta={delta:+.6g}/round"
+            )
+        else:
+            delta = gate_cand - gate_base
+            lines.append(f"{key}: baseline={base:.6g} candidate={cand:.6g} delta={delta:+.6g}")
+        if key in GATE_DROP_METRICS:
+            if gate_base == 0.0:
+                # A drop-gate against a zero baseline can never fire. Say so —
+                # "printed and gated" must not read as "protected".
+                lines.append(
+                    f"  WARNING: {key} drop-gate is vacuous against this baseline "
+                    "(baseline=0; nothing below zero exists)"
+                )
+            if delta < -tolerance:
+                rc = 1
         if key in GATE_RISE_METRICS and delta > tolerance:
             rc = 1
         if (
@@ -1349,6 +1411,11 @@ def validate_floor_candidate(
     for key in GATE_DROP_METRICS:
         floor_value = float(floor_metrics.get(key, 0.0) or 0.0)
         candidate_value = float(candidate_metrics.get(key, 0.0) or 0.0)
+        if key in GATE_COUNT_METRICS_PER_ROUND and floor_rounds > 0 and candidate_rounds > 0:
+            # Raw run-total counts only compare per round (a 10-round candidate
+            # trivially out-counts a 5-round floor and vice versa).
+            floor_value /= floor_rounds
+            candidate_value /= candidate_rounds
         if candidate_value < floor_value - tol:
             reasons.append(
                 f"{key} would drop: current_floor={floor_value:.6g} "
@@ -1802,6 +1869,15 @@ def main(argv: list[str] | None = None) -> int:
     compare.add_argument("baseline", type=Path)
     compare.add_argument("candidate", type=Path)
     compare.add_argument("--tolerance", type=float, default=0.0)
+    compare.add_argument(
+        "--allow-config-mismatch",
+        action="store_true",
+        help=(
+            "Proceed when baseline/candidate config identity (phone_model/task_set/"
+            "language/region) differs — output is labelled advisory; without this "
+            "flag a cross-config comparison is refused (rc 2)."
+        ),
+    )
 
     floor_candidate = sub.add_parser(
         "validate-floor-candidate",
@@ -1945,7 +2021,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "compare":
         baseline = _read_json(args.baseline.expanduser().resolve())
         candidate = _read_json(args.candidate.expanduser().resolve())
-        rc, lines = compare_benchmarks(baseline, candidate, tolerance=args.tolerance)
+        rc, lines = compare_benchmarks(
+            baseline,
+            candidate,
+            tolerance=args.tolerance,
+            allow_config_mismatch=args.allow_config_mismatch,
+        )
         for line in lines:
             prefix = "ERROR: " if rc == 2 else ""
             print(prefix + line)

@@ -530,3 +530,95 @@ def test_gate_tolerance_absorbs_a_small_drop_but_not_a_large_one():
     rc_strict, _ = compare_benchmarks(baseline, regressed, tolerance=0.0)
     assert rc_loose == 0
     assert rc_strict == 1
+
+
+@pytest.mark.smoke
+def test_gate_refuses_cross_config_comparison_by_default():
+    """Gating a candidate from a different device/locale against the floor
+    compares two observation distributions — the verdict is meaningless either
+    way it falls (snapshot item 2: the nightly zh-iPhone lane used to do
+    exactly this against the en-iPad floor)."""
+    baseline = _baseline()
+    cross = copy.deepcopy(baseline)
+    cross["config"]["phone_model"] = "iphone_17_pro_max"
+    cross["config"]["language"] = "zh-Hans"
+
+    rc, lines = compare_benchmarks(baseline, cross)
+    assert rc == 2
+    assert any("config.phone_model mismatch" in line for line in lines)
+    assert any("not comparable for gating" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_allows_cross_config_comparison_as_labelled_advisory():
+    baseline = _baseline()
+    cross = copy.deepcopy(baseline)
+    cross["config"]["phone_model"] = "iphone_17_pro_max"
+
+    rc, lines = compare_benchmarks(baseline, cross, allow_config_mismatch=True)
+    assert rc == 0  # identical metrics — only the config identity differs
+    assert any("advisory readout" in line for line in lines)
+    assert any("config.phone_model mismatch" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_gate_count_metrics_compare_per_round_not_raw():
+    """Raw run-total counts are only scale-comparable per round: a 2-round
+    candidate with 1 recovery (0.5/round) must NOT read as a regression against
+    a 5-round floor with 2 (0.4/round) — and a same-rounds candidate with fewer
+    recoveries per round still must."""
+    baseline = _with_recoveries(_baseline(), count=2)
+    assert int(baseline["config"]["rounds"]) == 5
+
+    fewer_rounds = _with_recoveries(baseline, count=1)
+    fewer_rounds["config"]["rounds"] = 2
+    assert validate_benchmark(fewer_rounds) == []
+    rc, lines = compare_benchmarks(baseline, fewer_rounds)
+    assert rc == 0
+    assert any(line.startswith("recoveries:") and "/round" in line for line in lines)
+
+    same_rounds_regressed = _with_recoveries(baseline, count=1)
+    rc, _ = compare_benchmarks(baseline, same_rounds_regressed)
+    assert rc == 1
+
+
+@pytest.mark.smoke
+def test_gate_says_so_when_a_drop_gate_is_vacuous():
+    """The committed floor has strategy_switches=0 and vlm_action_coverage=0 —
+    their drop-gates cannot fire. "Printed and gated" must not read as
+    "protected": the comparator now says so explicitly on every run."""
+    baseline = _baseline()
+    assert float(baseline["metrics"]["strategy_switches"]) == 0.0
+
+    rc, lines = compare_benchmarks(baseline, copy.deepcopy(baseline))
+    assert rc == 0
+    assert any("strategy_switches drop-gate is vacuous" in line for line in lines)
+    assert any("vlm_action_coverage drop-gate is vacuous" in line for line in lines)
+
+
+@pytest.mark.smoke
+def test_duration_metrics_are_printed_but_never_gated():
+    """Speed is visible in every compare (snapshot item 2: latency could
+    regress through every gate invisibly) but never gates — observed action
+    duration is host/rig-dependent and reliability-first explicitly buys it."""
+    from skills.regression.computer_use_success_rate import (
+        GATE_DROP_METRICS,
+        GATE_RISE_METRICS,
+    )
+
+    assert "action_duration_ms_total" not in GATE_DROP_METRICS | GATE_RISE_METRICS
+    assert "action_duration_ms_per_task" not in GATE_DROP_METRICS | GATE_RISE_METRICS
+
+    baseline = _baseline()
+    slower = copy.deepcopy(baseline)
+    slower["tasks"][0]["actions"][0]["duration_ms"] += 600_000  # +10 min, way past any tolerance
+    slower["metrics"] = _metrics(slower["tasks"])
+    assert validate_benchmark(slower) == []
+    assert (
+        slower["metrics"]["action_duration_ms_total"]
+        > baseline["metrics"]["action_duration_ms_total"]
+    )
+
+    rc, lines = compare_benchmarks(baseline, slower)
+    assert rc == 0
+    assert any(line.startswith("action_duration_ms_total:") for line in lines)

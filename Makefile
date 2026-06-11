@@ -96,8 +96,13 @@ golden-audit:
 # on-rig gate the nightly workflow runs after a real device run.
 CANDIDATE ?= artifacts/computer_use_success_rate/benchmark.json
 TOLERANCE ?= 0.0
+# Extra comparator flags, e.g. REGRESSION_COMPARE_FLAGS=--allow-config-mismatch
+# for the labelled-advisory cross-device readout (the comparator refuses to
+# GATE a candidate whose phone_model/task_set/language/region differ from the
+# floor's — that comparison is meaningless either way it falls).
+REGRESSION_COMPARE_FLAGS ?=
 regression-compare:
-	$(COMPUTER_USE_SUCCESS_RATE) compare "$(RELIABILITY_BASELINE)" "$(CANDIDATE)" --tolerance $(TOLERANCE)
+	$(COMPUTER_USE_SUCCESS_RATE) compare "$(RELIABILITY_BASELINE)" "$(CANDIDATE)" --tolerance $(TOLERANCE) $(REGRESSION_COMPARE_FLAGS)
 
 # ADVISORY L2 coverage report (NON-blocking on purpose). Compare a fresh VLM-on
 # Settings run ($(L2_CANDIDATE), produce it with
