@@ -1,0 +1,4368 @@
+{
+  "schema_version": 1,
+  "run_id": "7e0b84d8e5714d73b594b69c9e774aba",
+  "started_at": "2026-06-11T15:58:26.155107+08:00",
+  "git_sha": "0466e06",
+  "config": {
+    "vlm_enabled": false,
+    "phone_model": "ipad_mini_7",
+    "task_set": "canonical_primitives",
+    "rounds": 5,
+    "navigation_origin_policy": "home_verified_precondition"
+  },
+  "tasks": [
+    {
+      "task": "go_home",
+      "round": 0,
+      "terminal_expected_state": {
+        "kind": "platform_scene_kind",
+        "payload": {
+          "any_of": [
+            "springboard"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 31545
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 31545
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3369
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3369
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_36_55_919427",
+      "artifact_run_id": "run_2026_06_11_15_36_55_919427",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "go_home",
+      "round": 1,
+      "terminal_expected_state": {
+        "kind": "platform_scene_kind",
+        "payload": {
+          "any_of": [
+            "springboard"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 9350
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 9350
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 5369
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 5369
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_37_48_047791",
+      "artifact_run_id": "run_2026_06_11_15_37_48_047791",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "go_home",
+      "round": 2,
+      "terminal_expected_state": {
+        "kind": "platform_scene_kind",
+        "payload": {
+          "any_of": [
+            "springboard"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 5314
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 5314
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3301
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3301
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_38_26_026284",
+      "artifact_run_id": "run_2026_06_11_15_38_26_026284",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "go_home",
+      "round": 3,
+      "terminal_expected_state": {
+        "kind": "platform_scene_kind",
+        "payload": {
+          "any_of": [
+            "springboard"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 9415
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 9415
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 19416
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 19416
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_38_59_731108",
+      "artifact_run_id": "run_2026_06_11_15_38_59_731108",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "go_home",
+      "round": 4,
+      "terminal_expected_state": {
+        "kind": "platform_scene_kind",
+        "payload": {
+          "any_of": [
+            "springboard"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 2510
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 2510
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 2441
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 2441
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_39_41_885243",
+      "artifact_run_id": "run_2026_06_11_15_39_41_885243",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "launch_app",
+      "round": 0,
+      "terminal_expected_state": {
+        "kind": "visible_text",
+        "payload": {
+          "any_of": [
+            "General",
+            "通用",
+            "Notifications",
+            "通知",
+            "Privacy & Security",
+            "隐私与安全性",
+            "Screen Time",
+            "屏幕使用时间"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": "settings/Blocked Contacts",
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "settings_detail",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 6296
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 6296
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "open_app",
+          "target": "设置",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "open_app",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "foreground_app_matches",
+          "confidence": 0.9,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "open_app",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 4543
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 4543
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_40_05_855886",
+      "artifact_run_id": "run_2026_06_11_15_40_05_855886",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "launch_app",
+      "round": 1,
+      "terminal_expected_state": {
+        "kind": "visible_text",
+        "payload": {
+          "any_of": [
+            "General",
+            "通用",
+            "Notifications",
+            "通知",
+            "Privacy & Security",
+            "隐私与安全性",
+            "Screen Time",
+            "屏幕使用时间"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": "settings/Blocked Contacts",
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "settings_detail",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3270
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3270
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "open_app",
+          "target": "设置",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "open_app",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "foreground_app_matches",
+          "confidence": 0.9,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "open_app",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 1655
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 1655
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_40_42_379431",
+      "artifact_run_id": "run_2026_06_11_15_40_42_379431",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "launch_app",
+      "round": 2,
+      "terminal_expected_state": {
+        "kind": "visible_text",
+        "payload": {
+          "any_of": [
+            "General",
+            "通用",
+            "Notifications",
+            "通知",
+            "Privacy & Security",
+            "隐私与安全性",
+            "Screen Time",
+            "屏幕使用时间"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": "settings/Blocked Contacts",
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "settings_detail",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 2386
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 2386
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "open_app",
+          "target": "设置",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "open_app",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "foreground_app_matches",
+          "confidence": 0.9,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "open_app",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 1670
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 1670
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_41_31_549395",
+      "artifact_run_id": "run_2026_06_11_15_41_31_549395",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "launch_app",
+      "round": 3,
+      "terminal_expected_state": {
+        "kind": "visible_text",
+        "payload": {
+          "any_of": [
+            "General",
+            "通用",
+            "Notifications",
+            "通知",
+            "Privacy & Security",
+            "隐私与安全性",
+            "Screen Time",
+            "屏幕使用时间"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": "settings/Blocked Contacts",
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "settings_detail",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 4222
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 4222
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "open_app",
+          "target": "设置",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "open_app",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "foreground_app_matches",
+          "confidence": 0.9,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "open_app",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 8682
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 8682
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_42_01_327220",
+      "artifact_run_id": "run_2026_06_11_15_42_01_327220",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "launch_app",
+      "round": 4,
+      "terminal_expected_state": {
+        "kind": "visible_text",
+        "payload": {
+          "any_of": [
+            "General",
+            "通用",
+            "Notifications",
+            "通知",
+            "Privacy & Security",
+            "隐私与安全性",
+            "Screen Time",
+            "屏幕使用时间"
+          ]
+        }
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": "settings/Blocked Contacts",
+        "scene_id": "scn_000005",
+        "is_anchor": false,
+        "platform_scene_kind": "settings_detail",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 4357
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 4357
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "open_app",
+          "target": "设置",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "open_app",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "foreground_app_matches",
+          "confidence": 0.9,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "open_app",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 4581
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 4581
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_42_47_661865",
+      "artifact_run_id": "run_2026_06_11_15_42_47_661865",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "back",
+      "round": 0,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000011",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3431
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3431
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "back",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_back",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "navigation_back",
+          "confidence": 0.85,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 2,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "nav_back_tap",
+              "verdict": "transport_failed",
+              "raw_semantic_status": "transport_failed",
+              "selection_source": "system",
+              "verification_source": "none",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 0
+            },
+            {
+              "idx": 1,
+              "strategy": "keyboard_back",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3886,
+              "switched_reason": "unsupported semantic strategy: back.nav_back_tap"
+            }
+          ],
+          "strategy_switches": 1,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3886
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_43_54_957134",
+      "artifact_run_id": "run_2026_06_11_15_43_54_957134",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "back",
+      "round": 1,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000011",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 2565
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 2565
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "back",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_back",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "navigation_back",
+          "confidence": 0.85,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 2,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "nav_back_tap",
+              "verdict": "transport_failed",
+              "raw_semantic_status": "transport_failed",
+              "selection_source": "system",
+              "verification_source": "none",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 0
+            },
+            {
+              "idx": 1,
+              "strategy": "keyboard_back",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3905,
+              "switched_reason": "unsupported semantic strategy: back.nav_back_tap"
+            }
+          ],
+          "strategy_switches": 1,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3905
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_44_22_805267",
+      "artifact_run_id": "run_2026_06_11_15_44_22_805267",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "back",
+      "round": 2,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000011",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 2586
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 2586
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "back",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_back",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "navigation_back",
+          "confidence": 0.85,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 2,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "nav_back_tap",
+              "verdict": "transport_failed",
+              "raw_semantic_status": "transport_failed",
+              "selection_source": "system",
+              "verification_source": "none",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 0
+            },
+            {
+              "idx": 1,
+              "strategy": "keyboard_back",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 4011,
+              "switched_reason": "unsupported semantic strategy: back.nav_back_tap"
+            }
+          ],
+          "strategy_switches": 1,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 4011
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_44_51_677096",
+      "artifact_run_id": "run_2026_06_11_15_44_51_677096",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "back",
+      "round": 3,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000010",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 2578
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 2578
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "back",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_back",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "navigation_back",
+          "confidence": 0.85,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 2,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "nav_back_tap",
+              "verdict": "transport_failed",
+              "raw_semantic_status": "transport_failed",
+              "selection_source": "system",
+              "verification_source": "none",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 0
+            },
+            {
+              "idx": 1,
+              "strategy": "keyboard_back",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 19634,
+              "switched_reason": "unsupported semantic strategy: back.nav_back_tap"
+            }
+          ],
+          "strategy_switches": 1,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 19634
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_45_09_973727",
+      "artifact_run_id": "run_2026_06_11_15_45_09_973727",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "back",
+      "round": 4,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000011",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 2624
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 2624
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "back",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_back",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "navigation_back",
+          "confidence": 0.85,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 2,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "nav_back_tap",
+              "verdict": "transport_failed",
+              "raw_semantic_status": "transport_failed",
+              "selection_source": "system",
+              "verification_source": "none",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 0
+            },
+            {
+              "idx": 1,
+              "strategy": "keyboard_back",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 7779,
+              "switched_reason": "unsupported semantic strategy: back.nav_back_tap"
+            }
+          ],
+          "strategy_switches": 1,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 7779
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_45_51_913238",
+      "artifact_run_id": "run_2026_06_11_15_45_51_913238",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "scroll_to_bottom",
+      "round": 0,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "unknown",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000106",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 5436
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 5436
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 6760
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 6760
+        },
+        {
+          "seq": 2,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 19683
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 19683
+        },
+        {
+          "seq": 3,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3886
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3886
+        },
+        {
+          "seq": 4,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 7871
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 7871
+        },
+        {
+          "seq": 5,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3917
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3917
+        },
+        {
+          "seq": 6,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 7690
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 7690
+        },
+        {
+          "seq": 7,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3899
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3899
+        },
+        {
+          "seq": 8,
+          "role": "primary",
+          "op": "drag",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "raw_hid_logical_drag",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "raw_hid_logical_drag",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 5598
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 5598
+        },
+        {
+          "seq": 9,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "drag",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 2,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "unknown",
+              "raw_semantic_status": "unknown",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 19863
+            },
+            {
+              "idx": 1,
+              "strategy": "drag",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 10846,
+              "switched_reason": "scene text changed only in a likely transient carousel/review region"
+            }
+          ],
+          "strategy_switches": 1,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 30709
+        },
+        {
+          "seq": 10,
+          "role": "primary",
+          "op": "drag",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "raw_hid_logical_drag",
+          "verdict": "unknown",
+          "raw_semantic_status": "unknown",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.35,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "raw_hid_logical_drag",
+              "verdict": "unknown",
+              "raw_semantic_status": "unknown",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3900
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3900
+        },
+        {
+          "seq": 11,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "drag",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 2,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "unknown",
+              "raw_semantic_status": "unknown",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3874
+            },
+            {
+              "idx": 1,
+              "strategy": "drag",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3872,
+              "switched_reason": "scene text changed only in a likely transient carousel/review region"
+            }
+          ],
+          "strategy_switches": 1,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 7746
+        },
+        {
+          "seq": 12,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 6572
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 6572
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_46_23_530440",
+      "artifact_run_id": "run_2026_06_11_15_46_23_530440",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "scroll_to_bottom",
+      "round": 1,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000082",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 9429
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 9429
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3838
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3838
+        },
+        {
+          "seq": 2,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3885
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3885
+        },
+        {
+          "seq": 3,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3863
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3863
+        },
+        {
+          "seq": 4,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3874
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3874
+        },
+        {
+          "seq": 5,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 7768
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 7768
+        },
+        {
+          "seq": 6,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 4745
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 4745
+        },
+        {
+          "seq": 7,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 5690
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 5690
+        },
+        {
+          "seq": 8,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3868
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3868
+        },
+        {
+          "seq": 9,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 10872
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 10872
+        },
+        {
+          "seq": 10,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3885
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3885
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_49_59_383785",
+      "artifact_run_id": "run_2026_06_11_15_49_59_383785",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "scroll_to_bottom",
+      "round": 2,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000080",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 2589
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 2589
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3838
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3838
+        },
+        {
+          "seq": 2,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3929
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3929
+        },
+        {
+          "seq": 3,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 4743
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 4743
+        },
+        {
+          "seq": 4,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 30722
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 30722
+        },
+        {
+          "seq": 5,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3937
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3937
+        },
+        {
+          "seq": 6,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3831
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3831
+        },
+        {
+          "seq": 7,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3843
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3843
+        },
+        {
+          "seq": 8,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 11619
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 11619
+        },
+        {
+          "seq": 9,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 6854
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 6854
+        },
+        {
+          "seq": 10,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 5787
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 5787
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_51_58_248210",
+      "artifact_run_id": "run_2026_06_11_15_51_58_248210",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "scroll_to_bottom",
+      "round": 3,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "failed",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000034",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 5383
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 5383
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3810
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3810
+        },
+        {
+          "seq": 2,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 4667
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 4667
+        },
+        {
+          "seq": 3,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 12852
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 12852
+        },
+        {
+          "seq": 4,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 4686
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 4686
+        },
+        {
+          "seq": 5,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "transport_failed",
+          "raw_semantic_status": "exception",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.0,
+          "selection_source": "none",
+          "verification_source": "none",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "transport_failed",
+              "raw_semantic_status": "exception",
+              "selection_source": "none",
+              "verification_source": "none",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 0
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 0
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_54_20_195198",
+      "artifact_run_id": "run_2026_06_11_15_54_20_195198",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    },
+    {
+      "task": "scroll_to_bottom",
+      "round": 4,
+      "terminal_expected_state": {
+        "kind": "unknown",
+        "payload": {}
+      },
+      "outcome": "succeeded",
+      "final_state": {
+        "page_id": null,
+        "scene_id": "scn_000081",
+        "is_anchor": false,
+        "platform_scene_kind": "springboard",
+        "visible_texts": [],
+        "elements": []
+      },
+      "root_pages_expected": 0,
+      "root_pages_covered": 0,
+      "root_pages_blocked": 0,
+      "root_pages_missing": [],
+      "actions": [
+        {
+          "seq": 0,
+          "role": "primary",
+          "op": "home",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "keyboard_combo",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "ios_home_screen_visible",
+          "confidence": 0.9,
+          "selection_source": "system",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "keyboard_combo",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "system",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 2538
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 2538
+        },
+        {
+          "seq": 1,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 19866
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 19866
+        },
+        {
+          "seq": 2,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3869
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3869
+        },
+        {
+          "seq": 3,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 7601
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 7601
+        },
+        {
+          "seq": 4,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3837
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3837
+        },
+        {
+          "seq": 5,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3815
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3815
+        },
+        {
+          "seq": 6,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 11889
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 11889
+        },
+        {
+          "seq": 7,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3895
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3895
+        },
+        {
+          "seq": 8,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3955
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3955
+        },
+        {
+          "seq": 9,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3872
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3872
+        },
+        {
+          "seq": 10,
+          "role": "primary",
+          "op": "scroll",
+          "target": "",
+          "expected_state": {
+            "kind": "unknown",
+            "payload": {}
+          },
+          "chosen_strategy": "wheel",
+          "verdict": "succeeded",
+          "raw_semantic_status": "succeeded",
+          "semantic_verifier": "scene_progressed",
+          "confidence": 0.7,
+          "selection_source": "none",
+          "verification_source": "ocr",
+          "vlm_calls": 0,
+          "vlm_cache_hits": 0,
+          "vlm_cache_misses": 0,
+          "vlm_triggers": [],
+          "last_vlm_trigger": null,
+          "vlm_budget_exhausted": false,
+          "attempt_count": 1,
+          "attempts": [
+            {
+              "idx": 0,
+              "strategy": "wheel",
+              "verdict": "succeeded",
+              "raw_semantic_status": "succeeded",
+              "selection_source": "none",
+              "verification_source": "ocr",
+              "vlm_calls": 0,
+              "vlm_cache_hits": 0,
+              "vlm_cache_misses": 0,
+              "duration_ms": 3897
+            }
+          ],
+          "strategy_switches": 0,
+          "retries": 0,
+          "recovered": false,
+          "duration_ms": 3897
+        }
+      ],
+      "artifact_run_dir": "/Users/biu/glassbox/artifacts/computer_use_success_rate/canonical_floor_runs/run_2026_06_11_15_56_05_925942",
+      "artifact_run_id": "run_2026_06_11_15_56_05_925942",
+      "navigation_origin": {
+        "policy": "home_verified_precondition",
+        "attempted": true,
+        "home_reached": true,
+        "can_start_clock": true,
+        "reason": "verified_home_reached",
+        "action_ok": true,
+        "semantic_status": "succeeded",
+        "semantic_verifier": "ios_home_screen_visible",
+        "error": null
+      }
+    }
+  ],
+  "metrics": {
+    "task_completion_rate": 0.9,
+    "task_completion_variance": 0.09,
+    "navigation_origin_precondition_failures": 0,
+    "action_success_rate": 1.0,
+    "unknown_rate": 0.0,
+    "task_action_count": 35,
+    "scroll_action_count": 47,
+    "scroll_success_rate": 0.9574468085106383,
+    "expected_state_coverage": 0.0,
+    "vlm_action_coverage": 0.0,
+    "root_pages_coverage": 0.0,
+    "recoveries": 0,
+    "strategy_switches": 7,
+    "retries": 0,
+    "vlm_calls": 0,
+    "vlm_calls_per_task": 0.0,
+    "vlm_cache_hits": 0,
+    "vlm_cache_misses": 0,
+    "vlm_cache_hit_rate": 0.0,
+    "action_duration_ms_total": 544199,
+    "action_duration_ms_per_task": 27209.95
+  }
+}

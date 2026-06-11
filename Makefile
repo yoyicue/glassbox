@@ -62,14 +62,17 @@ computer-use-success-rate-ios-settings:
 # (rc 1) / rejects a malformed candidate (rc 2). The on-rig time-series companion
 # is rig-nightly.yml.
 RELIABILITY_BASELINE ?= skills/regression/fixtures/reliability_baseline.json
+CANONICAL_BASELINE ?= skills/regression/fixtures/canonical_primitives_baseline.json
 HUMAN_BASELINE ?= skills/regression/fixtures/human_baseline_settings_template.json
 HUMAN_BASELINE_VALIDATE_ARGS ?= --allow-template
 HUMAN_BASELINE_CLI ?= uv run python -m skills.regression.human_baseline
 regression-gate:
 	$(COMPUTER_USE_SUCCESS_RATE) validate "$(RELIABILITY_BASELINE)"
+	$(COMPUTER_USE_SUCCESS_RATE) validate "$(CANONICAL_BASELINE)"
 	$(HUMAN_BASELINE_CLI) validate "$(HUMAN_BASELINE)" $(HUMAN_BASELINE_VALIDATE_ARGS)
 	uv run pytest skills/smoke/test_computer_use_regression_gate.py skills/smoke/test_human_baseline.py \
-		skills/smoke/test_clock_tabs_floor.py skills/smoke/test_verifier_alignment.py -q
+		skills/smoke/test_clock_tabs_floor.py skills/smoke/test_canonical_floor.py \
+		skills/smoke/test_verifier_alignment.py -q
 
 human-baseline-template:
 	$(HUMAN_BASELINE_CLI) template --out "$(HUMAN_BASELINE)"
