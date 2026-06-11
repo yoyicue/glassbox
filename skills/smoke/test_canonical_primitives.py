@@ -161,9 +161,11 @@ def test_build_canonical_manifest_shapes_tasks_for_aggregator(tmp_path):
     assert [t["task"] for t in tasks] == ["go_home", "go_home", "launch_app"]
     assert [t["round"] for t in tasks] == [0, 1, 0]
     # go_home carries its concrete terminal; every entry has the required fields.
+    # Classification vocabulary, not page_id — the iPad widget-Home never mints
+    # a page_id, so the old page_id terminal was unsatisfiable there.
     assert tasks[0]["terminal_expected_state"] == {
-        "kind": "page_id",
-        "payload": {"page_id": "springboard"},
+        "kind": "platform_scene_kind",
+        "payload": {"any_of": ["springboard"]},
     }
     for entry in tasks:
         assert set(entry) >= {"task", "run_dir", "round", "terminal_expected_state"}

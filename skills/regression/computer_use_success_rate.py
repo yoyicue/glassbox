@@ -29,6 +29,13 @@ EXPECTED_STATE_VALUES = {
     "visible_text",
     "element_appears",
     "element_gone",
+    # Platform scene classification of the final scene. Needed because some
+    # surfaces never mint a page_id on some devices (the iPad widget-Home is
+    # classified platform_scene_kind="springboard" but page_id stays None, and
+    # iPad Settings restores the last-viewed page so "settings/root" may never
+    # be the final page_id) — a terminal check written in page_id vocabulary is
+    # then unsatisfiable regardless of real task success.
+    "platform_scene_kind",
     "root_coverage_complete",
     "unknown",
 }
@@ -403,6 +410,7 @@ def _final_state(run_dir: Path, actions: list[dict[str, Any]]) -> dict[str, Any]
                 "page_id": page_id,
                 "scene_id": after.get("scene_id"),
                 "is_anchor": bool(page_id in {"home", "settings/root"}),
+                "platform_scene_kind": scene.get("platform_scene_kind"),
                 "visible_texts": _scene_texts(scene),
                 "elements": scene.get("elements") if isinstance(scene.get("elements"), list) else [],
             }
@@ -444,6 +452,9 @@ def _terminal_expected_state_met(
         any_ok = not any_of or any(_contains_text(texts, wanted) for wanted in any_of)
         all_ok = all(_contains_text(texts, wanted) for wanted in all_of)
         return any_ok and all_ok
+    if kind == "platform_scene_kind":
+        wanted = {str(item) for item in payload.get("any_of", []) or [] if str(item)}
+        return bool(wanted) and str(final_state.get("platform_scene_kind") or "") in wanted
     if kind in {"element_appears", "element_gone"}:
         query = payload.get("target_identity") if isinstance(payload.get("target_identity"), Mapping) else payload
         matched = _final_state_element_matches(final_state, query)
