@@ -7,6 +7,7 @@ URLs or host-side app activation.
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -190,6 +191,18 @@ def _looks_like_today_widget_surface(
     w, h = _scene_size(scene, viewport_size)
     if _looks_like_ipad_home_widget_page(scene, viewport_size=(w, h)):
         return False
+    # A page carrying a real, scannable set of app labels is an icon page no
+    # matter how many widgets sit above it. iPhone page 1 commonly stacks
+    # weather/calendar widgets over a full grid, and the old weatherish>=3
+    # shortcut made open_app_from_springboard bail to Spotlight BEFORE
+    # scanning — hiding the plainly visible Settings/Clock labels from the
+    # launcher (live, 2026-06-12: 'Settings' OCR'd at (150,541) on the very
+    # page the launcher refused to scan; killed every iPhone floor round at
+    # launch). Plain geometric grid detection cannot carry this veto — a
+    # weather app's hour row + 10-day column align like a grid — so filter to
+    # app-label-shaped texts first.
+    if len(_scannable_app_labels(scene, viewport_size=(w, h))) >= 6:
+        return False
     texts = [_text(el) for el in scene.elements if _text(el)]
     if any(text in {"SUGGESTED", "Suggested"} for text in texts):
         return True
@@ -197,6 +210,33 @@ def _looks_like_today_widget_surface(
         return True
     weatherish = sum(1 for text in texts if "°" in text or text in {"Sunny", "Cloudy", "Drizzle"})
     return weatherish >= 3
+
+
+_WIDGETY_LABEL = re.compile(
+    r"^(?:\d{1,2}\s*[AP]M|\d{1,3}%|\d{1,2}|Mon|Tue|Wed|Thu|Fri|Sat|Sun|Today|Tonight|Now)$",
+    re.IGNORECASE,
+)
+
+
+def _scannable_app_labels(scene: Scene, *, viewport_size: tuple[int, int]) -> list[UIElement]:
+    """Icon-label candidates that look like APP names, not widget furniture.
+
+    Filters out the texts widget/forecast surfaces are made of — times,
+    percentages, bare day/date words, temperatures, ALL-CAPS section headers,
+    and sentence-length strings — so a weather app's hour row / 10-day column
+    cannot masquerade as an icon grid while a genuine (hybrid) Home grid still
+    counts."""
+    out: list[UIElement] = []
+    for el in _icon_label_candidates(scene, viewport_size=viewport_size):
+        text = (_text(el) or "").strip()
+        if not text or len(text) > 18:
+            continue
+        if "°" in text or _WIDGETY_LABEL.match(text):
+            continue
+        if text.isupper() and len(text) >= 4:  # SUGGESTED / FRIDAY / FORECAST headers
+            continue
+        out.append(el)
+    return out
 
 
 def _looks_like_ipad_home_widget_page(

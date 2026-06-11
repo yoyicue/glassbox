@@ -1664,3 +1664,92 @@ def test_open_app_sweep_bails_to_spotlight_when_leaving_home_surface(monkeypatch
     # spotlight fallback was taken; the foreign-surface 'Clock' text was never tapped
     assert spotlight_calls == [("时钟", "Clock")]
     assert all(op != "tap" for op, _ in phone.actions)
+
+
+def _iphone_hybrid_page1() -> Scene:
+    """Real iPhone 17 Pro Max page 1 (live capture 2026-06-12, viewport
+    452x990): weather+calendar widgets stacked over a full 4-column icon grid
+    that includes Settings (and Clock)."""
+    coords = [
+        ("Shanghai", 52, 118), ("FRIDAY", 258, 121), ("23°", 52, 142),
+        ("Cloudy", 52, 230), ("No Events Today", 256, 212), ("H:34° L:22°", 52, 248),
+        ("Weather", 98, 288), ("Calendar", 302, 288),
+        ("FaceTime", 44, 398), ("Calendar", 148, 398), ("Photos", 256, 398), ("Camera", 356, 398),
+        ("Games", 229, 321), ("App Store", 331, 321),
+        ("Notes", 54, 510), ("Clock", 158, 508),
+        ("Wallet", 54, 620), ("Settings", 150, 541), ("RustDesk", 248, 620),
+        ("Q Search", 198, 792),
+    ]
+    return Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(452, 990),
+        elements=[_el(t, x, y) for t, x, y in coords],
+    )
+
+
+@pytest.mark.smoke
+def test_hybrid_widget_plus_grid_page_is_not_a_today_surface():
+    """Live failure (2026-06-12, iPhone floor run): weatherish>=3 classified
+    iPhone page 1 (weather+calendar widgets OVER a full icon grid) as a pure
+    Today surface, so open_app_from_springboard bailed to Spotlight before
+    scanning — the plainly visible 'Settings' label was never tapped and every
+    floor round died at launch. A page with a strong icon grid is a scannable
+    icon page regardless of widgets."""
+    from glassbox.ios.springboard import _looks_like_today_widget_surface
+
+    hybrid = _iphone_hybrid_page1()
+    assert not _looks_like_today_widget_surface(hybrid, viewport_size=(452, 990))
+
+    # A pure weather/Today surface (no grid) must STILL be a widget surface.
+    pure_today = _scene(
+        _el("Shanghai", 52, 118), _el("23°", 52, 142), _el("Cloudy", 52, 230),
+        _el("H:34° L:22°", 52, 248), _el("10-DAY FORECAST", 52, 320),
+    )
+    assert _looks_like_today_widget_surface(pure_today, viewport_size=(452, 990))
+
+
+@pytest.mark.smoke
+def test_open_app_scans_hybrid_page_instead_of_spotlight_bail(monkeypatch):
+    monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
+
+    spotlight_calls: list[tuple] = []
+    monkeypatch.setattr(
+        "glassbox.ios.springboard.open_app_via_spotlight",
+        lambda phone, labels, **kw: spotlight_calls.append(labels) or True,
+    )
+
+    hybrid = _iphone_hybrid_page1()
+
+    class FakePhone:
+        def __init__(self):
+            self.opened = False
+            self.actions: list[tuple[str, tuple[int, int] | None]] = []
+
+        def _viewport_size(self):
+            return 452, 990
+
+        def home(self):
+            self.actions.append(("home", None))
+
+        def perceive(self):
+            if self.opened:
+                return _scene(
+                    _el("Settings", 196, 40),
+                    _el("General", 54, 218),
+                    _el("Notifications", 54, 272),
+                )
+            return hybrid
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def tap_xy(self, x: int, y: int):
+            self.actions.append(("tap", (x, y)))
+            self.opened = True
+
+    phone = FakePhone()
+
+    assert open_app_from_springboard(phone, ("设置", "Settings"), settle_s=0.0)
+    assert spotlight_calls == [], "must scan the hybrid page, not bail to spotlight"
+    assert any(op == "tap" for op, _ in phone.actions)
