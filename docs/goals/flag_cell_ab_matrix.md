@@ -127,7 +127,7 @@ uv run python -m skills.regression.floor_lineage
 - 尝试 1(zh 词表错配):设备英文 → zh 根页词表不可达 → SettingsRootUnreachable;顺带暴露 Apple Account review 弹层行陷阱
 - 尝试 2(launch 全灭,**产出核心修复 #87**):混合 widget+网格首页被 `weatherish>=3` 误判为纯 Today 面 → launcher 跳过扫描**可见的** Settings 图标(OCR 实测 (150,541) 有标签)→ 全轮死于启动。修复 = `_scannable_app_labels` 语义过滤(几何网格判别被既有天气预报表守卫测试当场击杀,换语义路);同因解释 iPad Clock cell 的 launch 彩票成分
 - 尝试 3(#87 后,--keep-going 诚实计分):**成功进入 Settings 爬取**(launch 修复验证),但 5 轮仅 1 轮写出 artifact,该轮覆盖 0/17、5 滚全败、asr 0.33——单栏设置折叠线下 7 个根页(WLAN/声音/专注/辅助功能/操作按钮/FaceID/隐私)需要滚动,iPhone swipe-fling 物理天花板(已知:覆盖 9-15/17)是真实承重墙
-- 判定：**iPhone floor 前置依赖 = 滚动确定性(L4 类工作,roadmap 已有战役位)**;在此之前任何 n=5 都是彩票噪声。en/CN 词表路径确认完好(WLAN 别名生效,zh 规范 ID 层按设计工作)
+- 判定：~~iPhone floor 前置依赖 = 滚动确定性~~ **已证伪(06-12 晨法医修正)**:driver 选错 run 目录聚合了 9 动作辅助会话(修复 = `_pick_round_run_dir`,ledger 最大者胜);真实的 round 0 = **144 动作、物理进入 20 个 settings 页(含折叠线下的 WLAN/Face ID/Privacy——滚动够用)**,但 report 仅记 1 次 visit、失败类全是 `tap-no-transition`——**真墙 = 爬虫转场识别在 iPhone en/CN 上失灵**(点击开了页、爬虫不认 → back 回退 36 次 → 异常),iPad 状态机战役(C1-C5)的 iPhone 同类物。复现数据:`iphone_floor_runs/run_2026_06_12_06_04_38_*` + `ios-settings-000.json`。en/CN 词表路径确认完好(WLAN 别名生效,zh 规范 ID 层按设计工作);多轮间 rig 流翘死(rounds 1-4 preflight 全灭)为并行的第二债
 - 产物：#87 合并;无 fixture;`--keep-going` 语义确认(verify 失败轮诚实计分不中止)
 - 注意事项：设备已复位 verified-Home;Apple Account review 行陷阱待 settings_blocked_safety 词表覆盖(en:"Review Apple Account…");三次尝试的 run ledger 在本地 artifacts
 
