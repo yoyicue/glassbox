@@ -483,7 +483,7 @@ def _ensure_home_scene(phone, settle_s: float, *, attempts: int = 1) -> Scene:
         scene = _perceive_after_settle(phone, settle_s)
         if is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
             if i:
-                print(f"[sb] reached Home after {i + 1} home() presses", flush=True)
+                logger.info(f"[sb] reached Home after {i + 1} home() presses")
             return scene
         sig = springboard_signature(scene)
         if sig == prev_sig:
@@ -502,16 +502,16 @@ def _tap_icon_if_visible(
     labels = tuple(labels)
     icon = find_springboard_icon(scene, labels, viewport_size=_viewport_size(phone))
     if icon is None:
-        print(f"[sb] ocr: no icon for {labels}", flush=True)
+        logger.warning(f"[sb] ocr: no icon for {labels}")
         return False
-    print(f"[sb] ocr: tap {labels} @{icon.tap_point}", flush=True)
+    logger.info(f"[sb] ocr: tap {labels} @{icon.tap_point}")
     phone.tap_xy(*icon.tap_point)
     scene_after_tap = _perceive_after_settle(phone, settle_s)
     if is_ios_home_screen(scene_after_tap, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
-        print("[sb] ocr: tap stayed on Home", flush=True)
+        logger.warning("[sb] ocr: tap stayed on Home")
         return False
     opened = _opened_expected_app_or_recover(phone, scene_after_tap, labels, settle_s=settle_s)
-    print(f"[sb] ocr: opened_expected={opened}", flush=True)
+    logger.info(f"[sb] ocr: opened_expected={opened}")
     return opened
 
 
@@ -544,15 +544,17 @@ def _tap_icon_via_map_if_visible(
     """
     labels = tuple(labels)
     if icon_map is None or getattr(phone, "kimi", None) is None:
-        print(f"[sb] vlm-map: disabled (icon_map={icon_map is not None}, "
-              f"kimi={getattr(phone, 'kimi', None) is not None})", flush=True)
+        logger.info(
+            f"[sb] vlm-map: disabled (icon_map={icon_map is not None}, "
+            f"kimi={getattr(phone, 'kimi', None) is not None})"
+        )
         return False
     viewport = _viewport_size(phone)
     if not is_ios_home_screen(scene, viewport_size=viewport, strict_springboard=True):
-        print("[sb] vlm-map: skipped; scene is not a strict Home icon grid", flush=True)
+        logger.warning("[sb] vlm-map: skipped; scene is not a strict Home icon grid")
         return False
     if _looks_like_today_widget_surface(scene, viewport_size=viewport):
-        print("[sb] vlm-map: skipped; widget surface is not an app icon page", flush=True)
+        logger.warning("[sb] vlm-map: skipped; widget surface is not an app icon page")
         return False
     from glassbox.cognition.icon_detect import detect_icons_voted
     from glassbox.ios.springboard_map import build_icon_map, match_entry
@@ -560,49 +562,49 @@ def _tap_icon_via_map_if_visible(
     try:
         frame = phone.snapshot()
     except Exception:
-        print("[sb] vlm-map: snapshot failed", flush=True)
+        logger.warning("[sb] vlm-map: snapshot failed")
         return False
     text_boxes = tuple(
         (e.box.x, e.box.y, e.box.w, e.box.h) for e in scene.elements if e.box
     )
     regions = detect_icons_voted([frame.img], text_boxes=text_boxes, min_frames=1)
     if not regions:
-        print("[sb] vlm-map: no icon regions detected", flush=True)
+        logger.warning("[sb] vlm-map: no icon regions detected")
         return False
 
     global _icon_map_builds
     entries = icon_map.get(regions)
-    print(f"[sb] vlm-map: regions={len(regions)} cache={'hit' if entries is not None else 'miss'}", flush=True)
+    logger.info(f"[sb] vlm-map: regions={len(regions)} cache={'hit' if entries is not None else 'miss'}")
     if entries is None:
         if _icon_map_builds >= _ICON_MAP_BUILD_BUDGET:
-            print(f"[sb] vlm-map: build budget exhausted ({_ICON_MAP_BUILD_BUDGET})", flush=True)
+            logger.warning(f"[sb] vlm-map: build budget exhausted ({_ICON_MAP_BUILD_BUDGET})")
             return False
         _icon_map_builds += 1
         try:
             key, entries = build_icon_map([frame.img], vlm=phone.kimi, text_boxes=text_boxes)
         except Exception as exc:
             logger.warning(f"springboard icon-map build failed: {exc}")
-            print(f"[sb] vlm-map: build failed: {exc}", flush=True)
+            logger.warning(f"[sb] vlm-map: build failed: {exc}")
             return False
         icon_map.put(key, entries)
-        print(f"[sb] vlm-map: built {len(entries)} entries: {[e.app for e in entries][:10]}", flush=True)
+        logger.info(f"[sb] vlm-map: built {len(entries)} entries: {[e.app for e in entries][:10]}")
 
     entry = match_entry(entries, labels)
     if entry is None:
-        print(f"[sb] vlm-map: no match for {labels} among {[e.app for e in entries][:10]}", flush=True)
+        logger.warning(f"[sb] vlm-map: no match for {labels} among {[e.app for e in entries][:10]}")
         return False
-    print(f"[sb] vlm-map: tap {entry.app!r} @{entry.center}", flush=True)
+    logger.info(f"[sb] vlm-map: tap {entry.app!r} @{entry.center}")
     phone.tap_xy(*entry.center)
     after = _perceive_after_settle(phone, settle_s)
     if is_ios_home_screen(after, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
-        print("[sb] vlm-map: tap stayed on Home (invalidate)", flush=True)
+        logger.warning("[sb] vlm-map: tap stayed on Home (invalidate)")
         icon_map.invalidate(regions)        # tap stayed on Home → map drifted
         return False
     if not _opened_expected_app_or_recover(phone, after, labels, settle_s=settle_s):
-        print("[sb] vlm-map: opened non-target (invalidate)", flush=True)
+        logger.warning("[sb] vlm-map: opened non-target (invalidate)")
         icon_map.invalidate(regions)
         return False
-    print(f"[sb] vlm-map: opened {entry.app!r} OK", flush=True)
+    logger.info(f"[sb] vlm-map: opened {entry.app!r} OK")
     return True
 
 
@@ -644,13 +646,13 @@ def _handle_account_verification_or_continue(
         target_is_settings=target_is_settings,
     )
     if button is None:
-        print("[sb] account-verification: no actionable button found", flush=True)
+        logger.warning("[sb] account-verification: no actionable button found")
         return False, scene
-    print(f"[sb] account-verification: tap {_text(button)!r} @{button.box.center}", flush=True)
+    logger.info(f"[sb] account-verification: tap {_text(button)!r} @{button.box.center}")
     phone.tap_xy(*button.box.center)
     after = _perceive_after_settle(phone, settle_s)
     if target_is_settings and _opened_expected_app_or_recover(phone, after, labels, settle_s=settle_s):
-        print("[sb] account-verification: opened Settings OK", flush=True)
+        logger.info("[sb] account-verification: opened Settings OK")
         return True, after
     return False, after
 
@@ -1075,9 +1077,9 @@ def open_app_from_springboard(
     app_labels = tuple(labels)
     profile = _launch_profile(app_labels, phone=phone)
     _reset_icon_map_build_budget()
-    print(f"[sb] open_app_from_springboard start labels={app_labels}", flush=True)
+    logger.info(f"[sb] open_app_from_springboard start labels={app_labels}")
     if profile is not None and profile.preferred_open == "spotlight":
-        print("[sb] spotlight preferred for this target", flush=True)
+        logger.info("[sb] spotlight preferred for this target")
         if open_app_via_spotlight(
             phone,
             app_labels,
@@ -1086,7 +1088,7 @@ def open_app_from_springboard(
             settle_s=settle_s,
         ):
             return True
-        print("[sb] spotlight preferred path failed → Home scan fallback", flush=True)
+        logger.warning("[sb] spotlight preferred path failed → Home scan fallback")
 
     # Cold-start scan may enter from a dirty state (foregrounded app, modal), so
     # retry home() while it makes progress. The Spotlight path keeps the default
@@ -1095,14 +1097,14 @@ def open_app_from_springboard(
     if not is_ios_home_screen(scene, viewport_size=_viewport_size(phone), strict_springboard=_strict_home(phone)):
         waited = wait_for_ios_home_screen(phone, timeout=2.0)
         if waited is None:
-            print("[sb] could not reach Home → spotlight fallback", flush=True)
+            logger.warning("[sb] could not reach Home → spotlight fallback")
             return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
         scene = waited
     opened, scene = _handle_account_verification_or_continue(phone, scene, app_labels, settle_s=settle_s)
     if opened:
         return True
     if _looks_like_today_widget_surface(scene, viewport_size=_viewport_size(phone)):
-        print("[sb] widget surface without icon grid → spotlight fallback", flush=True)
+        logger.warning("[sb] widget surface without icon grid → spotlight fallback")
         return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
     if _tap_icon_any(phone, scene, app_labels, icon_map=icon_map, settle_s=settle_s):
         return True
@@ -1163,7 +1165,7 @@ def open_app_from_springboard(
             break
         forward_seen.add(sig)
 
-    print("[sb] all page sweeps failed → spotlight fallback", flush=True)
+    logger.warning("[sb] all page sweeps failed → spotlight fallback")
     return open_app_via_spotlight(phone, app_labels, settle_s=settle_s)
 
 

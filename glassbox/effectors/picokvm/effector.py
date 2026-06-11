@@ -239,7 +239,7 @@ class PicoKVMEffector:
         except Exception as exc:
             if mode == "required":
                 raise RuntimeError(f"picokvm_iPad_wheel_activation_failed: {exc}") from exc
-            print(f"[picokvm] iPad wheel activation failed; continuing because mode={mode}: {exc}", flush=True)
+            logger.warning(f"[picokvm] iPad wheel activation failed; continuing because mode={mode}: {exc}")
             return
         if activated and self.config.ipad_wheel_activation_wait_s > 0:
             time.sleep(float(self.config.ipad_wheel_activation_wait_s))
@@ -272,7 +272,7 @@ class PicoKVMEffector:
             self._wheel_activation_status = "failed"
             if mode == "required":
                 raise RuntimeError(f"picokvm_iPhone_wheel_activation_failed: {exc}") from exc
-            print(f"[picokvm] iPhone wheel activation failed; continuing because mode={mode}: {exc}", flush=True)
+            logger.warning(f"[picokvm] iPhone wheel activation failed; continuing because mode={mode}: {exc}")
 
     def _wait_for_iphone_hid_ready(self) -> None:
         x, y = self._logical_fraction_point(0.5, 0.5)

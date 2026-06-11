@@ -13,7 +13,6 @@ from importlib.metadata import entry_points
 from typing import Protocol
 
 from glassbox.cognition.contracts import SceneClassification, SceneClassificationPrior
-from glassbox.ios.scene import classify_ios_scene
 
 
 class AppSceneClassifier(Protocol):
@@ -43,6 +42,10 @@ class IOSSettingsSceneClassifier:
         viewport_size: tuple[int, int] | None = None,
         prior: SceneClassificationPrior | None = None,
     ) -> SceneClassification | None:
+        # Lazy, matching IPadOSSettingsSceneClassifier below: the registry
+        # module stays platform-neutral at import time (snapshot item 5).
+        from glassbox.ios.scene import classify_ios_scene
+
         return replace(
             classify_ios_scene(scene, viewport_size=viewport_size, prior=prior).to_scene_classification(),
             source="app",

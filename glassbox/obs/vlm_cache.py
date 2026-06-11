@@ -87,7 +87,7 @@ class CachedVLM:
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError) as e:
-                print(f"[CachedVLM] ignoring corrupt cache {path}: {e}")
+                logger.warning(f"[CachedVLM] ignoring corrupt cache {path}: {e}")
                 with contextlib.suppress(OSError):
                     path.unlink()
             else:
@@ -159,7 +159,7 @@ class CachedVLM:
             tmp_path.replace(path)
             self.stats["writes"] += 1
         except OSError as e:
-            print(f"[CachedVLM] failed to write cache {path}: {e}")
+            logger.warning(f"[CachedVLM] failed to write cache {path}: {e}")
             with contextlib.suppress(OSError, UnboundLocalError):
                 tmp_path.unlink()
         return resp

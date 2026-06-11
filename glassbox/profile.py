@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import yaml
+from loguru import logger
 from pydantic import BaseModel, Field, PrivateAttr
 
 from glassbox.cognition.text_match import compact_text, ocr_compact_text
@@ -359,7 +360,7 @@ class ProfileRegistry:
             except Exception as e:
                 self.load_errors.append(ProfileLoadError(path=str(p), error=str(e)))
                 # avoid a logger dependency for now, just print
-                print(f"[ProfileRegistry] failed to load {p}: {e}")
+                logger.warning(f"[ProfileRegistry] failed to load {p}: {e}")
                 if strict:
                     raise
         self._by_bundle = new_by_bundle

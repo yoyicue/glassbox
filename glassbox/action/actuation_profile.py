@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from loguru import logger
+
 from glassbox.action.actuation import ActuationMethod
 
 ControlActuability = Literal["unknown", "actuatable", "unactuatable"]
@@ -417,7 +419,7 @@ def load_actuation_profile(
         payload = json.loads(path.read_text(encoding="utf-8"))
         profile = ActuationProfile.from_dict(payload)
     except Exception as exc:
-        print(f"[actuation] failed to load {path}: {exc} — cold start")
+        logger.warning(f"[actuation] failed to load {path}: {exc} — cold start")
         return ActuationProfile(platform=platform, os_version=os_version, device_model=device_model)
     if (
         profile.platform != platform

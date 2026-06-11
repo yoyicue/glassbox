@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol
 
+from loguru import logger
+
 EFFECTOR_ACTIONS = frozenset({
     "tap",
     "long_press",
@@ -331,7 +333,7 @@ class NoOpEffector:
 
     def _log(self, op: str, **kw) -> ActionResult:
         kvs = ", ".join(f"{k}={v!r}" for k, v in kw.items())
-        print(f"[NoOpEffector] {op}({kvs}) — bridge not connected")
+        logger.warning(f"[NoOpEffector] {op}({kvs}) — bridge not connected")
         return ActionResult(
             ok=False,
             backend="noop",
