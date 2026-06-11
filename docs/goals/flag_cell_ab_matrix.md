@@ -73,6 +73,15 @@ docstring 和本台账。
 
 ## 3. 测试报告台账
 
+### 2026-06-11 矩阵 #11 attempt 4（诚实仪器,#75/#76/#77/#81/#82 全栈）—— 判定:该格子当前不可测 #11
+- 类型：flag A/B（**Arm A 完成,Arm B 取消**——格子被上游主导）
+- 格子：Clock cell;n=5;classical 钉死;命令同 attempt 1-3 + 全修复栈
+- A 臂（ui_layout 默认开）：completion **0.2**(1/5)、action 0.53、unknown 0.24(诚实弃权)、~78s/任务动作
+- 关键分解：4/4 失败轮全死于 `open_app`(verifier 诚实 veto:落点 `settings/All Devices`);**round 4 一旦启动成功,4 tab 9 动作全程无瑕疵**。该格子的瓶颈被精确定位为 launch 彩票(widget 优先主屏无 Clock 图标),ui_layout 管 in-app 感知,在 launch 吃掉 80% 的格子上数学上不可测
+- 判定：**#11 在 Clock cell 不可测,Arm B 取消不烧机时**;前置依赖改为"launch 稳定化"。下一个已定位 bug:**spotlight 兜底点错结果行**(搜 Clock 时 Settings/Screen Time 深链排在 app 之上;sweep surface 门 #82 已堵 OCR 误点,幸存路径只剩 spotlight 行选择)——候选修法:`open_app_via_spotlight` 结果行验证(要求 app 行,拒绝 settings 深链行),harness 已有 `require_visible_spotlight_result` 机制可挂
+- 产物：armA JSON 本地(不入库——非 floor 候选);本日衍生核心修复 #75/#76/#77/#81/#82 全部已合并
+- 注意事项：与 06-10 floor(0.8)不可比——当时主屏布局不同(图标可见);Clock cell 的 completion 强依赖主屏布局,floor 语义需注明布局前提;矩阵 #2 的 omniparser(0.8→1.0 修 launch)仍是已知杠杆(AGPL opt-in)
+
 ### 2026-06-11 矩阵 #11 ui_layout 反向 A/B —— 两次中止,产出一个核心发现（未采数据）
 - 类型：flag A/B（**中止**,数据无效但发现入账）
 - 格子：Clock cell;计划 n=5 ×2 臂;命令同 Clock 基线 + `GLASSBOX_UI_LAYOUT_SEGMENTATION_ENABLED=0`（B 臂）
