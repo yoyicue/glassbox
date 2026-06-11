@@ -362,3 +362,14 @@ uv run pytest skills/smoke -q
 Icon detector backends with AGPL-heavy dependencies are intentionally kept as
 drop-in plugins instead of project extras, so the core package remains
 dependency-clean for MIT distribution.
+
+## License
+
+glassbox is released under the [MIT License](LICENSE) — see the `LICENSE` file
+for the full text.
+
+To keep a clean checkout MIT-only, the optional OmniParser icon-detector backend
+(which pulls the AGPL-3.0 `ultralytics`/`torch` stack) is **not** a project
+dependency or extra: it ships solely as a git-ignored drop-in plugin under
+`glassbox/cognition/icon_backends/`. The committed dependency closure carries no
+copyleft runtime deps.
