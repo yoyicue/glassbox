@@ -165,3 +165,24 @@ def test_build_from_empty_recording(tmp_path):
     Recorder(run_dir, run_id="empty", save_frames=False).close()
     utg = build_from_recording(run_dir, bundle_id="com.x")
     assert not utg.nodes and not utg.edges
+
+
+@pytest.mark.smoke
+def test_build_from_recording_tolerates_torn_trailing_line(tmp_path):
+    """A run that crashed mid-write leaves a truncated final line in
+    events.jsonl; the UTG rebuild must skip it instead of raising."""
+    run_dir = tmp_path / "run1"
+    rec = Recorder(run_dir, run_id="run1", save_frames=False)
+    rec.snapshot(None)
+    rec.scene(_scene("登录", "密码"))
+    rec.action("tap", x=10, y=20, via="tap_text", target="登录")
+    rec.snapshot(None)
+    rec.scene(_scene("设置", "隐私"))
+    rec.close()
+    with (run_dir / "events.jsonl").open("a", encoding="utf-8") as fp:
+        fp.write('{"ts": 9.0, "seq": 99, "type": "sc')  # crash artifact
+
+    utg = build_from_recording(run_dir, bundle_id="com.x")
+
+    assert len(utg.nodes) == 2
+    assert len(utg.edges) == 1

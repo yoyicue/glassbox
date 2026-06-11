@@ -17,6 +17,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from glassbox.cognition.contracts import VLMRequest
 from glassbox.cognition.vlm_kimi import (
     VLMResponse,
@@ -89,15 +91,24 @@ class CachedVLM:
                 with contextlib.suppress(OSError):
                     path.unlink()
             else:
-                self.stats["hits"] += 1
-                self.last_hit = True
-                return VLMResponse(
-                    raw_content=data.get("raw_content", ""),
-                    parsed=data.get("parsed"),
-                    usage=data.get("usage", {}),
-                    model=data.get("model", self.model),
-                    elapsed_ms=data.get("elapsed_ms", 0),
+                if self._cacheable_parsed(data.get("parsed")):
+                    self.stats["hits"] += 1
+                    self.last_hit = True
+                    return VLMResponse(
+                        raw_content=data.get("raw_content", ""),
+                        parsed=data.get("parsed"),
+                        usage=data.get("usage", {}),
+                        model=data.get("model", self.model),
+                        elapsed_ms=data.get("elapsed_ms", 0),
+                    )
+                # A parse-failed response persisted by an older glassbox would
+                # replay the garbage for this frame forever; drop it and
+                # re-query.
+                logger.warning(
+                    "[CachedVLM] dropping cached parse-failed response {}; re-querying", path
                 )
+                with contextlib.suppress(OSError):
+                    path.unlink()
 
         self.stats["misses"] += 1
         self.last_hit = False
@@ -111,6 +122,16 @@ class CachedVLM:
         if set_of_mark:
             kwargs["set_of_mark"] = set_of_mark
         resp = self.inner.describe_scene(**kwargs)
+        if not self._cacheable_parsed(resp.parsed):
+            # Billed-but-garbage: a response whose JSON parse failed must not be
+            # persisted by frame hash, or every future run replays the bad
+            # result (vlm_status parse_error) for this frame. Re-query instead.
+            logger.warning(
+                "[CachedVLM] not persisting parse-failed VLM response for {}; "
+                "the next run will re-query",
+                path.name,
+            )
+            return resp
         try:
             tmp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
             tmp_path.write_text(
@@ -142,6 +163,15 @@ class CachedVLM:
             with contextlib.suppress(OSError, UnboundLocalError):
                 tmp_path.unlink()
         return resp
+
+    @staticmethod
+    def _cacheable_parsed(parsed: Any) -> bool:
+        """Only a successfully parsed describe_scene payload may be persisted.
+
+        Mirrors ``vlm_stage_outcome_from_result``: anything that is not a dict
+        is a parse_error and would be marked ``vlm_status != "ok"`` downstream.
+        """
+        return isinstance(parsed, dict)
 
     @staticmethod
     def _key(

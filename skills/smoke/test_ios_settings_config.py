@@ -116,6 +116,24 @@ def test_full_run_env_preserves_explicit_vlm_cache_dir(tmp_path):
 
 
 @pytest.mark.smoke
+def test_full_run_env_arms_ocr_watchdog(tmp_path):
+    """The committed rig path arms GLASSBOX_OCR_TIMEOUT (the opt-in per-
+    recognize() watchdog stays default-off globally) and an explicit value
+    in the caller's environment wins."""
+    report = tmp_path / "full.json"
+
+    env = build_full_run_env(report, base_env={}, run_id="abc")
+    assert env["GLASSBOX_OCR_TIMEOUT"] == "20"
+
+    explicit = build_full_run_env(
+        report,
+        base_env={"GLASSBOX_OCR_TIMEOUT": "5"},
+        run_id="abc",
+    )
+    assert explicit["GLASSBOX_OCR_TIMEOUT"] == "5"
+
+
+@pytest.mark.smoke
 def test_full_run_env_can_enable_page_id_route_from_glassbox_alias(tmp_path):
     report = tmp_path / "full.json"
     env = build_full_run_env(

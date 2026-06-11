@@ -237,6 +237,33 @@ def test_ai_tap_threads_expected_state_into_orchestrator(tmp_path):
 
 
 @pytest.mark.smoke
+def test_ai_observe_wraps_stability_timeout_as_assertion_error(tmp_path):
+    """A perpetually-animating screen makes phone.perceive() raise a bare
+    TimeoutError (wait_stable). The facade must not leak it into author
+    scripts: it re-raises as AIAssertionError with an actionable message."""
+    phone = _ai_phone(tmp_path, [_scene("通用")])
+
+    def _never_settles():
+        raise TimeoutError(
+            "wait_stable: the screen did not settle within 5.0s "
+            "(last diff=0.0410, thresh=0.005, stability_score=0.000)"
+        )
+
+    phone._phone.perceive = _never_settles
+
+    with pytest.raises(AIAssertionError) as excinfo:
+        phone.observe()
+
+    message = str(excinfo.value)
+    assert "never stabilized" in message
+    assert "GLASSBOX_STABLE_TIMEOUT" in message       # actionable knob
+    assert isinstance(excinfo.value.__cause__, TimeoutError)
+    assert excinfo.value.failure_path.exists()
+    failure = excinfo.value.failure_path.read_text(encoding="utf-8")
+    assert "observe.stability_timeout" in failure
+
+
+@pytest.mark.smoke
 def test_ai_observe_returns_text_first_summary_and_artifacts(tmp_path):
     phone = _ai_phone(tmp_path, [_scene("设置", "通用", "关于本机")])
 

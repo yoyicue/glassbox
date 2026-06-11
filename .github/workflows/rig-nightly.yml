@@ -52,6 +52,11 @@ jobs:
       GLASSBOX_LANGUAGE: ${{ matrix.device.language }}
       GLASSBOX_REGION: ${{ matrix.device.region }}
       GLASSBOX_SEMANTIC_PLAN_OPS: ${{ github.event.inputs.semantic_plan_ops }}
+      # Arm the per-recognize() OCR watchdog (default 0 = off) on the rig path:
+      # the rare live-camera OCR hang is exactly what nightlies hit. 20s never
+      # fires on legitimate OCR; a hang degrades the frame instead of wedging
+      # the whole nightly.
+      GLASSBOX_OCR_TIMEOUT: "20"
       ROUNDS: ${{ github.event.inputs.rounds || '3' }}
       TOLERANCE: ${{ github.event.inputs.tolerance || '0.0' }}
       ARTIFACT_ROOT: artifacts/ci/${{ matrix.device.name }}/runs

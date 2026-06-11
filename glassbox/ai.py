@@ -266,7 +266,34 @@ class AIPhone:
         return False
 
     def observe(self) -> ObservationSummary:
-        scene = self._phone.perceive()
+        try:
+            scene = self._phone.perceive()
+        except TimeoutError as exc:
+            # wait_stable raises a bare TimeoutError on perpetually-animating
+            # screens; the facade must not leak it into author scripts.
+            # ObservationSummary cannot carry "unstable" honestly, so degrade
+            # to the facade's own error type with an actionable message.
+            policy = getattr(self._phone, "stability_policy", None)
+            timeout_s = getattr(policy, "timeout", None)
+            within = f"{float(timeout_s):g}s" if timeout_s else "the stability timeout"
+            message = (
+                f"screen never stabilized within {within} — animating UI? raise the "
+                "stability timeout (GLASSBOX_STABLE_TIMEOUT) or set "
+                "GLASSBOX_STABLE_AFTER_ACTION=0 to act on unstable frames"
+            )
+            failure_path = self._write_failure(
+                expected="screen stabilized before observe()",
+                observed=str(exc),
+                failure_class="environment_drift",
+                failure_source="observe.stability_timeout",
+            )
+            raise AIAssertionError(
+                message,
+                run_id=self.run_id,
+                failure_path=failure_path,
+                observation=self._latest_observation,
+                artifacts=self.save_report(),
+            ) from exc
         frame = getattr(self._phone, "last_frame", None)
         frame_id = None
         screenshot_path: Path | None = None

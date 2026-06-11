@@ -306,6 +306,65 @@ def test_cache_write_leaves_no_temp_files_on_success(tmp_path):
     assert len(list(tmp_path.glob("*.json"))) == 1
 
 
+# ─── parse-failed responses must not poison the disk cache ───────────
+def _parse_failed_resp() -> VLMResponse:
+    """Billed-but-garbage: the backend answered, but the JSON parse failed."""
+    return VLMResponse(
+        raw_content="Sorry, I cannot answer in JSON right now.",
+        parsed=None,
+        usage={"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105},
+        model="fake",
+        elapsed_ms=42,
+    )
+
+
+@pytest.mark.smoke
+def test_parse_failed_response_is_not_persisted(tmp_path):
+    inner = FakeInner(response=_parse_failed_resp())
+    cached = CachedVLM(inner, cache_dir=tmp_path)
+    payload = {"frame_image": b"x", "elements": [{"id": 0}], "scene_hint": None}
+
+    r = cached.describe_scene(**payload)
+
+    assert r.parsed is None                      # the caller still sees the failure
+    assert cached.stats["writes"] == 0
+    assert list(tmp_path.glob("*.json")) == []
+    # next call re-queries instead of replaying the bad result forever
+    cached.describe_scene(**payload)
+    assert inner.calls == 2
+    assert cached.stats["hits"] == 0
+
+
+@pytest.mark.smoke
+def test_stale_parse_failed_cache_entry_is_dropped_and_requeried(tmp_path):
+    """A parse-failed entry persisted by an older glassbox is treated as a
+    miss (dropped + re-queried); a stored-good result still round-trips."""
+    payload = {"frame_image": b"x", "elements": [{"id": 0}], "scene_hint": None}
+    inner = FakeInner(response=_resp())
+    key = CachedVLM._key(
+        payload["frame_image"],
+        payload["elements"],
+        payload["scene_hint"],
+        model=inner.model,
+    )
+    (tmp_path / f"{key}.json").write_text(
+        '{"raw_content": "garbage", "parsed": null, "usage": {}, "model": "fake"}',
+        encoding="utf-8",
+    )
+    cached = CachedVLM(inner, cache_dir=tmp_path)
+
+    r = cached.describe_scene(**payload)
+
+    assert inner.calls == 1                      # stale bad entry → re-query
+    assert r.parsed["scene_type"] == "login_form"
+    assert cached.stats == {"hits": 0, "misses": 1, "writes": 1}
+    # the good result replaced the bad entry and round-trips from disk
+    cached2 = CachedVLM(FakeInner(response=_resp("不该调")), cache_dir=tmp_path)
+    r2 = cached2.describe_scene(**payload)
+    assert cached2.stats["hits"] == 1
+    assert r2.parsed["elements"][0]["intent_label"] == "确认登录"
+
+
 # ─── wrap_with_cache_if_enabled ──────────────────────────────────────
 @pytest.mark.smoke
 def test_wrap_returns_inner_when_no_env(monkeypatch):

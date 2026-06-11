@@ -84,6 +84,10 @@ class PicoKVMEffector:
         self._connected = False
         self._wheel_activation_status: str | None = None
         self.wheel_validation_warning: str | None = None
+        # Last *delivered* HID report state (updated in _call); used to detect
+        # a latched button/key when a gesture dies between press and release.
+        self._hid_button_down = False
+        self._hid_keys_down = False
 
     def _warn_on_inconsistent_fit(self) -> None:
         """CUQ-3.9: phone_model and the absolute-pointer fit are independent
@@ -475,7 +479,14 @@ class PicoKVMEffector:
         )
 
     def _call(self, method: str, params: dict) -> PicoKVMRpcResponse:
-        return self.rpc.call(method, params)
+        response = self.rpc.call(method, params)
+        # Only reached when the report was delivered: a raise above leaves the
+        # flags describing the last report the device actually received.
+        if method == "absMouseReport":
+            self._hid_button_down = bool(params.get("buttons"))
+        elif method == "keyboardReport":
+            self._hid_keys_down = bool(params.get("keys")) or bool(params.get("modifier"))
+        return response
 
     def _multi_result(self, responses: Iterable[PicoKVMRpcResponse], *, op: str) -> ActionResult:
         seqs = tuple(resp.id for resp in responses)
@@ -532,6 +543,33 @@ class PicoKVMEffector:
         except Exception as exc:
             return self._failed("reset_hid_state", exc)
 
+    def _release_latched_hid(self, op: str, exc: Exception) -> None:
+        """Best-effort HID release after a gesture died mid-flight.
+
+        A transport error between button-down and button-up leaves the pointer
+        button latched on the device (press delivered, release lost), turning
+        every subsequent pointer move into a drag. Try to release; the original
+        failure still wins — this never raises. No-op when the last delivered
+        report left nothing pressed (e.g. the gesture failed before its press).
+        """
+        if not (self._hid_button_down or self._hid_keys_down):
+            return
+        try:
+            result = self.reset_hid_state()
+        except Exception as reset_exc:  # reset_hid_state already guards; belt and braces
+            logger.warning(
+                f"PicoKVM {op} failed mid-gesture ({exc}); HID state reset also raised: {reset_exc}"
+            )
+            return
+        if result.ok:
+            logger.warning(
+                f"PicoKVM {op} failed mid-gesture ({exc}); HID state reset (pointer button released)"
+            )
+        else:
+            logger.warning(
+                f"PicoKVM {op} failed mid-gesture ({exc}); HID state reset also failed: {result.error}"
+            )
+
     def _click_at(self, x: int, y: int) -> list[PicoKVMRpcResponse]:
         responses = [
             self._abs_report(x, y, 0),
@@ -547,6 +585,7 @@ class PicoKVMEffector:
         try:
             return self._multi_result(self._click_at(x, y), op="tap")
         except Exception as exc:
+            self._release_latched_hid("tap", exc)
             return self._failed("tap", exc)
 
     def long_press(self, x: int, y: int, hold_ms: int = 500) -> ActionResult:
@@ -562,6 +601,7 @@ class PicoKVMEffector:
             responses.append(self._abs_report(x, y, 0))
             return self._multi_result(responses, op="long_press")
         except Exception as exc:
+            self._release_latched_hid("long_press", exc)
             return self._failed("long_press", exc)
 
     def double_tap(self, x: int, y: int) -> ActionResult:
@@ -571,6 +611,7 @@ class PicoKVMEffector:
             responses.extend(self._click_at(x, y))
             return self._multi_result(responses, op="double_tap")
         except Exception as exc:
+            self._release_latched_hid("double_tap", exc)
             return self._failed("double_tap", exc)
 
     def swipe(
@@ -722,6 +763,7 @@ class PicoKVMEffector:
                 responses.extend(self._hid_reset_reports())
             return self._multi_result(responses, op=op)
         except Exception as exc:
+            self._release_latched_hid(op, exc)
             return self._failed(op, exc)
 
     def scroll_wheel(
@@ -779,6 +821,7 @@ class PicoKVMEffector:
             responses.append(self._call("wheelReport", {"wheelY": 0}))
             return self._multi_result(responses, op="scroll_wheel")
         except Exception as exc:
+            self._release_latched_hid("scroll_wheel", exc)
             return self._failed("scroll_wheel", exc)
 
     def type(self, text: str) -> ActionResult:
@@ -856,6 +899,7 @@ class PicoKVMEffector:
             responses.extend(self._webui_key_combo_reports(_MOD_META_LEFT, _KEY_H))
             return self._multi_result(responses, op="home")
         except Exception as exc:
+            self._release_latched_hid("home", exc)
             return self._failed("home", exc)
 
     def back(self) -> ActionResult:
@@ -866,6 +910,7 @@ class PicoKVMEffector:
             responses.extend(self._webui_key_combo_reports(_MOD_META_LEFT, _KEY_LEFT_BRACKET))
             return self._multi_result(responses, op="back")
         except Exception as exc:
+            self._release_latched_hid("back", exc)
             return self._failed("back", exc)
 
     def recents(self) -> ActionResult:

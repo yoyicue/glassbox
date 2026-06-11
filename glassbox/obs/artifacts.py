@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 from glassbox.cognition.base import Scene
 from glassbox.perception.source import Frame
 
@@ -120,6 +122,7 @@ class AuditSink:
         self._fp = path.open("w", encoding="utf-8")
         self._seq = 0
         self._closed = False
+        self._write_failed = False
 
     def append(
         self,
@@ -144,14 +147,33 @@ class AuditSink:
             "payload": payload or {},
         }
         self._seq += 1
-        self._fp.write(json.dumps(event, ensure_ascii=False, default=_json_default) + "\n")
-        self._fp.flush()
+        if self._write_failed:
+            return event
+        try:
+            self._fp.write(json.dumps(event, ensure_ascii=False, default=_json_default) + "\n")
+            self._fp.flush()
+        except OSError as exc:
+            # The audit stream is observability, not the run itself: a
+            # disk-full / IO error mid-run must not kill the live run. Log
+            # loudly once, mark the sink dead, and no-op every later write.
+            self._write_failed = True
+            logger.error(
+                "AuditSink write to {} failed ({}); audit recording disabled "
+                "for the rest of this run — the run continues unrecorded",
+                self.path,
+                exc,
+            )
         return event
 
     def close(self) -> None:
         if not self._closed:
-            self._fp.flush()
-            self._fp.close()
+            try:
+                self._fp.flush()
+                self._fp.close()
+            except OSError:
+                # The sink already failed mid-run (and logged); teardown must
+                # not raise again.
+                pass
             self._closed = True
 
 

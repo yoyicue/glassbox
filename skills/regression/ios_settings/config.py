@@ -200,6 +200,11 @@ def build_full_run_env(
         "IOS_SETTINGS_PAGE_ID_ROUTE",
         env.get("GLASSBOX_SETTINGS_NAVIGATION_PAGE_ID_ROUTE", "0"),
     )
+    # Arm the per-recognize() OCR watchdog on the live rig (the only path with
+    # the camera-preview hang; see AgentConfig.ocr_timeout). 20s is far above
+    # any legitimate full-frame .accurate OCR latency, so it only fires on a
+    # real hang. The global default stays 0 (off) for offline callers.
+    env.setdefault("GLASSBOX_OCR_TIMEOUT", "20")
     # Enable the VLM (Layer 3) for live cold-start runs. build_phone already
     # creates the SpringBoard icon-map + wires phone.kimi; the only thing gating
     # the springboard's VLM visual icon-grounding fallback (and the row-OCR
