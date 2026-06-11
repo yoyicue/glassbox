@@ -1612,3 +1612,25 @@ def test_final_state_carries_platform_scene_kind(tmp_path):
     )
     assert task_row["final_state"]["platform_scene_kind"] == "springboard"
     assert task_row["outcome"] == "succeeded"
+
+
+def test_pick_round_run_dir_prefers_the_main_crawl_ledger(tmp_path, capsys):
+    """A round that spawns auxiliary Phone sessions must aggregate the MAIN
+    crawl: attempt 3 of the iPhone floor (2026-06-12) aggregated a 9-action
+    auxiliary dir instead of the 144-action crawl because the driver took the
+    newest new dir."""
+    from skills.regression.computer_use_success_rate import _pick_round_run_dir
+
+    main_dir = tmp_path / "run_2026_06_12_06_04_38_000001"
+    aux_dir = tmp_path / "run_2026_06_12_06_57_05_000002"
+    for d, lines in ((main_dir, 144), (aux_dir, 9)):
+        d.mkdir()
+        (d / "actions.jsonl").write_text("{}\n" * lines, encoding="utf-8")
+
+    # newest-last ordering used to win; the bigger ledger must win instead
+    assert _pick_round_run_dir([main_dir, aux_dir]) == main_dir
+    assert "picked" in capsys.readouterr().out
+
+    # single dir: no forking note, returned as-is
+    assert _pick_round_run_dir([aux_dir]) == aux_dir
+    assert capsys.readouterr().out == ""
