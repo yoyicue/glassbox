@@ -11,17 +11,24 @@ Coverage:
   - cannot write after close
   - when Phone uses a recorder, the tap_text chain is fully recorded
     (snapshot/scene/verdict/action)
+  - an OSError mid-run disables the Recorder / AuditSink without killing
+    the run (one loud log, no-op afterwards); non-IO errors still raise
+  - iter_events tolerates a torn trailing line (crash artifact) but still
+    raises on mid-file corruption
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
+from loguru import logger
 
 from glassbox.cognition import Box, Scene, UIElement
 from glassbox.obs import Recorder, open_recorder
+from glassbox.obs.artifacts import AuditSink
 from glassbox.obs.recorder import iter_events
 from glassbox.perception.source import Frame
 
@@ -357,3 +364,114 @@ def test_phone_records_expect_text_timeout(tmp_path, mock_phone):
     assert len(verdicts) == 1
     assert verdicts[0]["passed"] is False
     assert "timeout" in verdicts[0]["message"]
+
+
+# ─── write-failure robustness (sinks must not kill the live run) ─────
+class _ExplodingFp:
+    """File stub whose write always raises the given exception."""
+
+    def __init__(self, exc: Exception):
+        self.exc = exc
+        self.writes = 0
+
+    def write(self, _data: str) -> None:
+        self.writes += 1
+        raise self.exc
+
+    def flush(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.mark.smoke
+def test_recorder_oserror_disables_recording_but_run_continues(tmp_path):
+    rec = Recorder(tmp_path, save_frames=False)
+    errors: list[str] = []
+    handler_id = logger.add(lambda msg: errors.append(str(msg)), level="ERROR")
+    try:
+        fp = _ExplodingFp(OSError(28, "No space left on device"))
+        rec._events_fp = fp
+        ev1 = rec.action("tap", x=1, y=2)      # first write fails → one loud error
+        ev2 = rec.verdict("v", passed=True)    # sink dead → no-op, no raise
+        ev3 = rec.snapshot(None)
+    finally:
+        logger.remove(handler_id)
+
+    assert rec._write_failed is True
+    assert fp.writes == 1                       # later events never touch the fp
+    assert (ev1.seq, ev2.seq, ev3.seq) == (0, 1, 2)
+    disabled = [e for e in errors if "recording disabled" in e]
+    assert len(disabled) == 1
+    assert str(rec.events_path) in disabled[0]
+    rec.close()                                 # teardown must not raise either
+
+
+@pytest.mark.smoke
+def test_recorder_non_io_write_error_still_raises(tmp_path):
+    rec = Recorder(tmp_path, save_frames=False)
+    rec._events_fp = _ExplodingFp(ValueError("bug, not disk"))
+    with pytest.raises(ValueError):
+        rec.action("tap")
+    assert rec._write_failed is False
+
+
+@pytest.mark.smoke
+def test_audit_sink_oserror_disables_audit_but_run_continues(tmp_path):
+    sink = AuditSink(tmp_path / "audit.jsonl", run_id="r1")
+    errors: list[str] = []
+    handler_id = logger.add(lambda msg: errors.append(str(msg)), level="ERROR")
+    try:
+        fp = _ExplodingFp(OSError(28, "No space left on device"))
+        sink._fp = fp
+        ev1 = sink.append("frame.captured")
+        ev2 = sink.append("scene.observed")
+    finally:
+        logger.remove(handler_id)
+
+    assert sink._write_failed is True
+    assert fp.writes == 1
+    assert (ev1["seq"], ev2["seq"]) == (0, 1)
+    disabled = [e for e in errors if "audit recording disabled" in e]
+    assert len(disabled) == 1
+    assert str(sink.path) in disabled[0]
+    sink.close()
+
+
+@pytest.mark.smoke
+def test_audit_sink_non_io_write_error_still_raises(tmp_path):
+    sink = AuditSink(tmp_path / "audit.jsonl", run_id="r1")
+    sink._fp = _ExplodingFp(TypeError("bug, not disk"))
+    with pytest.raises(TypeError):
+        sink.append("frame.captured")
+    assert sink._write_failed is False
+
+
+# ─── torn trailing line (crash artifact) tolerance ───────────────────
+@pytest.mark.smoke
+def test_iter_events_skips_torn_trailing_line(tmp_path):
+    rec = Recorder(tmp_path, save_frames=False)
+    rec.action("tap", x=1)
+    rec.action("swipe", x=2)
+    rec.close()
+    with (tmp_path / "events.jsonl").open("a", encoding="utf-8") as fp:
+        fp.write('{"ts": 3.0, "seq": 2, "type": "act')  # crash mid-write
+
+    events = list(iter_events(tmp_path))
+
+    assert len(events) == 2
+    assert [e["type"] for e in events] == ["action", "action"]
+
+
+@pytest.mark.smoke
+def test_iter_events_raises_on_mid_file_corruption(tmp_path):
+    path = tmp_path / "events.jsonl"
+    path.write_text(
+        '{"ts": 1.0, "seq": 0, "type": "action"}\n'
+        '{"ts": 2.0, "seq": 1, "type": "act\n'      # torn but NOT final → corruption
+        '{"ts": 3.0, "seq": 2, "type": "action"}\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(json.JSONDecodeError):
+        list(iter_events(tmp_path))

@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
+from loguru import logger
 
 if TYPE_CHECKING:
     from glassbox.cognition.base import Scene
@@ -91,6 +92,7 @@ class Recorder:
         self._last_snapshot_seq = -1
         self._last_viewport_size: tuple[int, int] | None = None
         self._closed = False
+        self._write_failed = False
         self.save_frames = save_frames
 
         self._write_manifest(run_id=run_id, meta=meta or {})
@@ -135,8 +137,22 @@ class Recorder:
             type=type_,
             payload=payload,
         )
-        self._events_fp.write(ev.to_json_line() + "\n")
-        self._events_fp.flush()
+        if self._write_failed:
+            return ev
+        try:
+            self._events_fp.write(ev.to_json_line() + "\n")
+            self._events_fp.flush()
+        except OSError as exc:
+            # Recording is observability, not the run itself: a disk-full /
+            # IO error mid-run must not kill the live walkthrough. Log loudly
+            # once, mark the sink dead, and no-op every later write.
+            self._write_failed = True
+            logger.error(
+                "Recorder write to {} failed ({}); recording disabled for the "
+                "rest of this run — the run continues unrecorded",
+                self.events_path,
+                exc,
+            )
         return ev
 
     # —— public API ——
@@ -293,8 +309,13 @@ class Recorder:
 
     def close(self) -> None:
         if not self._closed:
-            self._events_fp.flush()
-            self._events_fp.close()
+            try:
+                self._events_fp.flush()
+                self._events_fp.close()
+            except OSError:
+                # The sink already failed mid-run (and logged); teardown must
+                # not raise again.
+                pass
             self._closed = True
 
     # —— context manager ——
@@ -332,11 +353,32 @@ def open_recorder(
 
 # ─── read side: events.jsonl parsing (for replay) ─────────────────────
 def iter_events(run_dir: Path | str):
-    """Read events.jsonl line by line, yielding dicts."""
+    """Read events.jsonl line by line, yielding dicts.
+
+    A run that crashed mid-write leaves a truncated FINAL line; that is a
+    crash artifact, not corruption, so it is skipped with a warning instead of
+    killing every consumer (replay, recording source, UTG rebuild). An
+    undecodable line anywhere ELSE is real corruption and still raises.
+    """
     path = Path(run_dir) / "events.jsonl"
+    pending_error: json.JSONDecodeError | None = None
     with path.open("r", encoding="utf-8") as fp:
         for line in fp:
             line = line.strip()
             if not line:
                 continue
-            yield json.loads(line)
+            if pending_error is not None:
+                # The undecodable line was followed by more data → mid-file.
+                raise pending_error
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError as exc:
+                pending_error = exc
+                continue
+            yield event
+    if pending_error is not None:
+        logger.warning(
+            "{}: torn trailing line (crash artifact) skipped: {}",
+            path,
+            pending_error,
+        )

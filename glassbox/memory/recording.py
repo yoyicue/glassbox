@@ -7,22 +7,19 @@ Kept separate from graph.py so the core graph carries no glassbox.obs import.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from glassbox.cognition.base import Box, Scene, UIElement
 from glassbox.memory.graph import ScreenMemory
 from glassbox.memory.schema import UTG, ActionRecord
+from glassbox.obs.recorder import iter_events
 
 
 def _iter_events(run_dir: str | Path):
-    path = Path(run_dir) / "events.jsonl"
-    with path.open("r", encoding="utf-8") as fp:
-        for line in fp:
-            line = line.strip()
-            if line:
-                yield json.loads(line)
+    # Shared hardened reader: tolerates a torn trailing line (crash artifact),
+    # still raises on mid-file corruption.
+    yield from iter_events(run_dir)
 
 
 def _scene_from_event(ev: dict) -> Scene:

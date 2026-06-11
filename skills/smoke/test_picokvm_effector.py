@@ -595,6 +595,92 @@ def test_picokvm_rejects_phone_px_coordinate_space():
     assert rpc.calls == []
 
 
+class MidGestureFailRpc(FakeRpc):
+    """Raises once on the first buttons==0 report after a delivered press —
+    the gesture's release is lost mid-flight (transport error)."""
+
+    def __init__(self):
+        super().__init__()
+        self.pressed = False
+        self.failed = False
+        self.calls_after_failure: list[tuple[str, dict | None]] = []
+
+    def call(self, method, params=None):
+        if self.failed:
+            self.calls_after_failure.append((method, params))
+        elif method == "absMouseReport":
+            buttons = (params or {}).get("buttons", 0)
+            if buttons:
+                self.pressed = True
+            elif self.pressed:
+                self.failed = True
+                raise RuntimeError("transport dropped mid-gesture")
+        return super().call(method, params)
+
+
+def _assert_hid_reset_after_failure(rpc: MidGestureFailRpc) -> None:
+    methods = [name for name, _ in rpc.calls_after_failure]
+    assert "keyboardReport" in methods                  # keyboard released
+    abs_reports = [p for name, p in rpc.calls_after_failure if name == "absMouseReport"]
+    assert abs_reports                                  # pointer re-reported …
+    assert all(p["buttons"] == 0 for p in abs_reports)  # … with the button up
+
+
+@pytest.mark.smoke
+def test_picokvm_tap_failure_after_press_releases_latched_button():
+    """A transport error between button-down and button-up must not leave the
+    pointer button latched: the effector best-effort resets HID state and the
+    original failure still wins (failed ActionResult)."""
+    rpc = MidGestureFailRpc()
+    eff, _ = make_eff(rpc=rpc)
+
+    result = eff.tap(960, 540)
+
+    assert result.ok is False
+    assert "transport dropped mid-gesture" in (result.error or "")
+    _assert_hid_reset_after_failure(rpc)
+
+
+@pytest.mark.smoke
+def test_picokvm_drag_failure_after_press_releases_latched_button():
+    rpc = MidGestureFailRpc()
+    eff, _ = make_eff(rpc=rpc)
+
+    result = eff.swipe(100, 800, 100, 200, steps=3)
+
+    assert result.ok is False
+    assert "transport dropped mid-gesture" in (result.error or "")
+    _assert_hid_reset_after_failure(rpc)
+
+
+@pytest.mark.smoke
+def test_picokvm_failure_before_press_does_not_reset_hid():
+    """A gesture that dies before any press was delivered has nothing latched;
+    the failure must not trigger extra HID traffic."""
+
+    class FailBeforePressRpc(FakeRpc):
+        def __init__(self):
+            super().__init__()
+            self.failed = False
+            self.calls_after_failure: list[tuple[str, dict | None]] = []
+
+        def call(self, method, params=None):
+            if self.failed:
+                self.calls_after_failure.append((method, params))
+            elif method == "absMouseReport":
+                self.failed = True
+                raise RuntimeError("transport down")
+            return super().call(method, params)
+
+    rpc = FailBeforePressRpc()
+    eff, _ = make_eff(rpc=rpc)
+
+    result = eff.tap(960, 540)
+
+    assert result.ok is False
+    assert rpc.calls_after_failure == []
+
+
 @pytest.mark.smoke
 def test_picokvm_drag_uses_settled_pointer_down_sequence():
     eff, rpc = make_eff()
