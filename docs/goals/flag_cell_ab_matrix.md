@@ -44,11 +44,18 @@ docstring 和本台账。
 uv run python -m skills.regression.floor_lineage
 ```
 
-列定义(顺序与 `floor_lineage.py:VALUE_KEYS` 锁定):completion =
-task_completion_rate,action = action_success_rate,esc =
-expected_state_coverage,recov = recoveries,switch = strategy_switches,
-vlm = vlm_action_coverage,scroll = scroll_success_rate。数值格式 `%.3g`。
-历史行由 git 逐版本重放生成(2026-06-11),🔼 = 抬高。
+列语义(顺序与 `floor_lineage.py:VALUE_KEYS` 锁定;数值格式 `%.3g`;
+历史行由 git 逐版本重放生成 2026-06-11,🔼 = 抬高):
+
+| 列 | 指标 | 含义 | 怎么读 |
+|---|---|---|---|
+| completion | task_completion_rate | 任务级完成率:整轮任务按**终态证据**判定成功的占比 | **头条,↑好** |
+| action | action_success_rate | 动作级成功率:任务型主要动作(排除滚动填充)语义验证 succeeded 的占比 | ↑好;**≠任务成功**(勿把 0.955 时代读成任务成功) |
+| esc | expected_state_coverage | 带显式期望状态(`expect=`)验证的动作占比 | **覆盖率,非成功率**;↑ = P2 语义验证在路径上 |
+| recov | recoveries | 恢复机制实际触发并成功的次数(原始计数) | **救场计数,方向中性**:干净跑诚实为 0,降可能 = 路径更可靠 |
+| switch | strategy_switches | 策略阶梯切换次数(P2 升级频次) | 同上(a8b6281 行 5→0 是诚实零,不是退化) |
+| vlm | vlm_action_coverage | VLM 参与的动作占比(P1 触发频次,计费路径) | 同上;守护者是机器探针,不是棘轮 |
+| scroll | scroll_success_rate | 滚动动作成功率(已知弱原语,单列以防稀释 action) | ↑好;样本少时波动大(看 scroll_action_count) |
 
 | 格子 | 日期 | commit | 事件 | completion | action | esc | recov | switch | vlm | scroll |
 |---|---|---|---|---|---|---|---|---|---|---|
