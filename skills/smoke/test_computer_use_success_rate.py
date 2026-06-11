@@ -1556,3 +1556,59 @@ def test_make_entrypoint_wraps_ios_settings_success_rate_harness():
     assert "run-ios-settings" in makefile
     assert "--rounds $(ROUNDS)" in makefile
     assert 'TERMINAL_EXPECTED_STATE ?= {"kind":"root_coverage_complete","payload":{}}' in makefile
+
+
+def test_platform_scene_kind_terminal_evidence():
+    """Some surfaces never mint a page_id on some devices (iPad widget-Home:
+    platform_scene_kind="springboard", page_id None; iPad Settings restores
+    the last-viewed page) — a page_id terminal is then unsatisfiable
+    regardless of real success. The classification-vocabulary evidence kind
+    closes that gap (observed live 2026-06-11: go_home verified by
+    ios_home_screen_visible yet scored failed 0/5)."""
+    from skills.regression.computer_use_success_rate import _terminal_expected_state_met
+
+    springboard = {"page_id": None, "platform_scene_kind": "springboard", "visible_texts": []}
+    terminal = {"kind": "platform_scene_kind", "payload": {"any_of": ["springboard"]}}
+    assert _terminal_expected_state_met(springboard, terminal) is True
+
+    detail = {"page_id": "settings/General", "platform_scene_kind": "settings_detail"}
+    assert _terminal_expected_state_met(detail, terminal) is False
+
+    # empty any_of must not vacuously pass
+    assert (
+        _terminal_expected_state_met(
+            springboard, {"kind": "platform_scene_kind", "payload": {"any_of": []}}
+        )
+        is False
+    )
+
+    # the kind is schema-valid for task manifests / committed floors
+    errors: list[str] = []
+    success_rate._validate_expected_state(terminal, "t", errors)
+    assert errors == []
+
+
+def test_final_state_carries_platform_scene_kind(tmp_path):
+    from skills.regression.computer_use_success_rate import aggregate_run_dir
+
+    run_dir = _run_dir(tmp_path, status="succeeded")
+    _write_json(
+        run_dir / "scenes" / "after1.json",
+        {
+            "page_id": None,
+            "platform_scene_kind": "springboard",
+            "vlm_status": "ok",
+            "elements": [{"type": "text", "text": "设置"}],
+        },
+    )
+    task_row = aggregate_run_dir(
+        run_dir,
+        task="go_home",
+        round_index=0,
+        terminal_expected_state={
+            "kind": "platform_scene_kind",
+            "payload": {"any_of": ["springboard"]},
+        },
+    )
+    assert task_row["final_state"]["platform_scene_kind"] == "springboard"
+    assert task_row["outcome"] == "succeeded"

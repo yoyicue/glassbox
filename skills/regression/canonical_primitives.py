@@ -68,14 +68,38 @@ CANONICAL_PRIMITIVE_TASKS: tuple[PrimitiveTask, ...] = (
     PrimitiveTask(
         "go_home",
         _go_home,
-        {"kind": "page_id", "payload": {"page_id": "springboard"}},
+        # Classification vocabulary, not page_id: the iPad widget-Home is
+        # classified platform_scene_kind="springboard" but never mints a
+        # page_id, so a page_id terminal was unsatisfiable there regardless of
+        # real success (observed live 2026-06-11: home verified by
+        # ios_home_screen_visible, task still scored failed 0/5).
+        {"kind": "platform_scene_kind", "payload": {"any_of": ["springboard"]}},
         "press Home and expect the Home screen",
     ),
     PrimitiveTask(
         "launch_app",
         _launch_settings,
-        {"kind": "page_id", "payload": {"page_id": "settings/root"}},
-        "launch the Settings app and expect its root",
+        # Settings-is-foregrounded evidence that holds on both devices/locales:
+        # iPad Settings restores the last-viewed page (sidebar always shows
+        # root entries at some scroll position), so demanding page_id
+        # settings/root was unsatisfiable there. any_of covers en/zh entries
+        # across sidebar scroll positions.
+        {
+            "kind": "visible_text",
+            "payload": {
+                "any_of": [
+                    "General",
+                    "通用",
+                    "Notifications",
+                    "通知",
+                    "Privacy & Security",
+                    "隐私与安全性",
+                    "Screen Time",
+                    "屏幕使用时间",
+                ]
+            },
+        },
+        "launch the Settings app and expect Settings UI on screen",
     ),
     PrimitiveTask(
         "back",
