@@ -91,3 +91,50 @@ def test_replays_consistently_skips_unreplayable_verifier_instead_of_crashing():
         "metadata": {"verifier": "expected_state"},
     }
     assert replays_consistently(payload, VerifierRegistry()) is False
+
+
+@pytest.mark.smoke
+def test_harvest_refuses_to_wipe_a_nonempty_corpus(tmp_path, capsys):
+    """Running the documented refresh (`make golden-harvest`) on a host without
+    run ledgers used to keep 0 cases and then prune-WIPE the committed corpus.
+    That must be an explicit decision (--allow-empty), never a side effect."""
+    from skills.regression.golden_ingest import _main
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    committed_case = corpus / "scene_progressed__deadbeef.json"
+    committed_case.write_text("{}", encoding="utf-8")
+    empty_roots = tmp_path / "no-ledgers"
+    empty_roots.mkdir()
+
+    rc = _main(["harvest", "--roots", str(empty_roots), "--out", str(corpus)])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert committed_case.exists(), "the committed corpus must survive a refused harvest"
+    assert "WIPE" in captured.err
+
+    rc = _main(
+        ["harvest", "--roots", str(empty_roots), "--out", str(corpus), "--allow-empty"]
+    )
+    assert rc == 0
+    assert not committed_case.exists(), "--allow-empty is the explicit wipe path"
+
+
+@pytest.mark.smoke
+def test_audit_skip_on_ledger_free_host_is_loud_and_honest(tmp_path, capsys):
+    """The rc-0 no-op on ledger-free hosts (CI included) is by design, but it
+    must say so explicitly — 'golden-audit OK' and 'golden-audit skipped' must
+    be impossible to confuse."""
+    from skills.regression.golden_ingest import audit
+
+    empty_roots = tmp_path / "no-ledgers"
+    empty_roots.mkdir()
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+
+    rc = audit([empty_roots], corpus)
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "SKIPPED" in captured.out
+    assert "BY DESIGN" in captured.out
+    assert "Do NOT read this as 'corpus audited'" in captured.out

@@ -25,7 +25,10 @@ _FLOOR = (
 @pytest.mark.smoke
 def test_committed_clock_tabs_floor_is_valid_and_completed():
     if not _FLOOR.exists():
-        pytest.skip("no committed clock-tabs floor yet")
+        pytest.fail(
+            f"committed clock-tabs floor missing: {_FLOOR} — it is gate-load-bearing; "
+            "deleting it must not merge green (was a silent pytest.skip)"
+        )
     payload = json.loads(_FLOOR.read_text(encoding="utf-8"))
     assert validate_benchmark(payload) == []
     assert payload["config"]["task_set"] == "ipados_clock_tabs"

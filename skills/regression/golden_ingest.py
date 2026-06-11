@@ -117,6 +117,10 @@ class HarvestReport:
     kept: int = 0
     by_verifier: dict[str, int] = field(default_factory=dict)
     removed_stale: int = 0
+    # True when the harvest found nothing keepable but the target corpus is
+    # non-empty: pruning would have wiped the committed corpus, so it was
+    # refused (see harvest(allow_empty=...)).
+    aborted_wipe: bool = False
 
     def render(self) -> str:
         cov = ", ".join(f"{k}={v}" for k, v in sorted(self.by_verifier.items()))
@@ -151,6 +155,7 @@ def harvest(
     out_dir: Path,
     *,
     prune_stale: bool = True,
+    allow_empty: bool = False,
 ) -> HarvestReport:
     out_dir = Path(out_dir)
     registry = VerifierRegistry()
@@ -174,6 +179,14 @@ def harvest(
             seen[fp] = payload
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Wipe guard: on a machine without run ledgers (every machine but the rig
+    # host — artifacts/ is gitignored), a fresh harvest keeps 0 cases, and
+    # prune_stale would then delete the entire committed corpus. That must be
+    # an explicit decision, never a side effect of running the documented
+    # refresh command on the wrong host.
+    if not seen and not allow_empty and any(out_dir.glob("*.json")):
+        report.aborted_wipe = True
+        return report
     kept_files: set[str] = set()
     for fp, payload in seen.items():
         fname = f"{payload['metadata']['verifier']}__{fp}.json"
@@ -200,7 +213,13 @@ def audit(roots: list[Path], against: Path) -> int:
     (which need only the committed corpus) are the real guard there."""
     against = Path(against)
     if not has_source_ledgers(roots):
-        print("golden-audit skipped: no source ledgers (artifacts/ gitignored)")
+        print(
+            "golden-audit SKIPPED (rc 0 BY DESIGN): no source ledgers under "
+            f"{', '.join(str(r) for r in roots)} — drift can only be audited on a host "
+            "with run artifacts (the rig). On ledger-free hosts (CI included) the "
+            "committed corpus is guarded by the replay+floor smoke tests instead "
+            "(skills/smoke/test_golden_ingest.py). Do NOT read this as 'corpus audited'."
+        )
         return 0
     with tempfile.TemporaryDirectory() as tmp:
         harvest(roots, Path(tmp), prune_stale=True)
@@ -230,6 +249,15 @@ def _main(argv: list[str] | None = None) -> int:
     h = sub.add_parser("harvest", help="harvest ledgers into the committed corpus")
     h.add_argument("--roots", nargs="+", default=["artifacts"])
     h.add_argument("--out", default=str(HARVESTED_ROOT))
+    h.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help=(
+            "Permit a harvest that keeps 0 cases to prune (i.e. wipe) a non-empty "
+            "corpus. Without this flag that situation aborts with rc 1 — it is what "
+            "running the refresh on a ledger-free host looks like."
+        ),
+    )
 
     a = sub.add_parser("audit", help="fail (rc 1) if the committed corpus drifts from a fresh harvest")
     a.add_argument("--roots", nargs="+", default=["artifacts"])
@@ -237,8 +265,20 @@ def _main(argv: list[str] | None = None) -> int:
 
     args = ap.parse_args(argv)
     if args.cmd == "harvest":
-        report = harvest([Path(r) for r in args.roots], Path(args.out))
+        report = harvest(
+            [Path(r) for r in args.roots], Path(args.out), allow_empty=args.allow_empty
+        )
         print(report.render())
+        if report.aborted_wipe:
+            print(
+                "golden-harvest REFUSED: the fresh harvest kept 0 cases but the corpus "
+                f"at {args.out} is non-empty — pruning would WIPE the committed corpus. "
+                "This is what running the refresh on a host without run ledgers looks "
+                "like (artifacts/ is gitignored; only the rig host has them). Pass "
+                "--allow-empty to wipe deliberately.",
+                file=sys.stderr,
+            )
+            return 1
         # Sanity: everything just written must load and replay.
         cases = iter_golden_cases(args.out)
         print(f"corpus: {len(cases)} loadable golden cases at {args.out}")
