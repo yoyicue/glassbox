@@ -23,6 +23,7 @@ memory/utg/
 memory/runtime/
 
 # Python
+dist/
 __pycache__/
 *.pyc
 *.pyo
@@ -53,3 +54,6 @@ glassbox/cognition/icon_backends/*
 
 # 自动生成的运行日志
 runs.tsv
+
+# Claude Code local session state
+.claude/

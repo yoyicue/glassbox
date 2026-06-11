@@ -420,10 +420,10 @@ P3**:
    schema, compares two benchmark artifacts, supports a task-manifest input for
    fixed multi-task benchmark sets, and can wrap the iOS Settings walkthrough
    for N rounds. It is exposed as
-   `glassbox-computer-use-success-rate` and as
-   `python -m skills.regression.computer_use_success_rate`; the repository
-   `Makefile` exposes `computer-use-success-rate-ios-settings` as the
-   unattended Settings benchmark wrapper.
+   `python -m skills.regression.computer_use_success_rate` (not as a console
+   script: the harness lives in `skills/`, which the wheel does not ship); the
+   repository `Makefile` exposes `computer-use-success-rate-ios-settings` as
+   the unattended Settings benchmark wrapper.
    `task_completion_rate` is computed from task evidence satisfying
    `terminal_expected_state`; action success remains a separate primary-action
    metric. Metrics and compare output also include `vlm_calls`,

@@ -26,12 +26,10 @@ jobs:
           python-version: "3.11"
       - name: Sync dependencies
         run: uv sync --extra dev
-      - name: Lint (ruff)
-        run: uv run ruff check glassbox skills
-      - name: Smoke suite
-        run: uv run pytest skills/smoke -q
-      - name: Reliability regression gate (offline)
-        # Validates the committed success-rate baseline floor and pins the
-        # comparator semantics (rc 1 on regression, rc 2 on malformed input) so a
-        # silent change to the gate cannot let a reliability regression merge.
-        run: uv run python -m skills.regression.computer_use_success_rate validate skills/regression/fixtures/reliability_baseline.json
+      - name: Merge gate (make check)
+        # Literally the gate contributors run locally — lint, smoke suite,
+        # offline reliability regression gate, golden-corpus audit (no-ops
+        # here: artifacts/ is not in CI), and the wheel packaging smoke.
+        # Running the make target instead of hand-copied steps keeps CI from
+        # drifting out of sync with the local gate.
+        run: make check

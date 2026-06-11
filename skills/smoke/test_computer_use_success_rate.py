@@ -1516,13 +1516,14 @@ def test_cli_run_ios_settings_rejects_invalid_terminal_expected_state_json(tmp_p
     assert not out.exists()
 
 
-def test_cli_entrypoint_is_registered():
+def test_cli_entrypoint_is_not_published():
+    """The harness lives in skills/ (not shipped in the wheel), so a console
+    script for it would ModuleNotFoundError on any non-checkout install — the
+    in-repo entry is the module form wrapped by the Makefile. The generic
+    no-unshipped-targets rule is enforced by test_packaging_guard.py."""
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert (
-        pyproject["project"]["scripts"]["glassbox-computer-use-success-rate"]
-        == "skills.regression.computer_use_success_rate:main"
-    )
+    assert "glassbox-computer-use-success-rate" not in pyproject["project"]["scripts"]
 
 
 def test_make_entrypoint_wraps_ios_settings_success_rate_harness():
