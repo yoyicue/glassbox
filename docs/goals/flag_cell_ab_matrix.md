@@ -121,6 +121,16 @@ uv run python -m skills.regression.floor_lineage
 
 ## 3. 测试报告台账
 
+### 2026-06-12 iPhone 设备匹配 floor 三连试 —— 中止,launch 路径修复入库,滚动确定性立为前置战役
+- 类型：基线建立(**未入库**——三次尝试均无法产出有意义 floor)
+- 格子：iPhone 17 Pro Max 设置钻取;计划 n=5;en/CN(设备实为英文系统,nightly 矩阵的 zh 假设过时,已决策 floor 用 en/CN 并待改 lane)
+- 尝试 1(zh 词表错配):设备英文 → zh 根页词表不可达 → SettingsRootUnreachable;顺带暴露 Apple Account review 弹层行陷阱
+- 尝试 2(launch 全灭,**产出核心修复 #87**):混合 widget+网格首页被 `weatherish>=3` 误判为纯 Today 面 → launcher 跳过扫描**可见的** Settings 图标(OCR 实测 (150,541) 有标签)→ 全轮死于启动。修复 = `_scannable_app_labels` 语义过滤(几何网格判别被既有天气预报表守卫测试当场击杀,换语义路);同因解释 iPad Clock cell 的 launch 彩票成分
+- 尝试 3(#87 后,--keep-going 诚实计分):**成功进入 Settings 爬取**(launch 修复验证),但 5 轮仅 1 轮写出 artifact,该轮覆盖 0/17、5 滚全败、asr 0.33——单栏设置折叠线下 7 个根页(WLAN/声音/专注/辅助功能/操作按钮/FaceID/隐私)需要滚动,iPhone swipe-fling 物理天花板(已知:覆盖 9-15/17)是真实承重墙
+- 判定：**iPhone floor 前置依赖 = 滚动确定性(L4 类工作,roadmap 已有战役位)**;在此之前任何 n=5 都是彩票噪声。en/CN 词表路径确认完好(WLAN 别名生效,zh 规范 ID 层按设计工作)
+- 产物：#87 合并;无 fixture;`--keep-going` 语义确认(verify 失败轮诚实计分不中止)
+- 注意事项：设备已复位 verified-Home;Apple Account review 行陷阱待 settings_blocked_safety 词表覆盖(en:"Review Apple Account…");三次尝试的 run ledger 在本地 artifacts
+
 ### 2026-06-11 矩阵 #11 attempt 4（诚实仪器,#75/#76/#77/#81/#82 全栈）—— 判定:该格子当前不可测 #11
 - 类型：flag A/B（**Arm A 完成,Arm B 取消**——格子被上游主导）
 - 格子：Clock cell;n=5;classical 钉死;命令同 attempt 1-3 + 全修复栈
