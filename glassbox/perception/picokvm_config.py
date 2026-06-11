@@ -18,6 +18,7 @@ class PicoKVMVideoSettings(Protocol):
     stream_path: str
     robust_capture: bool
     snapshot_reconnect_attempts: int
+    open_retry_attempts: int
 
 
 class PicoKVMVideoConfig(BaseSettings):
@@ -37,6 +38,11 @@ class PicoKVMVideoConfig(BaseSettings):
     stream_path: str = "/video/stream"
     robust_capture: bool = False
     snapshot_reconnect_attempts: int = 4
+    # The single-consumer H.264 stream intermittently refuses a fresh open for
+    # a few seconds when consumers cycle quickly (a benchmark opening one Phone
+    # per task-round is exactly that pattern); a bounded open retry rides
+    # through the wedge instead of killing a whole run at a round boundary.
+    open_retry_attempts: int = 4
 
     @field_validator("base_url")
     @classmethod
@@ -52,9 +58,9 @@ class PicoKVMVideoConfig(BaseSettings):
         value = value.strip() or "/video/stream"
         return value if value.startswith("/") else f"/{value}"
 
-    @field_validator("snapshot_reconnect_attempts")
+    @field_validator("snapshot_reconnect_attempts", "open_retry_attempts")
     @classmethod
     def _positive_attempts(cls, value: int) -> int:
         if int(value) <= 0:
-            raise ValueError("snapshot_reconnect_attempts must be > 0")
+            raise ValueError("attempt budgets must be > 0")
         return int(value)

@@ -194,3 +194,65 @@ def test_fresh_snapshot_uses_production_warmup_settle_defaults():
     captures = [FakeCapture([(True, _decoded(1)), (True, _decoded(2)), (True, fresh)])]
     source2 = PicoKVMFrameSource(config=cfg, capture_factory=lambda _u: captures.pop(0))
     assert source2.fresh_snapshot().img is fresh
+
+
+def test_open_retries_through_transient_wedge(monkeypatch):
+    """The single-consumer H.264 stream intermittently refuses a fresh open
+    when consumers cycle quickly (observed twice live on 2026-06-11, killing a
+    canonical-primitives benchmark at a round boundary). open() must ride
+    through with bounded backoff instead of raising on the first refusal."""
+    import glassbox.perception.picokvm_source as src_mod
+    from glassbox.perception.picokvm_source import PicoKVMFrameSource
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(src_mod.time, "sleep", sleeps.append)
+
+    class _Refused:
+        released = 0
+
+        def isOpened(self):
+            return False
+
+        def release(self):
+            type(self).released += 1
+
+    class _Opened:
+        def isOpened(self):
+            return True
+
+    captures = [_Refused(), _Refused(), _Opened()]
+    source = PicoKVMFrameSource(capture_factory=lambda _url: captures.pop(0))
+
+    source.open()
+
+    assert isinstance(source._capture, _Opened)
+    assert _Refused.released == 2  # refused handles are released, not leaked
+    assert sleeps == [2.0, 4.0]  # linear backoff between attempts
+
+
+def test_open_raises_after_retry_budget(monkeypatch):
+    import glassbox.perception.picokvm_source as src_mod
+    from glassbox.perception.picokvm_source import PicoKVMFrameSource
+
+    monkeypatch.setattr(src_mod.time, "sleep", lambda _s: None)
+
+    class _Refused:
+        def isOpened(self):
+            return False
+
+        def release(self):
+            pass
+
+    source = PicoKVMFrameSource(capture_factory=lambda _url: _Refused())
+
+    with pytest.raises(RuntimeError, match="did not open after 4 attempts"):
+        source.open()
+
+
+def test_open_retry_budget_is_env_tunable():
+    from glassbox.perception.picokvm_config import PicoKVMVideoConfig
+
+    assert PicoKVMVideoConfig().open_retry_attempts == 4
+    assert PicoKVMVideoConfig(open_retry_attempts=2).open_retry_attempts == 2
+    with pytest.raises(ValueError):
+        PicoKVMVideoConfig(open_retry_attempts=0)
