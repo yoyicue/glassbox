@@ -1,8 +1,14 @@
 # UI Transition Graph / 屏幕记忆 — 设计草案
 
-> 状态:**草案 v0**(2026-05-16)。等拍板后再拆 milestone / 落代码。
-> 关联:`gui_understanding.md` §6.4(已知 App 锚点缓存)、`../roadmap.md`、
-> `glassbox/profile.py`(`match_vc` / whitebox)、`glassbox/obs/recorder.py`。
+> 状态:**已实现**(设计稿 2026-05-16;状态更新 2026-06-11)。本文是 UTG 的
+> 设计底稿;实现已落在 `glassbox/memory/`(`graph.py` ScreenMemory、
+> `schema.py` UTG schema v2、`signature.py` dhash 签名、`store.py` 持久化、
+> `recording.py` 离线回放注入),细节以代码为准。注意:**跨 run 复用
+> (warm-start 导航)仍默认关闭**,尚无任务级收益证据
+> (见 `../goals/project_health_snapshot.md` item 2)。
+> 关联:`glassbox/profile.py`(`match_vc` / whitebox)、
+> `glassbox/obs/recorder.py`。(早期关联的 `gui_understanding.md` /
+> `roadmap.md` 已不存在,引用移除。)
 
 ---
 

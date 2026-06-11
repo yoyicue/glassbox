@@ -162,9 +162,11 @@ Every stage is a **named boundary** — `FrameSource`, `Effector`, `OCR`, `VLM`,
 `IconDetector`, `Verifier`, `Platform`, and `CrawlPolicy` (defined in
 `glassbox/boundaries.py`). Backends are discovered as Python **entry points**
 (`glassbox.frame_sources`, `glassbox.effectors`, `glassbox.ocr`, `glassbox.vlm`,
-`glassbox.icon_detectors`, `glassbox.verifiers`, `glassbox.platforms`,
-`glassbox.crawl_policies`), so you add a backend by registering an entry point —
-no core edits. Effector backends advertise capabilities (coordinate space,
+`glassbox.verifiers`, `glassbox.platforms`, `glassbox.crawl_policies`,
+`glassbox.app_policies`), so you add a backend by registering an entry point —
+no core edits. Icon detectors are the one exception: heavy (AGPL) backends load
+as git-ignored drop-in plugins via a directory scan of
+`glassbox/cognition/icon_backends/`, not as entry points (see License below). Effector backends advertise capabilities (coordinate space,
 connection requirements, transport label, calibrated-crop and wheel defaults).
 Boundary maturity is tracked in
 `docs/design/architecture_boundaries.md`
