@@ -12,8 +12,8 @@ from typing import Any
 from glassbox.ai import (
     ActionOutcome,
     AIPhone,
-    ObservationSummary,
     RunArtifacts,
+    observation_payload,
     open_phone,
 )
 
@@ -182,45 +182,9 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _observation_payload(obs: ObservationSummary) -> JSON:
-    return {
-        "summary": obs.summary,
-        "page_id": obs.page_id,
-        "scene_type": obs.scene_type,
-        "visible_texts": list(obs.visible_texts),
-        "actions": list(obs.actions),
-        "can_scroll": obs.can_scroll,
-        "screenshot_path": str(obs.screenshot_path) if obs.screenshot_path else None,
-        "scene_path": str(obs.scene_path),
-        "event_seq": obs.event_seq,
-        "viewport_size": list(obs.viewport_size) if obs.viewport_size else None,
-        "coordinate_space": obs.coordinate_space,
-        "crop_bbox": list(obs.crop_bbox) if obs.crop_bbox else None,
-        "platform_scene_kind": obs.platform_scene_kind,
-        "current_vc": obs.current_vc,
-        "whitebox_evaluated": obs.whitebox_evaluated,
-        "app_state": obs.app_state or {},
-        "elements": [
-            {
-                "id": element.element_id,
-                "type": element.type,
-                "text": element.text,
-                "box": {
-                    "x": element.box.x,
-                    "y": element.box.y,
-                    "w": element.box.w,
-                    "h": element.box.h,
-                    "center": list(element.box.center),
-                },
-                "confidence": element.confidence,
-                "suggested_actions": list(element.suggested_actions),
-                "intent_label": element.intent_label,
-                "preferred_tap_point": list(element.preferred_tap_point) if element.preferred_tap_point else None,
-                "whitebox_hint": element.whitebox_hint,
-            }
-            for element in obs.elements
-        ],
-    }
+# Observation serialization is shared with the MCP server — see
+# glassbox.ai.observation_payload (the single wire-format source of truth).
+_observation_payload = observation_payload
 
 
 def _outcome_payload(outcome: ActionOutcome) -> JSON:

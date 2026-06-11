@@ -30,6 +30,12 @@ on:
         description: "Also run a VLM-on Settings L2 run (iPad only) + print an ADVISORY coverage delta vs the committed L2 snapshot. Billed; needs VLM credentials on the runner."
         default: "false"
 
+# Least privilege: checkout reads the repo; actions/upload-artifact@v4 uses the
+# workflow's runtime token (not GITHUB_TOKEN repo scopes), so read-only contents
+# is sufficient for every step here.
+permissions:
+  contents: read
+
 concurrency:
   group: rig-nightly-${{ github.ref }}
   cancel-in-progress: false   # never interrupt a run that is driving real hardware
