@@ -1563,6 +1563,34 @@ def _parse_json_arg(raw: str | None, default: Mapping[str, Any]) -> dict[str, An
     return payload
 
 
+def _pick_round_run_dir(new_dirs: list[Path]) -> Path:
+    """Pick THE round's run dir when a round spawned several.
+
+    A run_full round can open more than one Phone session (the main crawl plus
+    auxiliary probe/recovery sessions); naively taking the newest dir
+    aggregated a 9-action auxiliary session instead of the 144-action crawl
+    (live, 2026-06-12 iPhone floor attempt 3). The main session dwarfs any
+    auxiliary one, so pick the new dir with the largest actions ledger
+    (ties -> newest), and say so when a round forked."""
+    if len(new_dirs) == 1:
+        return new_dirs[0]
+
+    def ledger_lines(run_dir: Path) -> int:
+        try:
+            with (run_dir / "actions.jsonl").open("r", encoding="utf-8") as fp:
+                return sum(1 for _ in fp)
+        except OSError:
+            return -1
+
+    chosen = max(new_dirs, key=lambda d: (ledger_lines(d), d.name))
+    print(
+        f"NOTE: round produced {len(new_dirs)} run dirs; picked {chosen.name} "
+        f"({ledger_lines(chosen)} ledger lines) over "
+        + ", ".join(f"{d.name}({ledger_lines(d)})" for d in new_dirs if d is not chosen)
+    )
+    return chosen
+
+
 def _find_new_run_dirs(root: Path, before: set[Path]) -> list[Path]:
     if not root.exists():
         return []
@@ -1632,7 +1660,7 @@ def _run_ios_settings(args: argparse.Namespace) -> int:
             if not args.keep_going:
                 return 1
             continue
-        run_dirs.append(new_dirs[-1])
+        run_dirs.append(_pick_round_run_dir(new_dirs))
         report_payload = _read_json(report) if report.exists() else {}
         coverage = report_payload.get("root_coverage")
         root_coverages.append(coverage if isinstance(coverage, Mapping) else None)
@@ -1709,7 +1737,7 @@ def _run_canonical_primitives(args: argparse.Namespace) -> int:
             if not new_dirs:
                 print(f"ERROR: {task.name} round {index} wrote no computer-use artifact run")
                 return 1
-            run_dirs_by_task[task.name].append(new_dirs[-1])
+            run_dirs_by_task[task.name].append(_pick_round_run_dir(new_dirs))
 
     manifest = build_canonical_manifest(run_dirs_by_task, rounds=args.rounds)
     manifest_path = artifact_root / "canonical_primitives_manifest.json"
@@ -1768,7 +1796,7 @@ def _run_machinery_probe(args: argparse.Namespace) -> int:
             if not new_dirs:
                 print(f"ERROR: {task.name} round {index} wrote no computer-use artifact run")
                 return 1
-            run_dirs_by_task[task.name].append(new_dirs[-1])
+            run_dirs_by_task[task.name].append(_pick_round_run_dir(new_dirs))
 
     manifest = build_machinery_probe_manifest(run_dirs_by_task, rounds=args.rounds)
     manifest_path = artifact_root / "machinery_probe_manifest.json"
@@ -1834,7 +1862,7 @@ def _run_clock_tabs(args: argparse.Namespace) -> int:
         if not new_dirs:
             print(f"ERROR: round {index} wrote no computer-use artifact run")
             return 1
-        run_dirs.append(new_dirs[-1])
+        run_dirs.append(_pick_round_run_dir(new_dirs))
 
     manifest = build_clock_tabs_manifest(run_dirs, rounds=args.rounds)
     manifest["config"]["cell_profile"] = dict(cell_profile_notes())
