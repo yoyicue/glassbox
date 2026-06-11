@@ -152,8 +152,10 @@ docstring 和本台账。
   无可测增益；且它够不到 Settings 地板。无翻默认理由。
 - 产物：`/tmp/probe-swipe.out`、`/tmp/probe-wheel.out`（探针输出，未入库）；探针脚本 `scroll_probe.py`（未提交）
 - 注意事项：n=1/臂、单页、`max_steps=1`——wheel 的理论优势（无 fling 过冲、精确定位）只会在
-  多步/滚到目标任务上显现，本探针没压到那一面。先决条件踩了两个坑：① `open_phone()` 不自动加载 `.env`
-  → 默认落 `NoOpEffector`（`supports` 全 False），**facade 探针必须 `source .env`**；
+  多步/滚到目标任务上显现，本探针没压到那一面。先决条件踩了两个坑：① **在 git worktree 里跑丢了 `.env`**
+  → 默认落 `NoOpEffector`（`supports` 全 False）。注意 `open_phone()` 其实**会**加载 `.env`
+  （`import glassbox`→`_load_dotenv_once`，`glassbox/__init__.py:46`），但找的是**相对包根**的 `.env`；
+  `.env` 是 gitignored，worktree 没有它 → 静默跳过。修法：从主仓跑 / 拷 `.env` 进 worktree / 显式 `source .env`；
   ② 真机视频有 ~6% h264 噪声 → 默认 `stable_diff_threshold=0.005` 会 `wait_stable` 超时，探针调到 0.09。
 
 ### 2026-06-10 矩阵 #5 白盒选择 flag A/B（`GLASSBOX_WHITEBOX_HINT_SELECTION`，离线 replay，代码 `efcf262`）
