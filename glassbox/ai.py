@@ -584,10 +584,14 @@ class AIPhone:
         return self._action_outcome("back", None, self._phone.back_gesture())
 
     def home(self) -> ActionOutcome:
-        if self._phone_backend() == "picokvm":
-            close_app = getattr(self._phone, "close_foreground_app", None)
-            if callable(close_app):
-                return self._action_outcome("home", None, close_app())
+        # Always route through Phone.home()'s verified ladder (direct/keyboard →
+        # AssistiveTouch menu → indicator drag, all under op="home" → the
+        # ios_home_screen_visible verifier). The old picokvm shortcut called
+        # close_foreground_app() raw: that op has no dedicated verifier, so it
+        # rode scene_progressed, which the facade honestly downgrades to
+        # "unknown" — home() could then NEVER produce a semantically-proven
+        # Home, and every home_verified_precondition harness round failed
+        # (observed live: 20/20 canonical rounds precondition_failed on iPad).
         return self._action_outcome("home", None, self._phone.home())
 
     def navigate_to_page(

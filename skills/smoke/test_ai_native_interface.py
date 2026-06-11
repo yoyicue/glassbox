@@ -315,12 +315,16 @@ def test_ai_facade_exposes_coordinate_primitives_and_cached_observation(tmp_path
     assert phone.launch_app("settings").semantic_status == "succeeded"
     assert phone.close_app().semantic_status == "succeeded"
     assert phone.home().semantic_status == "succeeded"
+    # home() must route through Phone.home()'s verified ladder (op="home" →
+    # ios_home_screen_visible), never the raw close_foreground_app shortcut —
+    # that op rides scene_progressed, which the facade downgrades to "unknown",
+    # so the shortcut could never produce a semantically-proven Home.
     assert phone._phone.actions[-5:] == [
         ("tap_xy", "10,20"),
         ("swipe_xy", "1,2->3,4"),
         ("open_app", "设置"),
         ("close_foreground_app", None),
-        ("close_foreground_app", None),
+        ("home", None),
     ]
 
 
