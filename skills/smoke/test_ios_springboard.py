@@ -1591,3 +1591,76 @@ def test_vlm_icon_map_skips_non_strict_home_scenes(monkeypatch):
         settle_s=0,
     )
     assert phone.snapshot_calls == 0
+
+
+@pytest.mark.smoke
+def test_open_app_sweep_bails_to_spotlight_when_leaving_home_surface(monkeypatch):
+    """Live failure (2026-06-11, matrix #11 arm A): on iPad a sweep swipe fired
+    the bottom-edge previous-app gesture and bounced back into Settings — the
+    scan then "found" 'Clock' inside Screen Time's app-usage list at (112,787)
+    and tapped it (Screen Time → Clock detail, opened_expected=True). The page
+    sweep must never OCR-tap off the Home surface; it bails to the designed
+    spotlight fallback instead."""
+    monkeypatch.setattr("glassbox.ios.springboard.time.sleep", lambda _: None)
+
+    home_page = _scene(
+        _el("文件", 42, 176), _el("预览", 154, 176), _el("邮件", 252, 176), _el("搜索", 196, 892)
+    )
+    settings_screen_time = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        platform_scene_kind="settings_detail",
+        page_id="settings/All Devices",
+        elements=[
+            _el("Accessibility", 54, 100),
+            _el("Screen Time", 54, 140),
+            _el("All Devices", 300, 100),
+            _el("Clock", 300, 220),  # ← the usage list names the target app
+        ],
+    )
+
+    spotlight_calls: list[tuple] = []
+
+    def fake_spotlight(phone, app_labels, **kwargs):
+        spotlight_calls.append(app_labels)
+        return True
+
+    monkeypatch.setattr(
+        "glassbox.ios.springboard.open_app_via_spotlight", fake_spotlight
+    )
+
+    class FakePhone:
+        def __init__(self):
+            self.on_settings = False
+            self.actions: list[tuple[str, tuple[int, int] | None]] = []
+
+        def _viewport_size(self):
+            return 440, 956
+
+        def home(self):
+            self.actions.append(("home", None))
+
+        def perceive(self):
+            return settings_screen_time if self.on_settings else home_page
+
+        def invalidate_perceive_cache(self):
+            pass
+
+        def swipe_right(self):
+            self.actions.append(("swipe_right", None))
+            # the gesture bounces back into the foregrounded Settings app
+            self.on_settings = True
+
+        def swipe_left(self):
+            self.actions.append(("swipe_left", None))
+            self.on_settings = True
+
+        def tap_xy(self, x: int, y: int):
+            self.actions.append(("tap", (x, y)))
+
+    phone = FakePhone()
+
+    assert open_app_from_springboard(phone, ("时钟", "Clock"), settle_s=0.0)
+    # spotlight fallback was taken; the foreign-surface 'Clock' text was never tapped
+    assert spotlight_calls == [("时钟", "Clock")]
+    assert all(op != "tap" for op, _ in phone.actions)
