@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 from glassbox.backend_registry import (
     DEFAULT_EFFECTOR_REGISTRY,
     DEFAULT_FRAME_SOURCE_REGISTRY,
@@ -27,10 +29,6 @@ from glassbox.cognition import HeuristicTyper
 from glassbox.config import AgentConfig, get_config
 from glassbox.effector import NOOP_CAPABILITIES, BackendCapabilities, Effector
 from glassbox.geometry import content_size_for_crop, effector_frame_resolution, make_device_geometry
-from glassbox.ios.settings_rows import (
-    settings_root_fuzzy_aliases_for_config,
-    settings_root_label_aliases_for_config,
-)
 from glassbox.locale import select_locale_code
 from glassbox.memory import save_utg, wrap_with_memory_if_enabled
 from glassbox.obs import open_recorder, wrap_vlm_cache_if_enabled
@@ -148,8 +146,8 @@ def _connect_effector_if_needed(
                 "Confirm the configured hardware is connected, or set "
                 "GLASSBOX_ALLOW_NOOP_FALLBACK=1 for dry-run mode."
             ) from exc
-        print(f"[runtime] {backend} effector connect() failed: {exc}")
-        print("[runtime] falling back to NoOpEffector (GLASSBOX_ALLOW_NOOP_FALLBACK=1)")
+        logger.warning(f"[runtime] {backend} effector connect() failed: {exc}")
+        logger.warning("[runtime] falling back to NoOpEffector (GLASSBOX_ALLOW_NOOP_FALLBACK=1)")
         return DEFAULT_EFFECTOR_REGISTRY.create(
             "noop",
             cfg=cfg,
@@ -169,7 +167,7 @@ def _freshen_source_after_effector_connect(source) -> bool:
         fresh_snapshot()
         return True
     except Exception as exc:
-        print(f"[runtime] source fresh snapshot after effector connect failed: {exc}")
+        logger.warning(f"[runtime] source fresh snapshot after effector connect failed: {exc}")
         return False
 
 
@@ -276,7 +274,7 @@ def _load_cached_crop(
         bbox = tuple(int(v) for v in payload["crop_bbox"])
         return _crop_from_bbox(bbox, frame_size=frame_size, phone_size=phone_size)
     except Exception as exc:
-        print(f"[runtime] ignoring invalid crop cache {path}: {exc}")
+        logger.warning(f"[runtime] ignoring invalid crop cache {path}: {exc}")
         return None
 
 
@@ -300,7 +298,7 @@ def _save_cached_crop(
             encoding="utf-8",
         )
     except OSError as exc:
-        print(f"[runtime] failed to save crop cache {path}: {exc}")
+        logger.warning(f"[runtime] failed to save crop cache {path}: {exc}")
 
 
 def detect_crop(
@@ -326,7 +324,7 @@ def detect_crop(
                 "A configured effector crop bbox is set but current frame resolution is unavailable"
             ) from exc
         crop = _crop_from_bbox(crop_bbox, frame_size=frame_size, phone_size=phone_size)
-        print(f"[runtime] using configured crop bbox={crop.crop_bbox}")
+        logger.info(f"[runtime] using configured crop bbox={crop.crop_bbox}")
         return crop
     last_exc: Exception | None = None
     attempts = max(1, int(_crop_config_value(cfg, capabilities, "crop_retries", 3)))
@@ -362,21 +360,21 @@ def detect_crop(
                         phone_size=candidate_phone_size,
                     )
                     if cached is not None:
-                        print(f"[runtime] using cached crop bbox={cached.crop_bbox}")
+                        logger.info(f"[runtime] using cached crop bbox={cached.crop_bbox}")
                         return cached
             raise RuntimeUnavailable(
                 f"{capabilities.backend} requires a calibrated letterbox crop. "
                 f"Auto-detect failed after {attempts} frame(s): {exc}. "
                 "Set an effector crop bbox or provide a valid effector crop cache."
             ) from exc
-        print(f"[runtime] letterbox auto-detect failed, using full frame: {exc}")
+        logger.warning(f"[runtime] letterbox auto-detect failed, using full frame: {exc}")
         return None
     try:
         if crop.cropped_size == source.resolution and crop.cropped_size == phone_size:
             return None
     except Exception:
         pass
-    print(
+    logger.info(
         f"[runtime] letterbox crop detected bbox={crop.crop_bbox} "
         f"cropped={crop.cropped_size} phone={crop.phone_size}"
     )
@@ -407,6 +405,21 @@ def _build_recovery_hook(cfg, *, make_try_memory_path_hook, home_hook):
         min_success_rate=float(cfg.recovery_min_success_rate),
         fallback=home_hook,
     )
+
+
+def _settings_root_label_aliases(cfg: AgentConfig):
+    # Platform-seepage containment (snapshot item 5): the assembly module is
+    # platform-neutral, so glassbox.ios stays out of its import header — the
+    # iOS-specific alias tables load only when a Phone is actually built.
+    from glassbox.ios.settings_rows import settings_root_label_aliases_for_config
+
+    return settings_root_label_aliases_for_config(cfg)
+
+
+def _settings_root_fuzzy_aliases(cfg: AgentConfig):
+    from glassbox.ios.settings_rows import settings_root_fuzzy_aliases_for_config
+
+    return settings_root_fuzzy_aliases_for_config(cfg)
 
 
 def build_phone(
@@ -712,8 +725,8 @@ def build_phone(
             max_ocr_elements=cfg.max_ocr_elements,
             max_ocr_text_chars=cfg.max_ocr_text_chars,
             ocr_timeout=cfg.ocr_timeout,
-            settings_root_label_aliases=settings_root_label_aliases_for_config(cfg),
-            settings_root_fuzzy_aliases=settings_root_fuzzy_aliases_for_config(cfg),
+            settings_root_label_aliases=_settings_root_label_aliases(cfg),
+            settings_root_fuzzy_aliases=_settings_root_fuzzy_aliases(cfg),
             ocr_tiling=OcrTilingConfig(
                 enabled=cfg.ocr_tiling_enabled,
                 rows=cfg.ocr_tiling_rows,

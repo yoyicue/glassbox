@@ -11,6 +11,8 @@ import os
 import uuid
 from pathlib import Path
 
+from loguru import logger
+
 from glassbox.memory.graph import ScreenMemory
 from glassbox.memory.schema import UTG, UTG_RUNTIME_COMPAT, UTG_SCHEMA_VERSION
 
@@ -42,22 +44,22 @@ def load_utg(
         payload = _migrate_payload(payload)
         schema_version = int(payload.get("schema_version", 0) or 0)
         if schema_version != UTG_SCHEMA_VERSION:
-            print(
+            logger.warning(
                 f"[memory] {bundle_id} UTG schema v{schema_version}, "
                 f"want v{UTG_SCHEMA_VERSION} — cold start"
             )
             return UTG(bundle_id=bundle_id, app_version=app_version)
         runtime_compat = payload.get("runtime_compat") or {}
         if not _runtime_compat_ok(runtime_compat):
-            print(f"[memory] {bundle_id} UTG runtime compatibility changed — cold start")
+            logger.warning(f"[memory] {bundle_id} UTG runtime compatibility changed — cold start")
             return UTG(bundle_id=bundle_id, app_version=app_version)
         payload["runtime_compat"] = dict(UTG_RUNTIME_COMPAT)
         utg = UTG.model_validate(payload)
     except Exception as e:                       # corrupt file → don't crash the run
-        print(f"[memory] failed to load {path}: {e} — cold start")
+        logger.warning(f"[memory] failed to load {path}: {e} — cold start")
         return UTG(bundle_id=bundle_id, app_version=app_version)
     if app_version is not None and utg.app_version not in (None, app_version):
-        print(f"[memory] {bundle_id} UTG is v{utg.app_version}, want v{app_version} — cold start")
+        logger.warning(f"[memory] {bundle_id} UTG is v{utg.app_version}, want v{app_version} — cold start")
         return UTG(bundle_id=bundle_id, app_version=app_version)
     return utg
 
@@ -110,7 +112,7 @@ def save_utg(utg: UTG, *, memory_dir: str | Path | None = None) -> None:
         )
         tmp_path.replace(path)
     except OSError as e:
-        print(f"[memory] failed to save {path}: {e}")
+        logger.warning(f"[memory] failed to save {path}: {e}")
         with contextlib.suppress(OSError, UnboundLocalError):
             tmp_path.unlink()
 

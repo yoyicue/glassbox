@@ -19,7 +19,6 @@ from glassbox.action.actuation import (
 )
 from glassbox.cognition import UIElement
 from glassbox.cognition.text_match import compact_text
-from glassbox.ios.settings_rows import visible_settings_root_row_label
 
 _KEY_RETURN = 0x28
 _REGROUND_MIN_SHIFT_PX = 24
@@ -302,6 +301,10 @@ class TargetPlanner:
         width, height = viewport_size
         if el.box.x > max(16, int(width * 0.04)):
             return False
+        # Lazy: keep glassbox.ios out of this platform-neutral module's header
+        # (snapshot item 5); this branch is only reached on iPad models anyway.
+        from glassbox.ios.settings_rows import visible_settings_root_row_label
+
         return visible_settings_root_row_label(el, viewport_size=(width, height)) is not None
 
     def _has_ipad_sidebar_preferred_point(

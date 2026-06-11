@@ -31,12 +31,9 @@ _AI_DEFAULT_SCROLL_TIMEOUT_S = 10.0
 _AI_DEFAULT_SAMPLE_INTERVAL_S = 0.25
 _AI_DEFAULT_SCROLL_WINDOW_S = 1.2
 
-_APP_ALIASES: dict[str, tuple[str, tuple[str, ...]]] = {
-    "com.apple.Preferences": ("设置", ("Settings",)),
-    "settings": ("设置", ("Settings",)),
-    "Settings": ("设置", ("Settings",)),
-    "设置": ("设置", ("Settings",)),
-}
+# Localized launch-label data is platform knowledge and lives with the
+# platform (glassbox/ios/app_aliases.py), not in the facade — imported lazily
+# in launch_app() so this module's header stays platform-neutral.
 
 
 @dataclass(frozen=True)
@@ -530,7 +527,9 @@ class AIPhone:
         expect_visible: str | None = None,
         expect_page: str | None = None,
     ) -> ActionOutcome:
-        label, default_aliases = _APP_ALIASES.get(app, (app, ()))
+        from glassbox.ios.app_aliases import app_launch_label
+
+        label, default_aliases = app_launch_label(app)
         all_aliases = tuple(dict.fromkeys([*aliases, *default_aliases]))
         result = self._phone.open_app(label, aliases=all_aliases)
         outcome = self._action_outcome("launch_app", app, result)
