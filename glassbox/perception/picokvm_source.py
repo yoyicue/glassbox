@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import cv2
+from loguru import logger
 
 from glassbox.perception.picokvm_config import PicoKVMVideoConfig, PicoKVMVideoSettings
 from glassbox.perception.source import Frame
@@ -58,10 +59,33 @@ class PicoKVMFrameSource:
         self.close()
 
     def open(self) -> None:
-        if self._capture is None:
-            self._capture = self._capture_factory(self.stream_url)
-        if hasattr(self._capture, "isOpened") and not self._capture.isOpened():
-            raise RuntimeError(f"PicoKVM video stream did not open: {self.stream_url}")
+        if self._capture is not None:
+            if hasattr(self._capture, "isOpened") and not self._capture.isOpened():
+                raise RuntimeError(f"PicoKVM video stream did not open: {self.stream_url}")
+            return
+        # The single-consumer H.264 stream intermittently refuses a fresh open
+        # for a few seconds when consumers cycle quickly (one Phone per
+        # benchmark task-round is exactly that pattern, observed twice live on
+        # 2026-06-11). Bounded retry with linear backoff rides through the
+        # wedge; a genuinely dead rig still raises after the budget.
+        attempts = max(1, int(getattr(self.config, "open_retry_attempts", 4)))
+        for attempt in range(attempts):
+            capture = self._capture_factory(self.stream_url)
+            if not hasattr(capture, "isOpened") or capture.isOpened():
+                self._capture = capture
+                return
+            if hasattr(capture, "release"):
+                capture.release()
+            if attempt < attempts - 1:
+                delay = 2.0 * (attempt + 1)
+                logger.warning(
+                    f"PicoKVM video stream open {attempt + 1}/{attempts} failed; "
+                    f"retrying in {delay:.0f}s: {self.stream_url}"
+                )
+                time.sleep(delay)
+        raise RuntimeError(
+            f"PicoKVM video stream did not open after {attempts} attempts: {self.stream_url}"
+        )
 
     def close(self) -> None:
         if self._capture is not None and self._owns_capture and hasattr(self._capture, "release"):
