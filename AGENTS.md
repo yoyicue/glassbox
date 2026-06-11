@@ -18,13 +18,22 @@ public repo.**
 uv sync --extra dev                  # install (Python >=3.11, uv-managed)
 uv run python -c "import glassbox"    # smoke-import
 
-make check    # MERGE GATE: lint + offline tests + reliability gate. Keep it GREEN.
+make check    # MERGE GATE: lint + test + regression-gate + golden-audit. Keep it GREEN.
 make test     # uv run pytest skills/smoke -q  — fast, offline, no hardware
 uv run ruff check glassbox skills     # lint (line-length 100, target py311)
+
+uv run pytest skills/smoke/test_foo.py -q             # one test file
+uv run pytest skills/smoke/test_foo.py::test_bar -q   # one test
 ```
 
 - `make check` is **device-independent** (no PicoKVM/rig) and is what CI runs on
-  every PR. Run it before you push.
+  every PR. Run it before you push. Its on-rig time-series companion is
+  `.github/workflows/rig-nightly.yml` (self-hosted `picokvm` runner, iPhone 17
+  Pro Max zh + iPad mini 7 en matrix) — informational, never a merge gate.
+- pytest: `testpaths = skills`; markers are `smoke` (fast, offline),
+  `regression` (slow, needs rig/artifacts), `feature(name)`.
+  `--strict-markers` is on, so a typoed marker fails instead of silently
+  selecting nothing.
 - **Working in a `git worktree`? Create it with `make worktree DEST=../gb-foo
   BRANCH=feature/foo`** (or `scripts/new-worktree.sh`). A bare `git worktree add`
   does **not** copy gitignored local config, so the worktree silently misses `.env`
@@ -49,7 +58,10 @@ uv run ruff check glassbox skills     # lint (line-length 100, target py311)
   (platform providers). `runtime.py` assembles them into a `Phone`; `ai.py` is
   the `glassbox.ai` facade. Seams are named boundaries (`boundaries.py`)
   discovered via entry points — add a backend by registering one, **not** by
-  editing core.
+  editing core. The entry-point groups (see `pyproject.toml`):
+  `glassbox.frame_sources`, `glassbox.ocr`, `glassbox.vlm`,
+  `glassbox.effectors`, `glassbox.verifiers`, `glassbox.platforms`,
+  `glassbox.crawl_policies`, `glassbox.app_policies`.
 - **`skills/`** — tests and harnesses, **not** app code:
   - `smoke/` — offline unit/contract suite (the bulk of the tests).
   - `regression/` — on-rig measurement harness + committed baselines.
@@ -58,7 +70,8 @@ uv run ruff check glassbox skills     # lint (line-length 100, target py311)
   - Placement rule: see `docs/reference/ai_native_author_mode.md` →
     "Where Tests Go: smoke vs regression".
 - **`docs/`** — `design/` (architecture & decisions), `goals/` (roadmaps),
-  `reference/` (author mode, rig/hardware references).
+  `reference/` (author mode, rig/hardware references), `measurements/`
+  (experiment reports).
 - **`README.md`** (architecture/install/hardware) · **`ONBOARDING.md`** (rig
   bring-up from parts to first run).
 
@@ -84,6 +97,10 @@ uv run ruff check glassbox skills     # lint (line-length 100, target py311)
   test over a hand-typed inventory. (Stale baselines have been caught repeatedly.)
   zsh does **not** word-split an unquoted `$var` — use an explicit `for` loop or
   `${=var}`, or grep counts silently come back wrong.
+- **Transport `ok` ≠ success.** Trust `ActionResult.semantic_status`
+  (`succeeded` / `unknown` / `failed`, set by the post-action verifier), not the
+  effector ACK — an action can be delivered over HID and still do nothing on
+  screen.
 - **Don't over-claim reliability.** The eval harness is deliberately multi-layer
   and honest; there is no single "accuracy rate". Do not cite one headline number
   (e.g. an action-level ACK rate) as task-completion success — cite the roadmap
