@@ -1,6 +1,10 @@
 # Project health snapshot
 
-Status: **assessment, snapshot as of `801032f` (2026-06-11).**
+Status: **assessment + same-day remediation, snapshot as of `c892824`
+(2026-06-11).** The structural items below were identified by the 2026-06-11
+evaluation at `801032f` and their offline-fixable halves were remediated the
+same day in PRs #68–#73 — each item carries a "Remediation" line saying what
+landed and what honestly remains.
 
 A whole-project health read intended as an input to the roadmap docs in this
 directory, not a replacement for them. It summarises where the codebase is
@@ -31,16 +35,16 @@ coverage-bearing floor `571e568` (2026-06-10). This revision replaces it.
 
 ## Snapshot data
 
-| Dimension | Value (as of `801032f`) | Regenerate with |
+| Dimension | Value (as of `c892824`) | Regenerate with |
 | --- | --- | --- |
-| Core package size | `glassbox/` ≈ 38.6k LOC | `find glassbox -name '*.py' \| xargs wc -l \| tail -1` |
-| Test/harness size | `skills/` ≈ 63.5k LOC | `find skills -name '*.py' \| xargs wc -l \| tail -1` |
-| Docs | ≈ 10.7k LOC across `docs/` | `find docs -name '*.md' \| xargs wc -l \| tail -1` |
-| Smoke suite | 1879 pass / 23 skip, offline (1902 collected) | `uv run pytest skills/smoke -q --collect-only \| tail -1` |
-| Merge gate | green (verified 2026-06-11) | `make check` |
-| CI | macOS `make check` on PR + self-hosted nightly rig | `.github/workflows/` |
-| Gated metrics | 9–10 of 19 printed (7 drop + 2 rise + 1 conditional scroll) | `grep -n 'GATE_DROP_METRICS\|GATE_RISE_METRICS' skills/regression/computer_use_success_rate.py` |
-| History | 333 commits, 20 days old, single author (2 name strings, 1 email), 0 tags | `git rev-list --count HEAD; git log --reverse --format=%ci \| head -1; git log --format=%ae \| sort -u` |
+| Core package size | `glassbox/` ≈ 38.9k LOC | `find glassbox -name '*.py' \| xargs wc -l \| tail -1` |
+| Test/harness size | `skills/` ≈ 64.4k LOC | `find skills -name '*.py' \| xargs wc -l \| tail -1` |
+| Docs | ≈ 10.8k LOC across `docs/` | `find docs -name '*.md' \| xargs wc -l \| tail -1` |
+| Smoke suite | 1908 pass / 23 skip, offline (1931 collected) | `uv run pytest skills/smoke -q --collect-only \| tail -1` |
+| Merge gate | green; now also runs a wheel-install packaging smoke | `make check` |
+| CI | macOS `make check` (literally, since #68) on PR + self-hosted nightly rig | `.github/workflows/` |
+| Gated metrics | 9–10 of 19 printed (7 drop + 2 rise + 1 conditional scroll), config-identity-checked, counts per-round | `grep -n 'GATE_DROP_METRICS\|GATE_RISE_METRICS' skills/regression/computer_use_success_rate.py` |
+| History | 344 commits, 20 days old, single author (2 name strings, 1 email), 0 tags | `git rev-list --count HEAD; git log --reverse --format=%ci \| head -1; git log --format=%ae \| sort -u` |
 
 The skipped smoke tests are app-specific fixtures gitignored by design
 (`test_profile_match.py`, `test_whitebox.py`); both use skip-if-absent guards, so
@@ -92,9 +96,17 @@ proven true (see Strengths) — the gap is the published-install path, not the s
 design. Highest-leverage move: fix the inversion and add a wheel-install smoke to
 the gate.
 
+**Remediation: FIXED (PR #68).** Checkout-only crawl policies degrade with an
+actionable error and are no longer advertised as wheel entry points; the broken
+console script is gone; `.env` falls back to a `GLASSBOX_`-bearing CWD `.env`
+on wheel installs; `py.typed` ships; sdist builds from an allow-list; and
+`make packaging-smoke` (wheel build + isolated-venv probe) is part of
+`make check`, with `test_packaging_guard.py` pinning the rule class offline.
+
 ```bash
 grep -n "skills" glassbox/crawl_policies.py
 sed -n '44,50p' pyproject.toml
+make packaging-smoke
 ```
 
 ### 2. Demonstrated-capability envelope ≪ headline claims (HIGH)
@@ -109,6 +121,14 @@ a floor, not the nightly comparison). Latency is unmeasured and ungated — the
 benchmark schema has no duration field, so speed can regress through every gate.
 UTG cross-run reuse is default-off with no committed evidence it improves any
 outcome. Owner: [`computer_use_quality_roadmap.md`](computer_use_quality_roadmap.md).
+
+**Remediation: PARTIAL (PR #69).** `compare_benchmarks` now refuses
+cross-config gating (rc 2; `--allow-config-mismatch` = labelled advisory), the
+nightly iPhone lane is explicitly advisory until a device-matched floor
+exists, and `action_duration_ms_*` metrics print in every compare so speed is
+visible (never gated — host-dependent). **Remaining (rig work, not offline):**
+a device-matched iPhone floor, any state-changing task evidence, and a
+warm-vs-cold UTG-reuse A/B.
 
 ```bash
 grep -n "FLOOR_IDENTITY_CONFIG_KEYS\|def compare_benchmarks\|def validate_floor_candidate" skills/regression/computer_use_success_rate.py
@@ -126,6 +146,14 @@ self-merges by a single author. Honesty as practiced is self-consistency +
 candid labelling, not third-party auditability (tamper experiments confirm
 metric-edit and status-flip attempts ARE caught offline — validators recompute
 from tasks).
+
+**Remediation: PARTIAL (PR #70).** `golden-harvest` refuses to wipe a
+non-empty corpus from a ledger-free host (`--allow-empty` is the explicit
+path); the audit's rc-0 no-op announces itself as skipped-by-design; and the
+three gate-load-bearing fixtures flipped skip-if-absent → FAIL-if-absent.
+**Remaining (structural):** 7/11 fixture groups stay regenerable only on the
+author's rig, and bus factor 1 with 0-approval merges is a fact of a
+single-maintainer project — recorded, not fixable offline.
 
 ```bash
 git log --format='%an <%ae>' | sort | uniq -c
@@ -146,6 +174,14 @@ within the nightly but the nightly never gates merges). `unknown_rate=0.0` is
 likewise a floor. Owner:
 [`computer_use_honest_gate_first.md`](computer_use_honest_gate_first.md).
 
+**Remediation: PARTIAL (PR #69).** Raw counts now gate per round (a 2-round
+candidate is no longer a fake regression against the 5-round floor), and every
+vacuous drop-gate announces itself on each compare run — "printed and gated"
+can no longer read as "protected". **Remaining:** the vacuity itself ends only
+when a floor with non-zero `strategy_switches`/`vlm_action_coverage` is
+promoted (a rig run); until then the L2-snapshot pin + nightly machinery probe
+stay the real teeth.
+
 ```bash
 sed -n '81,97p' skills/regression/computer_use_success_rate.py
 ```
@@ -164,9 +200,21 @@ loguru/logger** calls in library code, with real failure paths reporting via
 `print`. Owner: the seam contracts in
 [`../design/architecture_boundaries.md`](../design/architecture_boundaries.md).
 
+**Remediation: PARTIAL (PR #73).** The platform-neutral modules (`runtime`,
+`target_planner`, `app_policies`, `ai`) no longer import iOS modules eagerly —
+the facade's zh alias table moved to `glassbox/ios/app_aliases.py` — and a
+subprocess guard pins the rule; 49 library `print()` sites converted to loguru
+(UTG save/load and profile-load failures are now visible to log collectors),
+with an allow-list guard for CLI-only prints. **Remaining (needs its own
+design pass):** the `Phone` (229 methods) / orchestrator (3.8k lines)
+decomposition, perceptor's platform-keyed (already-lazy) annotator imports,
+the unconditional AssistiveTouchDriver collaborator, and the broad
+silent-`except` population beyond the critical paths.
+
 ```bash
 grep -c "def " glassbox/phone.py; wc -l glassbox/phone.py glassbox/action/orchestrator.py
 grep -rn "except Exception" glassbox --include="*.py" | wc -l
+uv run pytest skills/smoke/test_platform_neutral_imports.py -q
 ```
 
 ### 6. Runtime robustness edges (MEDIUM, one cluster)
@@ -180,6 +228,15 @@ default-on icon/layout YOLO stage has no hang protection; a mid-gesture HID
 failure can latch the pointer button (`reset_hid_state` has no callers on failure
 paths); VLM parse-failures are disk-cached permanently by frame hash (poisoning,
 no TTL). Owner: [`computer_use_quality_roadmap.md`](computer_use_quality_roadmap.md).
+
+**Remediation: FIXED (PR #72), all six.** Recorder/AuditSink degrade loudly
+instead of dying; torn trailing `events.jsonl` lines are skipped (mid-file
+corruption still raises); `GLASSBOX_OCR_TIMEOUT=20` armed on the committed rig
+paths (global default untouched); press-bearing PicoKVM gestures best-effort
+`reset_hid_state()` on mid-gesture failure; `CachedVLM` refuses to persist
+parse-failed responses and heals poisoned entries on read; the facade
+re-raises stability timeouts as `AIAssertionError` with an actionable message.
+14 new smoke tests pin the behaviors.
 
 ## Corrected by adversarial review
 
@@ -206,6 +263,11 @@ never mentions VLM or API keys though the `run_full` harness defaults VLM on
 (`skills/regression/ios_settings/config.py` sets `GLASSBOX_ENABLE_VLM=1`) — a
 new operator's first cold-start run hits a "Missing API key" failure.
 
+**Remediation: FIXED (PR #71).** All three wrong claims corrected, the two
+stale status lines updated (screen_memory.md now says the UTG shipped;
+rig-validation Phase E credits the shipped `tap` laddering), and the dangling
+references removed.
+
 ```bash
 grep -rn "not branch-protected\|NOT branch-protected" docs/
 grep -n "icon_detectors" README.md
@@ -215,19 +277,28 @@ grep -n "GLASSBOX_ENABLE_VLM" skills/regression/ios_settings/config.py
 ## Bottom line
 
 **Honest-alpha; trajectory exemplary** — the prior eval's own prescriptions
-landed within days. The risk axis has **moved** from metric-scope (now fixed) to
-**device-scope, packaging, and regenerability**. Priority order, each pointing at
-its owner doc where one exists:
+landed within days, and this eval's offline-fixable items were remediated the
+same day (PRs #68–#73; plus a settings-level hardening: the repo's Actions
+fork-PR approval policy was raised from `first_time_contributors` to
+`all_external_contributors`, closing the main fork-workflow path to the
+self-hosted `picokvm` runner — note the runner registry read 0 runners at
+audit time, so the exposure was latent, returning whenever the rig host
+re-registers). The risk axis has **moved** from metric-scope (fixed) and
+packaging (fixed) to **evidence scope and structure**. What remains, priority
+order:
 
-1. Fix core→skills inversion + add a wheel-install smoke to the gate (offline,
-   small) — item 1.
-2. iPhone lane: add a config-identity check to `compare_benchmarks` + a
-   device-matched floor, or explicitly drop the cross-device comparison — item 2,
+1. **Device-scope evidence (rig work):** a device-matched iPhone floor (or a
+   deliberate decision to stay iPad-only and say so in README), at least one
+   state-changing task, and a warm-vs-cold UTG-reuse A/B — item 2,
    [`computer_use_quality_roadmap.md`](computer_use_quality_roadmap.md).
-3. Self-hosted-runner fork-approval settings audit (5 min, settings-only).
-4. Stale-doc trio — item 7.
-5. Runtime edges (Recorder degrade, replay torn-line tolerance, arm watchdogs on
-   the rig path, `reset_hid_state` on failure) — item 6.
-6. Then `Phone`/orchestrator decomposition, a config preset layer, latency into
-   the benchmark schema, and billed-VLM-client tests — item 5,
+2. **End the residual gate vacuity** by promoting a VLM-on floor with non-zero
+   `strategy_switches`/`vlm_action_coverage` — item 4,
+   [`computer_use_honest_gate_first.md`](computer_use_honest_gate_first.md).
+3. **`Phone`/orchestrator decomposition** (229 methods / 3.8k lines), a config
+   preset layer, and billed-VLM-client tests — item 5,
    [`../design/architecture_boundaries.md`](../design/architecture_boundaries.md).
+4. **Latency from visible to gated** once duration baselines accumulate
+   (the new `action_duration_ms_*` metrics make speed visible in every
+   compare; gating needs per-host baselines first) — item 2.
+5. Structural facts to keep stating, not fix: single-rig regenerability
+   (7/11 fixture groups), bus factor 1 with 0-approval merges — item 3.
