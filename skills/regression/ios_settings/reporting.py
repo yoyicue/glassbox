@@ -505,23 +505,53 @@ def known_harness_issues(
             "next_action": "Track these as glassbox efficiency/perception signals; they are not strict-acceptance blockers.",
         })
     entry_exempt = set(entry_exempt_labels)
-    blocking_navigation_failures = [
+    # A `search_no_result` failure is the SEARCH recovery rung giving up — no
+    # HID tap was ever delivered for it — so it must not be folded into the
+    # tap-no-transition issue (area glassbox/effectors/picokvm), which falsely
+    # pointed every search-rung abort at the HID transport. Split by reason and
+    # attribute each to its own surface.
+    tap_failures = [
         failure for failure in navigation_failures
-        if canonical_root_label_from_text(str(_value(failure, "text") or "")) not in entry_exempt
+        if _value(failure, "reason") != "search_no_result"
     ]
-    if navigation_failures:
+    search_failures = [
+        failure for failure in navigation_failures
+        if _value(failure, "reason") == "search_no_result"
+    ]
+
+    def _blocking(failures: Sequence[Any]) -> bool:
+        return any(
+            canonical_root_label_from_text(str(_value(failure, "text") or "")) not in entry_exempt
+            for failure in failures
+        )
+
+    if tap_failures:
         issues.append({
             "id": "ios-settings-navigation-tap-no-transition",
             "category": "operation",
-            "severity": "blocking" if require_exhaustive and blocking_navigation_failures else "warning",
+            "severity": "blocking" if require_exhaustive and _blocking(tap_failures) else "warning",
             "status": "open",
             "area": "glassbox/effectors/picokvm",
             "summary": "One or more safe-looking navigation taps did not open a new page.",
             "evidence": [
                 " > ".join((*_path(failure), str(_value(failure, "text", ""))))
-                for failure in navigation_failures[:8]
+                for failure in tap_failures[:8]
             ],
             "next_action": "Reproduce each failed row and classify as tap precision, stale perception, or allowlist issue.",
+        })
+    if search_failures:
+        issues.append({
+            "id": "ios-settings-search-rung-no-result",
+            "category": "operation",
+            "severity": "blocking" if require_exhaustive and _blocking(search_failures) else "warning",
+            "status": "open",
+            "area": "skills/regression/ios_settings",
+            "summary": "The Settings-search recovery rung found no result for one or more root rows (no HID tap was attempted).",
+            "evidence": [
+                " > ".join((*_path(failure), str(_value(failure, "text", ""))))
+                for failure in search_failures[:8]
+            ],
+            "next_action": "Check whether the query was actually typed, whether the search pane classified correctly (settings_search_home vs system_search), and whether results rendered.",
         })
     unresolved_rejections = [
         candidate

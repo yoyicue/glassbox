@@ -773,8 +773,21 @@ def _validate_known_issues(
     hard_limits = [item for item in limits_hit if item not in SOFT_LIMITS]
     if hard_limits and "ios-settings-traversal-limits-hit" not in issue_ids:
         errors.append("known_issues missing traversal-limits issue for limits_hit")
-    if navigation_failures and "ios-settings-navigation-tap-no-transition" not in issue_ids:
+    # Mirrors the reason split in reporting.known_harness_issues: tap failures
+    # attribute to the HID-tap issue, search-rung aborts (no HID tap happened)
+    # to their own issue.
+    tap_failures = [
+        failure for failure in navigation_failures
+        if not (isinstance(failure, dict) and failure.get("reason") == "search_no_result")
+    ]
+    search_failures = [
+        failure for failure in navigation_failures
+        if isinstance(failure, dict) and failure.get("reason") == "search_no_result"
+    ]
+    if tap_failures and "ios-settings-navigation-tap-no-transition" not in issue_ids:
         errors.append("known_issues missing navigation failure issue")
+    if search_failures and "ios-settings-search-rung-no-result" not in issue_ids:
+        errors.append("known_issues missing search-rung failure issue")
     unresolved_rejections = [
         candidate
         for candidate in rejected_candidates

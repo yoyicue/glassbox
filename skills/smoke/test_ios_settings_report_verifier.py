@@ -463,11 +463,57 @@ def test_report_summaries_downgrade_entry_exempt_navigation_failures():
     report["root_coverage"]["entry_exempt"] = ["操作按钮"]
     report["navigation_failures"] = [
         {"path": ["Settings"], "title": "Settings", "text": "操作按钮", "reason": "search_no_result"},
+        {"path": ["Settings"], "title": "Settings", "text": "操作按钮", "reason": "tap_no_navigation"},
     ]
     _refresh_report_summaries(report)
 
     issue = next(item for item in report["known_issues"] if item["id"] == "ios-settings-navigation-tap-no-transition")
     assert issue["severity"] == "warning"
+    search_issue = next(
+        item for item in report["known_issues"] if item["id"] == "ios-settings-search-rung-no-result"
+    )
+    assert search_issue["severity"] == "warning"
+
+
+@pytest.mark.smoke
+def test_search_rung_abort_is_not_attributed_to_picokvm_tap_issue():
+    # A search_no_result failure means the SEARCH recovery rung gave up before
+    # any HID tap was delivered; it must carry its own known_issue/area instead
+    # of being folded into ios-settings-navigation-tap-no-transition (area
+    # glassbox/effectors/picokvm) — the false attribution observed in the
+    # iphone_transition_n1 run.
+    report = _report(
+        visits=[
+            {"path": ["Settings"], "title": "Settings", "texts": ["Settings"]},
+            *[
+                {"path": ["Settings", label], "title": label, "texts": [label, "body line"]}
+                for label in EXPECTED_ROOT_NAV_TEXT_ZH
+                if label != "操作按钮"
+            ],
+        ],
+        missing=["操作按钮"],
+    )
+    report["navigation_failures"] = [
+        {"path": ["Settings"], "title": "Settings", "text": "操作按钮", "reason": "search_no_result"},
+    ]
+    _refresh_report_summaries(report)
+
+    issue_ids = {item["id"] for item in report["known_issues"]}
+    assert "ios-settings-navigation-tap-no-transition" not in issue_ids
+    issue = next(
+        item for item in report["known_issues"] if item["id"] == "ios-settings-search-rung-no-result"
+    )
+    assert issue["area"] == "skills/regression/ios_settings"
+    assert issue["category"] == "operation"
+    # The validator demands the split ids for the matching failure subsets.
+    assert not any("known_issues missing" in error for error in validate_report(report))
+    del report["known_issues"][next(
+        idx for idx, item in enumerate(report["known_issues"])
+        if item["id"] == "ios-settings-search-rung-no-result"
+    )]
+    assert any(
+        "missing search-rung failure issue" in error for error in validate_report(report)
+    )
 
 
 @pytest.mark.smoke
