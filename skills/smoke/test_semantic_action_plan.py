@@ -576,6 +576,121 @@ def test_verify_expected_state_page_id_and_visible_text():
     )
 
 
+# ── S4: fold-normalized page_id fallback ─────────────────────────────────────
+# docs/design/iphone_settings_transition.md §2 S4 (C3: three uncoordinated
+# page_id namespaces compared as exact strings). Positives are the real VLM
+# tokens from the live repro run_2026_06_12_06_04_38_737160 (committed in
+# skills/golden/ios_settings_transitions notes; the corpus-driven sweep lives
+# in test_ios_settings_transition_replay.py).
+
+
+def _page_id_outcome(actual, any_of):
+    scene = Scene(frame_id=1, timestamp=0.0, page_id=actual, elements=[])
+    return verify_expected_state(ExpectedState("page_id", {"any_of": list(any_of)}), scene)
+
+
+def test_verify_expected_state_page_id_fold_positives_from_live_ledger():
+    # C3 headline: the VLM slugged Face ID & Passcode its own way (two
+    # spellings live) while the builder slugs 'face-id-passcode'.
+    face_id = [
+        "settings/Face ID与密码",
+        "com.apple.settings.face-id",
+        "settings/Face ID & Passcode",
+        "com.apple.settings.face-id-passcode",
+    ]
+    for token in ("com.apple.settings.faceid_passcode", "com.apple.settings.faceid-passcode"):
+        outcome = _page_id_outcome(token, face_id)
+        assert outcome.status == "succeeded", (token, outcome.reason)
+        assert "fold-normalized" in outcome.reason
+        assert outcome.confidence == 0.9
+        assert outcome.deterministic is True
+    # Design §2 S4 example: the OCR namespace folds the same way.
+    assert _page_id_outcome("settings/face-id-&-passcode", face_id).status == "succeeded"
+    # ios_settings_* ↔ com.apple.settings.* namespace equivalence (review
+    # correction (a)): every member of the family the live VLM actually emitted.
+    equivalence_cases = [
+        ("ios_settings_wallpaper", ["settings/Wallpaper", "com.apple.settings.wallpaper"]),
+        (
+            "ios_settings_notifications",
+            ["settings/通知", "settings/Notifications", "com.apple.settings.notifications"],
+        ),
+        ("ios_settings_developer", ["settings/Developer", "com.apple.settings.developer"]),
+        ("ios_settings_apps", ["settings/Apps", "com.apple.settings.apps"]),
+        ("ios_settings_focus", ["settings/专注模式", "settings/Focus", "com.apple.settings.focus"]),
+    ]
+    for token, any_of in equivalence_cases:
+        outcome = _page_id_outcome(token, any_of)
+        assert outcome.status == "succeeded", (token, outcome.reason)
+    # The run's recorded Home Screen & App Library after-scene carries the
+    # VLM-written CamelCase mint — pure casefold/strip drift.
+    assert (
+        _page_id_outcome(
+            "com.apple.settings.HomeScreenAppLibrary",
+            ["settings/Home Screen & App Library", "com.apple.settings.home-screen-app-library"],
+        ).status
+        == "succeeded"
+    )
+    # Plain casefold is also a fold match.
+    assert _page_id_outcome("settings/wlan", ["settings/WLAN"]).status == "succeeded"
+
+
+def test_verify_expected_state_page_id_exact_fast_path_unchanged():
+    outcome = _page_id_outcome("settings/root", ["settings/root"])
+    assert outcome.status == "succeeded"
+    assert outcome.reason == "page_id matched: settings/root"
+    assert outcome.confidence == 0.95
+
+
+def test_verify_expected_state_page_id_fold_negatives_pin_non_collision():
+    """Fold equality is whole-identity (never substring or bag-of-words): the
+    fallback must not make the Settings gate looser for genuinely different
+    pages."""
+    rejected = [
+        # Required non-collision pins.
+        ("settings/Silent Mode", ["settings/声音与触感", "settings/Sounds"]),
+        ("com.apple.settings.notifications", ["com.apple.settings.notes"]),
+        # Adversarial near-misses: shared prefixes stay distinct after folding.
+        ("settings/General", ["settings/Game Center"]),
+        ("settings/Game Center", ["settings/General"]),
+        ("settings/Face ID", ["settings/Face ID & Passcode"]),
+        ("com.apple.settings.sounds", ["com.apple.settings.sounds-haptics"]),
+        ("settings/通知", ["settings/通用"]),
+        # NO namespace-prefix stripping (explicitly rejected in the design):
+        # the same title in the OCR vs bundle namespace stays distinct — the
+        # builder's any_of carries both forms, the comparator must not bridge.
+        ("settings/Wallpaper", ["com.apple.settings.wallpaper"]),
+        # The ios_settings_ equivalence maps into the bundle namespace ONLY.
+        ("ios_settings_root", ["settings/root"]),
+        # Live free-form VLM tokens that remain false-rejectable by design
+        # (word-order reversed / bare): see the comparator's rationale comment.
+        ("wallpaper_settings", ["settings/Wallpaper", "com.apple.settings.wallpaper"]),
+        ("developer_settings", ["settings/Developer", "com.apple.settings.developer"]),
+        (
+            "faceid-passcode",
+            ["settings/Face ID & Passcode", "com.apple.settings.face-id-passcode"],
+        ),
+        # A genuinely different page name for the same surface stays rejected.
+        ("settings/Do Not Disturb", ["settings/专注模式", "settings/Focus", "com.apple.settings.focus"]),
+        (
+            "apple_account_trusted_number_verification",
+            [
+                "settings/Review Apple Account phone number",
+                "com.apple.settings.review-apple-account-phone-number",
+            ],
+        ),
+    ]
+    for actual, any_of in rejected:
+        outcome = _page_id_outcome(actual, any_of)
+        assert outcome.status == "failed", (actual, outcome.reason)
+
+
+def test_verify_expected_state_page_id_empty_fold_never_matches():
+    # Both sides folding to "" means "no identity", not a wildcard match.
+    assert _page_id_outcome("/", ["—"]).status == "failed"
+    assert _page_id_outcome("", ["settings/root"]).status == "failed"
+    assert _page_id_outcome(None, ["settings/root"]).status == "failed"
+
+
 def test_verify_expected_state_element_appears_and_gone():
     scene = Scene(
         frame_id=1,
