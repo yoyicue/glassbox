@@ -78,6 +78,22 @@ def _temporary_env(env: dict[str, str]) -> Iterator[None]:
         get_config.cache_clear()
 
 
+def _retain_existing_report(path: Path) -> None:
+    """Never destroy a prior attempt's evidence (S6/C5,
+    docs/design/iphone_settings_transition.md): a retry that reused the report
+    path used to unlink it — the 2026-06-12 forensics lost a 144-action run's
+    report exactly that way. Rename to a unique timestamped sibling instead."""
+    if not path.exists():
+        return
+    stamp = int(path.stat().st_mtime)
+    for n in range(1000):
+        suffix = f".prev-{stamp}" + (f"-{n}" if n else "")
+        target = path.with_name(path.stem + suffix + path.suffix)
+        if not target.exists():
+            path.rename(target)
+            return
+
+
 def _run_diagnose(env: dict[str, str], diagnose_report: Path, *, require_ready: bool) -> int:
     with _temporary_env(env):
         report = diagnose_mod.diagnose(get_config())
@@ -251,10 +267,9 @@ def main(argv: list[str] | None = None) -> int:
         env.update(_DRILL_DOWN_ENV_OVERRIDES)
         env.setdefault("IOS_SETTINGS_ARTIFACT_DIR", str(report.with_suffix(".artifacts")))
 
-    if report.exists():
-        report.unlink()
-    if not args.skip_diagnose and diagnose_report.exists():
-        diagnose_report.unlink()
+    _retain_existing_report(report)
+    if not args.skip_diagnose:
+        _retain_existing_report(diagnose_report)
 
     if not args.skip_diagnose:
         rc = _run_diagnose(env, diagnose_report, require_ready=True)

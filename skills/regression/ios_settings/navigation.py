@@ -893,7 +893,16 @@ def crawl_current_page(
                 # so the scroll/multi-pass recovery can still reach it.
                 current = phone.perceive()
                 if not actions.scene_is_settings_root(current):
-                    actions.return_to_settings_root(phone)
+                    try:
+                        actions.return_to_settings_root(phone)
+                    except SettingsRootUnreachable:
+                        # S6/C5 (docs/design/iphone_settings_transition.md): an
+                        # infra death mid-crawl (frame source gone) used to
+                        # escape THIS re-ground as a raw walkthrough exception
+                        # while the scroll loop's re-ground above aborts
+                        # gracefully — same classification, same graceful stop.
+                        limits_hit.add("return_to_root_failed")
+                        return
                     current = phone.perceive()
                 # Re-locate this row in the live scene. Match by canonical section
                 # first (a garbled/variant OCR of e.g. "Bluetooth" still maps to

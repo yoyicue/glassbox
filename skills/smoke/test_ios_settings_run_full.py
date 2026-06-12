@@ -185,3 +185,33 @@ def _state_machine_utg() -> UTG:
             ),
         ],
     )
+
+
+@pytest.mark.smoke
+def test_retain_existing_report_preserves_prior_evidence(tmp_path):
+    """S6/C5 (docs/design/iphone_settings_transition.md): run_full used to
+    unlink the report on every invocation — a retry that reused the path
+    destroyed the 144-action run's report (2026-06-12 forensics). Prior
+    reports must survive under unique names, including collisions."""
+    from skills.regression.ios_settings.run_full import _retain_existing_report
+
+    report = tmp_path / "ios-settings-000.json"
+
+    # nothing to retain: no-op
+    _retain_existing_report(report)
+    assert list(tmp_path.iterdir()) == []
+
+    report.write_text('{"attempt": 1}', encoding="utf-8")
+    _retain_existing_report(report)
+    assert not report.exists()
+    (first_kept,) = tmp_path.iterdir()
+    assert first_kept.name.startswith("ios-settings-000.prev-")
+    assert first_kept.read_text(encoding="utf-8") == '{"attempt": 1}'
+
+    # same-mtime collision: second retention picks a distinct sibling name
+    report.write_text('{"attempt": 2}', encoding="utf-8")
+    import os
+    os.utime(report, (first_kept.stat().st_mtime, first_kept.stat().st_mtime))
+    _retain_existing_report(report)
+    kept = sorted(p.name for p in tmp_path.iterdir())
+    assert len(kept) == 2 and all(".prev-" in name for name in kept)
