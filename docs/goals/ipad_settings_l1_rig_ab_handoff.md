@@ -171,8 +171,8 @@ in-place (`recovery.py:93-94`) so no physical return is needed.
   fling didn't reach; A_1 happened to fling-hit them (`ticks=12`) before crashing.
   Do **not** read A's wider `entered`=11 as "A better" — that is per-frame coverage that
   the design explicitly distrusts; the graph-authoritative `entered_graph` is A=0 / B=7.
-- A_1 also lost a required root (`蓝牙`) to OCR garble (`Cameral`/`kacier`), same OCR-case /
-  locale-seam family as the root-signature split above.
+- A_1 also lost a required root (`蓝牙`) to OCR garble (`Cameral` / the connected-SSID row
+  text), same OCR-case / locale-seam family as the root-signature split above.
 
 ## 3. Bug to fix before the rerun — matrix driver self-restart (data corruption)
 

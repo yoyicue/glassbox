@@ -27,7 +27,7 @@ def test_classify_root_coverage_splits_entered_visible_only_blocked():
     expected = ["无线局域网", "蓝牙", "Face ID与密码", "通用"]
     visits = [
         # entered: detail page captured (more than the bare row label)
-        PageVisit(("Settings", "无线局域网"), "无线局域网", ("无线局域网", "接入无线局域网…", "kacier")),
+        PageVisit(("Settings", "无线局域网"), "无线局域网", ("无线局域网", "接入无线局域网…", "homenet")),
         # visible_only: bare root-row visibility record (single text == label)
         PageVisit(("Settings", "蓝牙"), "蓝牙", ("蓝牙",)),
     ]
@@ -918,7 +918,7 @@ def test_ios_settings_report_verifier_rejects_dynamic_wifi_path_even_when_partia
     visits = [
         {"path": ["Settings"], "title": "设置", "texts": []},
         {"path": ["Settings", "无线局域网"], "title": "无线局域网", "texts": []},
-        {"path": ["Settings", "无线局域网", "Kacler_Iptv"], "title": "kacier_iptv", "texts": []},
+        {"path": ["Settings", "无线局域网", "Homenet_Iptv"], "title": "homenet_iptv", "texts": []},
     ]
     errors = validate_report(_report(visits=visits, missing=["蓝牙"]), require_exhaustive=False)
 
@@ -1022,7 +1022,7 @@ def test_ios_settings_report_verifier_requires_blocked_evidence_for_protected_vi
         {
             "path": ["Settings", "无线局域网"],
             "title": "无线局域网",
-            "texts": ["无线局域网", "我的网络", "kacier", "其他网络"],
+            "texts": ["无线局域网", "我的网络", "homenet", "其他网络"],
         },
     ]
 
@@ -1075,7 +1075,7 @@ def test_ios_settings_report_verifier_accepts_blocked_evidence_for_protected_vis
         {
             "path": ["Settings", "无线局域网"],
             "title": "无线局域网",
-            "texts": ["无线局域网", "我的网络", "kacier", "其他网络"],
+            "texts": ["无线局域网", "我的网络", "homenet", "其他网络"],
         },
     ]
     report = _report(visits=visits)
@@ -1084,7 +1084,7 @@ def test_ios_settings_report_verifier_accepts_blocked_evidence_for_protected_vis
             "path": ["Settings", "无线局域网"],
             "title": "无线局域网",
             "reason": "dynamic Wi-Fi rows",
-            "texts": ["无线局域网", "我的网络", "kacier", "其他网络"],
+            "texts": ["无线局域网", "我的网络", "homenet", "其他网络"],
         },
     ]
     _refresh_report_summaries(report)

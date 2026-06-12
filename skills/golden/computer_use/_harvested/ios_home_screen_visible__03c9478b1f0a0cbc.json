@@ -1,11 +1,11 @@
 {
-  "case_id": "scene_progressed_18636320f51fd4a6",
-  "action": "close_foreground_app",
-  "verifier": "scene_progressed",
-  "expected_status": "succeeded",
+  "case_id": "ios_home_screen_visible_03c9478b1f0a0cbc",
+  "action": "home",
+  "verifier": "ios_home_screen_visible",
+  "expected_status": "failed",
   "before_texts": [
-    "6:38PM Mon1.Jun",
-    "11 12",
+    "G:46PM Mon1.Jun",
+    "11121",
     "No.Lvents |ouay",
     "Daxing？",
     "32°",
@@ -16,9 +16,9 @@
     "189",
     "160",
     "Books",
-    "曰 Notes",
+    "口 Notes",
     "No Notes：",
-    "21 22 23 26",
+    "SCRUBBED_PHONE_1",
     "28 29 30",
     "9PM",
     "290",
@@ -30,20 +30,23 @@
     "260",
     "27",
     "camera",
-    "astv",
+    "atv",
     "Videos",
     "Settings",
-    "分司 G 100% ta",
+    "分司 心 100% ta",
     "Files",
-    "凶口"
+    "Maps",
+    "医口"
   ],
   "after_texts": [
-    "Settings",
-    "Notes",
-    "35",
+    "A：",
+    "000ag",
+    "J",
+    "Weglne",
+    "cotinag",
     "口a"
   ],
   "metadata": {
-    "verifier": "scene_progressed"
+    "verifier": "ios_home_screen_visible"
   }
 }

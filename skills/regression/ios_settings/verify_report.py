@@ -65,14 +65,17 @@ def entry_exempt_root_labels(extra: Iterable[str] = ()) -> set[str]:
             labels.add(_canonical_expected_root_label(text) or text)
     return labels
 
+# Structural shapes of dynamic network/IoT rows — never personal literals.
 UNSAFE_PATH_PATTERNS = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
-        r"kacier",
         r"iptv",
         r"aiot",
         r"washer",
-        r"LYC/LNJ",
+        r"^DIRECT-",        # Wi-Fi Direct device SSIDs (printers etc.)
+        r"^ChinaNet-",      # ISP-branded access points
+        r"^STB_",           # set-top-box hotspots
+        r"_r?_?[0-9a-f]{4}$",  # IoT device names with a MAC-derived hex suffix
         r"我的网络",
         r"其他网络",
         r"My Networks",

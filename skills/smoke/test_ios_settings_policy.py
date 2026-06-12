@@ -222,7 +222,7 @@ def test_ipad_settings_policy_blocks_dynamic_wlan_child_rows():
             _el("WLAN", 280, 188, w=44, h=18),
             _el("Connect to WLAN, view available networks,", 280, 216, w=300, h=14),
             _el("Networks", 280, 360, w=80, h=14),
-            _el("kacier_aiot", 318, 402, w=100, h=14),
+            _el("homenet_aiot", 318, 402, w=100, h=14),
             _el("Other...", 318, 520, w=72, h=14),
         ],
     )
@@ -394,7 +394,7 @@ def test_ipad_blocked_reason_ignores_sidebar_marker_collisions():
         elements=[
             _el("Q Search", 34, 90, w=72, h=18),
             _el("WLAN", 70, 214, w=44, h=16),
-            _el("kacier", 70, 242, w=50, h=12),
+            _el("homenet", 70, 242, w=50, h=12),
             _el("Notifications", 70, 330, w=92, h=16),
             _el("Sounds", 70, 360, w=52, h=16),
             _el("Apps", 268, 44, w=42, h=16),
@@ -412,7 +412,7 @@ def test_ipad_blocked_reason_ignores_sidebar_marker_collisions():
         elements=[
             _el("Q Search", 34, 90, w=72, h=18),
             _el("WLAN", 70, 214, w=44, h=16),
-            _el("kacier", 70, 242, w=50, h=12),
+            _el("homenet", 70, 242, w=50, h=12),
             _el("Bluetooth", 70, 292, w=70, h=16),
             _el("Game Center", 268, 44, w=96, h=16),
             _el("Customize Profile", 314, 180, w=128, h=14),
@@ -429,7 +429,7 @@ def test_ipad_blocked_reason_ignores_sidebar_marker_collisions():
         elements=[
             _el("Q Search", 34, 90, w=72, h=18),
             _el("WLAN", 70, 214, w=44, h=16),
-            _el("kacier", 70, 242, w=50, h=12),
+            _el("homenet", 70, 242, w=50, h=12),
             _el("Notifications", 70, 330, w=92, h=16),
             _el("Sounds", 70, 360, w=52, h=16),
             _el("Example", 420, 44, w=72, h=16),
@@ -892,7 +892,7 @@ def test_ios_settings_policy_owns_labels_candidates_and_blocked_pages():
         _el("<", 18, 72, w=14, ty="nav_back"),
         _el("无线局域网", 170, 78, w=96),
         _el("我的网络", 70, 420, w=72),
-        _el("kacier", 80, 480, w=52),
+        _el("homenet", 80, 480, w=52),
         _el("其他网络", 70, 560, w=72),
     )
 
@@ -1128,7 +1128,7 @@ def test_ipad_top_search_ignores_layout_grouped_account_row():
         elements=[
             _el("Apps", 268, 44, w=36, h=14),
             _el("Q Search Apps", 434, 42, w=106, h=16),
-            _el("Da Li", 19, 28, w=222, h=130, ty="button"),
+            _el("Jo Doe", 19, 28, w=222, h=130, ty="button"),
             _el("Q Search", 36, 90, w=70, h=14),
             _el("Apple Account, iCloud", 94, 108, w=526, h=66, ty="switch"),
             _el("WLAN", 25, 205, w=203, h=79, ty="button"),
@@ -1153,7 +1153,7 @@ def test_ipad_sidebar_candidates_ignore_profile_band_owner_row():
         elements=[
             _el("Apps", 268, 44, w=36, h=14),
             _el("Q Search", 36, 90, w=70, h=14),
-            _el("Da Li", 94, 142, w=44, h=16, ty="list_item"),
+            _el("Jo Doe", 94, 142, w=44, h=16, ty="list_item"),
             _el("Apple Account, iCloud", 94, 108, w=526, h=66, ty="switch"),
             _el("Airplane Mode", 30, 126, w=207, h=112, ty="button"),
             _el("WLAN", 25, 205, w=203, h=79, ty="button"),
@@ -1166,7 +1166,7 @@ def test_ipad_sidebar_candidates_ignore_profile_band_owner_row():
         for element in policy.safe_navigation_candidates(scene, allow_sensitive_root_labels=True)
     ]
 
-    assert "Da Li" not in labels
+    assert "Jo Doe" not in labels
     assert "Apple Account, iCloud" not in labels
     assert "Airplane Mode" not in labels
     assert labels[:2] == ["WLAN", "Bluetooth"]
@@ -1182,7 +1182,7 @@ def test_ipad_sidebar_candidates_skip_status_text_and_optional_roots():
         elements=[
             _el("Q Search", 36, 90, w=70, h=14),
             _el("WLAN", 35, 205, w=203, h=79, ty="button"),
-            _el("kacier", 182, 270, w=44, h=14),
+            _el("homenet", 182, 270, w=44, h=14),
             _el("Bluetooth", 35, 252, w=217, h=74, ty="button"),
             _el("General", 35, 346, w=217, h=74, ty="button"),
             _el("Wallpaper", 35, 435, w=99, h=26, ty="list_item"),

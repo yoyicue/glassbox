@@ -200,7 +200,7 @@ def test_committed_a11y_cell_snapshot_is_labeled_scrubbed_and_honest():
     # scrubbed like the L2 snapshot
     assert all((t.get("final_state") or {}).get("visible_texts") == [] for t in payload["tasks"])
     assert all("elements" not in (t.get("final_state") or {}) for t in payload["tasks"])
-    for forbidden in ("Da Li", "Apple Account and password"):
+    for forbidden in ("Jo Doe", "Apple Account and password"):
         assert forbidden not in raw
     # honest-coverage invariant: the run exercised the semantic path for real.
     # (Loop-1's baseline had strategy_switches=21/recoveries=7 because the

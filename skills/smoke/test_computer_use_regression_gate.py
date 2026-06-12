@@ -245,7 +245,7 @@ def test_l2_expected_state_snapshot_fixture_is_load_bearing_and_scrubbed():
     )
     assert all((task.get("final_state") or {}).get("visible_texts") == [] for task in payload["tasks"])
     assert all("elements" not in (task.get("final_state") or {}) for task in payload["tasks"])
-    for forbidden in ("Da Li", "Apple Account and password", "You must enter both your"):
+    for forbidden in ("Jo Doe", "Apple Account and password", "You must enter both your"):
         assert forbidden not in raw
 
 

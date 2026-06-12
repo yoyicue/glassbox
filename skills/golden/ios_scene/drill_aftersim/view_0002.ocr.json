@@ -11,44 +11,44 @@
     "icon_grid"
   ],
   "signature": [
-    "10:37 €",
+    "SCRUBBED_SSID_1",
     "Edit",
     "WLAN",
     "Connect to WLAN, view available networks,",
     "and manage settings for joining networks and",
     "nearby hotspots. Learn more...",
-    "V kacier",
+    "SCRUBBED_SSID_2",
     "•",
     "My Networks",
-    "kacier_iptv",
-    "Networks *",
+    "SCRUBBED_SSID_3",
+    "SCRUBBED_SSID_4",
     "Other..."
   ],
   "texts": [
-    "10:37 €",
+    "SCRUBBED_SSID_1",
     "Edit",
     "WLAN",
     "Connect to WLAN, view available networks,",
     "and manage settings for joining networks and",
     "nearby hotspots. Learn more...",
     "WLAN",
-    "V kacier",
+    "SCRUBBED_SSID_2",
     "•",
     "My Networks",
-    "kacier_iptv",
-    "Networks *",
+    "SCRUBBED_SSID_3",
+    "SCRUBBED_SSID_4",
     "Other...",
     "Apps Using WLAN & Mobile Data",
-    "Enable WAPI",
+    "SCRUBBED_SSID_5",
     "Ask to Join Networks",
-    "Notify >",
+    "SCRUBBED_SSID_6 >",
     "Known networks will be joined automatically. If no known",
     "astwarke are avallakils vanwillke natifind af ausilakle"
   ],
   "elements": [
     {
       "type": "button",
-      "text": "10:37 €",
+      "text": "SCRUBBED_SSID_1",
       "box": [
         50,
         28,
@@ -125,7 +125,7 @@
     },
     {
       "type": "text",
-      "text": "V kacier",
+      "text": "SCRUBBED_SSID_2",
       "box": [
         36,
         415,
@@ -158,7 +158,7 @@
     },
     {
       "type": "text",
-      "text": "kacier_iptv",
+      "text": "SCRUBBED_SSID_3",
       "box": [
         58,
         528,
@@ -169,7 +169,7 @@
     },
     {
       "type": "text",
-      "text": "Networks *",
+      "text": "SCRUBBED_SSID_4",
       "box": [
         40,
         589,
@@ -202,7 +202,7 @@
     },
     {
       "type": "text",
-      "text": "Enable WAPI",
+      "text": "SCRUBBED_SSID_5",
       "box": [
         40,
         815,
@@ -224,7 +224,7 @@
     },
     {
       "type": "text",
-      "text": "Notify >",
+      "text": "SCRUBBED_SSID_6 >",
       "box": [
         340,
         906,

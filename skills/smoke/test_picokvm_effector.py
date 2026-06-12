@@ -1300,12 +1300,12 @@ def test_phone_back_allows_picokvm_settings_detail_classifier_fallback_without_n
                 confidence=0.9,
             ),
             UIElement(type="text", box=Box(x=38, y=290, w=258, h=22), text="络及附近热点设置。进一步了解…", confidence=0.9),
-            UIElement(type="text", box=Box(x=58, y=398, w=52, h=18), text="kacier", confidence=0.9),
+            UIElement(type="text", box=Box(x=58, y=398, w=52, h=18), text="homenet", confidence=0.9),
             UIElement(type="text", box=Box(x=38, y=462, w=72, h=20), text="我的网络", confidence=0.9),
-            UIElement(type="text", box=Box(x=58, y=509, w=90, h=24), text="kacier_iptv", confidence=0.9),
+            UIElement(type="text", box=Box(x=58, y=509, w=90, h=24), text="homenet_iptv", confidence=0.9),
             UIElement(type="text", box=Box(x=40, y=576, w=68, h=18), text="其他网络", confidence=0.9),
-            UIElement(type="text", box=Box(x=58, y=624, w=90, h=22), text="kacier_aiot", confidence=0.9),
-            UIElement(type="text", box=Box(x=58, y=732, w=162, h=22), text="minii_washer_r_91f0", confidence=0.9),
+            UIElement(type="text", box=Box(x=58, y=624, w=90, h=22), text="homenet_aiot", confidence=0.9),
+            UIElement(type="text", box=Box(x=58, y=732, w=162, h=22), text="acme_washer_r_0a1b", confidence=0.9),
         ],
     )
     monkeypatch.setattr(phone, "perceive", lambda: scene)
