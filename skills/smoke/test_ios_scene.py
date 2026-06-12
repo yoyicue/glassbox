@@ -596,6 +596,47 @@ def test_ios_scene_classifier_typed_spotlight_results_are_system_search():
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_semantic_detail_mints_nav_band_title_over_first_row():
+    # C2/S3 (docs/design/iphone_settings_transition.md): the semantic detail
+    # guess scans the body band (cy >= h*0.11) and structurally excludes the
+    # real centered nav title (cy≈92px on iPhone frames). The mint must prefer
+    # the visible nav-band title over the first content row.
+    scene = _scene(
+        _el("<", 18, 80, w=14, ty="nav_back"),
+        _el("Sounds & Haptics", 156, 82, w=140),
+        _el("Silent Mode", 60, 200, w=100),
+        _el("Switch between Silent and Ring for calls and alerts.", 40, 240, w=330),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 990))
+
+    assert classified.kind == "settings_detail"
+    assert classified.page_id == "settings/Sounds & Haptics"
+    assert classified.title == "Sounds & Haptics"
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_semantic_detail_ignores_junk_nav_band_text():
+    # Guard on the S3 nav-band preference: the nav-band winner must carry >=3
+    # semantic chars. A nav-bar '+' (the Focus page's add button, which wins
+    # _page_title's |cy-90| tie-break over the centered title) or OCR junk
+    # like 'I!I,' must not replace a correct body-derived mint — on the live
+    # run that would have regressed the verified 'settings/Privacy & Security'.
+    scene = _scene(
+        _el("<", 18, 80, w=14, ty="nav_back"),
+        _el("+", 400, 80, w=16),
+        _el("Do Not Disturb", 60, 200, w=120),
+        _el("Switch between Silent and Ring for calls and alerts.", 40, 240, w=330),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 990))
+
+    assert classified.kind == "settings_detail"
+    assert classified.page_id == "settings/Do Not Disturb"
+    assert classified.title == "Do Not Disturb"
+
+
+@pytest.mark.smoke
 def test_ios_scene_classifier_settings_detail_without_back_ocr():
     scene = _scene(
         _el("音频与视觉", 180, 78, w=110),
@@ -903,6 +944,32 @@ def test_ipados_split_detail_title_ignores_cross_pane_layout_control():
     assert classified.kind == "settings_detail"
     assert classified.title == "Search and Look Up"
     assert classified.page_id == "settings/Search and Look Up"
+
+
+@pytest.mark.smoke
+def test_ipados_compat_fallback_demotion_survives_nav_band_mint_fix():
+    # The S3 nav-band mint fix reaches iPadOS only through
+    # _classify_ios_compat_fallback (glassbox/ipados/scene.py). The iPad en/HK
+    # floor is gate-load-bearing: a non-split surface that the iOS classifier
+    # reads as settings_detail must STILL demote to unknown with NO page_id
+    # minted, nav-band title or not — the fix must never leak a page identity
+    # into the sidebar-less iPad path. (The split-view detail path mints from
+    # _detail_pane_title and is untouched; see
+    # test_ipados_split_detail_title_ignores_cross_pane_layout_control.)
+    scene = _scene(
+        _el("<", 18, 80, w=14, ty="nav_back"),
+        _el("Sounds & Haptics", 290, 82, w=160),
+        _el("Silent Mode", 160, 610, w=120),
+        _el("Switch between Silent and Ring for calls and alerts.", 120, 650, w=330),
+    )
+    scene.viewport_size = (744, 1133)
+
+    classified = classify_ipados_scene(scene)
+
+    assert classified.kind == "unknown"
+    assert classified.page_id is None
+    assert classified.safe_actions == ("trace", "vlm_on_uncertain")
+    assert classified.evidence[0] == "ipados_no_settings_sidebar"
 
 
 @pytest.mark.smoke

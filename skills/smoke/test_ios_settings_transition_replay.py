@@ -1,13 +1,16 @@
 """Replay the committed iPhone Settings transition corpus against current code.
 
-S1+S2 of docs/design/iphone_settings_transition.md. For every candidate tap
+S1+S2+S3 of docs/design/iphone_settings_transition.md. For every candidate tap
 group in ``skills/golden/ios_settings_transitions`` this rebuilds the
 expected_state with the **real production builder**
 (``navigation._settings_row_expected_state`` →
 ``policy.page_id_route_label_candidates``, wired exactly as
-``core._navigation_actions`` does) under the run's locale (en/CN), then runs
-the **real comparator** (``glassbox.action.semantic_plan.verify_expected_state``
-page_id membership) against the recorded after-scene ``page_id``.
+``core._navigation_actions`` does) under the run's locale (en/CN), **re-mints
+the after-scene page_id with the current classifier**
+(``glassbox.ios.scene.classify_ios_scene`` over the committed after-scene
+elements — since S3 the mint is what the replay validates, not the recorded
+string), then runs the **real comparator**
+(``glassbox.action.semantic_plan.verify_expected_state`` page_id membership).
 
 Pin taxonomy (22 groups):
 
@@ -18,14 +21,21 @@ Pin taxonomy (22 groups):
   union supplies it.
 - ``CORRECT_REJECTIONS`` — physically did not land on the target page
   (Apple-ID modal / stayed on root, No-SIM): stays rejected.
-- ``FALSE_REJECTIONS_WRONG_MINT`` — physically entered, but the after-scene
-  page_id was minted from a body row instead of the nav title (C2) — e.g.
-  first-row titles or ``None``. The label-alias fix (S2) cannot and should not
-  make these pass; they stay ``xfail(strict=True)`` until the minting fix (S3)
-  / comparator normalization (S4) land in later PRs.
+- ``REMINT_GREEN_S3`` — physically entered, but the run minted the page_id
+  from a body row instead of the visible nav title (C2): ``settings/Silent
+  Mode`` over 'Sounds & Haptics', ``settings/Paired Devices`` over
+  'Developer'. The S3 nav-band mint fix re-mints these correctly from the
+  committed after-scene, so they are green now (was ``xfail(strict=True)``
+  before S3; verified_via stays ``None`` — they were rejected live).
+- ``FALSE_REJECTIONS_WRONG_MINT`` — physically entered but **not** fixed by
+  S3: Wallpaper's committed after-scene carries no usable settings_detail
+  evidence at all (16 sparse OCR elements → the classifier abstains, page_id
+  ``None``; the ``settings/CURRENT`` body mint happened on wrapper retry
+  frames that live only in ``notes``). Stays ``xfail(strict=True)`` until
+  S4/S5 territory.
 - ``VLM_ONLY_LIVE`` — verified live **only** through billed VLM escalation;
-  the offline page_id comparator cannot reproduce that from the recorded
-  after-scene (page_id ``None`` or a non-member mint), so the page_id-route
+  the offline page_id comparator cannot reproduce that from the committed
+  after-scene (re-mint is ``None`` or a non-member mint), so the page_id-route
   replay is pinned rejected. (Spec nuance: "16/22 verified live" = the 10
   ``PAGE_ID_GREEN`` originals + these 6.)
 """
@@ -41,7 +51,9 @@ from types import SimpleNamespace
 import pytest
 
 from glassbox.action.semantic_plan import ExpectedState, verify_expected_state
+from glassbox.cognition import Box, Scene, UIElement
 from glassbox.config import get_config
+from glassbox.ios.scene import classify_ios_scene
 from skills.regression.ios_settings import core as walkthrough
 from skills.regression.ios_settings import navigation as settings_navigation
 from skills.regression.ios_settings.policy import IPadSettingsPolicy, SettingsPolicy
@@ -50,6 +62,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CORPUS_DIR = REPO_ROOT / "skills" / "golden" / "ios_settings_transitions"
 GROUPS = {path.stem: json.loads(path.read_text()) for path in sorted(CORPUS_DIR.glob("grp_*.json"))}
 IPAD_BASELINE = REPO_ROOT / "skills" / "regression" / "fixtures" / "reliability_baseline.json"
+# The slimmed corpus scenes drop viewport_size, so the replay re-supplies the
+# run's frame size. The source run's letterbox crop jitters a few px per frame
+# (448-452 x 977-992); the classifier's band math is insensitive at this scale.
+RUN_VIEWPORT = (448, 990)
 
 PAGE_ID_GREEN = {
     "grp_000023",  # 无线局域网 → settings/WLAN
@@ -70,10 +86,16 @@ CORRECT_REJECTIONS = {
     "grp_000014",  # Review Apple Account phone number → Apple-ID modal (page_id None)
     "grp_000029",  # 蜂窝网络 → stayed on settings/root (device has no SIM)
 }
+REMINT_GREEN_S3 = {
+    "grp_000056",  # 声音与触感 → run minted first row 'Silent Mode'; S3 re-mints
+    #                'settings/Sounds & Haptics' from the nav-band title
+    "grp_000084",  # Developer → run minted body section 'Paired Devices'; S3
+    #                re-mints 'settings/Developer' from the nav-band title
+}
 FALSE_REJECTIONS_WRONG_MINT = {
-    "grp_000050",  # Wallpaper → minted None here (the retry frame minted 'CURRENT')
-    "grp_000056",  # 声音与触感 → minted from first row 'Silent Mode'
-    "grp_000084",  # Developer → minted from body section 'Paired Devices'
+    "grp_000050",  # Wallpaper → committed after-scene re-mints None (classifier
+    #                abstains on its 16 sparse elements; the 'CURRENT' body mint
+    #                lives only on wrapper retry frames recorded in notes)
 }
 VLM_ONLY_LIVE = {
     "grp_000038",  # Display & Brightness (after page_id None)
@@ -116,17 +138,45 @@ def _replay_param(group_id: str):
         marks.append(
             pytest.mark.xfail(
                 strict=True,
-                reason="false rejection: page_id minted from body text, not the nav "
-                "title (C2) — flips with the minting fix (S3) / comparator "
-                "normalization (S4), not with label aliases",
+                reason="false rejection the minting fix (S3) does not earn: the "
+                "committed after-scene carries no usable settings_detail "
+                "evidence (re-mint is None) — comparator normalization (S4) / "
+                "attribution (S5) territory",
             )
         )
     return pytest.param(group_id, id=f"{group_id}-{GROUPS[group_id]['target']}", marks=marks)
 
 
+def _scene_from_corpus(after_scene: dict) -> Scene:
+    elements = []
+    for raw in after_scene["elements"]:
+        box = raw["box"]
+        elements.append(
+            UIElement(
+                type=raw.get("type") or "text",
+                box=Box(x=box["x"], y=box["y"], w=box["w"], h=box["h"]),
+                text=raw.get("text"),
+                confidence=0.9,
+            )
+        )
+    scene = Scene(frame_id=0, timestamp=0.0, elements=elements)
+    scene.viewport_size = RUN_VIEWPORT
+    return scene
+
+
+def _remint_page_id(after_scene: dict) -> str | None:
+    return classify_ios_scene(_scene_from_corpus(after_scene)).page_id
+
+
 @pytest.mark.smoke
 def test_replay_categories_partition_the_corpus():
-    categories = (PAGE_ID_GREEN, CORRECT_REJECTIONS, FALSE_REJECTIONS_WRONG_MINT, VLM_ONLY_LIVE)
+    categories = (
+        PAGE_ID_GREEN,
+        CORRECT_REJECTIONS,
+        REMINT_GREEN_S3,
+        FALSE_REJECTIONS_WRONG_MINT,
+        VLM_ONLY_LIVE,
+    )
     assert sum(len(category) for category in categories) == len(GROUPS) == 22
     assert set().union(*categories) == set(GROUPS)
     # Corpus self-consistency: the pin taxonomy must agree with the recorded
@@ -141,6 +191,8 @@ def test_replay_categories_partition_the_corpus():
         elif group_id in PAGE_ID_GREEN:
             assert group["verified_via"] == "page_id"
         else:
+            # REMINT_GREEN_S3 / FALSE_REJECTIONS_WRONG_MINT / CORRECT_REJECTIONS
+            # were all rejected live.
             assert group["verified_via"] is None
 
 
@@ -153,12 +205,25 @@ def test_transition_replay_against_current_builder(group_id, en_cn_locale):
     recorded = set(group["expected_state"]["payload"]["any_of"])
     assert _expected_any_of(rebuilt) >= recorded
 
-    scene = SimpleNamespace(page_id=group["after_scene"]["page_id"])
+    scene = SimpleNamespace(page_id=_remint_page_id(group["after_scene"]))
     outcome = verify_expected_state(ExpectedState.from_dict(rebuilt), scene)
-    if group_id in PAGE_ID_GREEN or group_id in FALSE_REJECTIONS_WRONG_MINT:
+    if group_id in PAGE_ID_GREEN or group_id in REMINT_GREEN_S3:
         assert outcome.status == "succeeded", outcome.reason
+    elif group_id in FALSE_REJECTIONS_WRONG_MINT:
+        assert outcome.status == "succeeded", outcome.reason  # xfail(strict) pin
     else:
         assert outcome.status == "failed", outcome.reason
+
+
+@pytest.mark.smoke
+def test_s3_remint_prefers_nav_band_title_on_corpus_scenes():
+    """S3 pin: the re-minted identities themselves (not just comparator status)
+    — the nav-band title beats the body-row mint the run recorded."""
+    assert _remint_page_id(GROUPS["grp_000056"]["after_scene"]) == "settings/Sounds & Haptics"
+    assert _remint_page_id(GROUPS["grp_000084"]["after_scene"]) == "settings/Developer"
+    # Not earned by S3: Wallpaper's committed after-scene has no usable
+    # settings_detail evidence — the classifier abstains rather than minting.
+    assert _remint_page_id(GROUPS["grp_000050"]["after_scene"]) is None
 
 
 # ── S2 guards ────────────────────────────────────────────────────────────────

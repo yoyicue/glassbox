@@ -46,7 +46,11 @@ scene stays clean (shape-based; no personal literals in the test either).
 - `skills/smoke/test_ios_settings_transition_replay.py` — rebuilds each
   expected_state with the **current** builder
   (`navigation._settings_row_expected_state` →
-  `policy.page_id_route_label_candidates`) under en/CN and replays the real
-  comparator (`glassbox.action.semantic_plan.verify_expected_state`) against
-  the recorded after-scene `page_id`, pinning matches / correct rejections /
-  known-wrong mints (strict xfail, C2 territory).
+  `policy.page_id_route_label_candidates`) under en/CN, **re-mints** the
+  after-scene `page_id` with the current classifier
+  (`glassbox.ios.scene.classify_ios_scene` over the committed elements; since
+  the S3 nav-band mint fix the mint itself is under test, not the recorded
+  string) and replays the real comparator
+  (`glassbox.action.semantic_plan.verify_expected_state`), pinning matches /
+  correct rejections / S3-fixed mints / the one remaining wrong-mint
+  false rejection (strict xfail, S4 territory).
