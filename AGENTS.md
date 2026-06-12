@@ -29,7 +29,7 @@ uv run pytest skills/smoke/test_foo.py::test_bar -q   # one test
 - `make check` is **device-independent** (no PicoKVM/rig) and is what CI runs on
   every PR. Run it before you push. Its on-rig time-series companion is
   `.github/workflows/rig-nightly.yml` (self-hosted `picokvm` runner, iPhone 17
-  Pro Max zh + iPad mini 7 en matrix) — informational, never a merge gate.
+  Pro Max en/CN + iPad mini 7 en/HK matrix) — informational, never a merge gate.
 - pytest: `testpaths = skills`; markers are `smoke` (fast, offline),
   `regression` (slow, needs rig/artifacts), `feature(name)`.
   `--strict-markers` is on, so a typoed marker fails instead of silently
@@ -122,16 +122,20 @@ uv run pytest skills/smoke/test_foo.py::test_bar -q   # one test
 ## Hardware / rig notes (only when running on real devices)
 
 Most work is offline (`make check`). For on-rig runs see `ONBOARDING.md` and
-`docs/reference/`. Facts that bite:
+`docs/reference/`. **Per-device defaults (locale, floors, input quirks, volatile
+device state): `docs/reference/rig_device_profiles.md`.** Facts that bite:
 
 - **iPhone** drives via the AssistiveTouch pointer only: clicks work, scroll is an
   imprecise swipe-fling (precise wheel is intermittent → off by default), keyboard
   is text + a few combos. **iPad** has a native pointer + reliable wheel — prefer
   iPad for scroll-heavy work.
-- The `make computer-use-success-rate-ios-settings` target assumes a **zh iPhone**.
-  For the **iPad mini 7** rig, drive `run_full` directly:
+- The `make computer-use-success-rate-ios-settings` target passes no
+  `--language` and so falls to the in-code **zh-Hans** default — a mismatch for
+  the physically-English rig iPhone. Drive the harness directly with the
+  device-matched locale instead; for the **iPad mini 7** rig:
   `GLASSBOX_PHONE_MODEL=ipad_mini_7 uv run python -m skills.regression.ios_settings.run_full --drill-down --language en --region HK`.
-- **Locale:** default is `zh-Hans`, English is switchable per run with
-  `run_full --language en --region HK`. **Do not pin `GLASSBOX_LANGUAGE` in
+- **Locale:** the in-code default is `zh-Hans`, but **both rig devices run
+  English** — iPhone is en/CN, iPad is en/HK — so pass the device-matched
+  `--language en --region CN|HK` per run. **Do not pin `GLASSBOX_LANGUAGE` in
   `.env`** — it flips the global default for every caller, including the smoke
   suite.
