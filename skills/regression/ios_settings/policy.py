@@ -18,6 +18,7 @@ from glassbox.ios.scene import (
     SETTINGS_TITLE_LABELS,
     IOSSceneClassification,
     classify_ios_scene,
+    has_semantic_title_chars,
     settings_detail_semantic_guess,
 )
 from glassbox.ios.settings_rows import (
@@ -918,6 +919,31 @@ class SettingsPolicy:
         return fields[0]
 
     def page_title(self, scene) -> str:
+        # Core-first: the platform classifier already mints the visit title via
+        # `_page_title` (Edit/Done excluded, 28-char cap) plus the S3 junk guard
+        # and the semantic-detail body fallback. The local nav-band heuristic
+        # below kept producing wrong visit titles where the core was right —
+        # 'Edit' for WLAN (trailing nav button not excluded), '+' for Bluetooth
+        # (empty band → raw texts[0]), 'I!I,' for Privacy & Security (no junk
+        # guard), 'Appearance' for Display & Brightness (true title is 20 chars
+        # > the local 18-char cap) — so delegate and keep the heuristic only as
+        # last resort. The semantic-chars gate keeps a junk classifier title
+        # (possible on non-detail kinds, whose title skips the S3 guard) from
+        # being returned over a real band candidate, and the clock gate drops
+        # noisy status-bar reads ('2:02 C') the core's narrower time regex
+        # misses — both cases then fall through to the band heuristic.
+        classified = self.classify_scene(
+            scene,
+            viewport_size=getattr(scene, "viewport_size", None),
+        )
+        if classified is not None:
+            classified_title = (classified.title or "").strip()
+            if (
+                classified_title
+                and has_semantic_title_chars(classified_title)
+                and not self.is_status_bar_clock_text(classified_title)
+            ):
+                return classified_title
         candidates = [
             element for element in scene.elements
             if (

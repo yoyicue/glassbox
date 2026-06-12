@@ -21,7 +21,7 @@ from glassbox.boundaries import action_host_backend_capabilities
 from glassbox.cognition import Box, UIElement
 from glassbox.cognition.text_match import compact_text
 from glassbox.ios.progress import is_time_text
-from glassbox.ios.scene import has_strong_ios_home_evidence
+from glassbox.ios.scene import has_semantic_title_chars, has_strong_ios_home_evidence
 from glassbox.target_planner import TargetPlanner
 from skills.regression.ios_settings import context as settings_context
 from skills.regression.ios_settings import graph_state as settings_graph_state
@@ -614,25 +614,31 @@ def _observed_path_label(
     depth: int,
 ) -> str:
     observed_title = (actions.page_title(after_scene) or "").strip()
-    if not observed_title or observed_title == "?":
-        return requested_label
+    # Backstop independent of the picker: a missing read or OCR junk ('I!I,',
+    # '+', a stray back glyph or clock read) must never become a visit path
+    # label even when page_title errs — the tapped row's label is the honest
+    # intent (canonicalized at depth 0 below, like every other root entry).
+    title_is_noise = _observed_title_missing_or_noise(observed_title)
     if depth == 0:
-        observed_root_label = actions.canonical_expected_root_label(observed_title)
-        if observed_root_label is not None:
-            return observed_root_label
+        if not title_is_noise:
+            observed_root_label = actions.canonical_expected_root_label(observed_title)
+            if observed_root_label is not None:
+                return observed_root_label
         requested_root_label = actions.canonical_expected_root_label(requested_label)
         if requested_root_label is not None and (
-            actions.page_title(after_scene) == requested_label
+            title_is_noise
+            or actions.page_title(after_scene) == requested_label
             or settings_scene_state.title_matches_navigation_label(observed_title, requested_label)
             or compact_text(observed_title).casefold() in {"settings", "设置"}
-            or _observed_title_missing_or_noise(observed_title)
         ):
             # Root-row intent is more stable than the detail title OCR. Live iPad
             # Settings has produced titles such as "Bluetgoth"; treating that as
             # a new path makes coverage think the root was never entered and
             # triggers wasteful search recovery back to an already-visited row.
             return requested_root_label
-    return observed_title or requested_label
+    if title_is_noise:
+        return requested_label
+    return observed_title
 
 
 def _observed_title_missing_or_noise(title: str) -> bool:
@@ -643,6 +649,10 @@ def _observed_title_missing_or_noise(title: str) -> bool:
         or text in {"<", "‹", "〈", "返回", "Back"}
         or is_time_text(text)
         or settings_scene_state.is_status_bar_clock_text(text)
+        # OCR junk that carries no semantic page-name characters ('I!I,' from
+        # the Privacy & Security hands icon, '+' from the Bluetooth nav bar)
+        # — same guard the core S3 nav-band mint applies.
+        or not has_semantic_title_chars(text)
     )
 
 
