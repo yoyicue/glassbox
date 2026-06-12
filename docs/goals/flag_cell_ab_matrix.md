@@ -27,7 +27,7 @@ docstring 和本台账。
 |---|---|---|---|
 | a11y cell（overlay ON） | ~~task_completion 0.0~~ → **loop-2 后 1.0 已饱和**；剩 action_success 0.87 / unknown 0.11 | 见台账 loop-2 | `a11y_voice_control_cell_snapshot.json` |
 | 设置地板 scroll | scroll_success_rate | 0.077 | `reliability_baseline.json` |
-| iPhone 设置地板（en/CN） | task_completion | **0.0**（2026-06-12 入库；操作按钮 5/5 确定性缺失,见台账） | `iphone_settings_baseline.json` |
+| iPhone 设置地板（en/HK） | task_completion | **0.0**（2026-06-12 入库；操作按钮 5/5 确定性缺失,见台账） | `iphone_settings_baseline.json` |
 | Clock cell | task_completion / 每轮耗时 | 0.8 / ~14min（launch 占大头） | `clock_tabs_baseline.json` |
 | L2 快照 | task_completion | 0.8 | `l2_settings_expected_state_snapshot.json` |
 | canonical primitives | task_completion / scroll_success_rate | **0.9 / 0.957**（2026-06-11 入库,见台账） | `canonical_primitives_baseline.json` |
@@ -134,6 +134,7 @@ uv run python -m skills.regression.floor_lineage
 - 判定：转场识别墙已拆(iPad 状态机战役的 iPhone 同类物收官);completion 0.0 的唯一结构性根因(#99)已修,修复后 n=5(单进程 5 轮,顺带实测多轮翘死债 + `GLASSBOX_PICOKVM_ROBUST_CAPTURE=1` 默认)= fixture 候选,完成后补谱系行
 - 产物：**修复后 n=5 完成并入库**(round 0 @`2434d09`,rounds 1-4 @`baa6274`,#101 仅文档代码同一;单进程 5 轮 `--keep-going`):task_completion **0.0**(5/5 failed)、action 0.883、root 覆盖 0.88(每轮进入 12-14/17;蜂窝网络 device_unavailable + 钱包 blocked 豁免)、esc 0.525、scroll 0.110(136 滚)、switches 39、recoveries 14、unknown 0.0088、vlm 覆盖 0.181(101 调用,host env 开 VLM,config.vlm_enabled 只记 `--vlm` flag)。源数据 `iphone_floor_n5_post99/floor_candidate.json` → fixture `skills/regression/fixtures/iphone_settings_baseline.json`(本仓**首个 iPhone 设备匹配 floor**;离线门 `test_iphone_settings_floor.py` + nightly iPhone lane 阻断比对接线,lane env zh-Hans→en/CN)。修复后法医:**操作按钮仍 5/5 缺失**(0-2 轮零 tap 尝试、3-4 轮各 2 次 failed tap,报告 0-3 轮记 search_absent)→ **#99 实机不充分**;**Camera 首次进入**(5/5 tap succeeded;修复前 n=5 零尝试)→ 死区修复部分起效;**蜂窝网络 5/5 tap failed**(page_id mismatch)→ 新异常待查;round 4 限位 'exception'(PicoKVM 流打开 RuntimeError)保留 = 诚实方差
 - 注意事项：S5b 默认开翻转的 rig A/B 证据 = n=1 守卫零触发(惰性)+ 离线语料钉,翻转决策留给下一轮守卫真实触发样本;设备挂着"今晚安装软件更新"(用户决策:不管);`--out` 在轮验证 rc≠0 且无 `--keep-going` 时不写(已三次踩 zsh 管道掩码,取内层 rc 用 `${pipestatus[1]}`)
+- **区域声明修正(2026-06-13)**:真机直读 Settings > General > Language & Region = **Hong Kong (China)**(首选语言 English + 简体中文)→ 本条及此前各条的 "en/CN" 实为 **en/HK**;fixture/lane/文档身份键已统一改 HK。功能零影响(en-CN ≡ en-HK 同一张 `GREATER_CHINA_EN_ROOT_LABEL_ALIASES`,settings_rows.py:89-90),数值不变。教训:"WLAN" 在 HK 区域同样渲染,不是 CN 判别器;区域以设备页直读为准,不靠环境推断
 
 ### 2026-06-12 iPhone 设备匹配 floor 三连试 —— 中止,launch 路径修复入库,滚动确定性立为前置战役
 - 类型：基线建立(**未入库**——三次尝试均无法产出有意义 floor)

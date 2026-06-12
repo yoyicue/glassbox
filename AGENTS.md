@@ -29,7 +29,7 @@ uv run pytest skills/smoke/test_foo.py::test_bar -q   # one test
 - `make check` is **device-independent** (no PicoKVM/rig) and is what CI runs on
   every PR. Run it before you push. Its on-rig time-series companion is
   `.github/workflows/rig-nightly.yml` (self-hosted `picokvm` runner, iPhone 17
-  Pro Max en/CN + iPad mini 7 en/HK matrix) — informational, never a merge gate.
+  Pro Max en/HK + iPad mini 7 en/HK matrix) — informational, never a merge gate.
 - pytest: `testpaths = skills`; markers are `smoke` (fast, offline),
   `regression` (slow, needs rig/artifacts), `feature(name)`.
   `--strict-markers` is on, so a typoed marker fails instead of silently
@@ -135,7 +135,7 @@ device state): `docs/reference/rig_device_profiles.md`.** Facts that bite:
   device-matched locale instead; for the **iPad mini 7** rig:
   `GLASSBOX_PHONE_MODEL=ipad_mini_7 uv run python -m skills.regression.ios_settings.run_full --drill-down --language en --region HK`.
 - **Locale:** the in-code default is `zh-Hans`, but **both rig devices run
-  English** — iPhone is en/CN, iPad is en/HK — so pass the device-matched
-  `--language en --region CN|HK` per run. **Do not pin `GLASSBOX_LANGUAGE` in
+  English, both region HK** (iPhone Region read off the device 2026-06-13) —
+  so pass `--language en --region HK` per run. **Do not pin `GLASSBOX_LANGUAGE` in
   `.env`** — it flips the global default for every caller, including the smoke
   suite.

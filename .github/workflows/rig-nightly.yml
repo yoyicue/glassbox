@@ -48,11 +48,12 @@ jobs:
       fail-fast: false        # one device failing must not cancel the others
       matrix:
         device:
-          # The iPhone rig device runs an ENGLISH system (en/CN) — the old
+          # The iPhone rig device runs an ENGLISH system (en/HK — Region read off the
+          # device 2026-06-13: "Hong Kong (China)") — the old
           # zh-Hans assumption was stale, and the committed iPhone floor
-          # (iphone_settings_baseline.json, 2026-06-12) is en/CN; the lane must
+          # (iphone_settings_baseline.json, 2026-06-12) is en/HK; the lane must
           # match it or the comparator's config-identity check refuses to gate.
-          - { name: iphone, model: iphone_17_pro_max, language: en, region: CN }
+          - { name: iphone, model: iphone_17_pro_max, language: en, region: HK }
           - { name: ipad,   model: ipad_mini_7,       language: en, region: HK }
     env:
       GLASSBOX_PICOKVM: "1"
@@ -126,7 +127,7 @@ jobs:
 
       # Each lane gates against ITS OWN device-matched floor — the comparator's
       # config-identity check refuses anything else. iPad: en/HK floor
-      # (reliability_baseline.json). iPhone: en/CN floor
+      # (reliability_baseline.json). iPhone: en/HK floor
       # (iphone_settings_baseline.json, first committed 2026-06-12 — an honest
       # completion-0.0 floor whose drop-gate teeth are action_success /
       # root_pages_coverage / per-round recoveries+strategy_switches and the
