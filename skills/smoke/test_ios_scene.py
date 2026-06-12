@@ -1284,7 +1284,10 @@ def _apple_account_safety_sheet_scene(*, with_close_x: bool = True) -> Scene:
         _el("Current trusted number:", 38, 308, w=248, h=22),
         _el("+1 (555) 010-4477", 38, 336, w=192, h=24),
         _el("Date added:", 38, 382, w=126, h=23),
-        _el("17 January 2023", 37, 412, w=163, h=22),
+        # Synthetic date: the real sheet's "Date added" value is personal
+        # (the privacy guard derives it from raw run ledgers and sweeps the
+        # tree); any date-shaped text exercises the classifier identically.
+        _el("5 March 2021", 37, 412, w=163, h=22),
         _el("It is important to make sure your", 36, 457, w=314, h=23),
         _el("trusted phone number is correct so", 36, 486, w=340, h=22),
         _el("that you always have access to your", 37, 514, w=349, h=24),

@@ -20,11 +20,11 @@
 | 项 | 值 |
 |---|---|
 | `GLASSBOX_PHONE_MODEL` | `iphone_17_pro_max`(**代码内默认**,可不设) |
-| 设备 UI locale | **English / 地区 CN** → 所有跑分用 `--language en --region CN` |
-| Floor fixture | `skills/regression/fixtures/iphone_settings_baseline.json`(en/CN, `ios_settings_clean_hdmi`) |
-| Nightly lane | en/CN,floor 比对 **blocking**(`rig-nightly.yml` matrix) |
+| 设备 UI locale | **English / 地区 HK**(2026-06-13 直读 Settings > General > Language & Region:"Hong Kong (China)",首选语言 English + 简体中文)→ 所有跑分用 `--language en --region HK` |
+| Floor fixture | `skills/regression/fixtures/iphone_settings_baseline.json`(en/HK, `ios_settings_clean_hdmi`;2026-06-13 区域声明修正,见 fixture note) |
+| Nightly lane | en/HK,floor 比对 **blocking**(`rig-nightly.yml` matrix) |
 | 输入 | 仅 AssistiveTouch 指针;滚动 = swipe-fling(过冲 + 落带后 ~25-36px 蠕动);精确滚轮间歇性失效 → 默认关;键盘 = 文本 + 少数组合键 |
-| 已知陷阱 | `make computer-use-success-rate-ios-settings` 不传 `--language` → 落到代码内 zh-Hans 默认,**与物理英文设备错配**;直接用 `run-ios-settings`/`run_full` 加 `--language en --region CN` |
+| 已知陷阱 | `make computer-use-success-rate-ios-settings` 不传 `--language` → 落到代码内 zh-Hans 默认,**与物理英文设备错配**;直接用 `run-ios-settings`/`run_full` 加 `--language en --region HK`。注意 **"WLAN" 标签在 HK 区域同样显示**——它是大中华标记,不能用来区分 CN/HK(2026-06-13 教训:CN 声明就是这么推错的;区域以 Language & Region 页直读为准) |
 
 设备状态(as of 2026-06-12,上 rig 前核验):
 

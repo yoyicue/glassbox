@@ -1,7 +1,7 @@
 """Offline guard for the committed iPhone Settings floor (first device-matched
 iPhone fixture; closes project_health_snapshot item "iPhone floor").
 
-First committed floor: 2026-06-12, iPhone 17 Pro Max (en/CN), n=5, produced by
+First committed floor: 2026-06-12, iPhone 17 Pro Max (en/HK; region corrected 2026-06-13 from the device, rounds historically invoked --region CN — alias-bucket-identical), n=5, produced by
 the post-#99/#100 transition-recognition stack. task_completion 0.0 — an HONEST
 floor, not a success story (precedent: the a11y loop-1 snapshot was committed at
 0.0). The zero is deterministic and forensically attributed: the REQUIRED root
@@ -50,7 +50,7 @@ def test_committed_iphone_floor_is_valid_with_cell_identity():
     assert payload["config"]["task_set"] == "ios_settings"
     assert payload["config"]["phone_model"] == "iphone_17_pro_max"
     assert payload["config"]["language"] == "en"
-    assert payload["config"]["region"] == "CN"
+    assert payload["config"]["region"] == "HK"
     assert payload["config"]["evaluation_cell"] == IOS_SETTINGS_CLEAN_HDMI_EVALUATION_CELL
     assert payload["config"]["environment"] == IOS_SETTINGS_CLEAN_HDMI_ENVIRONMENT
     assert payload["config"]["rounds"] >= 5
