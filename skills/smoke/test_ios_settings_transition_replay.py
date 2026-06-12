@@ -1,6 +1,7 @@
 """Replay the committed iPhone Settings transition corpus against current code.
 
-S1+S2+S3+S4 (+S5a category pins) of docs/design/iphone_settings_transition.md.
+S1+S2+S3+S4 (+S5a category pins, +S5b ladder pin) of
+docs/design/iphone_settings_transition.md.
 For every candidate tap
 group in ``skills/golden/ios_settings_transitions`` this rebuilds the
 expected_state with the **real production builder**
@@ -61,10 +62,21 @@ from types import SimpleNamespace
 
 import pytest
 
+from glassbox.action import (
+    ActionOrchestrator,
+    BoundStrategy,
+    SemanticActionPlan,
+    SemanticActionSpec,
+    StrategySpec,
+)
 from glassbox.action.semantic_plan import ExpectedState, verify_expected_state
-from glassbox.cognition import Box, Scene, UIElement
+from glassbox.cognition import Box, Scene, SceneClassification, UIElement
 from glassbox.config import get_config
+from glassbox.effector import MockEffector
 from glassbox.ios.scene import classify_ios_scene
+from glassbox.obs.artifacts import ArtifactStore
+from glassbox.perception.source import Frame as PerceptionFrame
+from glassbox.phone import Phone
 from skills.regression.ios_settings import core as walkthrough
 from skills.regression.ios_settings import navigation as settings_navigation
 from skills.regression.ios_settings.policy import IPadSettingsPolicy, SettingsPolicy
@@ -157,11 +169,12 @@ def _replay_param(group_id: str):
                 reason="false rejection neither the minting fix (S3) nor the "
                 "comparator fold (S4) earns: the committed after-scene carries "
                 "no usable settings_detail evidence, so the re-mint is None "
-                "and there is nothing to normalize. S5a (landed) now "
-                "classifies this mint_none and backs out instead of "
-                "re-tapping, but that changes runtime recovery, not the "
-                "offline re-mint — flipping needs a rig run (the back-out "
-                "retry capturing a mintable frame) or an S5b/core change",
+                "and there is nothing to normalize. S5a (landed) classifies "
+                "this mint_none and backs out instead of re-tapping, and S5b "
+                "(landed, flag-gated) stops the core ladder's same-target "
+                "re-tap — but both change runtime retry behavior, not the "
+                "offline re-mint. Flipping needs a rig run (the back-out "
+                "retry capturing a mintable frame)",
             )
         )
     return pytest.param(group_id, id=f"{group_id}-{GROUPS[group_id]['target']}", marks=marks)
@@ -474,3 +487,151 @@ def test_page_id_route_consumes_vocab_widened_candidates(en_cn_locale):
         settings_navigation._settings_row_page_id_candidates("Face ID与密码", actions)
     )
     assert "settings/Face ID & Passcode" in phone.page_ids
+
+
+# ── S5b: ladder identity guard replayed on the recorded act-63-65 shape ──────
+#
+# Ledger acts 63-65 (grp_000055/grp_000056 of the repro run) are the core
+# ladder's destructive re-tap: target_tap physically entered Sounds & Haptics
+# (root mint 'settings/root' → recorded after mint 'settings/Silent Mode'),
+# verification false-rejected it, and the ladder ran its second same-target
+# rung (keyboard_focus_activate, recorded wrapper attempt act_000065) ON the
+# entered page. The corpus carries every signal needed to reconstruct that
+# shape — the recorded root/after mints, the recorded expected_state, and the
+# two recorded wrapper attempts — so this drives the REAL orchestrator ladder
+# over scenes pinned to those mints and asserts the S5b guard stops the second
+# rung (flag on) while the flag-off path still reproduces the recorded
+# two-rung shape byte-for-byte.
+
+ROOT_SCENE_RAW = json.loads((CORPUS_DIR / "root_scene.json").read_text())
+
+
+class _LadderSource:
+    resolution = (32, 32)
+
+    def __init__(self):
+        self.count = 0
+
+    def snapshot(self):
+        import numpy as np
+
+        value = min(self.count, 255)
+        self.count += 1
+        return PerceptionFrame(img=np.full((32, 32, 3), value, dtype=np.uint8), ts=float(self.count))
+
+
+class _MarkerOCR:
+    def __init__(self, markers: list[str]):
+        self.markers = markers
+        self.index = 0
+
+    def recognize(self, image):
+        del image
+        marker = self.markers[min(self.index, len(self.markers) - 1)]
+        self.index += 1
+        return [
+            UIElement(type="text", box=Box(x=1, y=1, w=20, h=3), text=marker, confidence=0.9, element_id=0)
+        ]
+
+
+def _run_recorded_tap_ladder(tmp_path, *, guard_on: bool):
+    group = GROUPS["grp_000056"]
+    before_page = str(ROOT_SCENE_RAW["page_id"])
+    after_page = str(group["after_scene"]["page_id"])
+    page_map = {"BEFORE": before_page, "AFTER": after_page}
+
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store, tap_retry_identity_guard=guard_on)
+
+    def mint_recorded_page(scene, viewport_size=None, prior=None):
+        del viewport_size, prior
+        for element in scene.elements:
+            page_id = page_map.get(element.text or "")
+            if page_id:
+                return SceneClassification(page_id=page_id, source="platform", confidence=0.9)
+        return None
+
+    phone = Phone(
+        source=_LadderSource(),
+        # 2 BEFORE perceives = before_requested + before_command of the first
+        # rung; from its after-capture onward the run observes the entered page.
+        ocr=_MarkerOCR(["BEFORE"] * 2 + ["AFTER"] * 9),
+        effector=MockEffector(_connected=True),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+        scene_classifiers=[mint_recorded_page],
+    )
+
+    rungs: list[str] = []
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"), StrategySpec("keyboard_focus_activate")),
+        expected_state=ExpectedState.from_dict(group["expected_state"]),
+        recovery=None,
+        idempotent=True,
+    )
+    plan = SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(
+                spec.strategies[0],
+                lambda: rungs.append("target_tap") or phone.effector.home(),
+            ),
+            BoundStrategy(
+                spec.strategies[1],
+                lambda: rungs.append("keyboard_focus_activate") or phone.effector.home(),
+            ),
+        ],
+    )
+    result = phone._execute_action("tap", plan)
+    orchestrator.close()
+    audit = [
+        json.loads(line)
+        for line in (store.run_dir / "audit.jsonl").read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+    return result, rungs, audit, before_page, after_page
+
+
+@pytest.mark.smoke
+def test_s5b_corpus_signals_pin_the_recorded_destructive_shape():
+    """The reconstruction's inputs are committed corpus facts, not hand-typed:
+    the run rejected the tap (recorded_verdict) and ran exactly two same-target
+    rungs (the recorded wrapper attempts act_000063 → act_000065)."""
+    group = GROUPS["grp_000056"]
+    assert group["wrapper_group_id"] == "grp_000055"
+    assert group["recorded_verdict"] == "failed"
+    attempts = group["notes"]["wrapper_attempts"]
+    assert [attempt["attempt_id"] for attempt in attempts] == ["act_000063", "act_000065"]
+    assert [attempt["status"] for attempt in attempts] == ["failed", "failed"]
+    # The identity signals the guard consumes, as recorded by the run.
+    assert ROOT_SCENE_RAW["page_id"] == "settings/root"
+    assert group["after_scene"]["page_id"] == "settings/Silent Mode"
+
+
+@pytest.mark.smoke
+def test_s5b_identity_guard_blocks_recorded_act_63_65_retap(tmp_path):
+    """Flag on: replaying the recorded act-63-65 signals, the guard stops the
+    ladder after the first rung — the recorded destructive second tap
+    (act_000065's keyboard_focus_activate on the entered page) never runs and
+    the plan ends semantic unknown instead of false-failed."""
+    result, rungs, audit, before_page, after_page = _run_recorded_tap_ladder(
+        tmp_path, guard_on=True
+    )
+    assert rungs == ["target_tap"]
+    assert result.semantic_status == "unknown"
+    blocked = [e for e in audit if e["type"] == "semantic_plan.identity_guard.blocked"]
+    assert len(blocked) == 1
+    assert blocked[0]["payload"]["before_page_id"] == before_page
+    assert blocked[0]["payload"]["after_page_id"] == after_page
+
+
+@pytest.mark.smoke
+def test_s5b_flag_off_reproduces_recorded_two_rung_shape(tmp_path):
+    """Flag off (default): the replay reproduces exactly the recorded shape —
+    both same-target rungs run and the plan ends failed, pinning that the
+    default path stays byte-identical to main until the rig A/B flips it."""
+    result, rungs, audit, _before, _after = _run_recorded_tap_ladder(tmp_path, guard_on=False)
+    assert rungs == ["target_tap", "keyboard_focus_activate"]
+    assert result.semantic_status == "failed"
+    assert not any(e["type"] == "semantic_plan.identity_guard.blocked" for e in audit)

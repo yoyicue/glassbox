@@ -482,6 +482,19 @@ class AgentConfig(BaseSettings):
     ops (tap/back/...) always stay at 0. Validate on-rig (e.g. that a retried
     scroll does not over-scroll) before raising."""
 
+    tap_retry_identity_guard: bool = False
+    """S5b (docs/design/iphone_settings_transition.md §1 C4 / §2): edge on the
+    tap strategy ladder — when a tap's verification comes back failed/unknown
+    but the before/after minted page identity CHANGED (fold-tolerant compare,
+    same as the S4 comparator), the remaining same-target rungs are forbidden
+    and the plan stops with semantic unknown, instead of re-actuating stale
+    coordinates on the page we just entered (live repro: ledger acts
+    63-65/74-76/96-98 of run_2026_06_12_06_04_38_737160 — all four such
+    rejections were false). Platform-neutral logic; default off so the default
+    path (zh iPhone lane + committed iPad floor) stays byte-identical. Env
+    GLASSBOX_TAP_RETRY_IDENTITY_GUARD. Flip-to-default-on is gated on rig A/B
+    evidence (the same bar the P2 ladder itself cleared)."""
+
     whitebox_hint_selection: bool = False
     """CUQ-2.10: when OCR cannot find a selection target, resolve it by an
     element's whitebox identity (accessibility_id / asset_match / deep_link /

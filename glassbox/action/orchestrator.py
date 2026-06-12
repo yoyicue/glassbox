@@ -20,6 +20,7 @@ from glassbox.action.seeds import DEFAULT_RECOVERY_SEED, recovery_hint
 from glassbox.action.semantic_plan import (
     ExpectedState,
     SemanticActionPlan,
+    page_identity_changed,
     semantic_transition_edge,
     verify_expected_state,
 )
@@ -61,6 +62,12 @@ class AttemptExecution:
     command_exception: BaseException | None = None
     landing_observation: dict[str, Any] | None = None
     attempt_attribution: dict[str, Any] | None = None
+    # S5b (docs/design/iphone_settings_transition.md): the minted page_ids of
+    # the attempt's before_command / last after scene, in memory only (never
+    # serialized) so the strategy-ladder advance can see whether the action
+    # physically moved page identity even though verification said failed.
+    before_page_id: str | None = None
+    after_page_id: str | None = None
 
 
 @dataclass
@@ -249,6 +256,7 @@ class ActionOrchestrator:
         max_stuck_recoveries: int = 3,
         idempotent_retry_budget: int = 0,
         recover_then_retry: bool = False,
+        tap_retry_identity_guard: bool = False,
     ):
         if observation_producer_mode not in OBSERVATION_PRODUCER_MODES:
             expected = ", ".join(sorted(OBSERVATION_PRODUCER_MODES))
@@ -272,6 +280,14 @@ class ActionOrchestrator:
         # action once from the recovered state so recovery alters the CURRENT
         # outcome (not only the next action). Default off (byte-identical).
         self._recover_then_retry = bool(recover_then_retry)
+        # S5b (docs/design/iphone_settings_transition.md §1 C4): opt-in edge on
+        # the tap strategy ladder — when verification fails/unknowns but the
+        # before/after page identity CHANGED, the next same-target rung would
+        # actuate stale coordinates on a different page (ledger acts
+        # 63-65/74-76/96-98 of run_2026_06_12_06_04_38_737160), so the ladder
+        # stops with semantic unknown instead. Default off (byte-identical);
+        # flip-to-default-on is gated on rig A/B evidence.
+        self._tap_retry_identity_guard = bool(tap_retry_identity_guard)
         self._in_recover_retry = False
         self.semantic_fail_fast = semantic_fail_fast
         self.observation_producer_mode = observation_producer_mode
@@ -912,6 +928,74 @@ class ActionOrchestrator:
         terminal_reason = attempt.semantic.disqualifying_state or attempt.semantic.reason
         return SemanticPlanAdvance(strategy_index, attempt_index, recovery_used, False, terminal_reason, stop=True)
 
+    def _identity_guard_stop(
+        self,
+        *,
+        spec,
+        attempt: AttemptExecution,
+        strategy,
+        status: str,
+        strategy_index: int,
+        attempt_index: int,
+        recovery_used: bool,
+        group_id: str,
+    ) -> SemanticPlanAdvance | None:
+        """S5b edge (docs/design/iphone_settings_transition.md §1 C4 / §2):
+        forbid same-target re-actuation once the page identity changed.
+
+        A tap whose verification came back failed/unknown but whose
+        before→after minted page identity CHANGED has physically navigated
+        somewhere: the remaining tap rungs (keyboard_focus_activate, a
+        post-recovery rung-0 re-run) would re-actuate the same target on a
+        DIFFERENT page — arbitrary detail-page content (live repro: ledger
+        acts 63-65/74-76/96-98 of run_2026_06_12_06_04_38_737160). The tap
+        ladder has no non-destructive rung to skip to, so the plan stops with
+        semantic unknown ("we left the page; whether it was the wanted page is
+        unverified" — the run's 4 such rejections were all false). This is an
+        edge on the existing ladder, not a new rung; flag-gated
+        (GLASSBOX_TAP_RETRY_IDENTITY_GUARD, default off → byte-identical)."""
+        if not self._tap_retry_identity_guard or spec.op != "tap":
+            return None
+        if not page_identity_changed(attempt.before_page_id, attempt.after_page_id):
+            return None
+        reason = (
+            "tap retry identity guard: page identity changed "
+            f"({attempt.before_page_id!r} -> {attempt.after_page_id!r}); "
+            "same-target re-tap forbidden"
+        )
+        self.store.audit.append(
+            "semantic_plan.identity_guard.blocked",
+            attempt_id=attempt.attempt_id,
+            attempt_group_id=group_id,
+            payload={
+                "strategy": strategy.spec.name,
+                "status": status,
+                "before_page_id": attempt.before_page_id,
+                "after_page_id": attempt.after_page_id,
+                "verifier_reason": attempt.semantic.reason,
+            },
+        )
+        attempt.semantic = SemanticOutcome(
+            status="unknown",
+            verifier="tap_retry_identity_guard",
+            reason=f"{reason} (verifier said: {attempt.semantic.reason})",
+            confidence=attempt.semantic.confidence,
+            matched_evidence=list(attempt.semantic.matched_evidence),
+            missing_evidence=list(attempt.semantic.missing_evidence),
+            matched_frame_id=attempt.semantic.matched_frame_id,
+            matched_scene_id=attempt.semantic.matched_scene_id,
+            deterministic=True,
+            retry_allowed=False,
+        )
+        return SemanticPlanAdvance(
+            strategy_index,
+            attempt_index + 1,
+            recovery_used,
+            False,
+            reason,
+            stop=True,
+        )
+
     def _advance_after_semantic_attempt(
         self,
         phone,
@@ -954,6 +1038,18 @@ class ActionOrchestrator:
             )
             if retry is not None:
                 return retry
+        guard = self._identity_guard_stop(
+            spec=spec,
+            attempt=attempt,
+            strategy=strategy,
+            status=status,
+            strategy_index=strategy_index,
+            attempt_index=attempt_index,
+            recovery_used=recovery_used,
+            group_id=group_id,
+        )
+        if guard is not None:
+            return guard
         next_strategy_index = strategy_index + 1
         self._audit_semantic_strategy_failed(
             group_id=group_id,
@@ -2472,6 +2568,8 @@ class ActionOrchestrator:
             command_exception=command_exception,
             landing_observation=landing_observation,
             attempt_attribution=attempt_attribution,
+            before_page_id=self._observation_page_id(before_command),
+            after_page_id=self._observation_page_id(after[-1]) if after else None,
         )
 
     def _record_approval(
@@ -3631,6 +3729,13 @@ class ActionOrchestrator:
             "screenshot": frame.file if frame else None,
             "scene": scene.file if scene else None,
         }
+
+    @staticmethod
+    def _observation_page_id(item: Observation | None) -> str | None:
+        """Minted page_id of an observation's raw scene (S5b identity signal)."""
+        if item is None:
+            return None
+        return str(getattr(item[3], "page_id", "") or "") or None
 
     @staticmethod
     def _after_mode(strategy: str) -> str:

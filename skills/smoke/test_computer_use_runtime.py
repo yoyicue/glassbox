@@ -22,7 +22,7 @@ from glassbox.action import (
     recover_to_home_then_renavigate,
 )
 from glassbox.action import recovery as action_recovery
-from glassbox.cognition import Box, UIElement
+from glassbox.cognition import Box, SceneClassification, UIElement
 from glassbox.effector import ActionResult, MockEffector
 from glassbox.ios.springboard import IOSSpringboardProvider
 from glassbox.obs.artifacts import ArtifactStore
@@ -2757,3 +2757,151 @@ def test_recover_then_retry_off_does_not_reattempt(tmp_path):
     orchestrator.close()
 
     assert calls["n"] == 1  # no retry on the default path
+
+
+# ── S5b: tap retry identity guard (docs/design/iphone_settings_transition.md) ─
+#
+# When a tap's verification comes back failed/unknown but the before/after
+# minted page identity CHANGED, the action physically navigated somewhere: the
+# ladder's remaining same-target rungs would re-actuate stale coordinates on a
+# DIFFERENT page (live repro: ledger acts 63-65/74-76/96-98 of
+# run_2026_06_12_06_04_38_737160). With GLASSBOX_TAP_RETRY_IDENTITY_GUARD on,
+# that advance is forbidden and the plan stops with semantic unknown. Flag off
+# (default) is pinned byte-identical to main below.
+
+
+def _make_identity_guard_phone(tmp_path, text_frames, page_map, *, guard, platform="ios"):
+    """Mock Phone whose scene classifier mints page_id from an OCR marker text."""
+    store = ArtifactStore(tmp_path, run_id="run")
+    orchestrator = ActionOrchestrator(store, platform=platform, tap_retry_identity_guard=guard)
+
+    def mint_page_from_marker(scene, viewport_size=None, prior=None):
+        del viewport_size, prior
+        for element in scene.elements:
+            page_id = page_map.get(element.text or "")
+            if page_id:
+                return SceneClassification(page_id=page_id, source="platform", confidence=0.9)
+        return None
+
+    phone = Phone(
+        source=_Source(),
+        ocr=_OCR(text_frames),
+        effector=MockEffector(_connected=True),
+        action_orchestrator=orchestrator,
+        action_fail_fast=False,
+        scene_classifiers=[mint_page_from_marker],
+        springboard_provider=IOSSpringboardProvider(),
+    )
+    return phone, orchestrator, store
+
+
+def _identity_guard_tap_plan(phone, rungs):
+    """A tap ladder shaped like production's default (two same-target rungs),
+    expecting a page the run never reaches, so every verification fails."""
+    spec = SemanticActionSpec(
+        op="tap",
+        strategies=(StrategySpec("target_tap"), StrategySpec("keyboard_focus_activate")),
+        expected_state=ExpectedState("page_id", {"any_of": ["settings/Sounds"]}),
+        recovery=None,
+        idempotent=True,
+    )
+    return SemanticActionPlan(
+        spec,
+        [
+            BoundStrategy(
+                spec.strategies[0],
+                lambda: rungs.append("target_tap") or phone.effector.home(),
+            ),
+            BoundStrategy(
+                spec.strategies[1],
+                lambda: rungs.append("keyboard_focus_activate") or phone.effector.home(),
+            ),
+        ],
+    )
+
+
+_IDENTITY_GUARD_PAGE_MAP = {"ROOT": "settings/root", "DETAIL": "settings/Silent Mode"}
+# 2 ROOT perceives cover before_requested + before_command of the first
+# attempt; from the after-capture onward every perceive observes the entered
+# detail page (the page-identity change the guard must see).
+_IDENTITY_CHANGED_FRAMES = [["ROOT"]] * 2 + [["DETAIL"]] * 9
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("platform", ["ios", "ipados"])
+def test_tap_retry_identity_guard_blocks_same_target_retap_when_page_changed(tmp_path, platform):
+    """Flag on + identity changed: the same-target re-tap branch is NOT taken —
+    the plan stops with semantic unknown before the second rung ever actuates.
+    Parametrized over both platforms: the guard is platform-neutral logic (an
+    identity-changed re-tap is just as wrong on iPad)."""
+    phone, orchestrator, store = _make_identity_guard_phone(
+        tmp_path, _IDENTITY_CHANGED_FRAMES, _IDENTITY_GUARD_PAGE_MAP,
+        guard=True, platform=platform,
+    )
+    rungs: list[str] = []
+
+    result = phone._execute_action("tap", _identity_guard_tap_plan(phone, rungs))
+    orchestrator.close()
+
+    assert rungs == ["target_tap"]  # second rung forbidden
+    assert result.semantic_status == "unknown"
+    assert result.semantic_verifier == "tap_retry_identity_guard"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["command"]["strategy"] for action in actions] == ["target_tap"]
+    # The per-attempt ledger keeps the raw verifier verdict for forensics; only
+    # the plan-level outcome is downgraded to unknown.
+    assert actions[0]["semantic"]["status"] == "failed"
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    blocked = [e for e in audit if e["type"] == "semantic_plan.identity_guard.blocked"]
+    assert len(blocked) == 1
+    assert blocked[0]["payload"]["before_page_id"] == "settings/root"
+    assert blocked[0]["payload"]["after_page_id"] == "settings/Silent Mode"
+    assert not any(e["type"] == "semantic_plan.strategy_failed" for e in audit)
+    groups = _read_jsonl(store.run_dir / "attempt_groups.jsonl")
+    assert groups[-1]["group_status"] == "unknown"
+
+
+@pytest.mark.smoke
+def test_tap_retry_identity_guard_allows_retap_when_page_unchanged(tmp_path):
+    """Flag on + identity UNCHANGED (the tap did not navigate): the legitimate
+    same-page retry is still allowed — the ladder advances exactly as today."""
+    phone, orchestrator, store = _make_identity_guard_phone(
+        tmp_path, [["ROOT"]] * 10, _IDENTITY_GUARD_PAGE_MAP, guard=True,
+    )
+    rungs: list[str] = []
+
+    result = phone._execute_action("tap", _identity_guard_tap_plan(phone, rungs))
+    orchestrator.close()
+
+    assert rungs == ["target_tap", "keyboard_focus_activate"]
+    assert result.semantic_status == "failed"
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert not any(e["type"] == "semantic_plan.identity_guard.blocked" for e in audit)
+    assert sum(e["type"] == "semantic_plan.strategy_failed" for e in audit) == 2
+
+
+@pytest.mark.smoke
+def test_tap_retry_identity_guard_off_pins_main_retap_behavior(tmp_path):
+    """Flag off (default): identity-changed verification failure still advances
+    to the second same-target rung — byte-identical to main. This is the pin
+    that keeps the zh lane and the committed iPad floor stable until the rig
+    A/B earns the default-on flip."""
+    phone, orchestrator, store = _make_identity_guard_phone(
+        tmp_path, _IDENTITY_CHANGED_FRAMES, _IDENTITY_GUARD_PAGE_MAP, guard=False,
+    )
+    assert orchestrator._tap_retry_identity_guard is False  # ctor default
+    rungs: list[str] = []
+
+    result = phone._execute_action("tap", _identity_guard_tap_plan(phone, rungs))
+    orchestrator.close()
+
+    assert rungs == ["target_tap", "keyboard_focus_activate"]
+    assert result.semantic_status == "failed"
+    actions = _read_jsonl(store.run_dir / "actions.jsonl")
+    assert [action["command"]["strategy"] for action in actions] == [
+        "target_tap",
+        "keyboard_focus_activate",
+    ]
+    audit = _read_jsonl(store.run_dir / "audit.jsonl")
+    assert not any(e["type"] == "semantic_plan.identity_guard.blocked" for e in audit)
+    assert sum(e["type"] == "semantic_plan.strategy_failed" for e in audit) == 2
