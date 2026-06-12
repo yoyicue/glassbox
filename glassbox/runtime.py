@@ -651,6 +651,7 @@ def build_phone(
             ),
             idempotent_retry_budget=cfg.idempotent_retry_budget,
             recover_then_retry=cfg.recover_then_retry,
+            tap_retry_identity_guard=cfg.tap_retry_identity_guard,
         )
 
     platform = DEFAULT_PLATFORM_REGISTRY.create(

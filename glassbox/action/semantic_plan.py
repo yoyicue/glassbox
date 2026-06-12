@@ -533,6 +533,22 @@ def _fold_matched_page_id(actual: str, wanted: tuple[str, ...]) -> str | None:
     return None
 
 
+def page_identity_changed(before_page_id: Any, after_page_id: Any) -> bool:
+    """True only when both sides carry a foldable page identity and they differ.
+
+    S5b (docs/design/iphone_settings_transition.md §2): the tap retry ladder
+    must not re-actuate a same-page rung after the action already moved us to a
+    different page. This is the identity comparator for that edge — it reuses
+    S4's fold (``_fold_page_id``: namespace equivalence + casefold + strip
+    non-alphanumerics) so spelling variants of the SAME page never count as a
+    page change. A missing/unmintable identity on either side returns False:
+    the guard only fires on positive evidence that the page changed.
+    """
+    before_fold = _fold_page_id(str(before_page_id or ""))
+    after_fold = _fold_page_id(str(after_page_id or ""))
+    return bool(before_fold) and bool(after_fold) and before_fold != after_fold
+
+
 def _scene_texts(scene: Any) -> list[str]:
     return [
         str(getattr(element, "text", "") or "")
@@ -823,5 +839,6 @@ __all__ = [
     "StrategySpec",
     "default_semantic_action_plan",
     "default_semantic_action_spec",
+    "page_identity_changed",
     "verify_expected_state",
 ]
