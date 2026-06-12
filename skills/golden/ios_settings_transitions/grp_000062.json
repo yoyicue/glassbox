@@ -1,0 +1,307 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000062",
+ "wrapper_group_id": "grp_000061",
+ "attempt_id": "act_000072",
+ "target": "屏幕使用时间",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/屏幕使用时间",
+    "settings/Screen Time",
+    "com.apple.settings.screen-time"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: settings/Screen Time",
+ "verified_live": true,
+ "verified_via": "page_id",
+ "after_scene": {
+  "scene_id": "scn_000399",
+  "page_id": "settings/Screen Time",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:37",
+    "box": {
+     "x": 64,
+     "y": 26,
+     "w": 44,
+     "h": 22
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": "iPhone",
+    "box": {
+     "x": 17,
+     "y": 63,
+     "w": 81,
+     "h": 108
+    },
+    "type": "button"
+   },
+   {
+    "text": "Screen Time",
+    "box": {
+     "x": 172,
+     "y": 80,
+     "w": 104,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "Daily Average",
+    "box": {
+     "x": 40,
+     "y": 196,
+     "w": 108,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "1h 30m",
+    "box": {
+     "x": 40,
+     "y": 221,
+     "w": 115,
+     "h": 30
+    },
+    "type": "button"
+   },
+   {
+    "text": "8h",
+    "box": {
+     "x": 384,
+     "y": 266,
+     "w": 18,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "4h",
+    "box": {
+     "x": 386,
+     "y": 312,
+     "w": 16,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "avg",
+    "box": {
+     "x": 380,
+     "y": 342,
+     "w": 28,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "See All App & Website Activity",
+    "box": {
+     "x": 40,
+     "y": 420,
+     "w": 236,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 390,
+     "y": 416,
+     "w": 23,
+     "h": 29
+    },
+    "type": "image"
+   },
+   {
+    "text": "Updated today at 6:37AM",
+    "box": {
+     "x": 40,
+     "y": 464,
+     "w": 164,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Limit Usage",
+    "box": {
+     "x": 39,
+     "y": 499,
+     "w": 99,
+     "h": 24
+    },
+    "type": "text"
+   },
+   {
+    "text": "Downtime",
+    "box": {
+     "x": 86,
+     "y": 536,
+     "w": 78,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Schedule time away from the screen",
+    "box": {
+     "x": 86,
+     "y": 542,
+     "w": 329,
+     "h": 34
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "App Limits",
+    "box": {
+     "x": 84,
+     "y": 600,
+     "w": 84,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Set time limits for apps",
+    "box": {
+     "x": 86,
+     "y": 622,
+     "w": 162,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Always Allowed",
+    "box": {
+     "x": 84,
+     "y": 662,
+     "w": 122,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Choose apps to allow at all times",
+    "box": {
+     "x": 86,
+     "y": 686,
+     "w": 228,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Screen Distance",
+    "box": {
+     "x": 86,
+     "y": 726,
+     "w": 128,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 383,
+     "y": 726,
+     "w": 36,
+     "h": 40
+    },
+    "type": "image"
+   },
+   {
+    "text": "Reduce eye strain",
+    "box": {
+     "x": 86,
+     "y": 750,
+     "w": 126,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Communication",
+    "box": {
+     "x": 40,
+     "y": 808,
+     "w": 130,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Communication Limits",
+    "box": {
+     "x": 84,
+     "y": 846,
+     "w": 174,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Set limits for calling and messaging",
+    "box": {
+     "x": 86,
+     "y": 851,
+     "w": 325,
+     "h": 33
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "Communication Safety",
+    "box": {
+     "x": 84,
+     "y": 908,
+     "w": 178,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 390,
+     "y": 914,
+     "w": 23,
+     "h": 27
+    },
+    "type": "image"
+   },
+   {
+    "text": "Protect from sensitive content",
+    "box": {
+     "x": 86,
+     "y": 932,
+     "w": 212,
+     "h": 12
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000071",
+    "status": "succeeded",
+    "reason": "page_id matched: settings/Screen Time"
+   }
+  ]
+ }
+}

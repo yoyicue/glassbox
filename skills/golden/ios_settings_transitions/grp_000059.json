@@ -1,0 +1,302 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000059",
+ "wrapper_group_id": "grp_000058",
+ "attempt_id": "act_000068",
+ "target": "专注模式",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/专注模式",
+    "settings/Focus",
+    "com.apple.settings.focus"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: com.apple.settings.focus after VLM escalation",
+ "verified_live": true,
+ "verified_via": "vlm_escalation",
+ "after_scene": {
+  "scene_id": "scn_000374",
+  "page_id": "settings/Do Not Disturb",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:36",
+    "box": {
+     "x": 62,
+     "y": 30,
+     "w": 44,
+     "h": 18
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 0,
+     "y": 63,
+     "w": 136,
+     "h": 64
+    },
+    "type": "image"
+   },
+   {
+    "text": "<",
+    "box": {
+     "x": 34,
+     "y": 82,
+     "w": 14,
+     "h": 18
+    },
+    "type": "nav_back"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 122,
+     "y": 64,
+     "w": 200,
+     "h": 57
+    },
+    "type": "image"
+   },
+   {
+    "text": "Focus",
+    "box": {
+     "x": 198,
+     "y": 83,
+     "w": 52,
+     "h": 17
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 379,
+     "y": 65,
+     "w": 49,
+     "h": 49
+    },
+    "type": "image"
+   },
+   {
+    "text": "+",
+    "box": {
+     "x": 386,
+     "y": 68,
+     "w": 40,
+     "h": 44
+    },
+    "type": "text"
+   },
+   {
+    "text": "Do Not Disturb",
+    "box": {
+     "x": 80,
+     "y": 160,
+     "w": 118,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 387,
+     "y": 150,
+     "w": 30,
+     "h": 34
+    },
+    "type": "image"
+   },
+   {
+    "text": "Personal",
+    "box": {
+     "x": 80,
+     "y": 214,
+     "w": 72,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Set Up >",
+    "box": {
+     "x": 334,
+     "y": 214,
+     "w": 74,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": "Sleep",
+    "box": {
+     "x": 80,
+     "y": 268,
+     "w": 46,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "Set Up",
+    "box": {
+     "x": 334,
+     "y": 268,
+     "w": 54,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Work",
+    "box": {
+     "x": 31,
+     "y": 307,
+     "w": 382,
+     "h": 46
+    },
+    "type": "switch"
+   },
+   {
+    "text": "Set Up >",
+    "box": {
+     "x": 334,
+     "y": 322,
+     "w": 74,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": "Focus lets you customise your devices and silence calls",
+    "box": {
+     "x": 40,
+     "y": 366,
+     "w": 344,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "and notifications. Turn it on and off in Control Centre.",
+    "box": {
+     "x": 40,
+     "y": 382,
+     "w": 332,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Share Across Devices",
+    "box": {
+     "x": 38,
+     "y": 440,
+     "w": 172,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 340,
+     "y": 430,
+     "w": 71,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "Eocus is shared across your devices, and turning one on",
+    "box": {
+     "x": 40,
+     "y": 484,
+     "w": 348,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "for this device will turn it on for all of them.",
+    "box": {
+     "x": 40,
+     "y": 500,
+     "w": 266,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Focus Status",
+    "box": {
+     "x": 40,
+     "y": 560,
+     "w": 102,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 357,
+     "y": 549,
+     "w": 58,
+     "h": 34
+    },
+    "type": "image"
+   },
+   {
+    "text": "On >",
+    "box": {
+     "x": 366,
+     "y": 560,
+     "w": 42,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "When you give an app permission, it can share that you",
+    "box": {
+     "x": 40,
+     "y": 602,
+     "w": 342,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "have notifications silenced when using Focus.",
+    "box": {
+     "x": 40,
+     "y": 618,
+     "w": 282,
+     "h": 16
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000067",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/专注模式', 'settings/Focus', 'com.apple.settings.focus'), got 'ios_settings_focus' after VLM escalation"
+   },
+   {
+    "attempt_id": "act_000069",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/专注模式', 'settings/Focus', 'com.apple.settings.focus'), got 'settings/Do Not Disturb'"
+   }
+  ]
+ }
+}

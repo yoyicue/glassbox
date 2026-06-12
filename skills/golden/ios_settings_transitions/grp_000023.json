@@ -1,0 +1,399 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000023",
+ "wrapper_group_id": "grp_000022",
+ "attempt_id": "act_000027",
+ "target": "无线局域网",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/无线局域网",
+    "settings/Wi-Fi",
+    "com.apple.settings.wi-fi",
+    "settings/WLAN",
+    "com.apple.settings.wlan"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: settings/WLAN",
+ "verified_live": true,
+ "verified_via": "page_id",
+ "after_scene": {
+  "scene_id": "scn_000148",
+  "page_id": "settings/WLAN",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:23",
+    "box": {
+     "x": 64,
+     "y": 26,
+     "w": 44,
+     "h": 22
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 17,
+     "y": 63,
+     "w": 51,
+     "h": 53
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 359,
+     "y": 64,
+     "w": 70,
+     "h": 48
+    },
+    "type": "image"
+   },
+   {
+    "text": "Edit",
+    "box": {
+     "x": 378,
+     "y": 80,
+     "w": 34,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "WLAN",
+    "box": {
+     "x": 33,
+     "y": 153,
+     "w": 78,
+     "h": 103
+    },
+    "type": "button"
+   },
+   {
+    "text": "Connect to WLAN, view available networks,",
+    "box": {
+     "x": 40,
+     "y": 262,
+     "w": 336,
+     "h": 24
+    },
+    "type": "text"
+   },
+   {
+    "text": "and manage settings for joining networks and",
+    "box": {
+     "x": 40,
+     "y": 288,
+     "w": 352,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "nearby hotspots. Learn more...",
+    "box": {
+     "x": 40,
+     "y": 310,
+     "w": 238,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 173,
+     "y": 306,
+     "w": 106,
+     "h": 21
+    },
+    "type": "image"
+   },
+   {
+    "text": "WLAN",
+    "box": {
+     "x": 60,
+     "y": 362,
+     "w": 52,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 334,
+     "y": 352,
+     "w": 75,
+     "h": 39
+    },
+    "type": "image"
+   },
+   {
+    "text": "SCRUBBED_SSID_1",
+    "box": {
+     "x": 36,
+     "y": 413,
+     "w": 74,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 329,
+     "y": 407,
+     "w": 24,
+     "h": 29
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 353,
+     "y": 409,
+     "w": 23,
+     "h": 26
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 378,
+     "y": 409,
+     "w": 31,
+     "h": 29
+    },
+    "type": "image"
+   },
+   {
+    "text": "My Networks",
+    "box": {
+     "x": 38,
+     "y": 480,
+     "w": 110,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": "SCRUBBED_SSID_2",
+    "box": {
+     "x": 58,
+     "y": 528,
+     "w": 90,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 329,
+     "y": 522,
+     "w": 23,
+     "h": 25
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 353,
+     "y": 522,
+     "w": 24,
+     "h": 25
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 379,
+     "y": 517,
+     "w": 32,
+     "h": 45
+    },
+    "type": "image"
+   },
+   {
+    "text": "Other Networks",
+    "box": {
+     "x": 40,
+     "y": 594,
+     "w": 130,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "SCRUBBED_SSID_3",
+    "box": {
+     "x": 60,
+     "y": 642,
+     "w": 122,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 378,
+     "y": 634,
+     "w": 31,
+     "h": 33
+    },
+    "type": "image"
+   },
+   {
+    "text": "SCRUBBED_SSID_4",
+    "box": {
+     "x": 60,
+     "y": 690,
+     "w": 292,
+     "h": 26
+    },
+    "type": "list_item"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 377,
+     "y": 687,
+     "w": 34,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "SCRUBBED_SSID_5",
+    "box": {
+     "x": 58,
+     "y": 750,
+     "w": 90,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 330,
+     "y": 744,
+     "w": 22,
+     "h": 23
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 377,
+     "y": 741,
+     "w": 33,
+     "h": 35
+    },
+    "type": "image"
+   },
+   {
+    "text": "SCRUBBED_SSID_6",
+    "box": {
+     "x": 58,
+     "y": 804,
+     "w": 70,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 330,
+     "y": 798,
+     "w": 22,
+     "h": 26
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 377,
+     "y": 795,
+     "w": 33,
+     "h": 35
+    },
+    "type": "image"
+   },
+   {
+    "text": "SCRUBBED_SSID_7",
+    "box": {
+     "x": 58,
+     "y": 858,
+     "w": 162,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 378,
+     "y": 851,
+     "w": 31,
+     "h": 29
+    },
+    "type": "image"
+   },
+   {
+    "text": "SCRUBBED_SSID_8",
+    "box": {
+     "x": 60,
+     "y": 912,
+     "w": 84,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 330,
+     "y": 907,
+     "w": 21,
+     "h": 23
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 378,
+     "y": 904,
+     "w": 32,
+     "h": 33
+    },
+    "type": "image"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000026",
+    "status": "succeeded",
+    "reason": "page_id matched: settings/WLAN"
+   }
+  ]
+ }
+}

@@ -1,0 +1,337 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000075",
+ "wrapper_group_id": "grp_000074",
+ "attempt_id": "act_000087",
+ "target": "隐私与安全性",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/隐私与安全性",
+    "settings/Privacy & Security",
+    "com.apple.settings.privacy-security"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: settings/Privacy & Security",
+ "verified_live": true,
+ "verified_via": "page_id",
+ "after_scene": {
+  "scene_id": "scn_000480",
+  "page_id": "settings/Privacy & Security",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:40",
+    "box": {
+     "x": 62,
+     "y": 28,
+     "w": 44,
+     "h": 20
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 17,
+     "y": 60,
+     "w": 53,
+     "h": 70
+    },
+    "type": "image"
+   },
+   {
+    "text": "<",
+    "box": {
+     "x": 34,
+     "y": 80,
+     "w": 16,
+     "h": 20
+    },
+    "type": "nav_back"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 34,
+     "y": 171,
+     "w": 75,
+     "h": 70
+    },
+    "type": "image"
+   },
+   {
+    "text": "Privacy & Security",
+    "box": {
+     "x": 40,
+     "y": 250,
+     "w": 192,
+     "h": 28
+    },
+    "type": "button"
+   },
+   {
+    "text": "Control which apps can access your data,",
+    "box": {
+     "x": 42,
+     "y": 279,
+     "w": 324,
+     "h": 23
+    },
+    "type": "text"
+   },
+   {
+    "text": "location, camera and microphone, and manage",
+    "box": {
+     "x": 40,
+     "y": 306,
+     "w": 364,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "safety protections. Learn more...",
+    "box": {
+     "x": 40,
+     "y": 328,
+     "w": 254,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 187,
+     "y": 324,
+     "w": 106,
+     "h": 21
+    },
+    "type": "image"
+   },
+   {
+    "text": "Location Services",
+    "box": {
+     "x": 82,
+     "y": 414,
+     "w": 138,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 387,
+     "y": 415,
+     "w": 26,
+     "h": 31
+    },
+    "type": "image"
+   },
+   {
+    "text": "4 while using",
+    "box": {
+     "x": 80,
+     "y": 436,
+     "w": 78,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Tracking",
+    "box": {
+     "x": 80,
+     "y": 483,
+     "w": 70,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 208,
+     "y": 462,
+     "w": 28,
+     "h": 27
+    },
+    "type": "image"
+   },
+   {
+    "text": "1 >",
+    "box": {
+     "x": 376,
+     "y": 484,
+     "w": 30,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 390,
+     "y": 477,
+     "w": 21,
+     "h": 27
+    },
+    "type": "image"
+   },
+   {
+    "text": "Calendars",
+    "box": {
+     "x": 80,
+     "y": 571,
+     "w": 82,
+     "h": 17
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 388,
+     "y": 571,
+     "w": 26,
+     "h": 31
+    },
+    "type": "image"
+   },
+   {
+    "text": "None",
+    "box": {
+     "x": 80,
+     "y": 591,
+     "w": 34,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Contacts",
+    "box": {
+     "x": 80,
+     "y": 639,
+     "w": 74,
+     "h": 17
+    },
+    "type": "button"
+   },
+   {
+    "text": "None",
+    "box": {
+     "x": 80,
+     "y": 659,
+     "w": 34,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Files & Folders",
+    "box": {
+     "x": 80,
+     "y": 705,
+     "w": 116,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "2 apps",
+    "box": {
+     "x": 80,
+     "y": 727,
+     "w": 42,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Focus",
+    "box": {
+     "x": 82,
+     "y": 773,
+     "w": 48,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "None",
+    "box": {
+     "x": 80,
+     "y": 795,
+     "w": 34,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Health Data",
+    "box": {
+     "x": 80,
+     "y": 841,
+     "w": 94,
+     "h": 19
+    },
+    "type": "button"
+   },
+   {
+    "text": "None",
+    "box": {
+     "x": 80,
+     "y": 863,
+     "w": 34,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Home",
+    "box": {
+     "x": 80,
+     "y": 909,
+     "w": 50,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 387,
+     "y": 910,
+     "w": 26,
+     "h": 33
+    },
+    "type": "image"
+   },
+   {
+    "text": "1 app",
+    "box": {
+     "x": 80,
+     "y": 931,
+     "w": 34,
+     "h": 12
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000086",
+    "status": "succeeded",
+    "reason": "page_id matched: com.apple.settings.privacy-security after VLM escalation"
+   }
+  ]
+ }
+}

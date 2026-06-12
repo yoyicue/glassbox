@@ -1,0 +1,277 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000034",
+ "wrapper_group_id": "grp_000033",
+ "attempt_id": "act_000039",
+ "target": "通用",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/通用",
+    "settings/General",
+    "com.apple.settings.general"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: settings/General",
+ "verified_live": true,
+ "verified_via": "page_id",
+ "after_scene": {
+  "scene_id": "scn_000214",
+  "page_id": "settings/General",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:25",
+    "box": {
+     "x": 64,
+     "y": 28,
+     "w": 42,
+     "h": 20
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 18,
+     "y": 63,
+     "w": 49,
+     "h": 54
+    },
+    "type": "image"
+   },
+   {
+    "text": "General",
+    "box": {
+     "x": 190,
+     "y": 82,
+     "w": 68,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "General",
+    "box": {
+     "x": 36,
+     "y": 154,
+     "w": 88,
+     "h": 102
+    },
+    "type": "button"
+   },
+   {
+    "text": "Manage your overall setup and preferences for",
+    "box": {
+     "x": 40,
+     "y": 264,
+     "w": 362,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "iPhone, such as software updates, device",
+    "box": {
+     "x": 40,
+     "y": 286,
+     "w": 322,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "language, CarPlay, AirDrop and more.",
+    "box": {
+     "x": 38,
+     "y": 310,
+     "w": 294,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "About",
+    "box": {
+     "x": 80,
+     "y": 398,
+     "w": 50,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 389,
+     "y": 390,
+     "w": 25,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "Software Update",
+    "box": {
+     "x": 80,
+     "y": 452,
+     "w": 134,
+     "h": 20
+    },
+    "type": "list_item"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 390,
+     "y": 447,
+     "w": 21,
+     "h": 25
+    },
+    "type": "image"
+   },
+   {
+    "text": ">",
+    "box": {
+     "x": 396,
+     "y": 452,
+     "w": 10,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "iPhone Storage",
+    "box": {
+     "x": 78,
+     "y": 506,
+     "w": 124,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 388,
+     "y": 499,
+     "w": 27,
+     "h": 31
+    },
+    "type": "image"
+   },
+   {
+    "text": "AppleCare & Warranty",
+    "box": {
+     "x": 80,
+     "y": 596,
+     "w": 176,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 384,
+     "y": 583,
+     "w": 35,
+     "h": 40
+    },
+    "type": "image"
+   },
+   {
+    "text": "Health Data",
+    "box": {
+     "x": 80,
+     "y": 684,
+     "w": 94,
+     "h": 19
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 386,
+     "y": 673,
+     "w": 35,
+     "h": 42
+    },
+    "type": "image"
+   },
+   {
+    "text": "AirDrop",
+    "box": {
+     "x": 80,
+     "y": 774,
+     "w": 62,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 389,
+     "y": 767,
+     "w": 22,
+     "h": 28
+    },
+    "type": "image"
+   },
+   {
+    "text": "AirPlay & Continuity",
+    "box": {
+     "x": 80,
+     "y": 828,
+     "w": 156,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 209,
+     "y": 850,
+     "w": 28,
+     "h": 27
+    },
+    "type": "image"
+   },
+   {
+    "text": "Picture in Picture",
+    "box": {
+     "x": 80,
+     "y": 882,
+     "w": 134,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Screen Capture",
+    "box": {
+     "x": 82,
+     "y": 936,
+     "w": 122,
+     "h": 16
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000038",
+    "status": "succeeded",
+    "reason": "page_id matched: settings/General"
+   }
+  ]
+ }
+}

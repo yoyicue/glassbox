@@ -1,0 +1,371 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000084",
+ "wrapper_group_id": "grp_000083",
+ "attempt_id": "act_000097",
+ "target": "Developer",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/Developer",
+    "com.apple.settings.developer"
+   ]
+  }
+ },
+ "recorded_verdict": "failed",
+ "recorded_reason": "page_id mismatch: expected one of ('settings/Developer', 'com.apple.settings.developer'), got 'ios_settings_developer' after VLM escalation",
+ "verified_live": false,
+ "verified_via": null,
+ "after_scene": {
+  "scene_id": "scn_000538",
+  "page_id": "settings/Paired Devices",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:45",
+    "box": {
+     "x": 64,
+     "y": 26,
+     "w": 44,
+     "h": 22
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": "+",
+    "box": {
+     "x": 318,
+     "y": 26,
+     "w": 24,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 0,
+     "y": 60,
+     "w": 112,
+     "h": 70
+    },
+    "type": "image"
+   },
+   {
+    "text": "<",
+    "box": {
+     "x": 34,
+     "y": 80,
+     "w": 16,
+     "h": 22
+    },
+    "type": "nav_back"
+   },
+   {
+    "text": "Developer",
+    "box": {
+     "x": 182,
+     "y": 82,
+     "w": 86,
+     "h": 20
+    },
+    "type": "button"
+   },
+   {
+    "text": "Paired Devices",
+    "box": {
+     "x": 40,
+     "y": 154,
+     "w": 122,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Clear Trusted Computers",
+    "box": {
+     "x": 40,
+     "y": 198,
+     "w": 198,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Removing trusted computers will delete all the records of",
+    "box": {
+     "x": 40,
+     "y": 242,
+     "w": 354,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "computers you have paired with previously.",
+    "box": {
+     "x": 40,
+     "y": 258,
+     "w": 268,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Ul Automation",
+    "box": {
+     "x": 40,
+     "y": 294,
+     "w": 118,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Enable Ul Automation",
+    "box": {
+     "x": 40,
+     "y": 338,
+     "w": 168,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 342,
+     "y": 328,
+     "w": 67,
+     "h": 34
+    },
+    "type": "image"
+   },
+   {
+    "text": "Performance",
+    "box": {
+     "x": 40,
+     "y": 401,
+     "w": 108,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": "Hang Detection",
+    "box": {
+     "x": 38,
+     "y": 446,
+     "w": 124,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Off >",
+    "box": {
+     "x": 362,
+     "y": 446,
+     "w": 48,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 391,
+     "y": 439,
+     "w": 20,
+     "h": 28
+    },
+    "type": "image"
+   },
+   {
+    "text": "Performance Trace",
+    "box": {
+     "x": 36,
+     "y": 501,
+     "w": 154,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Off >",
+    "box": {
+     "x": 362,
+     "y": 501,
+     "w": 46,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Networking",
+    "box": {
+     "x": 40,
+     "y": 567,
+     "w": 94,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": "Network Link Conditioner",
+    "box": {
+     "x": 38,
+     "y": 609,
+     "w": 202,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Off >",
+    "box": {
+     "x": 362,
+     "y": 609,
+     "w": 46,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 391,
+     "y": 605,
+     "w": 19,
+     "h": 28
+    },
+    "type": "image"
+   },
+   {
+    "text": "Network Override",
+    "box": {
+     "x": 38,
+     "y": 665,
+     "w": 140,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Off >",
+    "box": {
+     "x": 362,
+     "y": 665,
+     "w": 46,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "L4S",
+    "box": {
+     "x": 38,
+     "y": 719,
+     "w": 34,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Responsiveness",
+    "box": {
+     "x": 40,
+     "y": 771,
+     "w": 128,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Test",
+    "box": {
+     "x": 372,
+     "y": 771,
+     "w": 36,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Responsiveness measures the quality of your network by",
+    "box": {
+     "x": 40,
+     "y": 817,
+     "w": 352,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "the number of round trips completed per minute (RPM)",
+    "box": {
+     "x": 40,
+     "y": 833,
+     "w": 340,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "under working conditions. Learn more...",
+    "box": {
+     "x": 40,
+     "y": 849,
+     "w": 248,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 202,
+     "y": 846,
+     "w": 85,
+     "h": 16
+    },
+    "type": "image"
+   },
+   {
+    "text": "Universal Links",
+    "box": {
+     "x": 40,
+     "y": 885,
+     "w": 124,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Associated Domains Development",
+    "box": {
+     "x": 40,
+     "y": 929,
+     "w": 268,
+     "h": 20
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000096",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/Developer', 'com.apple.settings.developer'), got 'developer_settings' after VLM escalation"
+   },
+   {
+    "attempt_id": "act_000098",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/Developer', 'com.apple.settings.developer'), got 'settings/Paired Devices'"
+   }
+  ]
+ }
+}

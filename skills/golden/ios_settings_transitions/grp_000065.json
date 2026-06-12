@@ -1,0 +1,373 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000065",
+ "wrapper_group_id": "grp_000064",
+ "attempt_id": "act_000075",
+ "target": "Face ID与密码",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/Face ID与密码",
+    "com.apple.settings.face-id",
+    "settings/Touch ID & Passcode",
+    "com.apple.settings.touch-id-passcode"
+   ]
+  }
+ },
+ "recorded_verdict": "failed",
+ "recorded_reason": "page_id mismatch: expected one of ('settings/Face ID与密码', 'com.apple.settings.face-id', 'settings/Touch ID & Passcode', 'com.apple.settings.touch-id-passcode'), got 'com.apple.settings.faceid_passcode' after VLM escalation",
+ "verified_live": false,
+ "verified_via": null,
+ "after_scene": {
+  "scene_id": "scn_000417",
+  "page_id": "settings/Face ID & Passcode",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:37",
+    "box": {
+     "x": 64,
+     "y": 30,
+     "w": 42,
+     "h": 18
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 17,
+     "y": 64,
+     "w": 50,
+     "h": 51
+    },
+    "type": "image"
+   },
+   {
+    "text": "<",
+    "box": {
+     "x": 34,
+     "y": 80,
+     "w": 16,
+     "h": 20
+    },
+    "type": "nav_back"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 33,
+     "y": 153,
+     "w": 79,
+     "h": 72
+    },
+    "type": "image"
+   },
+   {
+    "text": "Face ID & Passcode",
+    "box": {
+     "x": 40,
+     "y": 232,
+     "w": 204,
+     "h": 28
+    },
+    "type": "button"
+   },
+   {
+    "text": "Manage apps using Face ID and other iPhone",
+    "box": {
+     "x": 38,
+     "y": 266,
+     "w": 352,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "access settings, set up alternative",
+    "box": {
+     "x": 38,
+     "y": 288,
+     "w": 268,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "appearances and change your passcode.",
+    "box": {
+     "x": 40,
+     "y": 312,
+     "w": 322,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 39,
+     "y": 330,
+     "w": 106,
+     "h": 20
+    },
+    "type": "image"
+   },
+   {
+    "text": "Learn more...",
+    "box": {
+     "x": 40,
+     "y": 333,
+     "w": 107,
+     "h": 17
+    },
+    "type": "text"
+   },
+   {
+    "text": "Use Face ID For",
+    "box": {
+     "x": 42,
+     "y": 400,
+     "w": 128,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "iPhone Unlock",
+    "box": {
+     "x": 36,
+     "y": 442,
+     "w": 118,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 341,
+     "y": 433,
+     "w": 67,
+     "h": 31
+    },
+    "type": "image"
+   },
+   {
+    "text": "iTunes & App Store",
+    "box": {
+     "x": 38,
+     "y": 495,
+     "w": 152,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 341,
+     "y": 487,
+     "w": 67,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "Contactless & Payments",
+    "box": {
+     "x": 38,
+     "y": 549,
+     "w": 194,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 341,
+     "y": 541,
+     "w": 67,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "Password AutoFill",
+    "box": {
+     "x": 38,
+     "y": 603,
+     "w": 140,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 341,
+     "y": 595,
+     "w": 68,
+     "h": 31
+    },
+    "type": "image"
+   },
+   {
+    "text": "iPhone can recognise the unique, three-dimensional",
+    "box": {
+     "x": 40,
+     "y": 649,
+     "w": 322,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "features of your face to allow secure access to apps and",
+    "box": {
+     "x": 40,
+     "y": 665,
+     "w": 348,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "payments. About Face ID & Privacy....",
+    "box": {
+     "x": 40,
+     "y": 681,
+     "w": 228,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 107,
+     "y": 677,
+     "w": 160,
+     "h": 17
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 38,
+     "y": 737,
+     "w": 120,
+     "h": 21
+    },
+    "type": "image"
+   },
+   {
+    "text": "Set Up Face ID",
+    "box": {
+     "x": 38,
+     "y": 739,
+     "w": 118,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Attention",
+    "box": {
+     "x": 40,
+     "y": 815,
+     "w": 76,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Require Attention for F-",
+    "box": {
+     "x": 40,
+     "y": 857,
+     "w": 182,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "e ID",
+    "box": {
+     "x": 234,
+     "y": 846,
+     "w": 172,
+     "h": 78
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "TrueDepth camera provides an additional level of security",
+    "box": {
+     "x": 40,
+     "y": 901,
+     "w": 356,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "by verifying that you're looking at iPhone before",
+    "box": {
+     "x": 40,
+     "y": 917,
+     "w": 298,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "authenticating. Attention detection may not work with",
+    "box": {
+     "x": 40,
+     "y": 933,
+     "w": 332,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "some sunglasses. Face ID will always require attention",
+    "box": {
+     "x": 40,
+     "y": 951,
+     "w": 336,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "mhan wauire waaring a mash",
+    "box": {
+     "x": 40,
+     "y": 967,
+     "w": 176,
+     "h": 10
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000074",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/Face ID与密码', 'com.apple.settings.face-id', 'settings/Touch ID & Passcode', 'com.apple.settings.touch-id-passcode'), got 'com.apple.settings.faceid-passcode' after VLM escalation"
+   },
+   {
+    "attempt_id": "act_000076",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/Face ID与密码', 'com.apple.settings.face-id', 'settings/Touch ID & Passcode', 'com.apple.settings.touch-id-passcode'), got 'settings/Face ID & Passcode'"
+   }
+  ]
+ }
+}

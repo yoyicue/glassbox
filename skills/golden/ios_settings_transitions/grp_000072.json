@@ -1,0 +1,288 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000072",
+ "wrapper_group_id": "grp_000071",
+ "attempt_id": "act_000084",
+ "target": "紧急 SOS",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/紧急 SOS",
+    "com.apple.settings.sos",
+    "settings/Emergency SOS",
+    "com.apple.settings.emergency-sos"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: settings/Emergency SOS",
+ "verified_live": true,
+ "verified_via": "page_id",
+ "after_scene": {
+  "scene_id": "scn_000466",
+  "page_id": "settings/Emergency SOS",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:40",
+    "box": {
+     "x": 62,
+     "y": 28,
+     "w": 44,
+     "h": 18
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 17,
+     "y": 63,
+     "w": 51,
+     "h": 53
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 141,
+     "y": 60,
+     "w": 166,
+     "h": 59
+    },
+    "type": "image"
+   },
+   {
+    "text": "Emergency SOS",
+    "box": {
+     "x": 158,
+     "y": 80,
+     "w": 132,
+     "h": 20
+    },
+    "type": "button"
+   },
+   {
+    "text": "Press and hold the side button and either volume button to",
+    "box": {
+     "x": 40,
+     "y": 320,
+     "w": 364,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "make an emergency call. In certain regions, you may need",
+    "box": {
+     "x": 40,
+     "y": 336,
+     "w": 358,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "to specify an emergency service to dial. Auto Call requires",
+    "box": {
+     "x": 40,
+     "y": 352,
+     "w": 360,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "a SIM card.",
+    "box": {
+     "x": 40,
+     "y": 368,
+     "w": 74,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Call with Hold and Release",
+    "box": {
+     "x": 40,
+     "y": 426,
+     "w": 206,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "If you continuously hold the side button and either volume",
+    "box": {
+     "x": 40,
+     "y": 470,
+     "w": 360,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "button, a countdown begins and an alarm sounds. After the",
+    "box": {
+     "x": 40,
+     "y": 486,
+     "w": 368,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "countdown, if you release the buttons, iPhone will call",
+    "box": {
+     "x": 40,
+     "y": 502,
+     "w": 334,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "emergency services.",
+    "box": {
+     "x": 40,
+     "y": 520,
+     "w": 130,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Call with 5 Button Presses",
+    "box": {
+     "x": 40,
+     "y": 578,
+     "w": 204,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "If you rapidly press the side button five times, a countdown",
+    "box": {
+     "x": 42,
+     "y": 620,
+     "w": 364,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "begins and an alarm sounds. When the countdown ends,",
+    "box": {
+     "x": 40,
+     "y": 638,
+     "w": 352,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "iPhone will call emergency services.",
+    "box": {
+     "x": 40,
+     "y": 654,
+     "w": 224,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Crash Detection",
+    "box": {
+     "x": 40,
+     "y": 696,
+     "w": 132,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Call After Serious Crash",
+    "box": {
+     "x": 40,
+     "y": 740,
+     "w": 186,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "If you're in a car crash, iPhone can automatically call",
+    "box": {
+     "x": 40,
+     "y": 784,
+     "w": 326,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "emergency services. iPhone will start a countdown and",
+    "box": {
+     "x": 40,
+     "y": 802,
+     "w": 340,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "sound an alarm before the call.",
+    "box": {
+     "x": 40,
+     "y": 818,
+     "w": 192,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "iPhone cannot detect all crashes.",
+    "box": {
+     "x": 40,
+     "y": 850,
+     "w": 208,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Set up Emergency Contacts in Health",
+    "box": {
+     "x": 40,
+     "y": 906,
+     "w": 290,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "You can add or delete contacts for Emergency SOS in your",
+    "box": {
+     "x": 40,
+     "y": 952,
+     "w": 364,
+     "h": 16
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000083",
+    "status": "succeeded",
+    "reason": "page_id matched: settings/Emergency SOS"
+   }
+  ]
+ }
+}

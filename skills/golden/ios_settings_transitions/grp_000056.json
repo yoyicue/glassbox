@@ -1,0 +1,392 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000056",
+ "wrapper_group_id": "grp_000055",
+ "attempt_id": "act_000064",
+ "target": "声音与触感",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/声音与触感",
+    "settings/Sounds",
+    "com.apple.settings.sounds"
+   ]
+  }
+ },
+ "recorded_verdict": "failed",
+ "recorded_reason": "page_id mismatch: expected one of ('settings/声音与触感', 'settings/Sounds', 'com.apple.settings.sounds'), got 'com.apple.settings.sounds-haptics' after VLM escalation",
+ "verified_live": false,
+ "verified_via": null,
+ "after_scene": {
+  "scene_id": "scn_000347",
+  "page_id": "settings/Silent Mode",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:34",
+    "box": {
+     "x": 62,
+     "y": 30,
+     "w": 44,
+     "h": 18
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": "+",
+    "box": {
+     "x": 318,
+     "y": 30,
+     "w": 18,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "Silent Mode",
+    "box": {
+     "x": 17,
+     "y": 65,
+     "w": 121,
+     "h": 108
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 108,
+     "y": 57,
+     "w": 203,
+     "h": 70
+    },
+    "type": "image"
+   },
+   {
+    "text": "Sounds & Haptics",
+    "box": {
+     "x": 150,
+     "y": 82,
+     "w": 148,
+     "h": 20
+    },
+    "type": "button"
+   },
+   {
+    "text": "Silent Mode",
+    "box": {
+     "x": 80,
+     "y": 197,
+     "w": 94,
+     "h": 19
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 342,
+     "y": 190,
+     "w": 68,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "iPhone will play ringtones, alerts and system sounds.",
+    "box": {
+     "x": 40,
+     "y": 242,
+     "w": 328,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Show in Status Bar",
+    "box": {
+     "x": 40,
+     "y": 300,
+     "w": 148,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 339,
+     "y": 292,
+     "w": 70,
+     "h": 34
+    },
+    "type": "image"
+   },
+   {
+    "text": "Input",
+    "box": {
+     "x": 36,
+     "y": 390,
+     "w": 48,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "iPhone Microphone >",
+    "box": {
+     "x": 234,
+     "y": 390,
+     "w": 174,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 390,
+     "y": 384,
+     "w": 23,
+     "h": 30
+    },
+    "type": "image"
+   },
+   {
+    "text": "Ringtone and Alerts",
+    "box": {
+     "x": 40,
+     "y": 464,
+     "w": 162,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Haptics",
+    "box": {
+     "x": 6,
+     "y": 490,
+     "w": 96,
+     "h": 142
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 377,
+     "y": 499,
+     "w": 29,
+     "h": 29
+    },
+    "type": "image"
+   },
+   {
+    "text": "Change with Buttons",
+    "box": {
+     "x": 42,
+     "y": 560,
+     "w": 162,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 341,
+     "y": 551,
+     "w": 69,
+     "h": 31
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 296,
+     "y": 608,
+     "w": 115,
+     "h": 26
+    },
+    "type": "image"
+   },
+   {
+    "text": "Always Play>",
+    "box": {
+     "x": 296,
+     "y": 614,
+     "w": 112,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "The volume buttons will not",
+    "box": {
+     "x": 40,
+     "y": 658,
+     "w": 174,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "hect the volume of the",
+    "box": {
+     "x": 224,
+     "y": 658,
+     "w": 138,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "ringtone and alerts.",
+    "box": {
+     "x": 40,
+     "y": 674,
+     "w": 122,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Ringtone",
+    "box": {
+     "x": 40,
+     "y": 732,
+     "w": 72,
+     "h": 20
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 308,
+     "y": 726,
+     "w": 101,
+     "h": 27
+    },
+    "type": "image"
+   },
+   {
+    "text": "Reflection",
+    "box": {
+     "x": 308,
+     "y": 732,
+     "w": 82,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": "Text Tone",
+    "box": {
+     "x": 38,
+     "y": 786,
+     "w": 78,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": "Note >",
+    "box": {
+     "x": 350,
+     "y": 786,
+     "w": 58,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "New Voicemail",
+    "box": {
+     "x": 40,
+     "y": 840,
+     "w": 116,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 328,
+     "y": 834,
+     "w": 82,
+     "h": 25
+    },
+    "type": "image"
+   },
+   {
+    "text": "Droplet >",
+    "box": {
+     "x": 330,
+     "y": 840,
+     "w": 78,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Calendar Alerts",
+    "box": {
+     "x": 40,
+     "y": 894,
+     "w": 122,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "Chord",
+    "box": {
+     "x": 338,
+     "y": 894,
+     "w": 52,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Reminder Alerts",
+    "box": {
+     "x": 42,
+     "y": 948,
+     "w": 124,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Chord >",
+    "box": {
+     "x": 338,
+     "y": 948,
+     "w": 70,
+     "h": 16
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000063",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/声音与触感', 'settings/Sounds', 'com.apple.settings.sounds'), got 'com.apple.settings.sounds-haptics' after VLM escalation"
+   },
+   {
+    "attempt_id": "act_000065",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/声音与触感', 'settings/Sounds', 'com.apple.settings.sounds'), got 'settings/Silent Mode'"
+   }
+  ]
+ }
+}

@@ -1,0 +1,334 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000029",
+ "wrapper_group_id": "grp_000028",
+ "attempt_id": "act_000033",
+ "target": "蜂窝网络",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/蜂窝网络",
+    "settings/Cellular",
+    "com.apple.settings.cellular",
+    "settings/Mobile Service",
+    "com.apple.settings.mobile-service"
+   ]
+  }
+ },
+ "recorded_verdict": "failed",
+ "recorded_reason": "page_id mismatch: expected one of ('settings/蜂窝网络', 'settings/Cellular', 'com.apple.settings.cellular', 'settings/Mobile Service', 'com.apple.settings.mobile-service'), got 'ios_settings_root' after VLM escalation",
+ "verified_live": false,
+ "verified_via": null,
+ "after_scene": {
+  "scene_id": "scn_000181",
+  "page_id": "settings/root",
+  "platform_scene_kind": "settings_root",
+  "elements": [
+   {
+    "text": "6:24",
+    "box": {
+     "x": 64,
+     "y": 28,
+     "w": 42,
+     "h": 21
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": "Settings",
+    "box": {
+     "x": 188,
+     "y": 82,
+     "w": 72,
+     "h": 20
+    },
+    "type": "button"
+   },
+   {
+    "text": "SCRUBBED_ACCOUNT_NAME",
+    "box": {
+     "x": 110,
+     "y": 184,
+     "w": 48,
+     "h": 20
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 382,
+     "y": 182,
+     "w": 35,
+     "h": 40
+    },
+    "type": "image"
+   },
+   {
+    "text": "Apple Account, iCloud and more",
+    "box": {
+     "x": 110,
+     "y": 210,
+     "w": 200,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Review Apple Account phone number",
+    "box": {
+     "x": 42,
+     "y": 258,
+     "w": 347,
+     "h": 39
+    },
+    "type": "list_item"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 388,
+     "y": 261,
+     "w": 23,
+     "h": 30
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 356,
+     "y": 350,
+     "w": 33,
+     "h": 34
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 388,
+     "y": 351,
+     "w": 25,
+     "h": 30
+    },
+    "type": "image"
+   },
+   {
+    "text": "Airplane Mode",
+    "box": {
+     "x": 80,
+     "y": 448,
+     "w": 114,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 339,
+     "y": 438,
+     "w": 70,
+     "h": 40
+    },
+    "type": "image"
+   },
+   {
+    "text": "WLAN",
+    "box": {
+     "x": 80,
+     "y": 502,
+     "w": 54,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "SCRUBBED_SSID_1 >",
+    "box": {
+     "x": 336,
+     "y": 502,
+     "w": 70,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Bluetooth",
+    "box": {
+     "x": 80,
+     "y": 554,
+     "w": 78,
+     "h": 16
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "On",
+    "box": {
+     "x": 362,
+     "y": 554,
+     "w": 24,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": ">",
+    "box": {
+     "x": 396,
+     "y": 554,
+     "w": 10,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Mobile Service",
+    "box": {
+     "x": 80,
+     "y": 606,
+     "w": 116,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "No SIM",
+    "box": {
+     "x": 326,
+     "y": 608,
+     "w": 60,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Personal Hotspot",
+    "box": {
+     "x": 80,
+     "y": 660,
+     "w": 138,
+     "h": 18
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "Off",
+    "box": {
+     "x": 358,
+     "y": 660,
+     "w": 28,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": ">",
+    "box": {
+     "x": 394,
+     "y": 660,
+     "w": 12,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Battery",
+    "box": {
+     "x": 79,
+     "y": 711,
+     "w": 62,
+     "h": 23
+    },
+    "type": "text"
+   },
+   {
+    "text": "VPN",
+    "box": {
+     "x": 80,
+     "y": 766,
+     "w": 36,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "General",
+    "box": {
+     "x": 80,
+     "y": 854,
+     "w": 64,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 388,
+     "y": 847,
+     "w": 23,
+     "h": 29
+    },
+    "type": "image"
+   },
+   {
+    "text": "Q",
+    "box": {
+     "x": 46,
+     "y": 910,
+     "w": 22,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "Search",
+    "box": {
+     "x": 72,
+     "y": 913,
+     "w": 58,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 368,
+     "y": 899,
+     "w": 38,
+     "h": 46
+    },
+    "type": "image"
+   },
+   {
+    "text": "Action Button",
+    "box": {
+     "x": 84,
+     "y": 960,
+     "w": 102,
+     "h": 14
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000032",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/蜂窝网络', 'settings/Cellular', 'com.apple.settings.cellular', 'settings/Mobile Service', 'com.apple.settings.mobile-service'), got 'ios_settings_root' after VLM escalation"
+   },
+   {
+    "attempt_id": "act_000034",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/蜂窝网络', 'settings/Cellular', 'com.apple.settings.cellular', 'settings/Mobile Service', 'com.apple.settings.mobile-service'), got 'settings/root'"
+   }
+  ]
+ }
+}

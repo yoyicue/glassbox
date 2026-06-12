@@ -1,0 +1,296 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000038",
+ "wrapper_group_id": "grp_000037",
+ "attempt_id": "act_000043",
+ "target": "Display & Brightness",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/Display & Brightness",
+    "com.apple.settings.display-brightness"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: com.apple.settings.display-brightness after VLM escalation",
+ "verified_live": true,
+ "verified_via": "vlm_escalation",
+ "after_scene": {
+  "scene_id": "scn_000237",
+  "page_id": null,
+  "platform_scene_kind": "springboard",
+  "elements": [
+   {
+    "text": "6:25",
+    "box": {
+     "x": 64,
+     "y": 26,
+     "w": 44,
+     "h": 22
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 0,
+     "y": 61,
+     "w": 99,
+     "h": 66
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 138,
+     "y": 74,
+     "w": 171,
+     "h": 26
+    },
+    "type": "image"
+   },
+   {
+    "text": "Display & Brightness",
+    "box": {
+     "x": 138,
+     "y": 80,
+     "w": 170,
+     "h": 20
+    },
+    "type": "button"
+   },
+   {
+    "text": "Appearance",
+    "box": {
+     "x": 40,
+     "y": 154,
+     "w": 100,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "9:41",
+    "box": {
+     "x": 286,
+     "y": 210,
+     "w": 32,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Light",
+    "box": {
+     "x": 126,
+     "y": 338,
+     "w": 42,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "Dark",
+    "box": {
+     "x": 282,
+     "y": 336,
+     "w": 40,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "Automatic",
+    "box": {
+     "x": 40,
+     "y": 419,
+     "w": 80,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 341,
+     "y": 411,
+     "w": 67,
+     "h": 33
+    },
+    "type": "image"
+   },
+   {
+    "text": "Liquid Glass",
+    "box": {
+     "x": 38,
+     "y": 510,
+     "w": 100,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": "Clear >",
+    "box": {
+     "x": 346,
+     "y": 510,
+     "w": 62,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": "Choose yourpreferred look for Liquid Glass.",
+    "box": {
+     "x": 40,
+     "y": 554,
+     "w": 272,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Text Size",
+    "box": {
+     "x": 38,
+     "y": 610,
+     "w": 74,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 387,
+     "y": 603,
+     "w": 30,
+     "h": 37
+    },
+    "type": "image"
+   },
+   {
+    "text": "Bold Text",
+    "box": {
+     "x": 40,
+     "y": 666,
+     "w": 76,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 341,
+     "y": 656,
+     "w": 67,
+     "h": 33
+    },
+    "type": "image"
+   },
+   {
+    "text": "Displays",
+    "box": {
+     "x": 40,
+     "y": 732,
+     "w": 70,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Built-In Retina Display",
+    "box": {
+     "x": 78,
+     "y": 776,
+     "w": 174,
+     "h": 20
+    },
+    "type": "list_item"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 390,
+     "y": 770,
+     "w": 22,
+     "h": 27
+    },
+    "type": "image"
+   },
+   {
+    "text": ">",
+    "box": {
+     "x": 396,
+     "y": 776,
+     "w": 12,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "T749-fHD720",
+    "box": {
+     "x": 82,
+     "y": 830,
+     "w": 108,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 384,
+     "y": 817,
+     "w": 34,
+     "h": 41
+    },
+    "type": "image"
+   },
+   {
+    "text": "Night Shift",
+    "box": {
+     "x": 38,
+     "y": 918,
+     "w": 88,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": "Off >",
+    "box": {
+     "x": 362,
+     "y": 918,
+     "w": 46,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 392,
+     "y": 912,
+     "w": 22,
+     "h": 27
+    },
+    "type": "image"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000042",
+    "status": "succeeded",
+    "reason": "page_id matched: com.apple.settings.display-brightness after VLM escalation"
+   }
+  ]
+ }
+}
