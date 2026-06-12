@@ -136,6 +136,20 @@ def _state_machine_report(memory_dir):
         "blocked_pages": [],
         "rejected_candidates": [],
         "navigation_failures": [],
+        # S5a (docs/design/iphone_settings_transition.md §2): the additive
+        # entered-unverified taxonomy must ride through run_full's verifier
+        # without affecting strict acceptance (forensic-only).
+        "unverified_transitions": [
+            {
+                "path": ["Settings"],
+                "text": "墙纸",
+                "category": "mint_none",
+                "verdict_status": "failed",
+                "verdict_reason": "page_id mismatch",
+                "minted_page_id": None,
+                "recovery": "backout_retry_rejected",
+            },
+        ],
         "visits": visits,
     }
     refresh_report_summaries(report)

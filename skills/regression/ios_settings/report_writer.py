@@ -43,6 +43,7 @@ def write_report(
     navigation_failures: list[NavigationFailure],
     root_coverage: dict[str, list[str]],
     trace_payload: dict[str, Any] | None,
+    unverified_transitions: list[dict[str, Any]] | None = None,
 ) -> None:
     if not report_path:
         return
@@ -57,6 +58,7 @@ def write_report(
         navigation_failures=navigation_failures,
         root_coverage=root_coverage,
         trace_payload=trace_payload,
+        unverified_transitions=unverified_transitions,
     )
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -71,6 +73,7 @@ def build_report_payload(
     navigation_failures: list[NavigationFailure],
     root_coverage: dict[str, list[str]],
     trace_payload: dict[str, Any] | None,
+    unverified_transitions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     report_config = run_config.to_report_config()
     report_config.update(_active_device_report_config())
@@ -151,6 +154,11 @@ def build_report_payload(
             }
             for failure in navigation_failures
         ],
+        # S5a (docs/design/iphone_settings_transition.md §2): additive,
+        # forensic-only taxonomy for verification-rejected row taps
+        # ("entered_unverified"). Never load-bearing for strict acceptance —
+        # an unentered section still fails via root_coverage.required_missing.
+        "unverified_transitions": [dict(entry) for entry in (unverified_transitions or [])],
         "visits": [
             {
                 "path": list(visit.path),
