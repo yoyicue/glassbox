@@ -4562,3 +4562,439 @@ def test_candidate_loop_reground_records_return_to_root_failure_instead_of_crash
     )
 
     assert "return_to_root_failed" in limits_hit
+
+
+# ── S5a: entered_unverified taxonomy + deliberate back-out (C4) ───────────────
+# docs/design/iphone_settings_transition.md §1 C4 / §2 S5a. A row tap whose
+# semantic verification is REJECTED is classified BEFORE the next action, and
+# the left-the-root categories back out + retry once instead of re-tapping the
+# captured root coordinates on the entered page.
+
+
+def _s5a_classifier_actions(**overrides):
+    base = replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda _scene: False,
+        same_page_after_tap=lambda *_args, **_kwargs: False,
+    )
+    return replace(base, **overrides)
+
+
+def _s5a_scene(*elements, page_id=None):
+    scene = _scene(*elements)
+    scene.viewport_size = (448, 973)
+    if page_id is not None:
+        scene.page_id = page_id
+    return scene
+
+
+@pytest.mark.smoke
+def test_unverified_transition_classifier_same_page_when_still_on_root():
+    before = _s5a_scene(_el("Settings", 48, 72, w=70))
+    after = _s5a_scene(_el("CURRENT", 100, 300))
+    actions = _s5a_classifier_actions(scene_is_settings_root=lambda _scene: True)
+
+    assert settings_navigation.classify_unverified_transition(before, after, actions) == "same_page"
+
+
+@pytest.mark.smoke
+def test_unverified_transition_classifier_same_page_when_texts_unchanged():
+    before = _s5a_scene(_el("Settings", 48, 72, w=70))
+    after = _s5a_scene(_el("Settings", 48, 72, w=70))
+    actions = _s5a_classifier_actions(same_page_after_tap=lambda *_args, **_kwargs: True)
+
+    assert settings_navigation.classify_unverified_transition(before, after, actions) == "same_page"
+
+
+@pytest.mark.smoke
+def test_unverified_transition_classifier_name_mismatch_when_page_id_minted():
+    before = _s5a_scene(_el("Settings", 48, 72, w=70))
+    after = _s5a_scene(
+        _el("<", 18, 92, w=14, ty="nav_back"),
+        _el("Do Not Disturb", 224, 92, w=120),
+        page_id="settings/Do Not Disturb",
+    )
+
+    assert settings_navigation.classify_unverified_transition(
+        before, after, _s5a_classifier_actions()
+    ) == "name_mismatch"
+
+
+@pytest.mark.smoke
+def test_unverified_transition_classifier_mint_none_on_sparse_unminted_scene():
+    # Mirrors the committed Wallpaper after-frame (grp_000050): left the root,
+    # the classifier abstains from minting, no affirmative non-Settings
+    # evidence — mint_none, not unknown_scene.
+    before = _s5a_scene(_el("Settings", 48, 72, w=70))
+    after = _s5a_scene(_el("CURRENT", 100, 300), _el("Dynamic", 100, 360))
+
+    assert settings_navigation.classify_unverified_transition(
+        before, after, _s5a_classifier_actions()
+    ) == "mint_none"
+
+
+@pytest.mark.smoke
+def test_unverified_transition_classifier_unknown_scene_on_strong_home_evidence():
+    # No corpus exemplar exists for this category (the committed rejected
+    # after-frames are all in-Settings or modal), so it is pinned with a
+    # constructed Home-grid scene: bottom search pill + icon-label grid.
+    before = _s5a_scene(_el("Settings", 48, 72, w=70))
+    after = _s5a_scene(
+        _el("Mail", 60, 300, w=60),
+        _el("Maps", 220, 300, w=60),
+        _el("Notes", 60, 420, w=60),
+        _el("Music", 220, 420, w=60),
+        _el("Search", 200, 900, w=70),
+    )
+
+    assert settings_navigation.classify_unverified_transition(
+        before, after, _s5a_classifier_actions()
+    ) == "unknown_scene"
+
+
+class _S5aPhone:
+    """Mock phone that records which scene was current when a row tap landed."""
+
+    def __init__(self, scene):
+        self.scene = scene
+
+    def perceive(self):
+        return self.scene
+
+    def invalidate_perceive_cache(self):
+        pass
+
+
+def _s5a_crawl_fixtures():
+    root = _s5a_scene(_el("Settings", 48, 72, w=70), _el("Wallpaper", 72, 344, w=120))
+    detail = _s5a_scene(
+        _el("<", 18, 92, w=14, ty="nav_back"),
+        _el("CURRENT", 100, 300),
+        page_id="settings/CURRENT",  # minted but ≁ expected → name_mismatch
+    )
+    verified = _s5a_scene(
+        _el("<", 18, 92, w=14, ty="nav_back"),
+        _el("Wallpaper", 224, 92, w=120),
+    )
+    return root, detail, verified
+
+
+def _s5a_crawl_actions(phone, root, *, tap_row, back_out, crawl_child, page_titles):
+    return replace(
+        walkthrough._navigation_actions(),
+        scene_is_settings_root=lambda scene: scene is root,
+        scene_kind=lambda _scene, phone=None: "settings_root",
+        root_coverage_perceive=lambda _phone, _depth: phone.perceive(),
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda *_args, **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=lambda _scene, **_kwargs: [_el("Wallpaper", 72, 344, w=120)],
+        canonical_expected_root_label=lambda text: "墙纸" if "Wallpaper" in (text or "") else None,
+        tap_settings_row=tap_row,
+        same_page_after_tap=lambda before, after, **_kwargs: before is after,
+        is_settings_section_header=lambda *_args, **_kwargs: False,
+        page_title=page_titles,
+        return_one_level=back_out,
+        crawl_current_page=crawl_child,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", root),
+        root_coverage=lambda _visits, phone=None: {"visited": [], "missing": []},
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        crawl_missing_root_pages_via_search=lambda *_args, **_kwargs: None,
+        vlm_point_for_label=lambda *_args, **_kwargs: None,
+    )
+
+
+def _s5a_run_crawl(phone, actions):
+    visits: list[PageVisit] = []
+    failures: list[NavigationFailure] = []
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings",),
+        visits=visits,
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=failures,
+        actions=actions,
+    )
+    return visits, failures
+
+
+@pytest.mark.smoke
+def test_root_unverified_tap_backs_out_then_retries_once_without_retapping_detail(monkeypatch):
+    """The C4 sequence: rejected tap that LEFT the root → back out FIRST, then
+    retry the re-grounded row. No tap may land while the detail scene is
+    current (that was the destructive re-tap of acts 63-65/74-76/96-98)."""
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root, detail, verified = _s5a_crawl_fixtures()
+    phone = _S5aPhone(root)
+    events: list[tuple[str, object]] = []
+    taps_on_scene: list[object] = []
+    opened: list[tuple[str, ...]] = []
+
+    def tap_row(_phone, row):
+        taps_on_scene.append(phone.scene)
+        events.append(("tap", (row.text or "").strip()))
+        if sum(1 for kind, _ in events if kind == "tap") == 1:
+            phone.scene = detail
+            settings_context.record_action_verdict(
+                phone,
+                SimpleNamespace(status="failed", accepted=False, reason="page_id mismatch"),
+            )
+            return False
+        phone.scene = verified
+        settings_context.record_action_verdict(
+            phone,
+            SimpleNamespace(status="succeeded", accepted=True),
+        )
+        return True
+
+    def back_out(_phone, **_kwargs):
+        events.append(("back", None))
+        phone.scene = root
+        return True
+
+    def crawl_child(_phone, *, path, visits, **_kwargs):
+        opened.append(path)
+        visits.append(PageVisit(path=path, title=path[-1], texts=()))
+
+    actions = _s5a_crawl_actions(
+        phone,
+        root,
+        tap_row=tap_row,
+        back_out=back_out,
+        crawl_child=crawl_child,
+        page_titles=lambda scene: "Wallpaper" if scene is verified else "Settings",
+    )
+
+    settings_context.reset_for(phone)
+    _visits, failures = _s5a_run_crawl(phone, actions)
+
+    # exactly one back-out-then-retry: tap → back → tap (→ normal return)
+    assert [kind for kind, _ in events][:3] == ["tap", "back", "tap"]
+    assert sum(1 for kind, _ in events if kind == "tap") == 2
+    # NO tap was issued while the detail-shaped scene was current
+    assert all(scene is root for scene in taps_on_scene)
+    # the retried row flowed into the normal entered path
+    assert opened == [("Settings", "墙纸")]
+    assert failures == []
+    records = settings_context.unverified_transitions(phone)
+    assert [record["category"] for record in records] == ["name_mismatch"]
+    assert records[0]["recovery"] == "backout_retry_accepted"
+    assert records[0]["minted_page_id"] == "settings/CURRENT"
+    assert records[0]["text"] == "Wallpaper"
+    assert records[0]["verdict_status"] == "failed"
+
+
+@pytest.mark.smoke
+def test_root_unverified_tap_retry_budget_is_single(monkeypatch):
+    """The back-out retry is bounded to ONE re-tap; a second rejection skips
+    the row (existing multi-pass/search recovery owns it from there)."""
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root, detail, _verified = _s5a_crawl_fixtures()
+    phone = _S5aPhone(root)
+    events: list[tuple[str, object]] = []
+
+    def tap_row(_phone, row):
+        events.append(("tap", (row.text or "").strip()))
+        phone.scene = detail
+        settings_context.record_action_verdict(
+            phone,
+            SimpleNamespace(status="failed", accepted=False, reason="page_id mismatch"),
+        )
+        return False
+
+    def back_out(_phone, **_kwargs):
+        events.append(("back", None))
+        phone.scene = root
+        return True
+
+    actions = _s5a_crawl_actions(
+        phone,
+        root,
+        tap_row=tap_row,
+        back_out=back_out,
+        crawl_child=lambda *_args, **_kwargs: None,
+        page_titles=lambda _scene: "Settings",
+    )
+
+    settings_context.reset_for(phone)
+    _visits, failures = _s5a_run_crawl(phone, actions)
+
+    assert sum(1 for kind, _ in events if kind == "tap") == 2  # original + 1 retry, never a 3rd
+    records = settings_context.unverified_transitions(phone)
+    assert [record["category"] for record in records] == ["name_mismatch"]
+    assert records[0]["recovery"] == "backout_retry_rejected"
+    # the canonical root row stays deferred to root coverage — no failure entry
+    assert failures == []
+
+
+@pytest.mark.smoke
+def test_root_unverified_tap_same_page_keeps_direct_path_without_backout(monkeypatch):
+    """same_page: the tap did nothing, the captured coordinates are still
+    valid — no back-out, no extra retry; record the category only."""
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root, _detail, _verified = _s5a_crawl_fixtures()
+    phone = _S5aPhone(root)
+    events: list[tuple[str, object]] = []
+
+    def tap_row(_phone, row):
+        events.append(("tap", (row.text or "").strip()))
+        settings_context.record_action_verdict(
+            phone,
+            SimpleNamespace(status="failed", accepted=False, reason="semantic rejected"),
+        )
+        return False  # scene unchanged: still on root
+
+    def back_out(_phone, **_kwargs):
+        events.append(("back", None))
+        return True
+
+    actions = _s5a_crawl_actions(
+        phone,
+        root,
+        tap_row=tap_row,
+        back_out=back_out,
+        crawl_child=lambda *_args, **_kwargs: None,
+        page_titles=lambda _scene: "Settings",
+    )
+
+    settings_context.reset_for(phone)
+    _visits, failures = _s5a_run_crawl(phone, actions)
+
+    assert events == [("tap", "Wallpaper")]  # no back-out, no retry tap
+    records = settings_context.unverified_transitions(phone)
+    assert [record["category"] for record in records] == ["same_page"]
+    assert records[0]["recovery"] == "none"
+    assert failures == []
+
+
+@pytest.mark.smoke
+def test_root_unverified_tap_ipad_records_category_but_does_not_back_out(monkeypatch):
+    """iPad split view keeps the sidebar (and the row) visible on detail
+    scenes, so the back-out is iPhone-only — the committed iPad floor's
+    behavior must not shift. The taxonomy is still recorded for forensics."""
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root, detail, _verified = _s5a_crawl_fixtures()
+    phone = _S5aPhone(root)
+    phone.device_geometry = SimpleNamespace(model="ipad_mini_7")
+    events: list[tuple[str, object]] = []
+
+    def tap_row(_phone, row):
+        events.append(("tap", (row.text or "").strip()))
+        phone.scene = detail
+        settings_context.record_action_verdict(
+            phone,
+            SimpleNamespace(status="failed", accepted=False, reason="page_id mismatch"),
+        )
+        return False
+
+    def back_out(_phone, **_kwargs):
+        events.append(("back", None))
+        return True
+
+    actions = _s5a_crawl_actions(
+        phone,
+        root,
+        tap_row=tap_row,
+        back_out=back_out,
+        crawl_child=lambda *_args, **_kwargs: None,
+        page_titles=lambda _scene: "Settings",
+    )
+
+    settings_context.reset_for(phone)
+    _s5a_run_crawl(phone, actions)
+
+    assert events == [("tap", "Wallpaper")]  # behavior unchanged: no back-out/retry
+    records = settings_context.unverified_transitions(phone)
+    assert [record["category"] for record in records] == ["name_mismatch"]
+    assert records[0]["recovery"] == "none"
+
+
+@pytest.mark.smoke
+def test_same_page_retap_block_skips_retap_when_after_scene_left_root(monkeypatch):
+    """S5a guard on the direct re-tap block: when same_page_after_tap
+    mis-scores an ENTERED page as same-page, the row label found on the
+    detail scene must not be re-tapped (C4's destructive re-tap)."""
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root, _detail, _verified = _s5a_crawl_fixtures()
+    # detail scene that still shows the row label (e.g. as its nav title)
+    detail_with_label = _s5a_scene(
+        _el("<", 18, 92, w=14, ty="nav_back"),
+        _el("Wallpaper", 224, 92, w=120),
+    )
+    phone = _S5aPhone(root)
+    taps: list[str] = []
+
+    def tap_row(_phone, row):
+        taps.append((row.text or "").strip())
+        phone.scene = detail_with_label
+        settings_context.record_action_verdict(
+            phone,
+            SimpleNamespace(status="transport_only", accepted=True),
+        )
+        return True  # accepted, but not semantically `succeeded`
+
+    actions = _s5a_crawl_actions(
+        phone,
+        root,
+        tap_row=tap_row,
+        back_out=lambda *_args, **_kwargs: True,
+        crawl_child=lambda *_args, **_kwargs: None,
+        page_titles=lambda _scene: "Settings",
+    )
+    actions = replace(
+        actions,
+        # force the mis-score the guard exists for
+        same_page_after_tap=lambda *_args, **_kwargs: True,
+    )
+
+    settings_context.reset_for(phone)
+    _s5a_run_crawl(phone, actions)
+
+    assert taps == ["Wallpaper"]  # no direct re-tap while off-root
+
+
+@pytest.mark.smoke
+def test_same_page_retap_block_still_retaps_on_ipad_split_view(monkeypatch):
+    """iPad exemption for the same guard: the sidebar row is genuinely still
+    visible on detail scenes, so the direct re-tap remains allowed there."""
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    root, _detail, _verified = _s5a_crawl_fixtures()
+    detail_with_label = _s5a_scene(
+        _el("<", 18, 92, w=14, ty="nav_back"),
+        _el("Wallpaper", 224, 92, w=120),
+    )
+    phone = _S5aPhone(root)
+    phone.device_geometry = SimpleNamespace(model="ipad_mini_7")
+    taps: list[str] = []
+
+    def tap_row(_phone, row):
+        taps.append((row.text or "").strip())
+        phone.scene = detail_with_label
+        settings_context.record_action_verdict(
+            phone,
+            SimpleNamespace(status="transport_only", accepted=True),
+        )
+        return True
+
+    actions = _s5a_crawl_actions(
+        phone,
+        root,
+        tap_row=tap_row,
+        back_out=lambda *_args, **_kwargs: True,
+        crawl_child=lambda *_args, **_kwargs: None,
+        page_titles=lambda _scene: "Settings",
+    )
+    actions = replace(actions, same_page_after_tap=lambda *_args, **_kwargs: True)
+
+    settings_context.reset_for(phone)
+    _s5a_run_crawl(phone, actions)
+
+    assert taps == ["Wallpaper", "Wallpaper"]  # unchanged iPad behavior

@@ -1510,3 +1510,99 @@ def test_ios_settings_report_verifier_cli(tmp_path, capsys):
 
     assert main([str(path), "--expected-run-id", "run-test"]) == 0
     assert "OK" in capsys.readouterr().out
+
+
+# ── S5a: additive unverified_transitions taxonomy in the report ───────────────
+# docs/design/iphone_settings_transition.md §2 S5a. The list is forensic-only:
+# it must be machine-readable when present, but it never gates strict
+# acceptance, and pre-S5a reports (no key) must keep validating.
+
+
+def _unverified_entry(**overrides):
+    entry = {
+        "path": ["Settings"],
+        "text": "Wallpaper",
+        "category": "mint_none",
+        "verdict_status": "failed",
+        "verdict_reason": "page_id mismatch",
+        "minted_page_id": None,
+        "recovery": "backout_retry_rejected",
+    }
+    entry.update(overrides)
+    return entry
+
+
+@pytest.mark.smoke
+def test_report_payload_emits_unverified_transitions(monkeypatch):
+    monkeypatch.setattr(
+        "skills.regression.ios_settings.report_writer._active_device_report_config",
+        lambda: {"phone_model": "iphone_17_pro_max", "platform": "ios"},
+    )
+    run_config = SettingsRunConfig.for_child_audit(
+        max_depth=1,
+        max_pages=4,
+        max_child_scrolls_per_page=1,
+        max_candidates_per_page=0,
+        strict_child_candidate_audit=False,
+    )
+    kwargs = dict(
+        run_config=run_config,
+        visits=[PageVisit(("Settings",), "Settings", ("Settings",))],
+        limits_hit=set(),
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        root_coverage={"expected": [], "visited": [], "missing": []},
+        trace_payload=None,
+    )
+
+    # default: the key is always present, additive, empty
+    assert build_report_payload(**kwargs)["unverified_transitions"] == []
+
+    entry = _unverified_entry()
+    payload = build_report_payload(**kwargs, unverified_transitions=[entry])
+    assert payload["unverified_transitions"] == [entry]
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_accepts_valid_unverified_transitions():
+    report = _report()
+    report["unverified_transitions"] = [
+        _unverified_entry(),
+        _unverified_entry(category="same_page", recovery="none"),
+        _unverified_entry(category="name_mismatch", minted_page_id="settings/Do Not Disturb"),
+        _unverified_entry(category="unknown_scene"),
+    ]
+
+    # forensic-only: a strict, otherwise-clean report stays clean
+    assert validate_report(report) == []
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_accepts_reports_without_unverified_transitions():
+    report = _report()
+    assert "unverified_transitions" not in report  # pre-S5a shape
+
+    assert validate_report(report) == []
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_rejects_malformed_unverified_transitions():
+    bad_category = _report()
+    bad_category["unverified_transitions"] = [_unverified_entry(category="entered_unverified")]
+    bad_path = _report()
+    bad_path["unverified_transitions"] = [_unverified_entry(path=["Wallpaper"])]
+    bad_text = _report()
+    bad_text["unverified_transitions"] = [_unverified_entry(text="")]
+    not_a_list = _report()
+    not_a_list["unverified_transitions"] = {"category": "mint_none"}
+
+    assert any(
+        "invalid category" in error for error in validate_report(bad_category)
+    )
+    assert any("invalid path" in error for error in validate_report(bad_path))
+    assert any("invalid text" in error for error in validate_report(bad_text))
+    assert any(
+        "unverified_transitions is not a list" in error
+        for error in validate_report(not_a_list)
+    )

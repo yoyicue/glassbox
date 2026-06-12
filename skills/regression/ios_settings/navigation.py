@@ -21,6 +21,7 @@ from glassbox.boundaries import action_host_backend_capabilities
 from glassbox.cognition import Box, UIElement
 from glassbox.cognition.text_match import compact_text
 from glassbox.ios.progress import is_time_text
+from glassbox.ios.scene import has_strong_ios_home_evidence
 from glassbox.target_planner import TargetPlanner
 from skills.regression.ios_settings import context as settings_context
 from skills.regression.ios_settings import graph_state as settings_graph_state
@@ -32,6 +33,12 @@ PageVisit = settings_reporting.PageVisit
 BlockedPage = settings_reporting.BlockedPage
 RejectedCandidate = settings_reporting.RejectedCandidate
 NavigationFailure = settings_reporting.NavigationFailure
+
+# S5a (docs/design/iphone_settings_transition.md §2): categories whose evidence
+# says the rejected tap LEFT the page it was issued from — re-tapping the
+# captured coordinates there presses whatever sits at them on the entered page
+# (C4's destructive re-tap), so recovery must back out first.
+UNVERIFIED_LEFT_PAGE_CATEGORIES = frozenset({"mint_none", "name_mismatch", "unknown_scene"})
 
 ActionIntent = Callable[..., AbstractContextManager[Any]]
 ActionResultRecorder = Callable[[Any, Any], bool]
@@ -644,6 +651,210 @@ def _last_action_succeeded(phone) -> bool:
     return str(getattr(verdict, "status", "")).lower() == "succeeded"
 
 
+def classify_unverified_transition(
+    before_scene,
+    after_scene,
+    actions: SettingsNavigationActions,
+    *,
+    phone=None,
+) -> str:
+    """S5a (docs/design/iphone_settings_transition.md §1 C4, §2): attribute a
+    row tap whose semantic verification was REJECTED before deciding the next
+    action, instead of folding every rejection into "no transition".
+
+    Locale-neutral by construction: only scene classification, the visible-text
+    signature, and the minted ``page_id`` are consulted — never label strings —
+    so zh and en runs classify identically.
+
+    Categories (see ``reporting.UNVERIFIED_TRANSITION_CATEGORIES``):
+
+    - ``same_page``: we never left the page the tap was issued from (the after
+      scene is still the Settings root, or its visible texts are
+      page-equivalent to the before scene). The tap did nothing; the captured
+      coordinates are still valid, so a direct retry is safe.
+    - ``name_mismatch``: a page_id WAS minted but the verifier still rejected
+      it (≁ expected even after the S4 fold) — we are standing on some other,
+      or wrongly-named, page.
+    - ``unknown_scene``: no page_id and the scene carries strong non-Settings
+      evidence (Home screen / app grid) — the tap threw us out of the app.
+    - ``mint_none``: every other left-the-page case — physically entered
+      something, but the classifier abstained from minting an identity (e.g.
+      the sparse-OCR Wallpaper after-frame in the committed transition
+      corpus, ``skills/golden/ios_settings_transitions/grp_000050``). The
+      scene-kind classifier is demonstrably unreliable on such sparse frames
+      (a real Display & Brightness capture classifies "springboard"), so
+      ``unknown_scene`` requires the strong-home-evidence check rather than a
+      mere kind string.
+    """
+    if actions.scene_is_settings_root(after_scene):
+        return "same_page"
+    if actions.same_page_after_tap(before_scene, after_scene):
+        return "same_page"
+    if _minted_page_id(after_scene, phone=phone):
+        return "name_mismatch"
+    viewport_size = settings_scene_state.phone_viewport_size(phone) if phone is not None else None
+    if has_strong_ios_home_evidence(after_scene, viewport_size=viewport_size):
+        return "unknown_scene"
+    return "mint_none"
+
+
+def _minted_page_id(scene, *, phone=None) -> str | None:
+    """The scene's minted identity: the perceive-stamped ``page_id`` when
+    present, else a deterministic re-mint with the platform classifier (same
+    authority the transition-corpus replay uses)."""
+    page_id = getattr(scene, "page_id", None)
+    if page_id:
+        return str(page_id)
+    classified = settings_scene_state.classify_ios_scene(scene, phone)
+    minted = getattr(classified, "page_id", None) if classified is not None else None
+    return str(minted) if minted else None
+
+
+def _record_unverified_transition(
+    phone,
+    *,
+    path: tuple[str, ...],
+    label: str,
+    category: str,
+    after_scene,
+) -> dict[str, Any]:
+    verdict = settings_context.last_action_verdict(phone)
+    payload: dict[str, Any] = {
+        "path": [str(segment) for segment in path],
+        "text": label,
+        "category": category,
+        "verdict_status": str(getattr(verdict, "status", "") or "") or None,
+        "verdict_reason": str(getattr(verdict, "reason", "") or "") or None,
+        "minted_page_id": _minted_page_id(after_scene, phone=phone),
+        "recovery": "none",
+    }
+    settings_context.record_unverified_transition(phone, payload)
+    return payload
+
+
+def _relocate_live_root_candidate(
+    phone,
+    actions: SettingsNavigationActions,
+    label: str,
+) -> tuple[Any, UIElement | None]:
+    """Re-ground the Settings root and re-locate ``label``'s row in the LIVE
+    scene. Match by canonical section first (a garbled/variant OCR of e.g.
+    "Bluetooth" still maps to the same row), then exact text, then a fuzzy
+    fallback. Exact-text only dropped mid-band rows whose OCR drifted between
+    frames (notably under English OCR). Raises ``SettingsRootUnreachable``
+    when the root cannot be re-grounded."""
+    current = phone.perceive()
+    if not actions.scene_is_settings_root(current):
+        actions.return_to_settings_root(phone)
+        current = phone.perceive()
+    candidate_canon = actions.canonical_expected_root_label(label)
+    live_root_candidates = actions.safe_navigation_candidates(
+        current,
+        allow_sensitive_root_labels=True,
+        allow_known_without_affordance=True,
+    )
+    relocated = None
+    for element in live_root_candidates:
+        etext = (element.text or "").strip()
+        if not etext:
+            continue
+        if etext == label or (
+            candidate_canon is not None
+            and actions.canonical_expected_root_label(etext) == candidate_canon
+        ):
+            relocated = element
+            break
+    if relocated is None:
+        relocated = actions.match_any(live_root_candidates, [label])
+    if relocated is None:
+        relocated = actions.vlm_point_for_label(
+            phone,
+            label,
+            scene_kind=actions.scene_kind(current, phone=phone),
+        )
+    return current, relocated
+
+
+def _recover_root_row_after_unverified_tap(
+    phone,
+    actions: SettingsNavigationActions,
+    *,
+    path: tuple[str, ...],
+    label: str,
+    before_scene,
+    before_texts: list[str],
+    limits_hit: set[str],
+) -> tuple[str, Any, UIElement | None]:
+    """S5a (C4): classify a verification-rejected root-row tap, record the
+    category for the report, then recover deliberately.
+
+    Returns ``("entered", scene, cand)`` when the single back-out retry was
+    accepted (the caller falls through into the normal entered flow),
+    ``("skip", None, None)`` when the row is left to the existing coverage
+    recovery (multi-pass scroll reset / search), and ``("abort", None, None)``
+    when the root became unreachable (caller stops this crawl level, same as
+    the other ``return_to_root_failed`` sites).
+
+    Per-category recovery policy (docs/design/iphone_settings_transition.md §2):
+
+    - ``same_page``: the tap did nothing, so the row is still at its captured
+      coordinates — a direct retry is safe and the existing recovery paths
+      (multi-pass reset, search) already provide it. No back-out.
+    - ``mint_none`` / ``name_mismatch`` / ``unknown_scene``: the evidence says
+      we LEFT the root while verification stayed inconclusive. Re-tapping the
+      captured coordinates would press whatever sits at them on the entered
+      page (toggles, sub-navigation — the ledger's acts 63-65/74-76/96-98).
+      Back out with the existing affordance helpers, re-ground the root, then
+      retry the row AT MOST once (no loop; `attempted` already holds the
+      label, so this crawl pass never reaches it again).
+
+    iPad split view keeps the back-out disabled: the sidebar — and the row
+    itself — remains visible on detail scenes, so a relocated re-tap presses
+    the real sidebar row there, and the committed iPad floor's behavior must
+    not shift. The classification is still recorded for forensics.
+    """
+    with contextlib.suppress(Exception):
+        phone.invalidate_perceive_cache()
+    after = phone.perceive()
+    category = classify_unverified_transition(before_scene, after, actions, phone=phone)
+    payload = _record_unverified_transition(
+        phone,
+        path=path,
+        label=label,
+        category=category,
+        after_scene=after,
+    )
+    if category not in UNVERIFIED_LEFT_PAGE_CATEGORIES or _is_ipad_target(phone):
+        return ("skip", None, None)
+    # Deliberate back-out — never a coordinate re-tap on the entered page.
+    if not actions.return_one_level(
+        phone,
+        parent_texts=before_texts,
+        parent_title=actions.page_title(before_scene),
+        parent_is_root=True,
+    ):
+        try:
+            actions.return_to_settings_root(phone)
+        except SettingsRootUnreachable:
+            limits_hit.add("return_to_root_failed")
+            payload["recovery"] = "backout_failed"
+            return ("abort", None, None)
+    try:
+        current, relocated = _relocate_live_root_candidate(phone, actions, label)
+    except SettingsRootUnreachable:
+        limits_hit.add("return_to_root_failed")
+        payload["recovery"] = "backout_failed"
+        return ("abort", None, None)
+    if relocated is None:
+        payload["recovery"] = "backout_row_not_relocated"
+        return ("skip", None, None)
+    if actions.tap_settings_row(phone, _tap_candidate_for_scene(phone, current, relocated)):
+        payload["recovery"] = "backout_retry_accepted"
+        return ("entered", current, relocated)
+    payload["recovery"] = "backout_retry_rejected"
+    return ("skip", None, None)
+
+
 def _backend_pointer_kind(phone) -> str:
     backend_capabilities = action_host_backend_capabilities(phone)
     if backend_capabilities is not None:
@@ -891,50 +1102,16 @@ def crawl_current_page(
                 # we are on root and re-locate this row by its label in the live
                 # scene. If it has scrolled off, skip WITHOUT marking it attempted
                 # so the scroll/multi-pass recovery can still reach it.
-                current = phone.perceive()
-                if not actions.scene_is_settings_root(current):
-                    try:
-                        actions.return_to_settings_root(phone)
-                    except SettingsRootUnreachable:
-                        # S6/C5 (docs/design/iphone_settings_transition.md): an
-                        # infra death mid-crawl (frame source gone) used to
-                        # escape THIS re-ground as a raw walkthrough exception
-                        # while the scroll loop's re-ground above aborts
-                        # gracefully — same classification, same graceful stop.
-                        limits_hit.add("return_to_root_failed")
-                        return
-                    current = phone.perceive()
-                # Re-locate this row in the live scene. Match by canonical section
-                # first (a garbled/variant OCR of e.g. "Bluetooth" still maps to
-                # the same row), then exact text, then a fuzzy fallback. Exact-text
-                # only dropped mid-band rows whose OCR drifted between frames
-                # (notably under English OCR) — the cascade this re-ground exists
-                # to prevent.
-                candidate_canon = actions.canonical_expected_root_label(label)
-                live_root_candidates = actions.safe_navigation_candidates(
-                    current,
-                    allow_sensitive_root_labels=True,
-                    allow_known_without_affordance=True,
-                )
-                relocated = None
-                for element in live_root_candidates:
-                    etext = (element.text or "").strip()
-                    if not etext:
-                        continue
-                    if etext == label or (
-                        candidate_canon is not None
-                        and actions.canonical_expected_root_label(etext) == candidate_canon
-                    ):
-                        relocated = element
-                        break
-                if relocated is None:
-                    relocated = actions.match_any(live_root_candidates, [label])
-                if relocated is None:
-                    relocated = actions.vlm_point_for_label(
-                        phone,
-                        label,
-                        scene_kind=actions.scene_kind(current, phone=phone),
-                    )
+                try:
+                    current, relocated = _relocate_live_root_candidate(phone, actions, label)
+                except SettingsRootUnreachable:
+                    # S6/C5 (docs/design/iphone_settings_transition.md): an
+                    # infra death mid-crawl (frame source gone) used to
+                    # escape THIS re-ground as a raw walkthrough exception
+                    # while the scroll loop's re-ground above aborts
+                    # gracefully — same classification, same graceful stop.
+                    limits_hit.add("return_to_root_failed")
+                    return
                 if relocated is None:
                     continue
                 cand = relocated
@@ -957,15 +1134,39 @@ def crawl_current_page(
             tap_cand = _tap_candidate_for_scene(phone, scene, cand)
             if not actions.tap_settings_row(phone, tap_cand):
                 if depth == 0 and actions.canonical_expected_root_label(label) is not None:
+                    # S5a (C4, docs/design/iphone_settings_transition.md §2): a
+                    # verification-rejected root tap used to `continue` silently
+                    # — leaving the run standing ON the page it may have
+                    # physically entered, with the visit unaccounted. Classify
+                    # WHY verification failed, record the category for the
+                    # report, and — when the evidence says we LEFT the root —
+                    # back out and retry the row once instead of letting the
+                    # next iteration tap stale root coordinates.
+                    status, retried_scene, retried_cand = _recover_root_row_after_unverified_tap(
+                        phone,
+                        actions,
+                        path=path,
+                        label=label,
+                        before_scene=scene,
+                        before_texts=before_texts,
+                        limits_hit=limits_hit,
+                    )
+                    if status == "abort":
+                        return
+                    if status != "entered":
+                        continue
+                    scene = retried_scene
+                    cand = retried_cand
+                    before_texts = actions.texts(scene)
+                else:
+                    actions.record_navigation_failure(
+                        navigation_failures,
+                        path=path,
+                        scene=scene,
+                        text=label,
+                        reason="tap_no_navigation",
+                    )
                     continue
-                actions.record_navigation_failure(
-                    navigation_failures,
-                    path=path,
-                    scene=scene,
-                    text=label,
-                    reason="tap_no_navigation",
-                )
-                continue
             time.sleep(1.0)
             phone.invalidate_perceive_cache()
             after = phone.perceive()
@@ -978,10 +1179,22 @@ def crawl_current_page(
             ):
                 same_page_after_tap = False
             if same_page_after_tap and depth == 0:
+                # S5a (C4) guard: only re-tap directly when the live scene is
+                # still the Settings root. `same_page_after_tap` is a
+                # text-overlap heuristic and can mis-score an entered detail
+                # page as "same page"; re-tapping the row's label there presses
+                # whatever sits at those coordinates on the DETAIL page (the
+                # destructive re-tap of
+                # docs/design/iphone_settings_transition.md §1 C4). iPad split
+                # view is exempt: its sidebar — including this row — genuinely
+                # stays visible on detail scenes, so the relocated re-tap
+                # presses the real sidebar row (and the committed iPad floor's
+                # behavior must not shift).
+                retap_safe = _is_ipad_target(phone) or actions.scene_is_settings_root(after)
                 retry_cand = next(
                     (element for element in after.elements if (element.text or "").strip() == label),
                     None,
-                )
+                ) if retap_safe else None
                 if (
                     retry_cand is not None
                     and not actions.is_settings_section_header(after, retry_cand)

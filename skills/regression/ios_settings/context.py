@@ -24,6 +24,11 @@ class SettingsRuntimeState:
     vlm_point_grounding_history: list[dict[str, Any]] = field(default_factory=list)
     root_sidebar_exhaustive: bool = False
     sidebar_absent_root_labels: set[str] = field(default_factory=set)
+    # S5a (docs/design/iphone_settings_transition.md §2): per-tap taxonomy
+    # records for verification-rejected row taps ("entered_unverified"). The
+    # report writer surfaces these as the report's `unverified_transitions`
+    # list so forensics can aggregate categories across runs.
+    unverified_transitions: list[dict[str, Any]] = field(default_factory=list)
 
 
 _STATE_BY_ID: dict[int, SettingsRuntimeState] = {}
@@ -106,6 +111,14 @@ def mark_root_sidebar_exhaustive(phone: object, value: bool = True) -> None:
 
 def root_sidebar_exhaustive(phone: object) -> bool:
     return state_for(phone).root_sidebar_exhaustive
+
+
+def record_unverified_transition(phone: object, payload: dict[str, Any]) -> None:
+    state_for(phone).unverified_transitions.append(payload)
+
+
+def unverified_transitions(phone: object) -> list[dict[str, Any]]:
+    return state_for(phone).unverified_transitions
 
 
 def record_sidebar_absent_root_labels(phone: object, labels: Any) -> None:

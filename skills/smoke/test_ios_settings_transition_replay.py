@@ -1,6 +1,7 @@
 """Replay the committed iPhone Settings transition corpus against current code.
 
-S1+S2+S3+S4 of docs/design/iphone_settings_transition.md. For every candidate tap
+S1+S2+S3+S4 (+S5a category pins) of docs/design/iphone_settings_transition.md.
+For every candidate tap
 group in ``skills/golden/ios_settings_transitions`` this rebuilds the
 expected_state with the **real production builder**
 (``navigation._settings_row_expected_state`` →
@@ -156,8 +157,11 @@ def _replay_param(group_id: str):
                 reason="false rejection neither the minting fix (S3) nor the "
                 "comparator fold (S4) earns: the committed after-scene carries "
                 "no usable settings_detail evidence, so the re-mint is None "
-                "and there is nothing to normalize — attribution (S5) "
-                "territory",
+                "and there is nothing to normalize. S5a (landed) now "
+                "classifies this mint_none and backs out instead of "
+                "re-tapping, but that changes runtime recovery, not the "
+                "offline re-mint — flipping needs a rig run (the back-out "
+                "retry capturing a mintable frame) or an S5b/core change",
             )
         )
     return pytest.param(group_id, id=f"{group_id}-{GROUPS[group_id]['target']}", marks=marks)
@@ -323,6 +327,53 @@ def test_s3_remint_prefers_nav_band_title_on_corpus_scenes():
     # Not earned by S3: Wallpaper's committed after-scene has no usable
     # settings_detail evidence — the classifier abstains rather than minting.
     assert _remint_page_id(GROUPS["grp_000050"]["after_scene"]) is None
+
+
+# ── S5a: entered_unverified taxonomy on the corpus's rejected groups ──────────
+#
+# S5a's runtime classifier (navigation.classify_unverified_transition) decides
+# whether a verification-rejected tap may be retried in place (same_page) or
+# must back out first (left-the-root categories). The corpus pins its category
+# for every group the CURRENT replay rejects — the only groups whose category
+# is derivable offline (for the green groups the classifier never runs):
+#
+# - grp_000029 stayed on the root (No-SIM) → same_page (retry-in-place safe).
+# - grp_000059 re-mints 'settings/Do Not Disturb', a real but non-matching
+#   identity → name_mismatch (back-out).
+# - every other rejected group re-mints None → mint_none (back-out). This
+#   includes the Apple-ID modal (grp_000014): the corpus carries no
+#   affirmative strong-home-evidence frame, so `unknown_scene` has no corpus
+#   exemplar — it is pinned by a constructed-scene unit test in
+#   test_ios_settings_navigation.py instead.
+S5A_REPLAY_CATEGORY_PINS = {
+    "grp_000014": "mint_none",
+    "grp_000029": "same_page",
+    "grp_000038": "mint_none",
+    "grp_000041": "mint_none",
+    "grp_000050": "mint_none",
+    "grp_000053": "mint_none",
+    "grp_000059": "name_mismatch",
+    "grp_000081": "mint_none",
+    "grp_000095": "mint_none",
+}
+
+
+@pytest.mark.smoke
+def test_s5a_classifier_categories_on_replay_rejected_groups(en_cn_locale):
+    # The pin table covers exactly the groups the replay rejects today.
+    assert set(S5A_REPLAY_CATEGORY_PINS) == (
+        CORRECT_REJECTIONS | FALSE_REJECTIONS_WRONG_MINT | VLM_ONLY_LIVE
+    )
+    root_scene = _scene_from_corpus(
+        json.loads((CORPUS_DIR / "root_scene.json").read_text())
+    )
+    actions = _production_actions()
+    for group_id, expected_category in sorted(S5A_REPLAY_CATEGORY_PINS.items()):
+        after = _scene_from_corpus(GROUPS[group_id]["after_scene"])
+        category = settings_navigation.classify_unverified_transition(
+            root_scene, after, actions
+        )
+        assert category == expected_category, (group_id, category)
 
 
 # ── S2 guards ────────────────────────────────────────────────────────────────

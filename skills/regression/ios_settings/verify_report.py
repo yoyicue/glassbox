@@ -30,6 +30,7 @@ from skills.regression.ios_settings.reporting import (
     EXPECTED_NAVIGATION_FAILURE_REASONS,
     EXPECTED_REJECTED_REASONS,
     SOFT_LIMITS,
+    UNVERIFIED_TRANSITION_CATEGORIES,
     blocked_reason_from_texts,
     canonical_root_label_from_text,
     computed_root_coverage,
@@ -487,6 +488,33 @@ def validate_report(
             continue
         if require_exhaustive and not text_entry_exempt:
             errors.append(f"navigation candidate did not open: {' > '.join(path_key)} > {text}")
+
+    # S5a (docs/design/iphone_settings_transition.md §2): the additive
+    # entered-unverified taxonomy list. Forensic-only — its presence or
+    # contents never gate strict acceptance (a section the back-out retry
+    # could not enter still fails via root_coverage.required_missing) — but
+    # when emitted it must be machine-readable: known categories, a Settings
+    # path, and a non-empty row label. Reports written before S5a omit the
+    # key entirely, which stays valid.
+    unverified_transitions = report.get("unverified_transitions", [])
+    if unverified_transitions is None:
+        unverified_transitions = []
+    if not isinstance(unverified_transitions, list):
+        errors.append("unverified_transitions is not a list")
+        unverified_transitions = []
+    for idx, entry in enumerate(unverified_transitions):
+        if not isinstance(entry, dict):
+            errors.append(f"unverified_transitions[{idx}] is not an object")
+            continue
+        path = entry.get("path")
+        if not isinstance(path, list) or not path or str(path[0]) != "Settings":
+            errors.append(f"unverified_transitions[{idx}] has invalid path")
+        text = entry.get("text")
+        if not isinstance(text, str) or not text:
+            errors.append(f"unverified_transitions[{idx}] has invalid text")
+        category = entry.get("category")
+        if not isinstance(category, str) or category not in UNVERIFIED_TRANSITION_CATEGORIES:
+            errors.append(f"unverified_transitions[{idx}] has invalid category: {category!r}")
 
     return errors
 

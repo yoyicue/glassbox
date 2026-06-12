@@ -119,6 +119,21 @@ EXPECTED_REJECTED_REASONS = frozenset({
     "inert_self_loop",
 })
 EXPECTED_NAVIGATION_FAILURE_REASONS = frozenset({"tap_no_navigation", "search_no_result"})
+# S5a (docs/design/iphone_settings_transition.md §1 C4, §2): taxonomy for a row
+# tap whose semantic verification was REJECTED ("entered_unverified"). The
+# category decides the runtime recovery (see navigation.py) and is recorded
+# per-entry in the report's additive `unverified_transitions` list:
+# - same_page:     the tap did nothing (still on the page we tapped from)
+# - mint_none:     left the page, but the classifier minted no page_id
+# - name_mismatch: left the page; a page_id WAS minted but ≁ expected even
+#                  after the S4 fold
+# - unknown_scene: left the page AND landed on a manifestly non-Settings scene
+UNVERIFIED_TRANSITION_CATEGORIES = frozenset({
+    "same_page",
+    "mint_none",
+    "name_mismatch",
+    "unknown_scene",
+})
 EXPECTED_MIN_VISITS = len(EXPECTED_ROOT_NAV_TEXT_ZH) + 1
 TRACE_METRIC_KEYS = (
     "hid_call_count",

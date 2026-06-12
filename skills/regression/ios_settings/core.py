@@ -1611,6 +1611,11 @@ def _write_report(
         navigation_failures=navigation_failures,
         root_coverage=_root_coverage(visits, phone=phone),
         trace_payload=trace_payload,
+        # S5a: per-tap entered_unverified taxonomy gathered in the per-phone
+        # runtime context by navigation._recover_root_row_after_unverified_tap.
+        unverified_transitions=(
+            list(settings_context.unverified_transitions(phone)) if phone is not None else []
+        ),
     )
 
 
