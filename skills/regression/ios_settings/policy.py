@@ -69,6 +69,12 @@ UNSAFE_OR_NON_NAV_TEXT = (
     "退出登录", "Sign Out",
     "Apple账户", "Apple 账户", "iCloud", "登录与安全性", "Media & Purchases",
     "媒体与购买项目",
+    # Apple-Account-review row en blocked-safety vocab: the en root row
+    # "Review Apple Account phone number" anchors the auto-presented trusted
+    # number safety sheet ("Is this still your phone number?"). The drill-down
+    # must never deliberately tap it — same family as the zh Apple-Account
+    # rows above. Substring form covers OCR truncations.
+    "Review Apple Account",
     "进一步了解", "Learn More",
     "Game Center",
 )

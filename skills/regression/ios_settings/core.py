@@ -46,7 +46,9 @@ from glassbox.ios.progress import (
 from glassbox.ios.progress import (
     trace_payload_no_progress as _trace_payload_no_progress,
 )
+from glassbox.ios.recovery import dismiss_modal_sheet_overlay
 from glassbox.ios.safe_area import IOSSafeArea
+from glassbox.ios.scene import modal_sheet_overlay_evidence
 from glassbox.ios.springboard import open_app_from_springboard
 from skills.regression.ios_settings import bootstrap as settings_bootstrap
 from skills.regression.ios_settings import context as settings_context
@@ -401,6 +403,7 @@ def _recovery_actions() -> settings_recovery.SettingsRecoveryActions:
         try_memory_return_to_settings_root=_try_memory_return_to_settings_root,
         looks_like_settings_search_results=_looks_like_settings_search_results,
         settings_search_has_bottom_chrome=_settings_search_has_bottom_chrome,
+        dismiss_modal_sheet=_dismiss_modal_sheet,
     )
 
 
@@ -505,6 +508,22 @@ def _return_from_blocked_settings_state(phone, scene) -> bool:
 
 def _return_from_unknown_settings_state(phone, scene) -> bool:
     return settings_recovery.return_from_unknown_settings_state(phone, scene, _recovery_actions())
+
+
+def _dismiss_modal_sheet(phone, scene) -> bool:
+    """Tap the top-right close-X of an auto-presented card sheet (core helper).
+
+    `unknown` semantic verdicts are tolerated: dismissal is confirmed by the
+    recovery ladder's settle + re-perceive, and the close tap itself has no
+    same-scene verification anchor.
+    """
+    return dismiss_modal_sheet_overlay(
+        phone,
+        scene,
+        viewport_size=_phone_viewport_size(phone),
+        action_context=lambda name, **metadata: _action_intent(phone, name, **metadata),
+        record_result=lambda result: _accept_tolerating_unknown(phone, result),
+    )
 
 
 def _try_memory_return_to_settings_root(phone, scene) -> bool:
@@ -1437,6 +1456,16 @@ def _return_one_level(
         scene = phone.perceive()
         if _scene_is_settings_root(scene) or _ipad_scene_has_root_sidebar(scene):
             return True
+    with suppress(Exception):
+        # An auto-presented card sheet (Apple Account safety sheet family) is
+        # not back-navigable: the back shortcut is inert and the top-LEFT
+        # corner fallback below is a mirror miss on its top-RIGHT close-X.
+        # Abstain immediately so the caller falls through to
+        # return_to_settings_root, whose bounded modal rung taps the close-X.
+        if modal_sheet_overlay_evidence(
+            phone.perceive(), viewport_size=_phone_viewport_size(phone)
+        ) is not None:
+            return False
     with _action_intent(phone, "return.one_level.back_shortcut", parent_title=parent_title):
         result = _send_ios_back_action(phone)
     if _action_semantically_failed(phone, result):

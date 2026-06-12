@@ -13,7 +13,11 @@ from typing import Any, Protocol
 
 from glassbox.boundaries import RecoverySignal, StepContext
 from glassbox.cognition.base import Scene
-from glassbox.ios.scene import classify_ios_scene
+from glassbox.ios.scene import (
+    classify_ios_scene,
+    modal_sheet_close_point,
+    modal_sheet_overlay_evidence,
+)
 from glassbox.ios.weather_surface import looks_like_weather_app_surface
 
 
@@ -60,6 +64,41 @@ def dismiss_system_search(
     if fallback_back is not None:
         return bool(fallback_back())
     return False
+
+
+def dismiss_modal_sheet_overlay(
+    phone: object,
+    scene: Scene | None = None,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+    action_context: ActionContext | None = None,
+    record_result: Callable[[Any], bool] | None = None,
+) -> bool:
+    """Dismiss an auto-presented card sheet by tapping its top-right close-X.
+
+    Read-only by construction: the only tap this primitive can issue is at
+    ``modal_sheet_close_point`` (the OCR'd X, else the canonical ~(0.90w,
+    0.11h) region) — it never touches the sheet's bottom action rows ("Keep
+    using …" / "Change trusted number" / "Done"). Abstains (returns False)
+    unless ``modal_sheet_overlay_evidence`` is present, so callers can fall
+    through to their existing escape ladder. Attempt bounding is owned by the
+    caller (the recovery ladder caps it at 2 per recovery episode).
+    """
+    if scene is None:
+        return False
+    evidence = modal_sheet_overlay_evidence(scene, viewport_size=viewport_size)
+    if evidence is None:
+        return False
+    tap = getattr(phone, "tap_xy", None)
+    if not callable(tap):
+        return False
+    x, y = modal_sheet_close_point(scene, viewport_size=viewport_size)
+    trace = action_context or _null_action_context
+    with trace("modal.dismiss_close_x", x=x, y=y, evidence=list(evidence)):
+        result = tap(x, y)
+    if record_result is not None:
+        return bool(record_result(result))
+    return True
 
 
 def should_foreground_target_app_instead_of_back(

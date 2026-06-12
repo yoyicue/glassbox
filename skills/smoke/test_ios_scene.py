@@ -1150,3 +1150,110 @@ def test_ios_scene_classifier_app_library_category_grid_without_title():
     classified = classify_ios_scene(scene, viewport_size=(448, 973))
 
     assert classified.kind == "app_library"
+
+
+# ── modal_sheet: auto-presented card sheets (Apple Account safety family) ─────
+# Evidence: iphone_transition_n1 (2026-06-12). iOS auto-presented the Apple
+# Account "Is this still your phone number?" sheet over settings/root; the
+# OCR-only cascade classified it springboard(0.82, icon_grid) — its short value
+# rows spread like app labels — and recovery climbed SpringBoard / blind-tapped
+# corners instead of the top-right close-X. Scenes below are CONSTRUCTED from
+# the recorded shape with synthetic values (no real phone digits / account
+# name / SSID committed).
+
+
+def _apple_account_safety_sheet_scene(*, with_close_x: bool = True) -> Scene:
+    elements = [
+        _el("2:14", 64, 26, w=42, ty="status_bar"),
+        _el("Is this still your phone number?", 36, 155, w=328, h=147, ty="button"),
+        _el("Current trusted number:", 38, 308, w=248, h=22),
+        _el("+1 (555) 010-4477", 38, 336, w=192, h=24),
+        _el("Date added:", 38, 382, w=126, h=23),
+        _el("17 January 2023", 37, 412, w=163, h=22),
+        _el("It is important to make sure your", 36, 457, w=314, h=23),
+        _el("trusted phone number is correct so", 36, 486, w=340, h=22),
+        _el("that you always have access to your", 37, 514, w=349, h=24),
+        _el("Apple Account.", 38, 544, w=150, h=24),
+        _el("If you forget your password or sign in", 36, 588, w=356, h=24),
+        _el("on a new device, your trusted phone", 38, 618, w=350, h=26),
+        _el("number is used to verify your identity.", 38, 648, w=361, h=22),
+        _el("Messaging and data rates may apply.", 38, 676, w=358, h=24),
+        _el("Keep using +1 (555) 010-4477", 98, 838, w=252, ty="button"),
+        _el("Change trusted number", 128, 902, w=194, h=18, ty="button"),
+    ]
+    if with_close_x:
+        elements.insert(1, _el("X", 394, 102, w=20, h=18, ty="button"))
+    return _scene(*elements)
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_apple_account_safety_sheet_is_modal_sheet():
+    from glassbox.ios.scene import modal_sheet_close_point
+
+    scene = _apple_account_safety_sheet_scene()
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 973))
+
+    assert classified.kind == "modal_sheet"
+    assert "modal_close_affordance" in classified.evidence
+    assert any(item.startswith("safety_sheet_vocabulary") for item in classified.evidence)
+    assert "dismiss_modal" in classified.safe_actions
+    # The dismiss point is the OCR'd X center — top-right band, never the
+    # bottom action rows.
+    x, y = modal_sheet_close_point(scene, viewport_size=(448, 973))
+    assert (x, y) == (404, 111)
+    assert x >= 448 * 0.75 and y <= 973 * 0.20
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_safety_sheet_without_ocr_close_x_still_modal():
+    from glassbox.ios.scene import modal_sheet_close_point
+
+    scene = _apple_account_safety_sheet_scene(with_close_x=False)
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 973))
+
+    assert classified.kind == "modal_sheet"
+    # Vocabulary anchor carries it; the dismiss point falls back to the
+    # canonical top-right close region (~0.90w, 0.11h).
+    x, y = modal_sheet_close_point(scene, viewport_size=(448, 973))
+    assert (x, y) == (403, 107)
+
+
+@pytest.mark.smoke
+def test_ios_scene_modal_sheet_abstains_without_card_shape_or_vocabulary():
+    from glassbox.ios.scene import modal_sheet_overlay_evidence
+
+    # A lone top-right "X" OCR token without sheet copy / safety vocabulary
+    # must NOT produce a modal verdict (abstain to the existing cascade).
+    scene = _scene(
+        _el("X", 394, 102, w=20, h=18, ty="button"),
+        _el("General", 80, 300, w=64),
+        _el("About", 80, 360, w=50),
+    )
+
+    assert modal_sheet_overlay_evidence(scene, viewport_size=(448, 973)) is None
+    assert classify_ios_scene(scene, viewport_size=(448, 973)).kind != "modal_sheet"
+
+
+@pytest.mark.smoke
+def test_ios_scene_modal_sheet_abstains_on_home_screen_with_x_app_label():
+    from glassbox.ios.scene import modal_sheet_overlay_evidence
+
+    # SpringBoard with an app literally labelled "X" near the top-right grid
+    # cell: the strong-Home veto (bottom Spotlight pill + app grid) wins, so
+    # the icon grid is still classified springboard, not a sheet.
+    scene = _scene(
+        _el("FaceTime", 56, 140, w=64),
+        _el("Calendar", 168, 140, w=64),
+        _el("Photos", 280, 140, w=50),
+        _el("X", 396, 140, w=14),
+        _el("Maps", 56, 250, w=40),
+        _el("Notes", 168, 250, w=44),
+        _el("Reminders", 280, 250, w=72),
+        _el("Settings", 392, 250, w=58),
+        _el("Q Search", 198, 902, w=70),
+    )
+
+    assert modal_sheet_overlay_evidence(scene, viewport_size=(448, 973)) is None
+    assert classify_ios_scene(scene, viewport_size=(448, 973)).kind == "springboard"

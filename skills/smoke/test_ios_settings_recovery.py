@@ -1471,3 +1471,121 @@ def test_open_settings_helper_skips_when_springboard_does_not_reach_settings(mon
 
     with pytest.raises(SettingsCrawlerUnavailable):
         _open_settings_from_home_if_visible(phone)
+
+# ── modal-dismiss rung: auto-presented card sheets (Apple Account family) ─────
+# Evidence: iphone_transition_n1 (2026-06-12). The sheet ate every escape rung
+# (back_gesture, tap_xy(24,83) top-LEFT mirror miss, tap_xy(394,938) next to
+# the bottom "Change trusted number" button, back_gesture) until recovery
+# exhausted. The rung below taps ONLY the top-right close-X, bounded at 2
+# attempts per recovery episode, then abstains to the existing ladder.
+# Scenes constructed from the recorded shape with synthetic values.
+
+
+def _modal_safety_sheet_scene():
+    return _scene(
+        _el("X", 394, 102, w=20, h=18, ty="button"),
+        _el("Is this still your phone number?", 36, 155, w=328, h=147, ty="button"),
+        _el("Current trusted number:", 38, 308, w=248, h=22),
+        _el("+1 (555) 010-4477", 38, 336, w=192, h=24),
+        _el("It is important to make sure your", 36, 457, w=314, h=23),
+        _el("trusted phone number is correct so", 36, 486, w=340, h=22),
+        _el("number is used to verify your identity.", 38, 648, w=361, h=22),
+        _el("Messaging and data rates may apply.", 38, 676, w=358, h=24),
+        _el("Keep using +1 (555) 010-4477", 98, 838, w=252, ty="button"),
+        _el("Change trusted number", 128, 902, w=194, h=18, ty="button"),
+    )
+
+
+class _ModalSheetPhone:
+    def __init__(self, sheet, root, *, dismiss_on_close_tap: bool):
+        self.scene = sheet
+        self._root = root
+        self._dismiss_on_close_tap = dismiss_on_close_tap
+        self.taps: list[tuple[int, int]] = []
+        self.keys: list[tuple[int, int]] = []
+        self.back_gestures = 0
+
+    def perceive(self):
+        return self.scene
+
+    def tap_xy(self, x: int, y: int):
+        self.taps.append((x, y))
+        if self._dismiss_on_close_tap and x >= 448 * 0.75 and y <= 973 * 0.20:
+            self.scene = self._root
+
+    def key(self, modifier: int, keycode: int):
+        self.keys.append((modifier, keycode))
+
+    def back_gesture(self):
+        self.back_gestures += 1
+
+    def viewport_size(self):
+        return 448, 973
+
+    def invalidate_perceive_cache(self):
+        pass
+
+
+def _zh_root_scene():
+    return _scene(
+        _el("设置", 198, 72, w=48),
+        _el("无线局域网", 80, 370, w=86),
+        _el("蓝牙", 80, 424, w=40),
+        _el("通用", 80, 725, w=40),
+    )
+
+
+@pytest.mark.smoke
+def test_return_to_settings_root_dismisses_modal_sheet_via_close_x(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    phone = _ModalSheetPhone(_modal_safety_sheet_scene(), _zh_root_scene(), dismiss_on_close_tap=True)
+
+    _return_to_settings_root(phone)
+
+    # Exactly one tap, at the OCR'd close-X — no back shortcut, no springboard
+    # climb, no blind corner/bottom taps.
+    assert phone.taps == [(404, 111)]
+    assert phone.keys == []
+    assert phone.back_gestures == 0
+
+
+@pytest.mark.smoke
+def test_return_to_settings_root_modal_dismiss_is_bounded_and_read_only(monkeypatch):
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    phone = _ModalSheetPhone(_modal_safety_sheet_scene(), _zh_root_scene(), dismiss_on_close_tap=False)
+
+    with pytest.raises(SettingsRootUnreachable):
+        _return_to_settings_root(phone)
+
+    # Bounded: at most 2 close-X dismiss attempts per recovery episode, then
+    # the existing unknown-state ladder takes over (back shortcut), and the
+    # episode ends in the catchable SettingsRootUnreachable — never a blind
+    # bottom tap.
+    close_region_taps = [(x, y) for x, y in phone.taps if x >= 448 * 0.75 and y <= 973 * 0.20]
+    assert len(close_region_taps) == 2
+    # READ-ONLY pin: button rows ("Keep using …" / "Change trusted number")
+    # are visible, so EVERY tap must stay inside the top-right close band —
+    # the live failure's tap_xy(394,938) landed beside "Change trusted number".
+    assert phone.taps == close_region_taps
+    assert phone.keys  # existing ladder (back shortcut) still ran after abstain
+
+
+@pytest.mark.smoke
+def test_return_one_level_abstains_on_modal_sheet_instead_of_corner_tap(monkeypatch):
+    """The live failure's first two wasted rungs came from `_return_one_level`
+    on the sheet: an inert back shortcut, then the top-LEFT corner fallback
+    tap_xy(24,83) — a mirror miss on the sheet's top-RIGHT close-X. On modal
+    evidence the helper must abstain immediately (no key, no tap) so the
+    caller falls through to `return_to_settings_root`'s bounded modal rung."""
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
+    phone = _ModalSheetPhone(_modal_safety_sheet_scene(), _zh_root_scene(), dismiss_on_close_tap=True)
+
+    assert not _return_one_level(
+        phone,
+        parent_texts=["Settings", "General"],
+        parent_title="Settings",
+        parent_is_root=True,
+    )
+    assert phone.taps == []
+    assert phone.keys == []
+    assert phone.back_gestures == 0

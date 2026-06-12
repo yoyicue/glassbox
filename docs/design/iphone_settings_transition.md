@@ -148,3 +148,38 @@ Every prior theory about this failure died on the data:
 多轮间 PicoKVM 流翘死(rounds 1-4 preflight 全灭;run 中 5 次
 transport_failed)。S6 让它不再伪装成 walkthrough exception;其本体修复
 (流会话级恢复/重建)另立工单。
+
+### 5.1 环境危害族:iOS 自呈现安全弹层(Apple Account safety sheet)
+
+证据:`iphone_transition_n1`(2026-06-12,两次复现)。run 抵达 settings/root
+后 iOS 自动弹出 Apple Account 安全卡片 "Is this still your phone number?"
+(全屏单卡;右上角 close-X ≈ (0.90w, 0.11h);底部按钮 "Keep using <number>" /
+"Change trusted number")。三个失败模式与修复(全部含冒烟测试钉):
+
+1. **逃逸梯子对弹层全盲(core)。** OCR 级联里没有弹层类:弹层的短值行
+   ("+1 …"、"Date added:")摊成 icon-grid 形状 → `springboard(0.82,
+   icon_grid)`,后续 perceive 落 `unknown(0.2)`;梯子打出 back_gesture、
+   tap_xy(24,83)(左上角镜像 miss)、tap_xy(394,938)(贴着底部
+   "Change trusted number" 的盲点)、back_gesture——全部无效。(同屏 UTG 节点
+   的 `scene_type='modal'` 来自 VLM(`vlm_platform_scene_kind`),与 OCR 级联
+   无关——能"认出"的层与决策用的层不是同一层。)修复:
+   `glassbox/ios/scene.py` 新增 `modal_sheet` 分类(veto+anchor+abstain:
+   右上带 close-X 锚 + 卡片形/安全弹层词表锚,排在 springboard icon-grid 尾
+   判之前,顺带否决了 icon_grid 误判)+ `glassbox/ios/recovery.py`
+   `dismiss_modal_sheet_overlay`(只点右上 close-X 区,READ-ONLY,按钮行在场
+   也绝不触碰)。技能侧梯子(`skills/regression/ios_settings/recovery.py`)
+   加 bounded rung:每次恢复 episode ≤2 次 dismiss,然后 abstain 回既有
+   unknown 梯子;`_return_one_level` 见弹层证据立即 abstain(不再左上角
+   镜像 miss)。
+2. **S6 收尾(skill)。** `navigation.py` post-child-crawl 的
+   `return_to_settings_root`(原 :1258 及 depth>0 兄弟位)是最后一个未包裹
+   位点,恢复耗尽时 `SettingsRootUnreachable` 以裸异常逃逸 → rc=1 两次。
+   已按 S6 同款包裹:`limits_hit.add('return_to_root_failed')` + 体面返回,
+   报告总能写完。
+3. **Apple-Account-review row en blocked-safety vocab(skill,具名工单
+   落地)。** en 根行 "Review Apple Account phone number" 即该弹层族的锚行,
+   加入 `policy.py UNSAFE_OR_NON_NAV_TEXT`("Review Apple Account" 子串,
+   与既有 zh Apple账户/iCloud 同族),drill-down 永不主动点它。
+
+夹具纪律:测试场景全部按记录形状**构造**(synthetic 数字/无账户名/无
+SSID),未提交本次 run 的任何原始 OCR;隐私守卫测试通过。

@@ -99,6 +99,24 @@ SETTINGS_HEALTH_DATA_MARKERS = (
 )
 HOME_SEARCH_LABELS = SETTINGS_SEARCH_LABELS
 _TIME_RE = re.compile(r"^\d{1,2}[:：.]?\d{2}[A-Za-z]?$")
+# Auto-presented full-screen card sheets (e.g. the Apple Account safety sheet
+# "Is this still your phone number?") carry a close-X at the top-right and a
+# single card of wide copy plus a bottom action stack. They are NOT
+# back-navigable: Cmd-[ / edge-back / top-LEFT corner taps are mirror misses,
+# and the loose icon-grid tail of `_looks_like_springboard` mistakes their
+# short value rows ("+1 …", "Date added:") for app labels. Veto + anchor +
+# abstain: only the close glyph in the top-right band counts as the close
+# affordance, and the sheet verdict additionally needs card-shaped copy or the
+# known safety-sheet vocabulary — anything weaker falls through unchanged.
+MODAL_SHEET_CLOSE_GLYPHS = frozenset({"x", "×", "✕", "✗", "╳"})
+# Known auto-presented safety-sheet vocabulary (observed live on the Apple
+# Account trusted-number sheet, en). System UI strings, not personal data.
+MODAL_SAFETY_SHEET_MARKERS = (
+    "is this still your phone number",
+    "trusted phone number",
+    "trusted number",
+    "verify your identity",
+)
 SETTINGS_DETAIL_SEMANTIC_NOUN_MARKERS = (
     "无线局域网", "Wi-Fi", "WLAN", "蓝牙", "Bluetooth", "蜂窝网络", "Cellular",
     "通知", "Notifications", "声音", "Sounds", "专注", "Focus",
@@ -166,8 +184,9 @@ def classify_ios_scene(
     Kinds are intentionally broad:
     harness_console, settings_root, settings_search_home,
     settings_search_results, settings_detail, settings_blocked_safety,
-    system_search, springboard, app_library, unknown. The confidence field is
-    a deterministic heuristic score, not a calibrated probability.
+    system_search, modal_sheet, springboard, app_library, unknown. The
+    confidence field is a deterministic heuristic score, not a calibrated
+    probability.
     """
     w, h = _scene_size(scene, viewport_size)
     title = _page_title(scene, viewport_size=(w, h))
@@ -304,6 +323,20 @@ def classify_ios_scene(
             title=title,
             safe_actions=("trace", "vlm_on_uncertain"),
             evidence=appstore_evidence,
+        )
+
+    modal_evidence = modal_sheet_overlay_evidence(scene, viewport_size=(w, h))
+    if modal_evidence is not None:
+        # Must outrank the springboard icon-grid tail below: the live Apple
+        # Account safety sheet's short value rows spread like app labels and
+        # were classified springboard(0.82, icon_grid), sending recovery into
+        # a useless springboard climb instead of tapping the close-X.
+        return IOSSceneClassification(
+            kind="modal_sheet",
+            confidence=0.86,
+            title=title,
+            safe_actions=("dismiss_modal", "trace"),
+            evidence=modal_evidence,
         )
 
     if _looks_like_springboard(scene, viewport_size=(w, h)):
@@ -620,6 +653,109 @@ def _blocked_safety_marker(scene: Scene) -> str | None:
     for marker in BLOCKED_SAFETY_MARKERS:
         if marker in joined:
             return marker
+    return None
+
+
+def modal_sheet_close_affordance(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+) -> UIElement | None:
+    """Find a sheet close-X affordance in the top-right band, else None.
+
+    Anchor discipline: only a bare close glyph whose center sits at
+    cx >= 0.80w and 0.04h <= cy <= 0.16h qualifies (the live Apple Account
+    safety sheet renders its X at ~(0.90w, 0.11h)). Bottom search-field clear
+    buttons (cy >= 0.86h) and left-side chrome can never match.
+    """
+    w, h = _scene_size(scene, viewport_size)
+    for el in scene.elements:
+        text = _text(el)
+        if not text or text.casefold() not in MODAL_SHEET_CLOSE_GLYPHS:
+            continue
+        cx, cy = el.box.center
+        if cx >= w * 0.80 and h * 0.04 <= cy <= h * 0.16:
+            return el
+    return None
+
+
+def modal_sheet_close_point(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+) -> tuple[int, int]:
+    """Tap point for dismissing a modal sheet: the OCR'd X if present, else the
+    canonical top-right close region (~0.90w, 0.11h). Always inside the
+    top-right band — never a content/button row."""
+    w, h = _scene_size(scene, viewport_size)
+    close = modal_sheet_close_affordance(scene, viewport_size=(w, h))
+    if close is not None:
+        cx, cy = close.box.center
+        return int(cx), int(cy)
+    return round(w * 0.90), round(h * 0.11)
+
+
+def modal_sheet_overlay_evidence(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+) -> tuple[str, ...] | None:
+    """Detect an auto-presented full-screen card sheet; None means abstain.
+
+    Veto: scenes that already carry strong root/search/home/App-Library/blocked
+    evidence are never a dismissible sheet. Anchors (either suffices):
+
+    - close-X affordance in the top-right band PLUS a card shape (>= 2 distinct
+      safety-vocabulary hits, or >= 3 wide copy lines with a centered bottom
+      action stack);
+    - >= 3 distinct safety-sheet vocabulary hits (covers perceives where the
+      small X glyph dropped out of OCR).
+    """
+    w, h = _scene_size(scene, viewport_size)
+    if (
+        _blocked_safety_marker(scene) is not None
+        or _is_settings_root(scene, viewport_size=(w, h))
+        or _has_settings_search_chrome(scene, viewport_size=(w, h))
+        or _looks_like_system_search(scene, viewport_size=(w, h))
+        or _app_library_evidence(scene, viewport_size=(w, h)) is not None
+        or _has_strong_home_evidence(scene, viewport_size=(w, h))
+    ):
+        return None
+
+    joined = "\n".join(_text(el) for el in scene.elements if _text(el)).casefold()
+    vocab_hits = marker_hits(joined, MODAL_SAFETY_SHEET_MARKERS)
+    close = modal_sheet_close_affordance(scene, viewport_size=(w, h))
+
+    wide_copy = 0
+    bottom_actions = 0
+    for el in scene.elements:
+        text = _text(el)
+        if not text or el.type == "status_bar":
+            continue
+        cx, cy = el.box.center
+        if el.box.w >= w * 0.55 and h * 0.16 <= cy <= h * 0.85:
+            wide_copy += 1
+        if (
+            h * 0.78 <= cy <= h * 0.97
+            and abs(cx - w / 2) <= w * 0.25
+            and 8 <= len(text) <= 40
+        ):
+            bottom_actions += 1
+
+    evidence: list[str] = []
+    if close is not None:
+        evidence.append("modal_close_affordance")
+    if vocab_hits:
+        evidence.append(f"safety_sheet_vocabulary:{min(vocab_hits, 4)}")
+    if wide_copy >= 3:
+        evidence.append(f"sheet_card_copy:{min(wide_copy, 6)}")
+    if bottom_actions:
+        evidence.append(f"sheet_action_stack:{min(bottom_actions, 3)}")
+
+    if close is not None and (vocab_hits >= 2 or (wide_copy >= 3 and bottom_actions >= 1)):
+        return tuple(evidence)
+    if vocab_hits >= 3:
+        return tuple(evidence)
     return None
 
 
