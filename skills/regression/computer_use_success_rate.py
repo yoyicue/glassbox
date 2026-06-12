@@ -444,7 +444,16 @@ def _terminal_expected_state_met(
     payload = payload if isinstance(payload, Mapping) else {}
     if kind == "page_id":
         wanted = _expected_page_ids(payload)
-        return bool(wanted) and str(final_state.get("page_id") or "") in wanted
+        actual = str(final_state.get("page_id") or "")
+        if not wanted:
+            return False
+        # Exact membership fast path, then the same fold-normalized fallback as
+        # the live comparator (S4): the final scene's page_id can be VLM-minted
+        # in a drifted spelling/namespace (live ledger: scn_000298 carries
+        # page_id 'ios_settings_wallpaper'), and a page_id terminal expectation
+        # is CLI-/manifest-reachable, so the offline score must not diverge
+        # from what verify_expected_state accepts on-device.
+        return actual in wanted or _fold_matched_page_id(actual, wanted) is not None
     if kind == "visible_text":
         texts = [str(text) for text in final_state.get("visible_texts", []) or []]
         any_of = [str(item) for item in payload.get("any_of", []) or []]
@@ -476,6 +485,38 @@ def _expected_page_ids(payload: Mapping[str, Any]) -> tuple[str, ...]:
             add(item)
     add(payload.get("page_id"))
     return tuple(wanted)
+
+
+# Deliberate stdlib-only duplicate of the S4 fold comparator in
+# glassbox.action.semantic_plan (this projector imports no glassbox modules, same
+# as the _expected_page_ids duplicate above). Semantics must stay in lockstep:
+# casefold + strip non-alphanumerics, whole-identity equality (never substring /
+# bag-of-words), no namespace-prefix stripping, and the single evidence-backed
+# ``ios_settings_`` ↔ ``com.apple.settings.`` namespace equivalence. See the
+# rationale comment on semantic_plan._PAGE_ID_NAMESPACE_EQUIVALENCES.
+_PAGE_ID_NAMESPACE_EQUIVALENCES: tuple[tuple[str, str], ...] = (
+    ("ios_settings_", "com.apple.settings."),
+)
+
+
+def _fold_page_id(value: str) -> str:
+    text = str(value or "").strip()
+    lowered = text.casefold()
+    for alias, canonical in _PAGE_ID_NAMESPACE_EQUIVALENCES:
+        if lowered.startswith(alias):
+            text = canonical + text[len(alias):]
+            break
+    return "".join(ch for ch in text.casefold() if ch.isalnum())
+
+
+def _fold_matched_page_id(actual: str, wanted: tuple[str, ...]) -> str | None:
+    actual_fold = _fold_page_id(actual)
+    if not actual_fold:
+        return None
+    for candidate in wanted:
+        if _fold_page_id(candidate) == actual_fold:
+            return candidate
+    return None
 
 
 def _final_state_element_matches(final_state: Mapping[str, Any], query: Mapping[str, Any]) -> bool:

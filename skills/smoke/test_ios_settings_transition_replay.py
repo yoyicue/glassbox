@@ -1,6 +1,6 @@
 """Replay the committed iPhone Settings transition corpus against current code.
 
-S1+S2+S3 of docs/design/iphone_settings_transition.md. For every candidate tap
+S1+S2+S3+S4 of docs/design/iphone_settings_transition.md. For every candidate tap
 group in ``skills/golden/ios_settings_transitions`` this rebuilds the
 expected_state with the **real production builder**
 (``navigation._settings_row_expected_state`` →
@@ -31,18 +31,28 @@ Pin taxonomy (22 groups):
   S3: Wallpaper's committed after-scene carries no usable settings_detail
   evidence at all (16 sparse OCR elements → the classifier abstains, page_id
   ``None``; the ``settings/CURRENT`` body mint happened on wrapper retry
-  frames that live only in ``notes``). Stays ``xfail(strict=True)`` until
-  S4/S5 territory.
+  frames that live only in ``notes``). Stays ``xfail(strict=True)``: S4's
+  comparator fold cannot normalize a ``None`` mint — S5 (attribution)
+  territory.
 - ``VLM_ONLY_LIVE`` — verified live **only** through billed VLM escalation;
   the offline page_id comparator cannot reproduce that from the committed
   after-scene (re-mint is ``None`` or a non-member mint), so the page_id-route
   replay is pinned rejected. (Spec nuance: "16/22 verified live" = the 10
   ``PAGE_ID_GREEN`` originals + these 6.)
+
+S4 (the fold-normalized comparator fallback) earns **no** re-mint pin flip:
+every remaining rejected group re-mints ``None`` (nothing to normalize) or a
+genuinely different page name (``settings/Do Not Disturb`` for 专注模式, which
+the whole-identity fold rightly keeps rejected). What S4 does fix is the
+*recorded verifier tokens* — the VLM-minted page_ids the run's comparator
+rejected against the builder's ``any_of`` — pinned per token in
+``test_s4_fold_comparator_verdicts_on_recorded_ledger_tokens`` below.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
@@ -99,9 +109,14 @@ FALSE_REJECTIONS_WRONG_MINT = {
 }
 VLM_ONLY_LIVE = {
     "grp_000038",  # Display & Brightness (after page_id None)
-    "grp_000041",  # Home Screen & App Library (mint differs only by slug casing — S4 territory)
+    "grp_000041",  # Home Screen & App Library (recorded VLM-written page_id
+    #                'com.apple.settings.HomeScreenAppLibrary' IS an S4 fold
+    #                match, but the current classifier re-mints None from the
+    #                committed OCR elements → stays VLM-only on replay)
     "grp_000053",  # 通知 (after page_id None; wrapper VLM matched)
-    "grp_000059",  # 专注模式 (minted 'settings/Do Not Disturb')
+    "grp_000059",  # 专注模式 (minted 'settings/Do Not Disturb' — a genuinely
+    #                different page name; the whole-identity fold keeps it
+    #                rejected, by design)
     "grp_000081",  # Apps (after page_id None; wrapper VLM matched)
     "grp_000095",  # Home Screen& App Library re-visit (after page_id None)
 }
@@ -138,10 +153,11 @@ def _replay_param(group_id: str):
         marks.append(
             pytest.mark.xfail(
                 strict=True,
-                reason="false rejection the minting fix (S3) does not earn: the "
-                "committed after-scene carries no usable settings_detail "
-                "evidence (re-mint is None) — comparator normalization (S4) / "
-                "attribution (S5) territory",
+                reason="false rejection neither the minting fix (S3) nor the "
+                "comparator fold (S4) earns: the committed after-scene carries "
+                "no usable settings_detail evidence, so the re-mint is None "
+                "and there is nothing to normalize — attribution (S5) "
+                "territory",
             )
         )
     return pytest.param(group_id, id=f"{group_id}-{GROUPS[group_id]['target']}", marks=marks)
@@ -213,6 +229,89 @@ def test_transition_replay_against_current_builder(group_id, en_cn_locale):
         assert outcome.status == "succeeded", outcome.reason  # xfail(strict) pin
     else:
         assert outcome.status == "failed", outcome.reason
+
+
+# ── S4: comparator fold fallback on the recorded ledger tokens ───────────────
+#
+# The committed corpus preserves every page_id token the run's verifier
+# actually REJECTED ("got '<token>'" inside recorded_reason and
+# notes.wrapper_attempts reasons), plus grp_000041's VLM-written after-scene
+# page_id. This table pins, token by token, what the S4 fold-normalized
+# comparator must now decide against the CURRENT builder's any_of:
+#
+# - "fold"  — accepted only via the fold fallback (the run false-rejected it):
+#   the ios_settings_* ↔ com.apple.settings.* namespace-equivalence family and
+#   the VLM's own face-id slug spellings. All are pages the run physically
+#   entered.
+# - "exact" — accepted by the exact fast path already (earned by S2's
+#   SectionVocab union, not S4; kept here to show the full token inventory).
+# - "rejected" — must STAY rejected: the Apple-ID modal tokens and empty mint
+#   (grp_000014), the stayed-on-root No-SIM tokens (grp_000029 — note
+#   'ios_settings_root' maps into the bundle namespace only, never to
+#   'settings/root'), pre-S3 body mints ('settings/Silent Mode',
+#   'settings/Paired Devices'), a genuinely different page name
+#   ('settings/Do Not Disturb'), and word-order-reversed free-form VLM tokens
+#   ('wallpaper_settings', 'developer_settings') — fold equality is
+#   whole-identity, not bag-of-words.
+S4_TOKEN_VERDICTS: dict[tuple[str, str], str] = {
+    ("grp_000014", ""): "rejected",
+    ("grp_000014", "apple_account_trusted_number_verification"): "rejected",
+    ("grp_000014", "apple_id_trusted_number_verification"): "rejected",
+    ("grp_000029", "ios_settings_root"): "rejected",
+    ("grp_000029", "settings/root"): "rejected",
+    ("grp_000041", "com.apple.settings.HomeScreenAppLibrary"): "fold",
+    ("grp_000050", "ios_settings_wallpaper"): "fold",
+    ("grp_000050", "wallpaper_settings"): "rejected",
+    ("grp_000053", "ios_settings_notifications"): "fold",
+    ("grp_000056", "com.apple.settings.sounds-haptics"): "exact",
+    ("grp_000056", "settings/Silent Mode"): "rejected",
+    ("grp_000059", "ios_settings_focus"): "fold",
+    ("grp_000059", "settings/Do Not Disturb"): "rejected",
+    ("grp_000065", "com.apple.settings.faceid_passcode"): "fold",
+    ("grp_000065", "com.apple.settings.faceid-passcode"): "fold",
+    ("grp_000065", "settings/Face ID & Passcode"): "exact",
+    ("grp_000081", "ios_settings_apps"): "fold",
+    ("grp_000084", "ios_settings_developer"): "fold",
+    ("grp_000084", "developer_settings"): "rejected",
+    ("grp_000084", "settings/Paired Devices"): "rejected",
+}
+
+
+def _recorded_rejected_tokens() -> set[tuple[str, str]]:
+    got = re.compile(r"got '([^']*)'")
+    tokens: set[tuple[str, str]] = set()
+    for group_id, group in GROUPS.items():
+        reasons = [str(group.get("recorded_reason") or "")]
+        for attempt in (group.get("notes") or {}).get("wrapper_attempts", []) or []:
+            reasons.append(str(attempt.get("reason") or ""))
+        for reason in reasons:
+            for token in got.findall(reason):
+                tokens.add((group_id, token))
+    # grp_000041's drifted identity lives in the recorded after-scene page_id
+    # (the VLM matched live before the OCR-route comparator ever saw it).
+    tokens.add(("grp_000041", str(GROUPS["grp_000041"]["after_scene"]["page_id"])))
+    return tokens
+
+
+@pytest.mark.smoke
+def test_s4_fold_comparator_verdicts_on_recorded_ledger_tokens(en_cn_locale):
+    # The table must cover exactly the tokens the committed corpus records —
+    # no hand-typed inventory drift.
+    assert _recorded_rejected_tokens() == set(S4_TOKEN_VERDICTS)
+
+    for (group_id, token), verdict in sorted(S4_TOKEN_VERDICTS.items()):
+        rebuilt = _rebuild_expected_state(GROUPS[group_id]["target"])
+        outcome = verify_expected_state(
+            ExpectedState.from_dict(rebuilt), SimpleNamespace(page_id=token)
+        )
+        if verdict == "rejected":
+            assert outcome.status == "failed", (group_id, token, outcome.reason)
+        else:
+            assert outcome.status == "succeeded", (group_id, token, outcome.reason)
+            if verdict == "fold":
+                assert "fold-normalized" in outcome.reason, (group_id, token)
+            else:
+                assert outcome.reason == f"page_id matched: {token}"
 
 
 @pytest.mark.smoke

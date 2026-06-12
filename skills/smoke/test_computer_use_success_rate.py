@@ -1588,6 +1588,79 @@ def test_platform_scene_kind_terminal_evidence():
     assert errors == []
 
 
+def test_page_id_terminal_fold_normalized_fallback():
+    """S4 (docs/design/iphone_settings_transition.md): the final scene's
+    page_id can be VLM-minted in a drifted spelling/namespace (live ledger
+    run_2026_06_12_06_04_38_737160, scn_000298: 'ios_settings_wallpaper'), and
+    a page_id terminal expectation is CLI-/manifest-reachable — the offline
+    scorer must agree with the live comparator's fold fallback."""
+    from skills.regression.computer_use_success_rate import _terminal_expected_state_met
+
+    wallpaper = {
+        "kind": "page_id",
+        "payload": {"any_of": ["settings/Wallpaper", "com.apple.settings.wallpaper"]},
+    }
+    assert _terminal_expected_state_met({"page_id": "ios_settings_wallpaper"}, wallpaper) is True
+    assert (
+        _terminal_expected_state_met({"page_id": "com.apple.settings.Wallpaper"}, wallpaper)
+        is True
+    )
+    # Exact membership still works (fast path).
+    assert _terminal_expected_state_met({"page_id": "settings/Wallpaper"}, wallpaper) is True
+    # Whole-identity equality: free-form and near-miss tokens stay failed —
+    # the fold must not loosen the gate for genuinely different pages.
+    assert _terminal_expected_state_met({"page_id": "wallpaper_settings"}, wallpaper) is False
+    notes = {"kind": "page_id", "payload": {"any_of": ["com.apple.settings.notifications"]}}
+    assert _terminal_expected_state_met({"page_id": "com.apple.settings.notes"}, notes) is False
+    near = {"kind": "page_id", "payload": {"any_of": ["settings/Game Center"]}}
+    assert _terminal_expected_state_met({"page_id": "settings/General"}, near) is False
+    # No namespace-prefix stripping: OCR vs bundle namespaces stay distinct.
+    bundle_only = {"kind": "page_id", "payload": {"any_of": ["com.apple.settings.wallpaper"]}}
+    assert _terminal_expected_state_met({"page_id": "settings/Wallpaper"}, bundle_only) is False
+    # None / missing page_id never matches.
+    assert _terminal_expected_state_met({"page_id": None}, wallpaper) is False
+    assert _terminal_expected_state_met({}, wallpaper) is False
+
+
+def test_page_id_fold_comparator_parity_with_live_verifier():
+    """The harness keeps a deliberate stdlib-only duplicate of the S4 fold
+    comparator (this projector imports no glassbox modules); this pin keeps the
+    two implementations in lockstep on the live ledger's token families."""
+    from glassbox.action import semantic_plan
+
+    wanted = (
+        "settings/Face ID与密码",
+        "settings/Face ID & Passcode",
+        "com.apple.settings.face-id-passcode",
+        "settings/Wallpaper",
+        "com.apple.settings.wallpaper",
+        "settings/root",
+    )
+    battery = [
+        "com.apple.settings.faceid_passcode",
+        "com.apple.settings.faceid-passcode",
+        "settings/face-id-&-passcode",
+        "ios_settings_wallpaper",
+        "ios_settings_root",
+        "wallpaper_settings",
+        "settings/Wallpaper",
+        "settings/wlan",
+        "faceid-passcode",
+        "",
+        "/",
+        "settings/通知",
+    ]
+    for token in battery:
+        assert success_rate._fold_page_id(token) == semantic_plan._fold_page_id(token), token
+        assert success_rate._fold_matched_page_id(
+            token, wanted
+        ) == semantic_plan._fold_matched_page_id(token, wanted), token
+    assert (
+        success_rate._PAGE_ID_NAMESPACE_EQUIVALENCES
+        == semantic_plan._PAGE_ID_NAMESPACE_EQUIVALENCES
+    )
+
+
 def test_final_state_carries_platform_scene_kind(tmp_path):
     from skills.regression.computer_use_success_rate import aggregate_run_dir
 

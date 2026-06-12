@@ -1,9 +1,15 @@
 # iPhone Settings transition recognition — forensics & fix design
 
-Status: **landing lever-by-lever — S6 (`ea13305`), S1+S2 (PR #92) and S3
+Status: **landing lever-by-lever — S6 (`ea13305`), S1+S2 (PR #92), S3
 (nav-band mint fix; reviewed flip allow-list in
-`skills/regression/fixtures/ios_settings_mint_flip_allowlist.json`) are landed,
-S4/S5 pending; forensics snapshot as of `8eb69f7` (2026-06-12).**
+`skills/regression/fixtures/ios_settings_mint_flip_allowlist.json`) and S4
+(comparator fold-normalize fallback; the review's `ios_settings_*` ↔
+`com.apple.settings.*` equivalence was confirmed in the run's audit ledger —
+got `ios_settings_wallpaper`/`_notifications`/`_developer`/`_apps`/`_focus`
+vs wanted `com.apple.settings.*` — and implemented; token-level pins in
+`skills/smoke/test_ios_settings_transition_replay.py`; no re-mint pin flips:
+every remaining rejected group re-mints `None` or a genuinely different page)
+are landed, S5 pending; forensics snapshot as of `8eb69f7` (2026-06-12).**
 Produced by a 5-agent forensic pass over the live repro
 (`run_2026_06_12_06_04_38_737160`: 144 actions, ~49 min, iPhone 17 Pro Max,
 en/CN) — 3 anatomists (ledger data / code path / iPad working precedent) → fix

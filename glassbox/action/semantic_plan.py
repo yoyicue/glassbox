@@ -400,16 +400,20 @@ def verify_expected_state(expected: ExpectedState, scene: Any) -> SemanticOutcom
     if expected.kind == "page_id":
         wanted = _expected_page_ids(expected.payload)
         actual = str(getattr(scene, "page_id", "") or "")
-        status = "succeeded" if wanted and actual in wanted else "failed"
+        exact = bool(wanted) and actual in wanted
+        folded = None if exact else _fold_matched_page_id(actual, wanted)
+        if exact:
+            reason = f"page_id matched: {actual}"
+        elif folded is not None:
+            reason = f"page_id matched (fold-normalized): {actual} ~ {folded}"
+        else:
+            reason = f"page_id mismatch: expected one of {wanted!r}, got {actual!r}"
+        status = "succeeded" if exact or folded is not None else "failed"
         return SemanticOutcome(
             status=status,
             verifier="expected_state",
-            reason=(
-                f"page_id matched: {actual}"
-                if status == "succeeded"
-                else f"page_id mismatch: expected one of {wanted!r}, got {actual!r}"
-            ),
-            confidence=0.95 if status == "succeeded" else 0.75,
+            reason=reason,
+            confidence=0.95 if exact else 0.9 if folded is not None else 0.75,
             matched_evidence=[actual] if status == "succeeded" else [],
             missing_evidence=list(wanted) if status != "succeeded" else [],
             deterministic=True,
@@ -476,6 +480,57 @@ def _expected_page_ids(payload: Mapping[str, Any]) -> tuple[str, ...]:
             add(item)
     add(payload.get("page_id"))
     return tuple(wanted)
+
+
+# C3 (docs/design/iphone_settings_transition.md §1): expected page_ids come from
+# three uncoordinated namespaces — OCR-minted ``settings/<Title>``, builder-slugged
+# ``com.apple.settings.<slug>``, and free-form VLM tokens. The exact-membership
+# fast path above stays; the fold fallback only equates *spelling* variants of the
+# same identity (casefold + drop non-alphanumerics), e.g.
+# ``com.apple.settings.faceid_passcode`` ≡ ``com.apple.settings.face-id-passcode``
+# and ``settings/Face ID & Passcode`` ≡ ``settings/face-id-&-passcode``.
+# It deliberately does NOT strip namespace prefixes (rejected in the design):
+# ``settings/wallpaper`` !≡ ``com.apple.settings.wallpaper`` — the builder's
+# any_of already carries both forms — so genuinely different pages cannot
+# collide. The single cross-namespace equivalence below is evidence-backed: the
+# live VLM names Apple's bundle namespace ``ios_settings_<slug>`` where the
+# builder slugs ``com.apple.settings.<slug>`` (run_2026_06_12_06_04_38_737160
+# audit: got 'ios_settings_wallpaper'/'ios_settings_notifications'/
+# 'ios_settings_developer'/'ios_settings_apps'/'ios_settings_focus' vs wanted
+# 'com.apple.settings.*'; pinned from the committed corpus in
+# skills/smoke/test_ios_settings_transition_replay.py). Other free-form VLM
+# tokens ('wallpaper_settings', bare 'faceid-passcode') remain false-rejectable
+# by design — fold equality is whole-identity, not bag-of-words.
+_PAGE_ID_NAMESPACE_EQUIVALENCES: tuple[tuple[str, str], ...] = (
+    ("ios_settings_", "com.apple.settings."),
+)
+
+
+def _fold_page_id(value: str) -> str:
+    """Fold one page_id for tolerant comparison.
+
+    Namespace-equivalence rewrite, then casefold and strip every
+    non-alphanumeric (CJK is alphanumeric, so zh page_ids survive). An empty
+    fold means "no foldable identity" and must never match.
+    """
+    text = str(value or "").strip()
+    lowered = text.casefold()
+    for alias, canonical in _PAGE_ID_NAMESPACE_EQUIVALENCES:
+        if lowered.startswith(alias):
+            text = canonical + text[len(alias):]
+            break
+    return "".join(ch for ch in text.casefold() if ch.isalnum())
+
+
+def _fold_matched_page_id(actual: str, wanted: tuple[str, ...]) -> str | None:
+    """Return the wanted entry whose fold equals the actual's fold, if any."""
+    actual_fold = _fold_page_id(actual)
+    if not actual_fold:
+        return None
+    for candidate in wanted:
+        if _fold_page_id(candidate) == actual_fold:
+            return candidate
+    return None
 
 
 def _scene_texts(scene: Any) -> list[str]:
