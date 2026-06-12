@@ -27,6 +27,7 @@ docstring 和本台账。
 |---|---|---|---|
 | a11y cell（overlay ON） | ~~task_completion 0.0~~ → **loop-2 后 1.0 已饱和**；剩 action_success 0.87 / unknown 0.11 | 见台账 loop-2 | `a11y_voice_control_cell_snapshot.json` |
 | 设置地板 scroll | scroll_success_rate | 0.077 | `reliability_baseline.json` |
+| iPhone 设置地板（en/CN） | task_completion | **0.0**（2026-06-12 入库；操作按钮 5/5 确定性缺失,见台账） | `iphone_settings_baseline.json` |
 | Clock cell | task_completion / 每轮耗时 | 0.8 / ~14min（launch 占大头） | `clock_tabs_baseline.json` |
 | L2 快照 | task_completion | 0.8 | `l2_settings_expected_state_snapshot.json` |
 | canonical primitives | task_completion / scroll_success_rate | **0.9 / 0.957**（2026-06-11 入库,见台账） | `canonical_primitives_baseline.json` |
@@ -66,6 +67,7 @@ uv run python -m skills.regression.floor_lineage
 | 设置 | 2026-06-06 | `5acec51` | clean-HDMI cell 约束(数值未动) | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
 | 设置 | 2026-06-10 | `571e568` | **🔼抬高②(质量棘轮)** 语义验证路径产出 | 1 | 1 | 0.978 | 2 | 0 | 0 | 0.0769 |
 | 设置 | 2026-06-11 | `03a2255` | schema 刷新 +duration(数值未动) | 1 | 1 | 0.978 | 2 | 0 | 0 | 0.0769 |
+| iPhone设置 | 2026-06-12 | `baa6274` | 诞生(诚实 0 地板:操作按钮 5/5 确定性缺失,#99 实机不充分;数据 sha=fixture.git_sha,a11y loop-1 先例) | 0 | 0.883 | 0.525 | 14 | 39 | 0.181 | 0.11 |
 | Clock | 2026-06-10 | `89a3bed` | 创建(第二 App cell;launch 弱原语如实保留) | 0.8 | 0.974 | 0.447 | 0 | 0 | 0 | 0 |
 | Clock | 2026-06-11 | `03a2255` | schema 刷新(数值未动) | 0.8 | 0.974 | 0.447 | 0 | 0 | 0 | 0 |
 | canonical | 2026-06-11 | `23c9fc4` | 创建(矩阵 #9;六次尝试换来 #75-#82 五个核心修复) | 0.9 | 1 | 0 | 0 | 7 | 0 | 0.957 |
@@ -122,7 +124,7 @@ uv run python -m skills.regression.floor_lineage
 ## 3. 测试报告台账
 
 ### 2026-06-12 iPhone 转场识别战役收官(S1-S6 全杠杆 + rig n=1 通过)+ 修复前 n=5 聚合 —— PRs #91-#100
-- 类型：战役验证(rig n=1)+ 基线测量(修复前 5 轮聚合,**未入库**;修复后 n=5 进行中,fixture 待其完成)
+- 类型：战役验证(rig n=1)+ 基线测量(修复前 5 轮聚合,**未入库**;修复后 n=5 **已完成并入库**,见产物行)
 - 格子：iPhone 17 Pro Max 设置钻取 en/CN;代码:离线杠杆 `#91-#97`,n=1 复验在 `2fa4911`,floor 候选在 `2434d09`(#98-#100)
 - 离线杠杆(设计 `docs/design/iphone_settings_transition.md`,每步独立 PR):S6 证据保全 #91 → S1 语料 + S2 SectionVocab 接入 #92(隐私前向擦洗支线 #93)→ S3 nav-band 铸造 #94 → S4 比较器折叠归一 #95 → S5a 归因+主动退出 #96 → S5b 身份守卫(flag-gated)#97
 - **rig n=1(尝试 3,§3 判据全过)**:30 visits、21 个子页进入+验证(判据 ≥16+4)、**4 个法医假拒绝全部翻正**(Wallpaper/声音与触感/Face ID与密码/Developer)、`unverified_transitions=0`、零破坏性重拍(S5b 守卫全程惰性=无假失败可挡);单轮 23-28 分钟(法医基线 49 分钟)。必需根页仅缺 `操作按钮`(确定性结构 miss,见下)
@@ -130,6 +132,7 @@ uv run python -m skills.regression.floor_lineage
 - n=1 残留法医(对抗复核级,全部 file:line 钉死)→ 同日修复:**#99** 操作按钮双根因(policy `cy<260` 全局死区使每个落带前 3 行结构性不可 tap——Camera/控制中心一直被跳;Settings 应用内搜索面板被弱分支误判 system_search → 查询从未输入,`search_no_result` 是谎言 + 错归因诽谤 picokvm)、**#100** visit 标题委托 core classifier(skill 选择器绕过 S3 守卫产出 'Edit'=WLAN/'+'=蓝牙/'I!I,'=隐私与安全性/'Appearance'=显示与亮度 四案;core 标题四案全对;core 增 CJK 臂保 zh 二字标题)
 - **修复前 n=5 聚合(@`2fa4911`,5×独立单轮进程绕多轮翘死,离线补聚合 `iphone_floor_n5/aggregate_2fa4911.json`)**:task_completion **0.0**(操作按钮死区每轮命中 → 根覆盖永不完整 → 终态判 0)、action 0.904、root 覆盖 0.84(16/17↔14/17 轮间方差:无线局域网/隐私与安全性在 3/5 轮未开)、scroll 0.095、switches 29、unknown 0.015。S6 报告保全链(.prev-mtime)是离线补聚合的使能者
 - 判定：转场识别墙已拆(iPad 状态机战役的 iPhone 同类物收官);completion 0.0 的唯一结构性根因(#99)已修,修复后 n=5(单进程 5 轮,顺带实测多轮翘死债 + `GLASSBOX_PICOKVM_ROBUST_CAPTURE=1` 默认)= fixture 候选,完成后补谱系行
+- 产物：**修复后 n=5 完成并入库**(round 0 @`2434d09`,rounds 1-4 @`baa6274`,#101 仅文档代码同一;单进程 5 轮 `--keep-going`):task_completion **0.0**(5/5 failed)、action 0.883、root 覆盖 0.88(每轮进入 12-14/17;蜂窝网络 device_unavailable + 钱包 blocked 豁免)、esc 0.525、scroll 0.110(136 滚)、switches 39、recoveries 14、unknown 0.0088、vlm 覆盖 0.181(101 调用,host env 开 VLM,config.vlm_enabled 只记 `--vlm` flag)。源数据 `iphone_floor_n5_post99/floor_candidate.json` → fixture `skills/regression/fixtures/iphone_settings_baseline.json`(本仓**首个 iPhone 设备匹配 floor**;离线门 `test_iphone_settings_floor.py` + nightly iPhone lane 阻断比对接线,lane env zh-Hans→en/CN)。修复后法医:**操作按钮仍 5/5 缺失**(0-2 轮零 tap 尝试、3-4 轮各 2 次 failed tap,报告 0-3 轮记 search_absent)→ **#99 实机不充分**;**Camera 首次进入**(5/5 tap succeeded;修复前 n=5 零尝试)→ 死区修复部分起效;**蜂窝网络 5/5 tap failed**(page_id mismatch)→ 新异常待查;round 4 限位 'exception'(PicoKVM 流打开 RuntimeError)保留 = 诚实方差
 - 注意事项：S5b 默认开翻转的 rig A/B 证据 = n=1 守卫零触发(惰性)+ 离线语料钉,翻转决策留给下一轮守卫真实触发样本;设备挂着"今晚安装软件更新"(用户决策:不管);`--out` 在轮验证 rc≠0 且无 `--keep-going` 时不写(已三次踩 zsh 管道掩码,取内层 rc 用 `${pipestatus[1]}`)
 
 ### 2026-06-12 iPhone 设备匹配 floor 三连试 —— 中止,launch 路径修复入库,滚动确定性立为前置战役
