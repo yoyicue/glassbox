@@ -1,0 +1,201 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000050",
+ "wrapper_group_id": "grp_000049",
+ "attempt_id": "act_000056",
+ "target": "Wallpaper",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/Wallpaper",
+    "com.apple.settings.wallpaper"
+   ]
+  }
+ },
+ "recorded_verdict": "failed",
+ "recorded_reason": "page_id mismatch: expected one of ('settings/Wallpaper', 'com.apple.settings.wallpaper'), got 'ios_settings_wallpaper' after VLM escalation",
+ "verified_live": false,
+ "verified_via": null,
+ "after_scene": {
+  "scene_id": "scn_000299",
+  "page_id": null,
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:29",
+    "box": {
+     "x": 64,
+     "y": 30,
+     "w": 42,
+     "h": 18
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 17,
+     "y": 65,
+     "w": 51,
+     "h": 51
+    },
+    "type": "image"
+   },
+   {
+    "text": "Wallpaper",
+    "box": {
+     "x": 180,
+     "y": 81,
+     "w": 86,
+     "h": 22
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 182,
+     "y": 79,
+     "w": 84,
+     "h": 20
+    },
+    "type": "image"
+   },
+   {
+    "text": "CURRENT",
+    "box": {
+     "x": 184,
+     "y": 182,
+     "w": 80,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": "9:41",
+    "box": {
+     "x": 102,
+     "y": 268,
+     "w": 84,
+     "h": 36
+    },
+    "type": "text"
+   },
+   {
+    "text": "Customise",
+    "box": {
+     "x": 7,
+     "y": 490,
+     "w": 171,
+     "h": 65
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "Customise",
+    "box": {
+     "x": 272,
+     "y": 534,
+     "w": 66,
+     "h": 15
+    },
+    "type": "text"
+   },
+   {
+    "text": "+Add New Wallpaper",
+    "box": {
+     "x": 148,
+     "y": 585,
+     "w": 152,
+     "h": 55
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 206,
+     "y": 584,
+     "w": 15,
+     "h": 14
+    },
+    "type": "image"
+   },
+   {
+    "text": "Change your Wallpaper from the",
+    "box": {
+     "x": 36,
+     "y": 714,
+     "w": 234,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Lock Screen",
+    "box": {
+     "x": 34,
+     "y": 734,
+     "w": 92,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "9:41",
+    "box": {
+     "x": 334,
+     "y": 728,
+     "w": 34,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "From your Lock Screen, touch and",
+    "box": {
+     "x": 36,
+     "y": 758,
+     "w": 238,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "hold to add, edit or switch between",
+    "box": {
+     "x": 34,
+     "y": 778,
+     "w": 248,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "different wallpapers and widgets.",
+    "box": {
+     "x": 34,
+     "y": 798,
+     "w": 236,
+     "h": 16
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000055",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/Wallpaper', 'com.apple.settings.wallpaper'), got 'wallpaper_settings' after VLM escalation"
+   },
+   {
+    "attempt_id": "act_000057",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/Wallpaper', 'com.apple.settings.wallpaper'), got 'wallpaper_settings'"
+   }
+  ]
+ }
+}

@@ -1,0 +1,397 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000053",
+ "wrapper_group_id": "grp_000052",
+ "attempt_id": "act_000060",
+ "target": "通知",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/通知",
+    "settings/Notifications",
+    "com.apple.settings.notifications"
+   ]
+  }
+ },
+ "recorded_verdict": "failed",
+ "recorded_reason": "page_id mismatch: expected one of ('settings/通知', 'settings/Notifications', 'com.apple.settings.notifications'), got 'ios_settings_notifications' after VLM escalation",
+ "verified_live": true,
+ "verified_via": "vlm_escalation",
+ "after_scene": {
+  "scene_id": "scn_000324",
+  "page_id": null,
+  "platform_scene_kind": "settings_search_results",
+  "elements": [
+   {
+    "text": "6:32",
+    "box": {
+     "x": 64,
+     "y": 28,
+     "w": 46,
+     "h": 20
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 0,
+     "y": 60,
+     "w": 101,
+     "h": 69
+    },
+    "type": "image"
+   },
+   {
+    "text": "Notifications",
+    "box": {
+     "x": 170,
+     "y": 82,
+     "w": 108,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "Display As",
+    "box": {
+     "x": 40,
+     "y": 154,
+     "w": 86,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "9:41",
+    "box": {
+     "x": 78,
+     "y": 218,
+     "w": 22,
+     "h": 10
+    },
+    "type": "text"
+   },
+   {
+    "text": "9:41",
+    "box": {
+     "x": 212,
+     "y": 216,
+     "w": 24,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "9:41",
+    "box": {
+     "x": 348,
+     "y": 218,
+     "w": 24,
+     "h": 10
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 21,
+     "y": 186,
+     "w": 141,
+     "h": 161
+    },
+    "type": "image"
+   },
+   {
+    "text": "Count",
+    "box": {
+     "x": 70,
+     "y": 302,
+     "w": 40,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Stack",
+    "box": {
+     "x": 202,
+     "y": 300,
+     "w": 42,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "List",
+    "box": {
+     "x": 348,
+     "y": 302,
+     "w": 26,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Choose the default for how notifications appear.",
+    "box": {
+     "x": 42,
+     "y": 354,
+     "w": 296,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Scheduled Summary",
+    "box": {
+     "x": 38,
+     "y": 414,
+     "w": 164,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Off >",
+    "box": {
+     "x": 362,
+     "y": 414,
+     "w": 46,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Show Previews",
+    "box": {
+     "x": 40,
+     "y": 468,
+     "w": 118,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 332,
+     "y": 461,
+     "w": 80,
+     "h": 26
+    },
+    "type": "image"
+   },
+   {
+    "text": "Always >",
+    "box": {
+     "x": 332,
+     "y": 468,
+     "w": 76,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Screen Sharing",
+    "box": {
+     "x": 40,
+     "y": 522,
+     "w": 120,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Notifications Off >",
+    "box": {
+     "x": 260,
+     "y": 522,
+     "w": 148,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 391,
+     "y": 516,
+     "w": 20,
+     "h": 26
+    },
+    "type": "image"
+   },
+   {
+    "text": "Siri",
+    "box": {
+     "x": 40,
+     "y": 594,
+     "w": 28,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Siri Suggestions",
+    "box": {
+     "x": 40,
+     "y": 638,
+     "w": 126,
+     "h": 20
+    },
+    "type": "list_item"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 390,
+     "y": 632,
+     "w": 28,
+     "h": 31
+    },
+    "type": "image"
+   },
+   {
+    "text": ">",
+    "box": {
+     "x": 398,
+     "y": 640,
+     "w": 10,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Choose which apps can suggest Shortcuts on the",
+    "box": {
+     "x": 42,
+     "y": 682,
+     "w": 306,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Lock screen.",
+    "box": {
+     "x": 40,
+     "y": 698,
+     "w": 80,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Notification Style",
+    "box": {
+     "x": 40,
+     "y": 734,
+     "w": 142,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "AITN2",
+    "box": {
+     "x": 84,
+     "y": 770,
+     "w": 54,
+     "h": 20
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "Banners, Sounds, Badges",
+    "box": {
+     "x": 86,
+     "y": 794,
+     "w": 180,
+     "h": 18
+    },
+    "type": "list_item"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 391,
+     "y": 778,
+     "w": 21,
+     "h": 26
+    },
+    "type": "image"
+   },
+   {
+    "text": ">",
+    "box": {
+     "x": 398,
+     "y": 784,
+     "w": 10,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "App Store",
+    "box": {
+     "x": 33,
+     "y": 832,
+     "w": 131,
+     "h": 44
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "Banners, Sounds, Badges",
+    "box": {
+     "x": 86,
+     "y": 858,
+     "w": 180,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "FaceTime",
+    "box": {
+     "x": 84,
+     "y": 898,
+     "w": 76,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Banners, Sounds, Badges",
+    "box": {
+     "x": 84,
+     "y": 918,
+     "w": 182,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Files",
+    "box": {
+     "x": 84,
+     "y": 960,
+     "w": 38,
+     "h": 16
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000059",
+    "status": "succeeded",
+    "reason": "page_id matched: com.apple.settings.notifications after VLM escalation"
+   }
+  ]
+ }
+}

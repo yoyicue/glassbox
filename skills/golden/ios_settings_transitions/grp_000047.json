@@ -1,0 +1,217 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000047",
+ "wrapper_group_id": "grp_000046",
+ "attempt_id": "act_000053",
+ "target": "待机显示",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/待机显示",
+    "settings/StandBy",
+    "com.apple.settings.standby"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: settings/StandBy",
+ "verified_live": true,
+ "verified_via": "page_id",
+ "after_scene": {
+  "scene_id": "scn_000284",
+  "page_id": "settings/StandBy",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:28",
+    "box": {
+     "x": 62,
+     "y": 28,
+     "w": 46,
+     "h": 20
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 0,
+     "y": 60,
+     "w": 98,
+     "h": 66
+    },
+    "type": "image"
+   },
+   {
+    "text": "StandBy",
+    "box": {
+     "x": 188,
+     "y": 82,
+     "w": 72,
+     "h": 21
+    },
+    "type": "button"
+   },
+   {
+    "text": "StandBy",
+    "box": {
+     "x": 40,
+     "y": 160,
+     "w": 68,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": "StandBy will turn on when iPhone is placed on its side while",
+    "box": {
+     "x": 40,
+     "y": 204,
+     "w": 368,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "charging to show information like widgets, photo frames or",
+    "box": {
+     "x": 40,
+     "y": 220,
+     "w": 364,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "clocks.",
+    "box": {
+     "x": 40,
+     "y": 238,
+     "w": 46,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Display",
+    "box": {
+     "x": 40,
+     "y": 296,
+     "w": 58,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 389,
+     "y": 288,
+     "w": 28,
+     "h": 31
+    },
+    "type": "image"
+   },
+   {
+    "text": "Notifications",
+    "box": {
+     "x": 40,
+     "y": 368,
+     "w": 106,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Show Notifications",
+    "box": {
+     "x": 40,
+     "y": 412,
+     "w": 146,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 340,
+     "y": 404,
+     "w": 70,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "Critical notifications will still he shown in StandBy if this",
+    "box": {
+     "x": 42,
+     "y": 454,
+     "w": 342,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "switch is off.",
+    "box": {
+     "x": 40,
+     "y": 471,
+     "w": 80,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Show Preview on Tap Only",
+    "box": {
+     "x": 42,
+     "y": 532,
+     "w": 204,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 340,
+     "y": 517,
+     "w": 73,
+     "h": 48
+    },
+    "type": "image"
+   },
+   {
+    "text": "StandBy can hide the preview of a notification until you",
+    "box": {
+     "x": 40,
+     "y": 574,
+     "w": 342,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "tap it.",
+    "box": {
+     "x": 40,
+     "y": 592,
+     "w": 36,
+     "h": 12
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000052",
+    "status": "succeeded",
+    "reason": "page_id matched: settings/StandBy"
+   }
+  ]
+ }
+}

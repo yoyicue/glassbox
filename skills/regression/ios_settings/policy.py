@@ -1279,6 +1279,27 @@ class SettingsPolicy:
         if canonical is not None:
             add(ROOT_SEARCH_QUERIES_EN.get(canonical))
             add(ROOT_SEARCH_QUERIES_GREATER_CHINA_EN.get(canonical))
+            # S2 (docs/design/iphone_settings_transition.md): the tables above
+            # are SEARCH-QUERY vocab and encode the iPad rig's physical labels
+            # (C1 — e.g. 'Touch ID & Passcode' for Face ID与密码). Union the
+            # locale-resolved SectionVocab display terms so the expectation is
+            # locale-shaped, not rack-shaped. The zh vocab's terms are the zh
+            # canonicals themselves, so zh output stays byte-identical
+            # (pinned by test_ios_settings_transition_replay.py).
+            section = root_section_for_canonical_label(canonical)
+            if section is not None:
+                try:
+                    from glassbox.config import get_config
+                    from glassbox.locale import resolve_locale
+
+                    locale = resolve_locale(get_config())
+                    vocab_terms = section_vocab_for(locale.language, locale.region).all_terms(
+                        section
+                    )
+                except Exception:
+                    vocab_terms = ()
+                for term in vocab_terms:
+                    add(term)
         if compact_text(visible) == compact_text("Home Screen &"):
             add("Home Screen & App Library")
         return tuple(candidates)
@@ -1772,7 +1793,7 @@ class IPadSettingsPolicy(SettingsPolicy):
             return None
         if cy <= int(h * 0.20) and not self.is_safe_known_navigation_label(text):
             # The profile/Apple Account block lives directly below the top search
-            # field. Layout segmentation may expose the owner name ("Da Li") as a
+            # field. Layout segmentation may expose the owner's display name as a
             # row-like button; that is never a Settings root navigation target.
             return None
         if len(text) <= 3 and (text[0] in "([（【〈《" or text[-1] in ")]）】〉》"):

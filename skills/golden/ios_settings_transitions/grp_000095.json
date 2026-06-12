@@ -1,0 +1,156 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000095",
+ "wrapper_group_id": "grp_000094",
+ "attempt_id": "act_000109",
+ "target": "Home Screen& App Library",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/Home Screen& App Library",
+    "com.apple.settings.home-screen-app-library"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: com.apple.settings.home-screen-app-library after VLM escalation",
+ "verified_live": true,
+ "verified_via": "vlm_escalation",
+ "after_scene": {
+  "scene_id": "scn_000618",
+  "page_id": null,
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:47",
+    "box": {
+     "x": 64,
+     "y": 30,
+     "w": 42,
+     "h": 18
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": "Home Screen &App Library",
+    "box": {
+     "x": 17,
+     "y": 65,
+     "w": 321,
+     "h": 50
+    },
+    "type": "button"
+   },
+   {
+    "text": "Newly Downloaded Apps",
+    "box": {
+     "x": 40,
+     "y": 136,
+     "w": 204,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Add to Home Screen",
+    "box": {
+     "x": 42,
+     "y": 182,
+     "w": 160,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 378,
+     "y": 174,
+     "w": 32,
+     "h": 38
+    },
+    "type": "image"
+   },
+   {
+    "text": "App Library Only",
+    "box": {
+     "x": 40,
+     "y": 236,
+     "w": 132,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Notification Badges",
+    "box": {
+     "x": 40,
+     "y": 300,
+     "w": 162,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Show in App Library",
+    "box": {
+     "x": 40,
+     "y": 348,
+     "w": 156,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 341,
+     "y": 338,
+     "w": 68,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "Search",
+    "box": {
+     "x": 40,
+     "y": 412,
+     "w": 58,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Show on Home Screen",
+    "box": {
+     "x": 42,
+     "y": 460,
+     "w": 176,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 7,
+     "y": 490,
+     "w": 65,
+     "h": 65
+    },
+    "type": "image"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000108",
+    "status": "succeeded",
+    "reason": "page_id matched: com.apple.settings.home-screen-app-library after VLM escalation"
+   }
+  ]
+ }
+}

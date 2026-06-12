@@ -1,0 +1,221 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000014",
+ "wrapper_group_id": "grp_000013",
+ "attempt_id": "act_000016",
+ "target": "Review Apple Account phone number",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/Review Apple Account phone number",
+    "com.apple.settings.review-apple-account-phone-number"
+   ]
+  }
+ },
+ "recorded_verdict": "failed",
+ "recorded_reason": "page_id mismatch: expected one of ('settings/Review Apple Account phone number', 'com.apple.settings.review-apple-account-phone-number'), got 'apple_account_trusted_number_verification' after VLM escalation",
+ "verified_live": false,
+ "verified_via": null,
+ "after_scene": {
+  "scene_id": "scn_000095",
+  "page_id": null,
+  "platform_scene_kind": "springboard",
+  "elements": [
+   {
+    "text": "6:17",
+    "box": {
+     "x": 66,
+     "y": 28,
+     "w": 38,
+     "h": 18
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 381,
+     "y": 85,
+     "w": 46,
+     "h": 50
+    },
+    "type": "image"
+   },
+   {
+    "text": "X",
+    "box": {
+     "x": 394,
+     "y": 102,
+     "w": 20,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "Is this still your phone number?",
+    "box": {
+     "x": 36,
+     "y": 155,
+     "w": 328,
+     "h": 147
+    },
+    "type": "button"
+   },
+   {
+    "text": "Current trusted number:",
+    "box": {
+     "x": 38,
+     "y": 308,
+     "w": 248,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "SCRUBBED_PHONE_1",
+    "box": {
+     "x": 38,
+     "y": 336,
+     "w": 192,
+     "h": 24
+    },
+    "type": "text"
+   },
+   {
+    "text": "Date added:",
+    "box": {
+     "x": 38,
+     "y": 381,
+     "w": 126,
+     "h": 23
+    },
+    "type": "text"
+   },
+   {
+    "text": "SCRUBBED_DATE_1",
+    "box": {
+     "x": 36,
+     "y": 412,
+     "w": 164,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "It is important to make sure your",
+    "box": {
+     "x": 36,
+     "y": 458,
+     "w": 314,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "trusted phone number is correct so",
+    "box": {
+     "x": 36,
+     "y": 486,
+     "w": 340,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "that you always have access to your",
+    "box": {
+     "x": 36,
+     "y": 516,
+     "w": 350,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "Apple Account.",
+    "box": {
+     "x": 38,
+     "y": 544,
+     "w": 150,
+     "h": 24
+    },
+    "type": "text"
+   },
+   {
+    "text": "If you forget your password or sign in",
+    "box": {
+     "x": 36,
+     "y": 588,
+     "w": 356,
+     "h": 24
+    },
+    "type": "text"
+   },
+   {
+    "text": "on a new device, your trusted phone",
+    "box": {
+     "x": 38,
+     "y": 618,
+     "w": 350,
+     "h": 26
+    },
+    "type": "text"
+   },
+   {
+    "text": "number is used to verify your identity.",
+    "box": {
+     "x": 38,
+     "y": 648,
+     "w": 360,
+     "h": 22
+    },
+    "type": "text"
+   },
+   {
+    "text": "Messaging and data rates may apply.",
+    "box": {
+     "x": 38,
+     "y": 676,
+     "w": 358,
+     "h": 24
+    },
+    "type": "text"
+   },
+   {
+    "text": "Keep using SCRUBBED_PHONE_1",
+    "box": {
+     "x": 98,
+     "y": 838,
+     "w": 252,
+     "h": 20
+    },
+    "type": "button"
+   },
+   {
+    "text": "Change trusted number",
+    "box": {
+     "x": 128,
+     "y": 902,
+     "w": 194,
+     "h": 18
+    },
+    "type": "button"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000015",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/Review Apple Account phone number', 'com.apple.settings.review-apple-account-phone-number'), got 'apple_id_trusted_number_verification' after VLM escalation"
+   },
+   {
+    "attempt_id": "act_000017",
+    "status": "failed",
+    "reason": "page_id mismatch: expected one of ('settings/Review Apple Account phone number', 'com.apple.settings.review-apple-account-phone-number'), got ''"
+   }
+  ]
+ }
+}

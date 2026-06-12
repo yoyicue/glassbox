@@ -1,0 +1,446 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000081",
+ "wrapper_group_id": "grp_000080",
+ "attempt_id": "act_000093",
+ "target": "Apps",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/Apps",
+    "com.apple.settings.apps"
+   ]
+  }
+ },
+ "recorded_verdict": "failed",
+ "recorded_reason": "page_id mismatch: expected one of ('settings/Apps', 'com.apple.settings.apps'), got 'ios_settings_apps' after VLM escalation",
+ "verified_live": true,
+ "verified_via": "vlm_escalation",
+ "after_scene": {
+  "scene_id": "scn_000516",
+  "page_id": null,
+  "platform_scene_kind": "springboard",
+  "elements": [
+   {
+    "text": "6:42",
+    "box": {
+     "x": 64,
+     "y": 28,
+     "w": 42,
+     "h": 18
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 17,
+     "y": 63,
+     "w": 50,
+     "h": 51
+    },
+    "type": "image"
+   },
+   {
+    "text": "Apps",
+    "box": {
+     "x": 202,
+     "y": 80,
+     "w": 44,
+     "h": 22
+    },
+    "type": "button"
+   },
+   {
+    "text": "Default Apps",
+    "box": {
+     "x": 80,
+     "y": 174,
+     "w": 102,
+     "h": 20
+    },
+    "type": "list_item"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 383,
+     "y": 173,
+     "w": 34,
+     "h": 41
+    },
+    "type": "image"
+   },
+   {
+    "text": ">",
+    "box": {
+     "x": 396,
+     "y": 184,
+     "w": 10,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Manage default apps on iPhone",
+    "box": {
+     "x": 80,
+     "y": 198,
+     "w": 184,
+     "h": 12
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "A",
+    "box": {
+     "x": 42,
+     "y": 258,
+     "w": 12,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "AlT2",
+    "box": {
+     "x": 80,
+     "y": 304,
+     "w": 52,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 388,
+     "y": 298,
+     "w": 24,
+     "h": 29
+    },
+    "type": "image"
+   },
+   {
+    "text": "A",
+    "box": {
+     "x": 40,
+     "y": 356,
+     "w": 24,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "App Store",
+    "box": {
+     "x": 80,
+     "y": 358,
+     "w": 80,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 387,
+     "y": 349,
+     "w": 26,
+     "h": 34
+    },
+    "type": "image"
+   },
+   {
+    "text": "G",
+    "box": {
+     "x": 434,
+     "y": 400,
+     "w": 12,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": "Apple Store",
+    "box": {
+     "x": 80,
+     "y": 409,
+     "w": 94,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 386,
+     "y": 404,
+     "w": 24,
+     "h": 31
+    },
+    "type": "image"
+   },
+   {
+    "text": "H",
+    "box": {
+     "x": 434,
+     "y": 414,
+     "w": 12,
+     "h": 12
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 430,
+     "y": 453,
+     "w": 16,
+     "h": 15
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 429,
+     "y": 480,
+     "w": 18,
+     "h": 16
+    },
+    "type": "image"
+   },
+   {
+    "text": "M",
+    "box": {
+     "x": 434,
+     "y": 484,
+     "w": 12,
+     "h": 10
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 431,
+     "y": 496,
+     "w": 16,
+     "h": 14
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 429,
+     "y": 509,
+     "w": 17,
+     "h": 16
+    },
+    "type": "image"
+   },
+   {
+    "text": "Calculator",
+    "box": {
+     "x": 80,
+     "y": 522,
+     "w": 82,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 387,
+     "y": 515,
+     "w": 24,
+     "h": 30
+    },
+    "type": "image"
+   },
+   {
+    "text": "Calendar",
+    "box": {
+     "x": 80,
+     "y": 573,
+     "w": 75,
+     "h": 21
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 387,
+     "y": 567,
+     "w": 25,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "Clock",
+    "box": {
+     "x": 80,
+     "y": 628,
+     "w": 48,
+     "h": 17
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 387,
+     "y": 619,
+     "w": 27,
+     "h": 34
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 427,
+     "y": 622,
+     "w": 20,
+     "h": 16
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 429,
+     "y": 637,
+     "w": 17,
+     "h": 14
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 428,
+     "y": 650,
+     "w": 18,
+     "h": 15
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 428,
+     "y": 663,
+     "w": 19,
+     "h": 16
+    },
+    "type": "image"
+   },
+   {
+    "text": "Compass",
+    "box": {
+     "x": 82,
+     "y": 680,
+     "w": 74,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 388,
+     "y": 674,
+     "w": 23,
+     "h": 30
+    },
+    "type": "image"
+   },
+   {
+    "text": "Contacts",
+    "box": {
+     "x": 80,
+     "y": 734,
+     "w": 74,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 385,
+     "y": 723,
+     "w": 30,
+     "h": 38
+    },
+    "type": "image"
+   },
+   {
+    "text": "F",
+    "box": {
+     "x": 42,
+     "y": 798,
+     "w": 10,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "FaceTime",
+    "box": {
+     "x": 80,
+     "y": 843,
+     "w": 76,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 388,
+     "y": 839,
+     "w": 25,
+     "h": 28
+    },
+    "type": "image"
+   },
+   {
+    "text": "Q Search Apps",
+    "box": {
+     "x": 46,
+     "y": 911,
+     "w": 130,
+     "h": 23
+    },
+    "type": "text"
+   },
+   {
+    "text": "Find My",
+    "box": {
+     "x": 82,
+     "y": 952,
+     "w": 62,
+     "h": 17
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000092",
+    "status": "succeeded",
+    "reason": "page_id matched: com.apple.settings.apps after VLM escalation"
+   }
+  ]
+ }
+}

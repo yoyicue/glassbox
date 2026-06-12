@@ -1,0 +1,346 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000078",
+ "wrapper_group_id": "grp_000077",
+ "attempt_id": "act_000090",
+ "target": "Game Center",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/Game Center",
+    "com.apple.settings.game-center"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: settings/Game Center",
+ "verified_live": true,
+ "verified_via": "page_id",
+ "after_scene": {
+  "scene_id": "scn_000498",
+  "page_id": "settings/Game Center",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:42",
+    "box": {
+     "x": 64,
+     "y": 26,
+     "w": 44,
+     "h": 20
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": "Profile",
+    "box": {
+     "x": 18,
+     "y": 63,
+     "w": 76,
+     "h": 89
+    },
+    "type": "button"
+   },
+   {
+    "text": "<",
+    "box": {
+     "x": 32,
+     "y": 78,
+     "w": 18,
+     "h": 22
+    },
+    "type": "nav_back"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 163,
+     "y": 63,
+     "w": 126,
+     "h": 48
+    },
+    "type": "image"
+   },
+   {
+    "text": "Game Center",
+    "box": {
+     "x": 170,
+     "y": 80,
+     "w": 110,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": "SCRUBBED_GC_NICKNAME_1",
+    "box": {
+     "x": 112,
+     "y": 196,
+     "w": 64,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 383,
+     "y": 197,
+     "w": 30,
+     "h": 35
+    },
+    "type": "image"
+   },
+   {
+    "text": "SCRUBBED_EMAIL_1",
+    "box": {
+     "x": 112,
+     "y": 217,
+     "w": 148,
+     "h": 17
+    },
+    "type": "text"
+   },
+   {
+    "text": "Customise Profile",
+    "box": {
+     "x": 40,
+     "y": 284,
+     "w": 138,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "Friends",
+    "box": {
+     "x": 40,
+     "y": 348,
+     "w": 64,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "All Friends",
+    "box": {
+     "x": 40,
+     "y": 396,
+     "w": 84,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 388,
+     "y": 392,
+     "w": 20,
+     "h": 24
+    },
+    "type": "image"
+   },
+   {
+    "text": "Friend Requests",
+    "box": {
+     "x": 38,
+     "y": 450,
+     "w": 130,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 387,
+     "y": 445,
+     "w": 21,
+     "h": 26
+    },
+    "type": "image"
+   },
+   {
+    "text": "Invite Friends",
+    "box": {
+     "x": 36,
+     "y": 502,
+     "w": 110,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 39,
+     "y": 499,
+     "w": 106,
+     "h": 20
+    },
+    "type": "image"
+   },
+   {
+    "text": "Share Friends List",
+    "box": {
+     "x": 38,
+     "y": 590,
+     "w": 144,
+     "h": 18
+    },
+    "type": "list_item"
+   },
+   {
+    "text": "On",
+    "box": {
+     "x": 362,
+     "y": 592,
+     "w": 26,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": ">",
+    "box": {
+     "x": 396,
+     "y": 590,
+     "w": 10,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Allow apps access to your list of Game Center friends for",
+    "box": {
+     "x": 40,
+     "y": 634,
+     "w": 354,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "an improved gameplay experience.",
+    "box": {
+     "x": 40,
+     "y": 650,
+     "w": 214,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Discoverability",
+    "box": {
+     "x": 40,
+     "y": 684,
+     "w": 122,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Help Friends Find You",
+    "box": {
+     "x": 40,
+     "y": 730,
+     "w": 170,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 341,
+     "y": 722,
+     "w": 69,
+     "h": 32
+    },
+    "type": "image"
+   },
+   {
+    "text": "Allow your Game Center friends to identify you more easily",
+    "box": {
+     "x": 40,
+     "y": 774,
+     "w": 364,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "by the email address and phone number associated with",
+    "box": {
+     "x": 40,
+     "y": 790,
+     "w": 350,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "your Apple Account.",
+    "box": {
+     "x": 40,
+     "y": 808,
+     "w": 126,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Friend Requests",
+    "box": {
+     "x": 40,
+     "y": 848,
+     "w": 134,
+     "h": 20
+    },
+    "type": "text"
+   },
+   {
+    "text": "Allow Request from Contacts Only",
+    "box": {
+     "x": 42,
+     "y": 896,
+     "w": 264,
+     "h": 16
+    },
+    "type": "text"
+   },
+   {
+    "text": "Allow only people from your contacts to send you",
+    "box": {
+     "x": 40,
+     "y": 940,
+     "w": 306,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "friend requests.",
+    "box": {
+     "x": 40,
+     "y": 956,
+     "w": 98,
+     "h": 12
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000089",
+    "status": "succeeded",
+    "reason": "page_id matched: settings/Game Center"
+   }
+  ]
+ }
+}

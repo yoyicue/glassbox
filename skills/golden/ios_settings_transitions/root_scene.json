@@ -1,0 +1,288 @@
+{
+ "schema": "ios_settings_transition_root_scene.v1",
+ "scene_id": "scn_000090",
+ "page_id": "settings/root",
+ "platform_scene_kind": "settings_root",
+ "elements": [
+  {
+   "text": "6:17",
+   "box": {
+    "x": 66,
+    "y": 24,
+    "w": 40,
+    "h": 24
+   },
+   "type": "status_bar"
+  },
+  {
+   "text": "Settings",
+   "box": {
+    "x": 188,
+    "y": 82,
+    "w": 72,
+    "h": 20
+   },
+   "type": "button"
+  },
+  {
+   "text": "SCRUBBED_ACCOUNT_NAME",
+   "box": {
+    "x": 110,
+    "y": 184,
+    "w": 48,
+    "h": 20
+   },
+   "type": "button"
+  },
+  {
+   "text": null,
+   "box": {
+    "x": 386,
+    "y": 186,
+    "w": 29,
+    "h": 33
+   },
+   "type": "image"
+  },
+  {
+   "text": "Apple Account, iCloud and more",
+   "box": {
+    "x": 110,
+    "y": 210,
+    "w": 200,
+    "h": 14
+   },
+   "type": "text"
+  },
+  {
+   "text": "Review Apple Account phone number",
+   "box": {
+    "x": 42,
+    "y": 258,
+    "w": 347,
+    "h": 39
+   },
+   "type": "list_item"
+  },
+  {
+   "text": null,
+   "box": {
+    "x": 387,
+    "y": 258,
+    "w": 27,
+    "h": 36
+   },
+   "type": "image"
+  },
+  {
+   "text": null,
+   "box": {
+    "x": 356,
+    "y": 350,
+    "w": 33,
+    "h": 34
+   },
+   "type": "image"
+  },
+  {
+   "text": null,
+   "box": {
+    "x": 388,
+    "y": 351,
+    "w": 25,
+    "h": 30
+   },
+   "type": "image"
+  },
+  {
+   "text": "Airplane Mode",
+   "box": {
+    "x": 80,
+    "y": 448,
+    "w": 114,
+    "h": 18
+   },
+   "type": "button"
+  },
+  {
+   "text": "WLAN",
+   "box": {
+    "x": 80,
+    "y": 502,
+    "w": 54,
+    "h": 16
+   },
+   "type": "text"
+  },
+  {
+   "text": "SCRUBBED_SSID_1 >",
+   "box": {
+    "x": 336,
+    "y": 502,
+    "w": 70,
+    "h": 16
+   },
+   "type": "text"
+  },
+  {
+   "text": "Bluetooth",
+   "box": {
+    "x": 80,
+    "y": 554,
+    "w": 78,
+    "h": 16
+   },
+   "type": "list_item"
+  },
+  {
+   "text": "On",
+   "box": {
+    "x": 362,
+    "y": 554,
+    "w": 24,
+    "h": 16
+   },
+   "type": "text"
+  },
+  {
+   "text": ">",
+   "box": {
+    "x": 396,
+    "y": 554,
+    "w": 10,
+    "h": 12
+   },
+   "type": "text"
+  },
+  {
+   "text": "Mobile Service",
+   "box": {
+    "x": 80,
+    "y": 606,
+    "w": 116,
+    "h": 18
+   },
+   "type": "text"
+  },
+  {
+   "text": "No SIM",
+   "box": {
+    "x": 326,
+    "y": 608,
+    "w": 60,
+    "h": 16
+   },
+   "type": "text"
+  },
+  {
+   "text": "Personal Hotspot",
+   "box": {
+    "x": 80,
+    "y": 660,
+    "w": 138,
+    "h": 18
+   },
+   "type": "list_item"
+  },
+  {
+   "text": "Off",
+   "box": {
+    "x": 358,
+    "y": 660,
+    "w": 28,
+    "h": 16
+   },
+   "type": "text"
+  },
+  {
+   "text": ">",
+   "box": {
+    "x": 394,
+    "y": 660,
+    "w": 12,
+    "h": 14
+   },
+   "type": "text"
+  },
+  {
+   "text": "Battery",
+   "box": {
+    "x": 80,
+    "y": 713,
+    "w": 60,
+    "h": 19
+   },
+   "type": "button"
+  },
+  {
+   "text": "VPN",
+   "box": {
+    "x": 80,
+    "y": 766,
+    "w": 36,
+    "h": 17
+   },
+   "type": "button"
+  },
+  {
+   "text": "General",
+   "box": {
+    "x": 80,
+    "y": 854,
+    "w": 64,
+    "h": 18
+   },
+   "type": "text"
+  },
+  {
+   "text": null,
+   "box": {
+    "x": 388,
+    "y": 846,
+    "w": 24,
+    "h": 31
+   },
+   "type": "image"
+  },
+  {
+   "text": "Q",
+   "box": {
+    "x": 46,
+    "y": 910,
+    "w": 22,
+    "h": 22
+   },
+   "type": "text"
+  },
+  {
+   "text": "Search",
+   "box": {
+    "x": 72,
+    "y": 915,
+    "w": 58,
+    "h": 17
+   },
+   "type": "text"
+  },
+  {
+   "text": null,
+   "box": {
+    "x": 368,
+    "y": 901,
+    "w": 36,
+    "h": 45
+   },
+   "type": "image"
+  },
+  {
+   "text": "Action Button",
+   "box": {
+    "x": 84,
+    "y": 960,
+    "w": 102,
+    "h": 14
+   },
+   "type": "text"
+  }
+ ]
+}

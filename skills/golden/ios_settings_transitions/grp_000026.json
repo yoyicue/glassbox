@@ -1,0 +1,207 @@
+{
+ "schema": "ios_settings_transition_group.v1",
+ "group_id": "grp_000026",
+ "wrapper_group_id": "grp_000025",
+ "attempt_id": "act_000030",
+ "target": "蓝牙",
+ "expected_state": {
+  "kind": "page_id",
+  "payload": {
+   "any_of": [
+    "settings/蓝牙",
+    "settings/Bluetooth",
+    "com.apple.settings.bluetooth"
+   ]
+  }
+ },
+ "recorded_verdict": "succeeded",
+ "recorded_reason": "page_id matched: settings/Bluetooth",
+ "verified_live": true,
+ "verified_via": "page_id",
+ "after_scene": {
+  "scene_id": "scn_000162",
+  "page_id": "settings/Bluetooth",
+  "platform_scene_kind": "settings_detail",
+  "elements": [
+   {
+    "text": "6:23",
+    "box": {
+     "x": 64,
+     "y": 28,
+     "w": 42,
+     "h": 18
+    },
+    "type": "status_bar"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 17,
+     "y": 63,
+     "w": 50,
+     "h": 50
+    },
+    "type": "image"
+   },
+   {
+    "text": "Bluetooth",
+    "box": {
+     "x": 34,
+     "y": 153,
+     "w": 110,
+     "h": 103
+    },
+    "type": "button"
+   },
+   {
+    "text": "Connect to accessories you can use for",
+    "box": {
+     "x": 42,
+     "y": 264,
+     "w": 306,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": "activities such as streaming music, making",
+    "box": {
+     "x": 40,
+     "y": 282,
+     "w": 332,
+     "h": 25
+    },
+    "type": "text"
+   },
+   {
+    "text": "phone calls and gaming. Learn more...",
+    "box": {
+     "x": 40,
+     "y": 310,
+     "w": 296,
+     "h": 18
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 231,
+     "y": 307,
+     "w": 105,
+     "h": 20
+    },
+    "type": "image"
+   },
+   {
+    "text": "Bluetooth",
+    "box": {
+     "x": 40,
+     "y": 362,
+     "w": 78,
+     "h": 18
+    },
+    "type": "button"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 338,
+     "y": 353,
+     "w": 73,
+     "h": 34
+    },
+    "type": "image"
+   },
+   {
+    "text": "This iPhone is discoverable as \"iPhone\" while Bluetooth",
+    "box": {
+     "x": 40,
+     "y": 404,
+     "w": 344,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": "Settings is open.",
+    "box": {
+     "x": 40,
+     "y": 422,
+     "w": 106,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 32,
+     "y": 447,
+     "w": 114,
+     "h": 36
+    },
+    "type": "image"
+   },
+   {
+    "text": "Devices",
+    "box": {
+     "x": 40,
+     "y": 457,
+     "w": 66,
+     "h": 19
+    },
+    "type": "text"
+   },
+   {
+    "text": "To pair an Apple Watch with your iPhone, go to the Apple",
+    "box": {
+     "x": 40,
+     "y": 498,
+     "w": 352,
+     "h": 14
+    },
+    "type": "text"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 354,
+     "y": 496,
+     "w": 38,
+     "h": 15
+    },
+    "type": "image"
+   },
+   {
+    "text": null,
+    "box": {
+     "x": 39,
+     "y": 512,
+     "w": 68,
+     "h": 16
+    },
+    "type": "image"
+   },
+   {
+    "text": "Watch app.",
+    "box": {
+     "x": 40,
+     "y": 516,
+     "w": 72,
+     "h": 12
+    },
+    "type": "text"
+   }
+  ]
+ },
+ "notes": {
+  "wrapper_attempts": [
+   {
+    "attempt_id": "act_000029",
+    "status": "succeeded",
+    "reason": "page_id matched: settings/Bluetooth"
+   }
+  ]
+ }
+}
