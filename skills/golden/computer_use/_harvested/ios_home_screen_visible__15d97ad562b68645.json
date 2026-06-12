@@ -1,5 +1,5 @@
 {
-  "case_id": "ios_home_screen_visible_4f9270f96a4ab0e5",
+  "case_id": "ios_home_screen_visible_15d97ad562b68645",
   "action": "home",
   "verifier": "ios_home_screen_visible",
   "expected_status": "failed",
@@ -82,7 +82,7 @@
     "Books",
     "日 Notes",
     "No Notes：",
-    "21 22 23 26",
+    "SCRUBBED_PHONE_1",
     "20 26",
     "28 29 30",
     "290",

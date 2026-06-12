@@ -1,27 +1,20 @@
 {
-  "case_id": "ios_home_screen_visible_8d7ae185735e5f77",
-  "action": "home",
-  "verifier": "ios_home_screen_visible",
-  "expected_status": "failed",
+  "case_id": "scene_progressed_c919cf765d4ddec4",
+  "action": "close_foreground_app",
+  "verifier": "scene_progressed",
+  "expected_status": "succeeded",
   "before_texts": [
-    "Settings",
-    "Notes",
-    "35",
-    "口a"
-  ],
-  "after_texts": [
-    "6:39 PM Mon 1 Jun",
+    "3:27 PM Mon 1Jun",
     "Q Search",
-    "ke",
-    "Da Li",
+    "SCRUBBED_ACCOUNT_NAME",
     "Apple Account, iCloud",
     "and more",
     "Airplane Mode",
     "WLAN",
+    "SCRUBBED_SSID_1",
+    "On",
     "Bluetooth",
     "Battery",
-    "Kacier",
-    "On",
     "General",
     "Accessibility",
     "Apple Pencil",
@@ -40,7 +33,7 @@
     "General",
     "Manage your overall setup and preferences for",
     "iPad, such as software updates, device language，",
-    "AitDrop and more.",
+    "AirDrop and more.",
     "About",
     "Software Update",
     "iPad Storage",
@@ -55,7 +48,30 @@
     "Fonts",
     "Keyboard"
   ],
+  "after_texts": [
+    "3¥27PM Mon 1.Jun",
+    "11 12 1",
+    "No.Lvents loday",
+    "Daxing",
+    "36°",
+    "8PM",
+    "Wea",
+    "tnu",
+    "Books",
+    "且ENotes",
+    "No Notes",
+    "SCRUBBED_PHONE_1",
+    "28 29 30",
+    "200",
+    "camem",
+    "Videos",
+    "27",
+    "Setiincs",
+    "FFIcS",
+    "函口",
+    "口a"
+  ],
   "metadata": {
-    "verifier": "ios_home_screen_visible"
+    "verifier": "scene_progressed"
   }
 }

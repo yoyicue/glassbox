@@ -390,7 +390,7 @@ point, with both transports OK and the page remaining `settings/Overlay`.
 |---|---|---:|---:|---|
 | `03_item_numbers_restored` | `settings/Overlay` | 47 | `item_numbers=12` | Bidirectional baseline capture. |
 | `wheel_scroll_probe` | same page | — | — | `scroll_wheel(90, focus=(135,930,cropped_px))` transport OK. |
-| `04_item_numbers_after_wheel` | `settings/Overlay` | 47 | `item_numbers=13` | `diff_ratio=0.007753`; semantic deltas were OCR/status-like (`Kacler -> Kacier`, `• Search -> Q Search`). |
+| `04_item_numbers_after_wheel` | `settings/Overlay` | 47 | `item_numbers=13` | `diff_ratio=0.007753`; semantic deltas were OCR/status-like (two case-garbles of the connected SSID, `• Search -> Q Search`). |
 | `wheel_second_scroll_probe` | same page | — | — | `scroll_wheel(-90, focus=(135,930,cropped_px))` transport OK. |
 | `05_item_numbers_after_wheel_second` | `settings/Overlay` | 48 | `item_numbers=12` | `diff_ratio=0.007524`; deltas reversed the same OCR noise. |
 

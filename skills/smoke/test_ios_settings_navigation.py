@@ -1100,9 +1100,9 @@ def test_wifi_network_list_is_not_crawled_as_navigation_rows():
         _el("编辑", 355, 78, w=38),
         _el("无线局域网", 70, 270, w=96),
         _el("我的网络", 70, 420, w=72),
-        _el("kacier", 80, 480, w=52),
+        _el("homenet", 80, 480, w=52),
         _el("其他网络", 70, 560, w=72),
-        _el("kacier_aiot", 80, 620, w=92),
+        _el("homenet_aiot", 80, 620, w=92),
     )
 
     assert _safe_navigation_candidates(scene) == []
@@ -1115,12 +1115,12 @@ def test_wifi_network_list_from_real_ocr_report_is_not_crawled():
         "接入无线局域网、查看可用网络，并管理加入网",
         "络及附近热点设置。进一步了解…",
         "无线局域网",
-        "Kacler_Iptv",
+        "Homenet_Iptv",
         "我的网络",
-        "kacier",
+        "homenet",
         "其他网络",
-        "kacier_aiot",
-        "minij_washer_r_91f0",
+        "homenet_aiot",
+        "acme_washer_r_0a1b",
         "其他⋯",
         "使用无线局域网与蜂窝网络的App",
         "启用WAPI",
@@ -1137,11 +1137,11 @@ def test_wifi_network_list_without_section_headers_is_not_crawled():
         "接入无线局域网、查看可用网络，并管理加入网",
         "络及附近热点设置。进一步了解…",
         "无线局域网",
-        "V kacier_iptv",
+        "V homenet_iptv",
         "网络",
-        "ChinaNet-xbPV",
-        "kacier_aiot",
-        "minii_washer_r_91f0",
+        "ChinaNet-XXXX",
+        "homenet_aiot",
+        "acme_washer_r_0a1b",
         "小猫",
         "其他⋯.",
         "使用无线局域网与蜂窝网络的App",
@@ -1154,7 +1154,7 @@ def test_wifi_network_list_without_section_headers_is_not_crawled():
 @pytest.mark.smoke
 def test_wifi_detail_page_from_real_ocr_report_is_not_crawled():
     scene = _scene_from_texts([
-        "kacier_iptv",
+        "homenet_iptv",
         "忽略此网络",
         "自动加入",
         "密码",
@@ -1176,11 +1176,11 @@ def test_settings_root_only_uses_known_safe_navigation_labels():
         _el("设置", 196, 78, w=48),
         _el("无线局域网", 80, 370, w=86),
         _el("蓝牙", 80, 424, w=40),
-        _el("kacier_iptv", 265, 370, w=92),
+        _el("homenet_iptv", 265, 370, w=92),
         _el("通知", 80, 590, w=40),
         _el("通用", 80, 725, w=40),
         _el("伴机息示", 80, 765, w=72),
-        _el("minij_washer_r_91f0", 80, 780, w=150),
+        _el("acme_washer_r_0a1b", 80, 780, w=150),
     )
 
     labels = [e.text for e in _safe_navigation_candidates(scene)]
@@ -1475,7 +1475,7 @@ def test_visible_root_row_vlm_recovery_only_spends_budget_on_navigation_like_row
     seen: set[tuple[tuple[str, ...], tuple[str, ...]]] = set()
     scene = _scene(
         _el("设置", 18, 126, w=68, h=36, ty="button"),
-        _el("Da Li", 76, 190, w=80),
+        _el("Jo Doe", 76, 190, w=80),
         _el("Apple 账户、iCloud等", 82, 220, w=180),
         _el("无线局域网", 80, 320, w=90),
         _el("P月l结机显示", 80, 420, w=120),
@@ -2461,7 +2461,7 @@ def test_blocked_page_report_records_reason_once():
     scene = _scene_from_texts([
         "无线局域网",
         "我的网络",
-        "kacier",
+        "homenet",
         "其他网络",
     ])
     blocked_pages: list[BlockedPage] = []
@@ -3540,7 +3540,7 @@ def test_root_child_crawl_returns_one_level_after_blocked_page(monkeypatch):
         _el("编辑", 340, 78, w=40),
         _el("无线局域网", 180, 78, w=96),
         _el("接入无线局域网、查看可用网络，并管理加入网", 60, 160, w=320),
-        _el("kacier_iptv", 80, 360, w=90),
+        _el("homenet_iptv", 80, 360, w=90),
     )
 
     class Phone:
@@ -3924,7 +3924,7 @@ def test_return_one_level_uses_picokvm_back_gesture(monkeypatch):
     child = _scene(
         _el("无线局域网", 40, 236, w=108, h=26, ty="button"),
         _el("接入无线局域网、查看可用网络，并管理加入网", 40, 268, w=360),
-        _el("kacier", 58, 398, w=52),
+        _el("homenet", 58, 398, w=52),
         _el("我的网络", 38, 462, w=72),
         _el("其他网络", 38, 576, w=70),
     )

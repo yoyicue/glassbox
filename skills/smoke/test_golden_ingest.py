@@ -121,6 +121,76 @@ def test_harvest_refuses_to_wipe_a_nonempty_corpus(tmp_path, capsys):
 
 
 @pytest.mark.smoke
+def test_harvest_scrubs_personal_values_before_fingerprinting(tmp_path):
+    """A fresh harvest on a host whose ledgers contain personal values must
+    commit stable placeholders, never the values — and the content-addressed
+    case_id must be computed over the SCRUBBED texts, so the committed corpus
+    is host-independent. The SSID is collected from the network-list scene and
+    substring-replaced in every scene of the run (the detail page repeats it)."""
+    import json
+
+    from skills.regression.golden_ingest import case_fingerprint
+
+    run_dir = tmp_path / "run_0001"
+    scenes = run_dir / "scenes"
+    scenes.mkdir(parents=True)
+
+    def write_scene(name: str, texts: list[str]) -> None:
+        payload = {
+            "elements": [
+                {"text": text, "box": {"x": 10, "y": 40 * i, "w": 80, "h": 16}, "type": "text"}
+                for i, text in enumerate(texts)
+            ]
+        }
+        (scenes / name).write_text(json.dumps(payload), encoding="utf-8")
+
+    # SSID-shaped row in a network-list scene (structural detection anchor)...
+    write_scene(
+        "scn_000000.json",
+        ["Edit", "WLAN", "My Networks", "testnet_5g", "Other Networks"],
+    )
+    # ... repeated on the network detail page the tap landed on.
+    write_scene(
+        "scn_000001.json",
+        ["testnet_5g", "Forget This Network", "Auto-Join", "Low Data Mode", "Configure IP"],
+    )
+    (run_dir / "actions.jsonl").write_text(
+        json.dumps(
+            {
+                "op": "tap",
+                "attempt_id": "att_000001",
+                "attempt_group_id": "grp_000001",
+                "before_command": {"scene": "scenes/scn_000000.json"},
+                "after": {"scene": "scenes/scn_000001.json"},
+                "semantic": {"verifier": "scene_progressed", "status": "succeeded"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    out_dir = tmp_path / "corpus"
+    report = harvest([run_dir], out_dir)
+    assert report.kept == 1, report.render()
+
+    (case_path,) = sorted(out_dir.glob("*.json"))
+    raw = case_path.read_text(encoding="utf-8")
+    assert "testnet_5g" not in raw, "personal value survived the harvest scrub"
+    payload = json.loads(raw)
+    assert payload["before_texts"].count("SCRUBBED_SSID_1") == 1
+    assert payload["after_texts"][0] == "SCRUBBED_SSID_1"
+    # Fingerprint is content-addressed over the SCRUBBED payload.
+    assert case_path.name == f"scene_progressed__{case_fingerprint(payload)}.json"
+    assert payload["case_id"] == f"scene_progressed_{case_fingerprint(payload)}"
+    # The scrubbed case replays consistently through the live registry.
+    assert replays_consistently(payload, VerifierRegistry()) is True
+    # Re-harvest is idempotent: same scrub, same fingerprint, same filename.
+    report2 = harvest([run_dir], out_dir)
+    assert report2.kept == 1
+    assert [p.name for p in sorted(out_dir.glob("*.json"))] == [case_path.name]
+
+
+@pytest.mark.smoke
 def test_audit_skip_on_ledger_free_host_is_loud_and_honest(tmp_path, capsys):
     """The rc-0 no-op on ledger-free hosts (CI included) is by design, but it
     must say so explicitly — 'golden-audit OK' and 'golden-audit skipped' must

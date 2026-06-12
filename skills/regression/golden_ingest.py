@@ -36,6 +36,7 @@ from glassbox.verification.probe_ingest import (
     write_golden_case,
 )
 from glassbox.verification.registry import VerifierRegistry
+from skills.regression.scrub import Scrubber, find_personal_texts
 
 HARVESTED_ROOT = Path("skills/golden/computer_use/_harvested")
 
@@ -88,15 +89,69 @@ def replays_consistently(payload: dict[str, Any], registry: VerifierRegistry) ->
     return True
 
 
+def _run_scrubber(run_dir: Path) -> Scrubber:
+    """Personal-data scrubber primed on every recorded scene of the run.
+
+    Collection runs over the FULL scene payloads (boxes included — the
+    connected-SSID rule is geometric), across the whole run rather than just
+    the verifier-bearing before/after pairs: the Settings root shows the
+    joined network and account name, and the scene that *anchors* a value
+    structurally (e.g. the network list) is not always one the verifier saw.
+    """
+    scrubber = Scrubber()
+    scenes_dir = run_dir / "scenes"
+    for scene_path in sorted(scenes_dir.glob("*.json")) if scenes_dir.is_dir() else []:
+        try:
+            scene = json.loads(scene_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(scene, dict):
+            continue
+        if not scene.get("elements") and isinstance(scene.get("texts"), list):
+            # Older texts-only scene payloads (same shape probe_ingest accepts).
+            scene = {"elements": [{"text": str(text)} for text in scene["texts"] if text]}
+        scrubber.collect(scene)
+    return scrubber
+
+
+def _scrub_payload(payload: dict[str, Any], scrubber: Scrubber) -> None:
+    """Replace personal values in the case's texts (and free-text fields) with
+    the run-stable placeholders. Runs BEFORE fingerprinting so the committed
+    filename is content-addressed over the scrubbed payload."""
+    for key in ("before_texts", "after_texts"):
+        payload[key] = [scrubber.scrub_text(text) for text in payload.get(key, [])]
+    for key in ("expected_disqualifying_state",):
+        if isinstance(payload.get(key), str):
+            payload[key] = scrubber.scrub_text(payload[key])
+
+
 def candidate_cases(run_dir: Path) -> list[dict[str, Any]]:
-    """Verifier-bearing actions in one run, lifted to pinned golden payloads."""
+    """Verifier-bearing actions in one run, lifted to scrubbed, pinned golden
+    payloads. Scrubbing happens before fingerprinting: a fresh harvest on a
+    host whose ledgers contain personal values commits placeholders, never the
+    values, and the content-addressed case_id is computed over the scrubbed
+    texts."""
     out: list[dict[str, Any]] = []
+    scrubber: Scrubber | None = None
     for action in load_actions(run_dir):
         semantic = action.get("semantic") or {}
         verifier = semantic.get("verifier")
         if not verifier or semantic.get("verification_skipped"):
             continue
+        if scrubber is None:
+            scrubber = _run_scrubber(run_dir)
         payload = golden_case_from_action(run_dir, action)
+        _scrub_payload(payload, scrubber)
+        # Hard post-condition: the structural detector must find nothing in the
+        # scrubbed texts (placeholders are never reported, so this is stable).
+        for key in ("before_texts", "after_texts"):
+            pseudo_scene = {"elements": [{"text": text} for text in payload.get(key, [])]}
+            leftovers = find_personal_texts(pseudo_scene)
+            if leftovers:
+                raise ValueError(
+                    f"harvest scrub left personal data in {run_dir} {key}: "
+                    f"{[(kind, idx) for kind, idx, _ in leftovers]}"
+                )
         # Pin the exact verifier that ran so replay resolves it deterministically
         # (routing is exercised by the hand-curated corpus, not here).
         payload.setdefault("metadata", {})

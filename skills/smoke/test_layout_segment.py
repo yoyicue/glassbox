@@ -254,7 +254,7 @@ def test_layout_segmentation_does_not_promote_settings_secondary_or_paragraph_te
         _el("text", x=204, y=314, w=20, h=12, text="On", element_id=3),
         _el("text", x=580, y=410, w=12, h=14, text=">", element_id=4),
         _el("text", x=94, y=178, w=52, h=12, text="and more", element_id=5),
-        _el("text", x=180, y=268, w=46, h=16, text="kacier", element_id=6),
+        _el("text", x=180, y=268, w=46, h=16, text="homenet", element_id=6),
         size=(640, 989),
     )
     scene.scene_type = "settings_detail"
@@ -264,7 +264,7 @@ def test_layout_segmentation_does_not_promote_settings_secondary_or_paragraph_te
 
     assert [(element.type, element.text) for element in scene.elements] == [
         ("text", "and more"),
-        ("text", "kacier"),
+        ("text", "homenet"),
         ("text", "Choose the default for how notifications appear."),
         ("text", "On"),
         ("text", ">"),

@@ -17,8 +17,9 @@ verdict/reason, and how the candidate verified live (`verified_via`:
 
 ## Regenerating
 
-The generator + scrubber live in one committed script (the raw run directory
-exists only on the rig host and is **not** committed):
+The generator is a committed script; the structural detector + scrubber it
+uses are shared in `skills/regression/scrub.py` (the raw run directory exists
+only on the rig host and is **not** committed):
 
 ```bash
 uv run python -m skills.regression.extract_transition_corpus \

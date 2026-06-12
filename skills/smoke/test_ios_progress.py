@@ -96,8 +96,8 @@ def test_scroll_outcome_overshoot_despite_shared_chrome():
 @pytest.mark.smoke
 def test_stable_visible_texts_drops_symbol_fragments():
     """纯符号/标点碎片(（②、-）)是 OCR 噪声,不算稳定行;行做空白+大小写归一。"""
-    stable = stable_visible_texts(["设置", "通知", "（②", "-）", "VPN", "Da Li"])
-    assert stable == {"设置", "通知", "vpn", "dali"}
+    stable = stable_visible_texts(["设置", "通知", "（②", "-）", "VPN", "Jo Doe"])
+    assert stable == {"设置", "通知", "vpn", "jodoe"}
 
 
 @pytest.mark.smoke

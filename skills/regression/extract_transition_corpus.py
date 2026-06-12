@@ -13,218 +13,26 @@ Generator command (also embedded in the corpus README):
         --run artifacts/computer_use_success_rate/iphone_floor_runs/run_2026_06_12_06_04_38_737160 \
         --out skills/golden/ios_settings_transitions
 
-Scrubbed classes (replaced with stable placeholders so replay still works):
-  - Apple Account display name on the Settings root (SCRUBBED_ACCOUNT_NAME)
-  - Wi-Fi/WLAN network names (SCRUBBED_SSID_n) — detected in network-list
-    scenes, then substring-replaced everywhere (the root scene shows the
-    connected SSID too)
-  - Bluetooth device names (SCRUBBED_BT_DEVICE_n)
-  - phone numbers / digit runs >= 7 (SCRUBBED_PHONE_n)
-  - e-mail addresses (SCRUBBED_EMAIL_n)
-  - Game Center nickname — the single-token line right above an e-mail
-    (SCRUBBED_GC_NICKNAME_n)
-  - account dates following a "Date added:" label (SCRUBBED_DATE_n)
+Scrubbed classes: see skills/regression/scrub.py (the shared structural
+detector + scrubber this generator delegates to).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
-PLACEHOLDER_PREFIX = "SCRUBBED_"
-
-_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-# Digit-ish span (optionally starting with "+") — personal iff it carries >= 7
-# digits, so times ("6:23"), percentages and small counters survive untouched.
-_PHONEISH_RE = re.compile(r"\+?\d[\d\s().\-]*\d")
-_TIME_RE = re.compile(r"^\d{1,2}:\d{2}$")
-_MIN_PHONE_DIGITS = 7
-
-# Structural markers (generic iOS chrome, not personal values).
-_ACCOUNT_MARKER_COMPACT = "appleaccounticloudandmore"
-_DATE_MARKER_COMPACT = "dateadded"
-_NETWORK_LIST_MARKERS = {"My Networks", "Other Networks"}
-_NETWORK_CHROME = {"WLAN", "Wi-Fi", "WiFi", "Edit", "My Networks", "Other Networks", "Networks"}
-_BLUETOOTH_SECTION_MARKERS = {"Devices", "My Devices", "Other Devices"}
-_BLUETOOTH_CHROME = {
-    "Bluetooth", "Devices", "My Devices", "Other Devices",
-    "On", "Off", "Connected", "Not Connected", "Now Discoverable",
-}
-
-
-def _compact(text: str) -> str:
-    return re.sub(r"[^0-9a-z]+", "", (text or "").casefold())
-
-
-def _texts(scene: dict[str, Any]) -> list[str]:
-    return [str(e.get("text") or "") for e in scene.get("elements", [])]
-
-
-def _digit_count(span: str) -> int:
-    return sum(ch.isdigit() for ch in span)
-
-
-def _looks_like_name_row(text: str) -> bool:
-    """Short non-sentence line: the shape of an SSID / device-name list row."""
-    stripped = text.strip()
-    if len(stripped) < 2 or stripped.startswith(PLACEHOLDER_PREFIX):
-        return False
-    if _TIME_RE.match(stripped):
-        return False
-    if stripped.count(" ") >= 3:  # prose/sentences
-        return False
-    return not stripped.endswith((".", "…"))  # sentence fragments
-
-
-def _is_network_list_scene(scene: dict[str, Any]) -> bool:
-    return any(t.strip() in _NETWORK_LIST_MARKERS for t in _texts(scene))
-
-
-def _is_bluetooth_scene(scene: dict[str, Any]) -> bool:
-    texts = [t.strip() for t in _texts(scene)]
-    return "Bluetooth" in texts and any(t in _BLUETOOTH_SECTION_MARKERS for t in texts)
-
-
-def find_personal_texts(scene: dict[str, Any]) -> list[tuple[str, int, str]]:
-    """Structural personal-data detector: list of (kind, element_index, text).
-
-    Shared with the smoke scrub test (which asserts it returns [] on every
-    committed scene): scrubbed placeholders are never reported, so the scrub is
-    idempotent by construction.
-    """
-    findings: list[tuple[str, int, str]] = []
-    texts = _texts(scene)
-    for idx, text in enumerate(texts):
-        if text.startswith(PLACEHOLDER_PREFIX):
-            continue
-        if _EMAIL_RE.search(text):
-            findings.append(("email", idx, text))
-        for match in _PHONEISH_RE.finditer(text):
-            if _digit_count(match.group()) >= _MIN_PHONE_DIGITS:
-                findings.append(("phone", idx, text))
-                break
-    def prev_nonempty(idx: int) -> int | None:
-        """Nearest preceding element with text (OCR scenes interleave nulls)."""
-        for back in range(idx - 1, -1, -1):
-            if texts[back].strip():
-                return back
-        return None
-
-    # Account display name: the row right above the "Apple Account, iCloud
-    # and more" subtitle on the Settings root.
-    for idx, text in enumerate(texts):
-        if _compact(text) == _ACCOUNT_MARKER_COMPACT:
-            prev_idx = prev_nonempty(idx)
-            if prev_idx is not None and not texts[prev_idx].startswith(PLACEHOLDER_PREFIX):
-                findings.append(("account_name", prev_idx, texts[prev_idx]))
-    # Date value following a "Date added:" label.
-    for idx, text in enumerate(texts[:-1]):
-        if _compact(text) == _DATE_MARKER_COMPACT:
-            nxt = texts[idx + 1]
-            if nxt.strip() and not nxt.startswith(PLACEHOLDER_PREFIX):
-                findings.append(("date", idx + 1, nxt))
-    # Game Center nickname: single-token line immediately above an e-mail
-    # (or above an already-scrubbed e-mail placeholder).
-    for idx, text in enumerate(texts[1:], start=1):
-        emailish = bool(_EMAIL_RE.search(text)) or text.startswith(f"{PLACEHOLDER_PREFIX}EMAIL")
-        if not emailish:
-            continue
-        prev_idx = prev_nonempty(idx)
-        if prev_idx is None:
-            continue
-        prev = texts[prev_idx].strip()
-        if " " not in prev and not prev.startswith(PLACEHOLDER_PREFIX):
-            findings.append(("nickname", prev_idx, texts[prev_idx]))
-    # Network names in a network-list scene (WLAN / Wi-Fi page).
-    if _is_network_list_scene(scene):
-        for idx, text in enumerate(texts):
-            stripped = text.strip()
-            if stripped in _NETWORK_CHROME or not _looks_like_name_row(text):
-                continue
-            findings.append(("ssid", idx, text))
-    # Bluetooth device names: list rows after a Devices section marker.
-    if _is_bluetooth_scene(scene):
-        started = False
-        for idx, text in enumerate(texts):
-            stripped = text.strip()
-            if stripped in _BLUETOOTH_SECTION_MARKERS:
-                started = True
-                continue
-            if not started or stripped in _BLUETOOTH_CHROME:
-                continue
-            if _looks_like_name_row(text):
-                findings.append(("bt_device", idx, text))
-    return findings
-
-
-class _Scrubber:
-    """Two-pass scrub: collect personal values across all scenes, then replace
-    them (exact + substring, longest-first) everywhere — including free-text
-    verdict reasons. Placeholders are stable per distinct value."""
-
-    def __init__(self) -> None:
-        self._map: dict[str, str] = {}
-        self._counters: dict[str, int] = {}
-
-    def _placeholder(self, kind: str, value: str) -> str:
-        if value in self._map:
-            return self._map[value]
-        if kind == "account_name":
-            label = f"{PLACEHOLDER_PREFIX}ACCOUNT_NAME"
-            if self._counters.get(kind):
-                label = f"{label}_{self._counters[kind] + 1}"
-        else:
-            token = {
-                "ssid": "SSID",
-                "bt_device": "BT_DEVICE",
-                "phone": "PHONE",
-                "email": "EMAIL",
-                "nickname": "GC_NICKNAME",
-                "date": "DATE",
-            }[kind]
-            label = f"{PLACEHOLDER_PREFIX}{token}_{self._counters.get(kind, 0) + 1}"
-        self._counters[kind] = self._counters.get(kind, 0) + 1
-        self._map[value] = label
-        return label
-
-    def collect(self, scene: dict[str, Any]) -> None:
-        texts = _texts(scene)
-        for kind, idx, _text in find_personal_texts(scene):
-            text = texts[idx]
-            if kind in {"email", "phone"}:
-                regex = _EMAIL_RE if kind == "email" else _PHONEISH_RE
-                for match in regex.finditer(text):
-                    span = match.group()
-                    if kind == "phone" and _digit_count(span) < _MIN_PHONE_DIGITS:
-                        continue
-                    self._placeholder(kind, span)
-            else:
-                self._placeholder(kind, text.strip())
-
-    def scrub_text(self, text: str | None) -> str | None:
-        if not text:
-            return text
-        out = text
-        for value in sorted(self._map, key=len, reverse=True):
-            if value in out:
-                out = out.replace(value, self._map[value])
-        return out
-
-    def scrub_scene(self, scene: dict[str, Any]) -> None:
-        for element in scene.get("elements", []):
-            element["text"] = self.scrub_text(element.get("text"))
-
-    @property
-    def replacement_count(self) -> int:
-        return len(self._map)
-
-    def counts(self) -> dict[str, int]:
-        return dict(self._counters)
+from skills.regression.scrub import (  # noqa: F401  (re-exported public API)
+    PLACEHOLDER_PREFIX,
+    find_personal_texts,
+)
+from skills.regression.scrub import (
+    Scrubber as _Scrubber,
+)
 
 
 def _slim_scene(scene: dict[str, Any]) -> dict[str, Any]:
