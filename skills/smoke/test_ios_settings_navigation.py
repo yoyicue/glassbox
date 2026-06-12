@@ -4508,3 +4508,57 @@ def test_root_scroll_loop_regrounds_if_scroll_leaves_settings_root():
 
     assert calls == ["return_to_root"]
     assert not limits_hit
+
+
+@pytest.mark.smoke
+def test_candidate_loop_reground_records_return_to_root_failure_instead_of_crashing():
+    """S6/C5 (docs/design/iphone_settings_transition.md): the candidate loop's
+    per-row re-ground (the sibling of the scroll loop's protected re-ground)
+    let SettingsRootUnreachable escape as a raw walkthrough exception when the
+    frame source died mid-crawl — manufacturing limits_hit=['exception'] and
+    masking the infra failure. Same graceful classification as the scroll
+    loop's variant above."""
+    from skills.regression.ios_settings.recovery import SettingsRootUnreachable
+
+    limits_hit: set[str] = set()
+    candidate = SimpleNamespace(text="通用", box=None, element_id=1)
+    actions = SimpleNamespace(
+        # scroll-loop perceive lands ON root so the loop proceeds to candidates;
+        # the candidate re-ground's phone.perceive() lands OFF root.
+        scene_is_settings_root=lambda scene: scene == "root",
+        root_coverage_perceive=lambda _phone, _depth: "root",
+        return_to_settings_root=lambda _phone: (_ for _ in ()).throw(
+            SettingsRootUnreachable("frame source died")
+        ),
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        record_blocked_page=lambda *_args, **_kwargs: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=lambda *_args, **_kwargs: [candidate],
+        max_candidates_per_page=0,
+        max_pages_visited=10_000,
+        scroll_budget_for_depth=lambda _depth: 1,
+        child_sampling_mode=lambda _depth: False,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", "detail"),
+        texts=lambda scene: [str(scene)],
+    )
+    phone = SimpleNamespace(perceive=lambda: "off-root")
+
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=limits_hit,
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert "return_to_root_failed" in limits_hit
