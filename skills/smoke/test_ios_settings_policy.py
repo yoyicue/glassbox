@@ -1696,3 +1696,47 @@ def test_ipad_settings_policy_can_pick_settings_app_from_spotlight_overlay():
     target, label = result
     assert target.text == "Open"
     assert label == "Settings"
+
+
+@pytest.mark.smoke
+def test_settings_policy_blocks_apple_account_review_row_as_unsafe():
+    """Apple-Account-review row en blocked-safety vocab (iphone_transition_n1,
+    2026-06-12): the en root row "Review Apple Account phone number" anchors
+    the auto-presented trusted-number safety sheet ("Is this still your phone
+    number?"). The drill-down must never deliberately tap it — same family as
+    the zh Apple-Account rows (Apple账户 / iCloud) already in the unsafe
+    vocabulary."""
+    assert DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text("Review Apple Account phone number")
+    assert DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text(
+        "Review Apple Account phone number", allow_sensitive_root_labels=True
+    )
+    # The banner sibling row stays covered by the existing iCloud entry.
+    assert DEFAULT_SETTINGS_POLICY.is_unsafe_navigation_text("Apple Account, iCloud and more")
+
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        elements=[
+            _el("Settings", 188, 80, w=70, ty="button"),
+            _el("Review Apple Account phone number", 80, 250, w=300),
+            _el("General", 80, 800, w=64),
+        ],
+    )
+    rejected = {
+        (item.text, item.reason)
+        for item in DEFAULT_SETTINGS_POLICY.rejected_candidate_rows(
+            scene,
+            allow_sensitive_root_labels=True,
+            allow_known_without_affordance=True,
+        )
+    }
+    assert ("Review Apple Account phone number", "unsafe_text") in rejected
+    labels = [
+        (candidate.text or "").strip()
+        for candidate in DEFAULT_SETTINGS_POLICY.safe_navigation_candidates(
+            scene,
+            allow_sensitive_root_labels=True,
+            allow_known_without_affordance=True,
+        )
+    ]
+    assert "Review Apple Account phone number" not in labels

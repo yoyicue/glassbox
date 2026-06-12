@@ -69,6 +69,13 @@ class SettingsRecoveryActions:
     try_memory_return_to_settings_root: Callable[[Any, Any], bool]
     looks_like_settings_search_results: Callable[[Any], bool]
     settings_search_has_bottom_chrome: Callable[[Any], bool]
+    dismiss_modal_sheet: Callable[[Any, Any], bool]
+
+
+# Auto-presented card sheets (Apple Account safety sheet family) get at most
+# this many close-X dismiss attempts per recovery episode; after that the
+# ladder abstains back to the existing unknown-state handling.
+_MAX_MODAL_DISMISS_ATTEMPTS = 2
 
 
 class SettingsRootUnreachable(RuntimeError):
@@ -88,6 +95,7 @@ def _return_root_via_memory_enabled() -> bool:
 def return_to_settings_root(phone, actions: SettingsRecoveryActions) -> None:
     last_state: tuple[str, tuple[str, ...]] | None = None
     repeated_state_count = 0
+    modal_dismiss_attempts = 0
     via_memory = _return_root_via_memory_enabled()
 
     for retry_index in range(12):
@@ -123,7 +131,22 @@ def return_to_settings_root(phone, actions: SettingsRecoveryActions) -> None:
             scene_kind=kind,
             repeated_state_count=repeated_state_count,
         ):
-            if kind in {"settings_search_home", "settings_search_results"} or actions.is_settings_search_scene(scene):
+            if kind == "modal_sheet":
+                # Auto-presented card sheet (e.g. the Apple Account safety
+                # sheet): back gestures / corner taps / search-clear bottom
+                # taps are useless or dangerous here — the bottom band holds
+                # state-changing buttons ("Change trusted number"). Tap ONLY
+                # the top-right close-X, bounded, then abstain to the
+                # unknown-state ladder. This branch must come before the
+                # settings-search sniff: the live sheet's bottom button rows
+                # fooled `is_settings_search_scene` into a blind bottom tap.
+                did_action = False
+                if modal_dismiss_attempts < _MAX_MODAL_DISMISS_ATTEMPTS:
+                    modal_dismiss_attempts += 1
+                    did_action = actions.dismiss_modal_sheet(phone, scene)
+                if not did_action:
+                    did_action = actions.return_from_unknown_settings_state(phone, scene)
+            elif kind in {"settings_search_home", "settings_search_results"} or actions.is_settings_search_scene(scene):
                 did_action = actions.return_from_settings_search_state(phone, scene)
             elif kind == "system_search":
                 did_action = actions.return_from_system_search_state(phone, scene)

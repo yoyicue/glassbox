@@ -4564,6 +4564,122 @@ def test_candidate_loop_reground_records_return_to_root_failure_instead_of_crash
     assert "return_to_root_failed" in limits_hit
 
 
+def _post_child_return_actions(calls: list[str]):
+    """Actions that drive the candidate loop through a SUCCESSFUL child entry
+    so the post-child-crawl re-ground (`return_one_level` fails →
+    `return_to_settings_root` raises) is the next step."""
+    from skills.regression.ios_settings.recovery import SettingsRootUnreachable
+
+    candidate = SimpleNamespace(text="通用", box=None, element_id=1)
+
+    def _raise_root_unreachable(_phone):
+        calls.append("return_to_root")
+        raise SettingsRootUnreachable("sheet ate every escape rung")
+
+    return SimpleNamespace(
+        scene_is_settings_root=lambda scene: scene == "root",
+        root_coverage_perceive=lambda _phone, _depth: "root",
+        return_to_settings_root=_raise_root_unreachable,
+        record_visible_page=lambda **_kwargs: True,
+        record_visible_root_row_visits=lambda **_kwargs: None,
+        blocked_child_navigation_reason=lambda _scene: None,
+        record_blocked_page=lambda *_args, **_kwargs: None,
+        should_audit_candidates=lambda _depth: False,
+        record_rejected_candidates=lambda **_kwargs: None,
+        should_traverse_candidates=lambda _depth: True,
+        safe_navigation_candidates=lambda *_args, **_kwargs: [candidate],
+        max_candidates_per_page=0,
+        max_pages_visited=10_000,
+        scroll_budget_for_depth=lambda _depth: 1,
+        child_sampling_mode=lambda _depth: False,
+        scroll_down_confirmed=lambda *_args, **_kwargs: ("stuck", "root"),
+        texts=lambda scene: [str(scene)],
+        canonical_expected_root_label=lambda _label: None,
+        match_any=lambda _elements, _labels: None,
+        vlm_point_for_label=lambda *_args, **_kwargs: None,
+        scene_kind=lambda _scene, phone=None: "settings_root",
+        tap_settings_row=lambda _phone, _cand: True,
+        same_page_after_tap=lambda *_args, **_kwargs: False,
+        page_title=lambda _scene: "",
+        is_settings_section_header=lambda _scene, _cand: False,
+        crawl_current_page=lambda _phone, **_kwargs: calls.append("child_crawl"),
+        return_one_level=lambda _phone, **_kwargs: False,
+        record_navigation_failure=lambda *_args, **_kwargs: None,
+        root_coverage=lambda _visits, phone=None: {"missing": []},
+        entry_exempt_sections=lambda _visits, phone=None: set(),
+        expected_root_labels=[],
+        open_root_label_via_search=lambda _phone, _label: False,
+        crawl_missing_root_pages_via_search=lambda _phone, **_kwargs: None,
+    )
+
+
+@pytest.mark.smoke
+def test_post_child_crawl_root_return_records_failure_instead_of_crashing(monkeypatch):
+    """S6 completion (iphone_transition_n1, 2026-06-12): the depth-0
+    post-child-crawl `return_to_settings_root` (navigation.py, after
+    `return_one_level` fails) was the last UNWRAPPED site. The Apple Account
+    safety sheet exhausted recovery there and SettingsRootUnreachable escaped
+    as a raw walkthrough exception (rc=1) — twice. Same graceful
+    classification as the scroll-loop / candidate-loop S6 sites."""
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    limits_hit: set[str] = set()
+    calls: list[str] = []
+    actions = _post_child_return_actions(calls)
+    phone = SimpleNamespace(
+        perceive=lambda: "root",
+        invalidate_perceive_cache=lambda: None,
+    )
+
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings",),
+        visits=[],
+        seen_sigs=set(),
+        depth=0,
+        max_depth=1,
+        limits_hit=limits_hit,
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert calls == ["child_crawl", "return_to_root"]
+    assert "return_to_root_failed" in limits_hit
+
+
+@pytest.mark.smoke
+def test_post_child_crawl_lost_parent_return_records_failure_instead_of_crashing(monkeypatch):
+    """Depth>0 sibling of the test above: `lost_parent` →
+    `return_to_settings_root` raising must classify, not crash."""
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _: None)
+    limits_hit: set[str] = set()
+    calls: list[str] = []
+    actions = _post_child_return_actions(calls)
+    phone = SimpleNamespace(
+        perceive=lambda: "parent",
+        invalidate_perceive_cache=lambda: None,
+    )
+
+    settings_navigation.crawl_current_page(
+        phone,
+        path=("Settings", "通用"),
+        visits=[],
+        seen_sigs=set(),
+        depth=1,
+        max_depth=2,
+        limits_hit=limits_hit,
+        blocked_pages=[],
+        rejected_candidates=[],
+        navigation_failures=[],
+        actions=actions,
+    )
+
+    assert calls == ["child_crawl", "return_to_root"]
+    assert "lost_parent" in limits_hit
+    assert "return_to_root_failed" in limits_hit
+
+
 # ── S5a: entered_unverified taxonomy + deliberate back-out (C4) ───────────────
 # docs/design/iphone_settings_transition.md §1 C4 / §2 S5a. A row tap whose
 # semantic verification is REJECTED is classified BEFORE the next action, and

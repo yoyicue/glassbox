@@ -1255,7 +1255,18 @@ def crawl_current_page(
                     parent_title=actions.page_title(scene),
                     parent_is_root=True,
                 ):
-                    actions.return_to_settings_root(phone)
+                    # S6 completion: this was the last unwrapped
+                    # return_to_settings_root site (the post-child-crawl
+                    # re-ground). An exhausted recovery here (e.g. an
+                    # auto-presented sheet eating every escape rung) raised a
+                    # raw walkthrough exception twice on the iPhone rig —
+                    # classify it like the scroll-loop's protected sibling so
+                    # the report always completes.
+                    try:
+                        actions.return_to_settings_root(phone)
+                    except SettingsRootUnreachable:
+                        limits_hit.add("return_to_root_failed")
+                        return
             else:
                 if not actions.return_one_level(
                     phone,
@@ -1264,7 +1275,11 @@ def crawl_current_page(
                     parent_is_root=False,
                 ):
                     limits_hit.add("lost_parent")
-                    actions.return_to_settings_root(phone)
+                    # Same S6 classification as the depth-0 sibling above.
+                    try:
+                        actions.return_to_settings_root(phone)
+                    except SettingsRootUnreachable:
+                        limits_hit.add("return_to_root_failed")
                     return
             if len(visits) >= actions.max_pages_visited:
                 limits_hit.add("max_pages")
