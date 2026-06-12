@@ -3,8 +3,9 @@ name: Rig nightly (success-rate time series)
 # The on-rig companion to the offline `make check` gate (ci.yml). It produces the
 # cross-commit, multi-device success-rate time series that the offline gate
 # cannot: it drives a REAL iPhone / iPad over the PicoKVM rig, aggregates a
-# Step-0 benchmark, and fails on any regression below the committed floor
-# (skills/regression/fixtures/reliability_baseline.json).
+# Step-0 benchmark, and fails on any regression below the lane's committed
+# device-matched floor (iPad: skills/regression/fixtures/reliability_baseline.json;
+# iPhone: skills/regression/fixtures/iphone_settings_baseline.json).
 #
 # Runs only on a self-hosted runner physically attached to a rig (label
 # `picokvm`); it never runs on PRs, so it cannot block merges — it is a nightly
@@ -47,8 +48,12 @@ jobs:
       fail-fast: false        # one device failing must not cancel the others
       matrix:
         device:
-          - { name: iphone, model: iphone_17_pro_max, language: zh-Hans, region: CN }
-          - { name: ipad,   model: ipad_mini_7,       language: en,      region: HK }
+          # The iPhone rig device runs an ENGLISH system (en/CN) — the old
+          # zh-Hans assumption was stale, and the committed iPhone floor
+          # (iphone_settings_baseline.json, 2026-06-12) is en/CN; the lane must
+          # match it or the comparator's config-identity check refuses to gate.
+          - { name: iphone, model: iphone_17_pro_max, language: en, region: CN }
+          - { name: ipad,   model: ipad_mini_7,       language: en, region: HK }
     env:
       GLASSBOX_PICOKVM: "1"
       # The single-consumer stream intermittently refuses fresh opens when
@@ -103,31 +108,43 @@ jobs:
             CANDIDATE="artifacts/ci/${{ matrix.device.name }}/canonical_benchmark.json" \
             TOLERANCE="$TOLERANCE"
 
+      # --language/--region are passed explicitly so the candidate benchmark
+      # RECORDS its config identity (run-ios-settings only writes
+      # config.language/region from its own flags, not from env) — without them
+      # every candidate carries language=null and the config-identity check
+      # refuses the blocking compares below.
       - name: iOS Settings drill-down benchmark
         run: |
           uv run python -m skills.regression.computer_use_success_rate run-ios-settings \
             --rounds "$ROUNDS" \
             --drill-down \
+            --language "${{ matrix.device.language }}" \
+            --region "${{ matrix.device.region }}" \
             --out "$CANDIDATE" \
             --artifact-root "$ARTIFACT_ROOT" \
             --report-dir "artifacts/ci/${{ matrix.device.name }}/reports"
 
-      # The committed floor is en-iPad — only the iPad lane is config-matched,
-      # so only it gates. The zh-iPhone lane used to gate against that same
-      # floor, comparing two different observation distributions; the comparator
-      # now refuses cross-config gating, so the iPhone lane is an explicitly
-      # labelled advisory readout until a device-matched iPhone floor exists
-      # (docs/goals/project_health_snapshot.md item 2).
+      # Each lane gates against ITS OWN device-matched floor — the comparator's
+      # config-identity check refuses anything else. iPad: en/HK floor
+      # (reliability_baseline.json). iPhone: en/CN floor
+      # (iphone_settings_baseline.json, first committed 2026-06-12 — an honest
+      # completion-0.0 floor whose drop-gate teeth are action_success /
+      # root_pages_coverage / per-round recoveries+strategy_switches and the
+      # unknown_rate rise-gate; the completion drop-gate is declared vacuous by
+      # the comparator until the 操作按钮 residual is fixed and the floor
+      # ratchets up). This replaces the old advisory cross-config readout the
+      # iPhone lane ran while no device-matched floor existed.
       - name: Regression gate vs committed floor (config-matched, blocking)
         if: ${{ matrix.device.name == 'ipad' }}
         run: make regression-compare CANDIDATE="$CANDIDATE" TOLERANCE="$TOLERANCE"
 
-      - name: Cross-config floor readout (advisory, never gates)
-        if: ${{ matrix.device.name != 'ipad' }}
-        continue-on-error: true
+      - name: iPhone Settings floor gate (config-matched, blocking)
+        if: ${{ matrix.device.name == 'iphone' }}
         run: |
-          make regression-compare CANDIDATE="$CANDIDATE" TOLERANCE="$TOLERANCE" \
-            REGRESSION_COMPARE_FLAGS=--allow-config-mismatch
+          make regression-compare \
+            RELIABILITY_BASELINE=skills/regression/fixtures/iphone_settings_baseline.json \
+            CANDIDATE="$CANDIDATE" \
+            TOLERANCE="$TOLERANCE"
 
       # BLOCKING P2/P3 (+ P1) machinery gate — iPad-only (the validated rig).
       # Injects a controlled verification failure (tap a present row, declare an

@@ -26,6 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # cell label (as it appears in the doc table) -> fixture path
 FLOOR_FIXTURES: dict[str, str] = {
     "设置": "skills/regression/fixtures/reliability_baseline.json",
+    "iPhone设置": "skills/regression/fixtures/iphone_settings_baseline.json",
     "Clock": "skills/regression/fixtures/clock_tabs_baseline.json",
     "canonical": "skills/regression/fixtures/canonical_primitives_baseline.json",
     "a11y": "skills/regression/fixtures/a11y_voice_control_cell_snapshot.json",
