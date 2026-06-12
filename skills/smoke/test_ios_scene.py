@@ -726,6 +726,32 @@ def test_ios_scene_classifier_semantic_detail_ignores_junk_nav_band_text():
 
 
 @pytest.mark.smoke
+def test_ios_scene_classifier_semantic_detail_keeps_two_char_cjk_nav_title():
+    # CJK arm of the S3 junk guard: two CJK characters ARE a complete zh page
+    # name (通用, 蓝牙, 电池 …). Under the Latin-only >=3 rule the guard
+    # discarded the real nav title and minted the first body row instead
+    # (通用 → settings/关于本机), which would have broken zh visit titles the
+    # moment the Settings skill started delegating to this classifier.
+    scene = _scene(
+        _el("<", 20, 80, w=16, h=20, ty="nav_back"),
+        _el("设置", 52, 86, w=40, h=20),
+        _el("通用", 202, 79, w=44, h=22),
+        _el("关于本机", 40, 160, w=86, h=20, ty="button"),
+        _el("软件更新", 40, 214, w=86, h=20, ty="button"),
+        _el("iPhone储存空间", 40, 268, w=130, h=20, ty="button"),
+        _el("后台App刷新", 40, 322, w=110, h=20, ty="button"),
+        _el("日期与时间", 40, 376, w=100, h=20, ty="button"),
+        _el("键盘", 40, 430, w=44, h=20, ty="button"),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 973))
+
+    assert classified.kind == "settings_detail"
+    assert classified.page_id == "settings/通用"
+    assert classified.title == "通用"
+
+
+@pytest.mark.smoke
 def test_ios_scene_classifier_settings_detail_without_back_ocr():
     scene = _scene(
         _el("音频与视觉", 180, 78, w=110),

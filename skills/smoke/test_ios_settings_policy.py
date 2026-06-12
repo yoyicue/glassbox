@@ -1958,3 +1958,245 @@ def test_navigation_dead_zone_stays_conservative_off_root_and_without_scene():
     assert not policy.scene_is_settings_root(detail)
     assert policy.navigation_row_top_cutoff(detail) == 260
     assert policy.navigation_row_top_cutoff(None) == 260
+
+
+# ── Visit-title picker: core-first delegation (iphone_transition_n1 forensics) ─
+#
+# The legacy nav-band heuristic in `SettingsPolicy.page_title` produced wrong
+# visit titles on four recorded pages of the gitignored run
+# `artifacts/ios_settings/iphone_transition_n1` while the platform classifier's
+# title in the very same trace payload was correct. The fixtures below replay
+# those four band geometries:
+#
+# - view_0006 / view_0017 / view_0039 are the RECORDED OCR elements, committed
+#   verbatim (verified clean: `find_personal_texts` returns [] on each, and the
+#   smoke assertions below re-verify on every run).
+# - the WLAN scene is SYNTHESIZED from view_0005's geometry: that view's OCR
+#   carries real network names, so every SSID-bearing row keeps its recorded
+#   box but its text is replaced with a SCRUBBED_SSID_n placeholder (the same
+#   convention as the committed transition corpus); the status-bar clock is a
+#   synthetic time. Only generic iOS system strings are committed verbatim.
+
+from skills.regression.scrub import find_personal_texts  # noqa: E402
+
+# view_0005 geometry, SSID texts synthesized (see block comment above).
+WLAN_VISIT_SCENE_ELEMENTS = [
+    {"type": "status_bar", "text": "2:40", "box": [64, 28, 40, 18]},
+    {"type": "text", "text": "+", "box": [316, 26, 24, 20]},
+    {"type": "image", "text": None, "box": [17, 62, 50, 52]},
+    {"type": "image", "text": None, "box": [359, 64, 69, 47]},
+    {"type": "button", "text": "Edit", "box": [378, 80, 34, 18]},
+    {"type": "button", "text": "WLAN", "box": [32, 153, 85, 103]},
+    {"type": "text", "text": "Connect to WLAN, view available networks,", "box": [40, 262, 336, 24]},
+    {"type": "text", "text": "and manage settings for joining networks and", "box": [40, 288, 352, 16]},
+    {"type": "text", "text": "nearby hotspots. Learn more...", "box": [40, 310, 238, 16]},
+    {"type": "image", "text": None, "box": [173, 305, 105, 22]},
+    {"type": "button", "text": "WLAN", "box": [60, 362, 52, 18]},
+    {"type": "image", "text": None, "box": [334, 352, 75, 42]},
+    {"type": "text", "text": "SCRUBBED_SSID_1", "box": [34, 414, 76, 18]},
+    {"type": "image", "text": None, "box": [329, 407, 23, 28]},
+    {"type": "image", "text": None, "box": [353, 409, 23, 26]},
+    {"type": "image", "text": None, "box": [378, 409, 32, 29]},
+    {"type": "text", "text": "My Networks", "box": [38, 480, 110, 21]},
+    {"type": "text", "text": "SCRUBBED_SSID_2", "box": [58, 527, 90, 22]},
+    {"type": "image", "text": None, "box": [329, 522, 23, 25]},
+    {"type": "image", "text": None, "box": [353, 522, 24, 26]},
+    {"type": "image", "text": None, "box": [379, 522, 30, 27]},
+    {"type": "text", "text": "Other Networks", "box": [40, 594, 130, 18]},
+    {"type": "text", "text": "SCRUBBED_SSID_3", "box": [60, 642, 122, 16]},
+    {"type": "image", "text": None, "box": [378, 634, 32, 32]},
+    {"type": "list_item", "text": "SCRUBBED_SSID_4", "box": [60, 690, 292, 25]},
+    {"type": "image", "text": None, "box": [377, 687, 33, 31]},
+    {"type": "text", "text": "SCRUBBED_SSID_5", "box": [58, 750, 90, 20]},
+    {"type": "image", "text": None, "box": [330, 744, 21, 23]},
+    {"type": "image", "text": None, "box": [377, 741, 33, 36]},
+    {"type": "text", "text": "SCRUBBED_SSID_6", "box": [58, 804, 162, 22]},
+    {"type": "image", "text": None, "box": [377, 795, 36, 35]},
+    {"type": "text", "text": "Other...", "box": [62, 858, 58, 17]},
+    {"type": "text", "text": "Apps Using WLAN & Mobile Data", "box": [40, 946, 258, 20]},
+]
+
+# view_0006, recorded verbatim.
+BLUETOOTH_VISIT_SCENE_ELEMENTS = [
+    {"type": "status_bar", "text": "2:41", "box": [64, 28, 40, 18]},
+    {"type": "text", "text": "+", "box": [316, 26, 24, 20]},
+    {"type": "image", "text": None, "box": [17, 63, 51, 50]},
+    {"type": "button", "text": "Bluetooth", "box": [33, 153, 111, 103]},
+    {"type": "text", "text": "Connect to accessories you can use for", "box": [42, 264, 306, 18]},
+    {"type": "text", "text": "activities such as streaming music, making", "box": [40, 288, 332, 18]},
+    {"type": "text", "text": "phone calls and gaming. Learn more...", "box": [40, 310, 296, 18]},
+    {"type": "image", "text": None, "box": [231, 307, 105, 20]},
+    {"type": "button", "text": "Bluetooth", "box": [40, 362, 78, 18]},
+    {"type": "image", "text": None, "box": [338, 353, 74, 35]},
+    {"type": "text", "text": "This iPhone is discoverable as \"iPhone\" while Bluetooth", "box": [40, 404, 344, 14]},
+    {"type": "text", "text": "Settings is open.", "box": [40, 422, 106, 14]},
+    {"type": "image", "text": None, "box": [32, 445, 113, 37]},
+    {"type": "text", "text": "Devices", "box": [40, 457, 66, 19]},
+    {"type": "text", "text": "*", "box": [112, 456, 22, 22]},
+    {"type": "list_item", "text": "To pair an Apple Watch with", "box": [40, 496, 198, 20]},
+    {"type": "text", "text": "ur iPhone, go to the Apple", "box": [232, 498, 160, 14]},
+    {"type": "image", "text": None, "box": [353, 496, 38, 15]},
+    {"type": "text", "text": "Watch app.", "box": [38, 513, 75, 16]},
+    {"type": "image", "text": None, "box": [40, 512, 68, 16]},
+]
+
+# view_0017, recorded verbatim. 'T749-fHD720' is the rig's HDMI capture
+# dongle EDID name listed under Displays — a hardware model string, not
+# personal data.
+DISPLAY_BRIGHTNESS_VISIT_SCENE_ELEMENTS = [
+    {"type": "status_bar", "text": "2:43", "box": [64, 28, 42, 18]},
+    {"type": "button", "text": "Display & Brightness", "box": [17, 63, 291, 53]},
+    {"type": "image", "text": None, "box": [39, 149, 101, 21]},
+    {"type": "text", "text": "Appearance", "box": [40, 154, 100, 18]},
+    {"type": "text", "text": "9:41", "box": [286, 210, 32, 16]},
+    {"type": "button", "text": "Light", "box": [126, 338, 42, 18]},
+    {"type": "button", "text": "Dark", "box": [282, 336, 40, 18]},
+    {"type": "text", "text": "Automatic", "box": [40, 419, 80, 19]},
+    {"type": "image", "text": None, "box": [341, 411, 68, 33]},
+    {"type": "text", "text": "Liquid Glass", "box": [38, 510, 98, 19]},
+    {"type": "text", "text": "Clear >", "box": [346, 510, 62, 16]},
+    {"type": "text", "text": "Choose your preferred look for Liquid Glass.", "box": [40, 554, 272, 14]},
+    {"type": "text", "text": "Text Size", "box": [38, 609, 75, 22]},
+    {"type": "image", "text": None, "box": [386, 602, 32, 38]},
+    {"type": "button", "text": "Bold Text", "box": [40, 666, 76, 18]},
+    {"type": "image", "text": None, "box": [342, 657, 67, 32]},
+    {"type": "text", "text": "Displays", "box": [40, 732, 70, 20]},
+    {"type": "list_item", "text": "Built-In Retina Display", "box": [78, 776, 174, 20]},
+    {"type": "image", "text": None, "box": [387, 768, 31, 33]},
+    {"type": "text", "text": ">", "box": [396, 776, 12, 14]},
+    {"type": "button", "text": "T749-fHD720", "box": [82, 830, 108, 18]},
+    {"type": "image", "text": None, "box": [385, 818, 32, 38]},
+    {"type": "text", "text": "Night Shift", "box": [38, 918, 88, 21]},
+    {"type": "text", "text": "Off >", "box": [362, 918, 46, 18]},
+    {"type": "image", "text": None, "box": [392, 912, 21, 26]},
+]
+
+# view_0039, recorded verbatim. 'I!I,' is the OCR junk read of the back
+# chevron + hands-icon column on Privacy & Security.
+PRIVACY_SECURITY_VISIT_SCENE_ELEMENTS = [
+    {"type": "status_bar", "text": "2:46", "box": [64, 28, 42, 18]},
+    {"type": "text", "text": "+", "box": [316, 26, 24, 22]},
+    {"type": "button", "text": "I!I,", "box": [16, 59, 74, 157]},
+    {"type": "image", "text": None, "box": [34, 170, 76, 71]},
+    {"type": "button", "text": "Privacy & Security", "box": [40, 250, 192, 26]},
+    {"type": "text", "text": "Control which apps can access your data,", "box": [40, 282, 326, 22]},
+    {"type": "text", "text": "location, camera and microphone, and manage", "box": [38, 304, 366, 18]},
+    {"type": "text", "text": "safety protections. Learn more...", "box": [40, 326, 254, 18]},
+    {"type": "image", "text": None, "box": [187, 323, 107, 21]},
+    {"type": "text", "text": "Location Services", "box": [82, 414, 138, 14]},
+    {"type": "image", "text": None, "box": [387, 414, 26, 32]},
+    {"type": "text", "text": "4 while using", "box": [80, 435, 78, 12]},
+    {"type": "list_item", "text": "Tracking", "box": [6, 468, 404, 90]},
+    {"type": "text", "text": ">", "box": [394, 482, 12, 14]},
+    {"type": "button", "text": "Calendars", "box": [80, 570, 82, 17]},
+    {"type": "image", "text": None, "box": [387, 570, 25, 32]},
+    {"type": "text", "text": "None", "box": [80, 592, 34, 10]},
+    {"type": "text", "text": "Contacts", "box": [80, 638, 74, 16]},
+    {"type": "text", "text": "None", "box": [80, 660, 34, 10]},
+    {"type": "text", "text": "Files & Folders", "box": [80, 704, 116, 18]},
+    {"type": "text", "text": "2apps", "box": [80, 726, 42, 14]},
+    {"type": "text", "text": "Focus", "box": [80, 772, 50, 18]},
+    {"type": "text", "text": "None", "box": [80, 794, 34, 12]},
+    {"type": "button", "text": "Health Data", "box": [80, 840, 94, 18]},
+    {"type": "text", "text": "None", "box": [80, 862, 34, 12]},
+    {"type": "text", "text": "Home", "box": [80, 908, 50, 18]},
+    {"type": "image", "text": None, "box": [387, 910, 25, 32]},
+    {"type": "text", "text": "1 app", "box": [80, 930, 34, 12]},
+]
+
+
+def _visit_scene(elements: list[dict]) -> Scene:
+    return _scene(*[
+        UIElement(
+            type=raw["type"],
+            box=Box(x=raw["box"][0], y=raw["box"][1], w=raw["box"][2], h=raw["box"][3]),
+            text=raw["text"],
+            confidence=0.9,
+        )
+        for raw in elements
+    ])
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("elements", [
+    pytest.param(WLAN_VISIT_SCENE_ELEMENTS, id="wlan_synthetic"),
+    pytest.param(BLUETOOTH_VISIT_SCENE_ELEMENTS, id="bluetooth_view_0006"),
+    pytest.param(DISPLAY_BRIGHTNESS_VISIT_SCENE_ELEMENTS, id="display_brightness_view_0017"),
+    pytest.param(PRIVACY_SECURITY_VISIT_SCENE_ELEMENTS, id="privacy_security_view_0039"),
+])
+def test_visit_title_fixture_has_no_personal_data(elements):
+    assert find_personal_texts({"elements": elements}) == []
+
+
+@pytest.mark.smoke
+def test_iphone_visit_title_wlan_ignores_trailing_edit_nav_button():
+    # Legacy heuristic picked the nav bar's trailing 'Edit' button (the large
+    # title sits below the 50-170 band); the core picker excludes Edit/Done
+    # and the semantic-detail fallback names the page from the body.
+    policy = SettingsPolicy()
+    scene = _visit_scene(WLAN_VISIT_SCENE_ELEMENTS)
+
+    assert policy.page_title(scene) == "WLAN"
+    # The block-reason match keys off page TEXTS, not the title — the WLAN
+    # dynamic-rows block must survive the title fix.
+    assert policy.blocked_child_navigation_reason(scene) == "dynamic Wi-Fi rows"
+
+
+@pytest.mark.smoke
+def test_iphone_visit_title_bluetooth_empty_nav_band_uses_semantic_body_title():
+    # Legacy heuristic found nothing in the nav band and fell back to raw
+    # texts[0] = '+' (the nav bar's add button). Core mints 'Bluetooth' from
+    # the semantic body candidate.
+    policy = SettingsPolicy()
+    scene = _visit_scene(BLUETOOTH_VISIT_SCENE_ELEMENTS)
+
+    title = policy.page_title(scene)
+    assert title == "Bluetooth"
+    assert title != "+"
+    assert policy.blocked_child_navigation_reason(scene) == "dynamic Bluetooth device rows"
+
+
+@pytest.mark.smoke
+def test_iphone_visit_title_display_brightness_beats_legacy_length_cap():
+    # 'Display & Brightness' (20 chars) was excluded by the legacy 18-char
+    # band cap, so the first content row 'Appearance' won. Core allows 28.
+    policy = SettingsPolicy()
+    scene = _visit_scene(DISPLAY_BRIGHTNESS_VISIT_SCENE_ELEMENTS)
+
+    assert policy.page_title(scene) == "Display & Brightness"
+
+
+@pytest.mark.smoke
+def test_iphone_visit_title_privacy_security_rejects_ocr_junk_band_winner():
+    # 'I!I,' (back chevron + hands icon misread) won the legacy band sort.
+    # The core junk guard rejects it and the semantic fallback names the page.
+    policy = SettingsPolicy()
+    scene = _visit_scene(PRIVACY_SECURITY_VISIT_SCENE_ELEMENTS)
+
+    title = policy.page_title(scene)
+    assert title == "Privacy & Security"
+    assert title != "I!I,"
+
+
+@pytest.mark.smoke
+def test_iphone_visit_title_zh_two_char_nav_title_survives_delegation():
+    # zh-lane byte-stability: 2-char zh nav titles (通用, 蓝牙, 电池 …) were
+    # correct under the legacy band heuristic and must stay identical under
+    # core delegation — guaranteed by the CJK arm of the core title junk
+    # guard (without it the S3 mint discards 通用 and names the page after
+    # the first body row, 关于本机).
+    policy = SettingsPolicy()
+    scene = _scene(
+        _el("14:21", 64, 28, w=40, h=18, ty="status_bar"),
+        _el("<", 20, 80, w=16, h=20, ty="nav_back"),
+        _el("设置", 52, 86, w=40, h=20),
+        _el("通用", 202, 79, w=44, h=22),
+        _el("关于本机", 40, 160, w=86, h=20, ty="button"),
+        _el("软件更新", 40, 214, w=86, h=20, ty="button"),
+        _el("iPhone储存空间", 40, 268, w=130, h=20, ty="button"),
+        _el("后台App刷新", 40, 322, w=110, h=20, ty="button"),
+        _el("日期与时间", 40, 376, w=100, h=20, ty="button"),
+        _el("键盘", 40, 430, w=44, h=20, ty="button"),
+    )
+
+    assert policy.page_title(scene) == "通用"

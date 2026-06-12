@@ -289,10 +289,10 @@ def classify_ios_scene(
         # first content rows like 'Silent Mode' over the visible real title
         # 'Sounds & Haptics'. Prefer `_page_title` and fall back to the guess —
         # aligning this branch with the settings_detail sibling below. The
-        # nav-band winner must carry >=3 semantic chars (the same rule the
-        # semantic candidate applies), or OCR junk like '+' / 'I!I,' from the
-        # nav bar would replace a correct body-derived identity.
-        nav_title = title if _has_semantic_title_chars(title) else None
+        # nav-band winner must carry >=3 semantic chars, or >=2 CJK chars (the
+        # same rule the semantic candidate applies), or OCR junk like '+' /
+        # 'I!I,' from the nav bar would replace a correct body-derived identity.
+        nav_title = title if has_semantic_title_chars(title) else None
         detail_title = nav_title or semantic_detail.title
         return IOSSceneClassification(
             kind="settings_detail",
@@ -927,13 +927,23 @@ def has_strong_ios_home_evidence(
 
 
 _SEMANTIC_TITLE_JUNK_RE = re.compile(r"[^0-9A-Za-z一-鿿& ]+")
+_CJK_TITLE_CHAR_RE = re.compile(r"[一-鿿]")
 
 
-def _has_semantic_title_chars(text: str | None) -> bool:
-    """True when the text carries enough semantic characters to name a page."""
+def has_semantic_title_chars(text: str | None) -> bool:
+    """True when the text carries enough semantic characters to name a page.
+
+    Junk like ``+`` or ``I!I,`` (OCR misreads of nav-bar buttons/icons) fails;
+    real titles pass. Two CJK characters are a complete page name (通用, 蓝牙,
+    电池 …), so CJK titles need >= 2 semantic chars while Latin titles need
+    >= 3 — the same rule the iPadOS detail-pane title picker applies. Without
+    the CJK arm, the S3 nav-band mint below discards real zh titles and
+    replaces them with the first body row (e.g. 通用 → 关于本机).
+    """
     if not text:
         return False
-    return len(_SEMANTIC_TITLE_JUNK_RE.sub("", text).strip()) >= 3
+    semantic = _SEMANTIC_TITLE_JUNK_RE.sub("", text).strip()
+    return len(semantic) >= 3 or len(_CJK_TITLE_CHAR_RE.findall(semantic)) >= 2
 
 
 def _semantic_detail_title_candidate(
@@ -948,7 +958,7 @@ def _semantic_detail_title_candidate(
         text = _text(el)
         if not text or text in ignored or len(text) > 32:
             continue
-        if not _has_semantic_title_chars(text):
+        if not has_semantic_title_chars(text):
             continue
         cx, cy = el.box.center
         if not (h * 0.11 <= cy <= h * 0.72):

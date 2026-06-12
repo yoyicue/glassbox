@@ -94,6 +94,32 @@ def test_root_path_prefers_requested_label_when_detail_title_ocr_is_garbled():
 
 
 @pytest.mark.smoke
+@pytest.mark.parametrize("junk_title", ["I!I,", "+", "<", "2:02 C", "", "?"])
+def test_observed_path_label_never_uses_ocr_junk_title(junk_title):
+    # iphone_transition_n1 forensics: 'I!I,' (Privacy & Security hands icon)
+    # and '+' (Bluetooth nav bar) became visit PATH labels. Junk reads must
+    # resolve to the tapped row's intent — canonicalized at depth 0, verbatim
+    # deeper — never to the junk itself.
+    actions = SimpleNamespace(
+        page_title=lambda _scene: junk_title,
+        canonical_expected_root_label=DEFAULT_SETTINGS_POLICY.canonical_expected_root_label,
+    )
+
+    assert settings_navigation._observed_path_label(
+        actions,
+        requested_label="Privacy & Security",
+        after_scene=object(),
+        depth=0,
+    ) == "隐私与安全性"
+    assert settings_navigation._observed_path_label(
+        actions,
+        requested_label="Location Services",
+        after_scene=object(),
+        depth=1,
+    ) == "Location Services"
+
+
+@pytest.mark.smoke
 def test_tap_settings_row_prefers_page_id_route_when_enabled():
     class RoutePhone:
         def __init__(self) -> None:
