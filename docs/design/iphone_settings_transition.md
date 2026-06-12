@@ -1,6 +1,9 @@
 # iPhone Settings transition recognition — forensics & fix design
 
-Status: **design, not implemented; snapshot as of `8eb69f7` (2026-06-12).**
+Status: **landing lever-by-lever — S6 (`ea13305`), S1+S2 (PR #92) and S3
+(nav-band mint fix; reviewed flip allow-list in
+`skills/regression/fixtures/ios_settings_mint_flip_allowlist.json`) are landed,
+S4/S5 pending; forensics snapshot as of `8eb69f7` (2026-06-12).**
 Produced by a 5-agent forensic pass over the live repro
 (`run_2026_06_12_06_04_38_737160`: 144 actions, ~49 min, iPhone 17 Pro Max,
 en/CN) — 3 anatomists (ledger data / code path / iPad working precedent) → fix

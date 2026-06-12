@@ -1,0 +1,69 @@
+{
+ "schema": "ios_settings_mint_flip_allowlist.v1",
+ "design": "docs/design/iphone_settings_transition.md (S3 — nav-band mint fix)",
+ "run": "run_2026_06_12_06_04_38_737160",
+ "snapshot": "generated against base c01a72a + the S3 fix; hand-reviewed before commit",
+ "generator": "uv run python -m skills.regression.replay_settings_mint_flips --run artifacts/computer_use_success_rate/iphone_floor_runs/run_2026_06_12_06_04_38_737160",
+ "notes": [
+  "Flips are recorded page_id -> re-minted page_id over the run's 834 scene ledgers.",
+  "20 VLM-authored scenes are skipped by the generator (OCR-only replay cannot reproduce them).",
+  "At the pre-S3 tree the same replay emitted zero flips, so this list is exactly the S3 delta.",
+  "Deliberate non-flips kept by the >=3-semantic-chars nav-title guard: scn_000370-379 (nav-bar '+' would have replaced 'settings/Do Not Disturb') and scn_000486-487 (OCR junk 'I!I,' would have replaced the live-verified 'settings/Privacy & Security')."
+ ],
+ "flips": [
+  {
+   "old": "settings/CURRENT",
+   "new": "settings/Wallpaper",
+   "scenes": ["scn_000300", "scn_000301", "scn_000302", "scn_000303", "scn_000304", "scn_000305", "scn_000306"],
+   "review": "improvement: 'CURRENT' is the wallpaper picker's body section header; 'Wallpaper' is the visible nav-band title and a member of the builder's any_of"
+  },
+  {
+   "old": "settings/camera",
+   "new": "settings/Settin",
+   "scenes": ["scn_000343"],
+   "review": "neutral: mid-transition tween frame (Sounds & Haptics sliding in over the root); both mints are OCR fragments — 'camera' a body fragment, 'Settin' the truncated 'Settings' back-label; the frame carries no stable identity either way"
+  },
+  {
+   "old": "settings/Silent Mode",
+   "new": "settings/Sounds & Haptics",
+   "scenes": ["scn_000344", "scn_000345", "scn_000346", "scn_000347", "scn_000348", "scn_000349", "scn_000350", "scn_000351", "scn_000352", "scn_000353", "scn_000354", "scn_000355", "scn_000356", "scn_000357", "scn_000358", "scn_000359"],
+   "review": "the headline C2 fix: 'Silent Mode' is the first content row; 'Sounds & Haptics' is the real centered nav title the body-band filter used to exclude"
+  },
+  {
+   "old": "settings/Do Not Disturb",
+   "new": "settings/Focus",
+   "scenes": ["scn_000382", "scn_000383", "scn_000384", "scn_000385", "scn_000386"],
+   "review": "improvement: 'Do Not Disturb' is the first Focus-mode row; 'Focus' is the real nav title (frames scn_000370-379 of the same page keep the old mint because their nav-band winner is the junk '+' add button, filtered by the guard)"
+  },
+  {
+   "old": "settings/lera",
+   "new": "settings/on Buttor",
+   "scenes": ["scn_000412"],
+   "review": "neutral-to-better: heavily garbled tween frame; 'on Buttor' is a truncation of the real title 'Action Button', 'lera' a body fragment — neither is usable but the new mint is closer to the page identity"
+  },
+  {
+   "old": "settings/ottications",
+   "new": "settings/Setti",
+   "scenes": ["scn_000479"],
+   "review": "neutral: garbled tween frame; truncated 'Settings' back-label vs truncated 'Notifications' body fragment — junk either way"
+  },
+  {
+   "old": "settings/Paired Devices",
+   "new": "settings/Developer",
+   "scenes": ["scn_000534", "scn_000535", "scn_000536", "scn_000537", "scn_000538", "scn_000539", "scn_000540", "scn_000541", "scn_000542", "scn_000543", "scn_000544", "scn_000545", "scn_000546", "scn_000547", "scn_000548", "scn_000549", "scn_000550", "scn_000551"],
+   "review": "improvement: 'Paired Devices' is a body section header on the Developer page; 'Developer' is the real nav title and a member of the builder's any_of (this was false rejection #4 in the forensics)"
+  },
+  {
+   "old": "settings/Diagnostics",
+   "new": "settings/Developer",
+   "scenes": ["scn_000552", "scn_000553", "scn_000554", "scn_000555"],
+   "review": "improvement: same Developer page scrolled — identity now stays stable across scroll positions instead of tracking whichever section header enters the body band"
+  },
+  {
+   "old": "settings/wagnostics",
+   "new": "settings/Developer",
+   "scenes": ["scn_000556", "scn_000557"],
+   "review": "improvement: same as settings/Diagnostics group but with the section header OCR-garbled ('wagnostics'); the nav title is immune to that noise"
+  }
+ ]
+}
