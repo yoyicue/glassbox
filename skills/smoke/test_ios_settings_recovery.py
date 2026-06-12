@@ -564,7 +564,11 @@ def test_return_to_settings_root_recovers_from_system_search_via_home(monkeypatc
 def test_system_search_bootstrap_taps_safe_settings_root_result_row_lead(monkeypatch):
     monkeypatch.setattr(walkthrough.time, "sleep", lambda _: None)
     scene = _scene(
-        _el("建议", 18, 98, w=36),
+        # Hard Spotlight marker: a result list with >=2 Settings-root-label
+        # rows reads as the Settings app's own search pane under the WEAK
+        # Suggestions branch; genuine Spotlight result lists carry hard
+        # headers like "Siri建议"/"最佳搜索结果".
+        _el("Siri建议", 18, 98, w=64),
         _el("App", 56, 152, w=34),
         _el("通用", 56, 212, w=36, ty="button"),
         _el("Bluetooth", 56, 274, w=78, ty="button"),

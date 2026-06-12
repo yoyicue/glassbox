@@ -1,0 +1,295 @@
+{
+  "scene_type": "system_search",
+  "confidence": 0.88,
+  "page_id": null,
+  "title": "Suggestions",
+  "safe_actions": [
+    "home",
+    "open_app"
+  ],
+  "evidence": [
+    "suggestions_title",
+    "app_category",
+    "bottom_search_chrome"
+  ],
+  "signature": [
+    "2:50",
+    "Suggestions",
+    "Face ID & Passcode",
+    "SOS",
+    "Emergency SOS",
+    "Home Screen & App Library",
+    "General",
+    "Recents",
+    "All Devices",
+    "Screen Time",
+    "Developer",
+    "Apps"
+  ],
+  "texts": [
+    "2:50",
+    "Suggestions",
+    "Face ID & Passcode",
+    "SOS",
+    "Emergency SOS",
+    "Home Screen & App Library",
+    "General",
+    "Recents",
+    "All Devices",
+    "Screen Time",
+    "Screen Time",
+    "Developer",
+    "Apps",
+    "Privacy & Security",
+    "Q",
+    "Search",
+    "Focus",
+    "Focus",
+    "earch",
+    "Q"
+  ],
+  "elements": [
+    {
+      "type": "status_bar",
+      "text": "2:50",
+      "box": [
+        64,
+        26,
+        44,
+        22
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Suggestions",
+      "box": [
+        18,
+        101,
+        104,
+        21
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Face ID & Passcode",
+      "box": [
+        56,
+        154,
+        156,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "image",
+      "text": null,
+      "box": [
+        9,
+        195,
+        183,
+        59
+      ],
+      "confidence": 0.3
+    },
+    {
+      "type": "text",
+      "text": "SOS",
+      "box": [
+        18,
+        216,
+        26,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Emergency SOS",
+      "box": [
+        56,
+        216,
+        128,
+        20
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Home Screen & App Library",
+      "box": [
+        58,
+        278,
+        216,
+        20
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "General",
+      "box": [
+        56,
+        340,
+        66,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Recents",
+      "box": [
+        20,
+        413,
+        68,
+        19
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "All Devices",
+      "box": [
+        56,
+        457,
+        90,
+        19
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Screen Time",
+      "box": [
+        58,
+        478,
+        78,
+        12
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Screen Time",
+      "box": [
+        58,
+        527,
+        98,
+        14
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Developer",
+      "box": [
+        58,
+        589,
+        82,
+        21
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Apps",
+      "box": [
+        56,
+        651,
+        44,
+        20
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Privacy & Security",
+      "box": [
+        58,
+        713,
+        142,
+        20
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "Q",
+      "box": [
+        18,
+        771,
+        24,
+        22
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "button",
+      "text": "Search",
+      "box": [
+        56,
+        775,
+        58,
+        18
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Focus",
+      "box": [
+        58,
+        829,
+        48,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "text",
+      "text": "Focus",
+      "box": [
+        58,
+        849,
+        40,
+        13
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "list_item",
+      "text": "earch",
+      "box": [
+        40,
+        896,
+        381,
+        59
+      ],
+      "confidence": 0.65
+    },
+    {
+      "type": "text",
+      "text": "Q",
+      "box": [
+        48,
+        915,
+        16,
+        16
+      ],
+      "confidence": 1.0
+    },
+    {
+      "type": "image",
+      "text": null,
+      "box": [
+        310,
+        903,
+        36,
+        44
+      ],
+      "confidence": 0.3
+    }
+  ]
+}

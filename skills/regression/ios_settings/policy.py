@@ -1050,10 +1050,11 @@ class SettingsPolicy:
         candidates: list[UIElement] = []
         seen: set[str] = set()
         annotate_root_rows = self.scene_is_settings_root(scene)
+        top_cutoff = self.navigation_row_top_cutoff(scene)
         for element in scene.elements:
             if annotate_root_rows:
                 self.annotate_root_row_intent(element)
-            text = self.potential_navigation_row_text(element)
+            text = self.potential_navigation_row_text(element, top_cutoff=top_cutoff)
             seen_key = self.row_label(element) if annotate_root_rows else text
             if not text or seen_key in seen:
                 continue
@@ -1109,8 +1110,9 @@ class SettingsPolicy:
             return []
         rejected: list[CandidateRejection] = []
         seen_texts: set[str] = set()
+        top_cutoff = self.navigation_row_top_cutoff(scene)
         for element in scene.elements:
-            text = self.potential_navigation_row_text(element)
+            text = self.potential_navigation_row_text(element, top_cutoff=top_cutoff)
             if not text or text in seen_texts:
                 continue
             seen_texts.add(text)
@@ -1140,14 +1142,59 @@ class SettingsPolicy:
             rejected.append(CandidateRejection(text=text, reason=reason))
         return rejected
 
-    def potential_navigation_row_text(self, element: UIElement) -> str | None:
+    # The historical blanket `cy < 260` dead zone existed to keep the
+    # UNSCROLLED root's Apple-Account card (account-name button ~cy 194,
+    # "Apple Account, iCloud and more" subtitle ~cy 217) and its "Review Apple
+    # Account phone number" banner out of the candidate set. Applied
+    # unconditionally it made rows 1-3 of EVERY settled scroll band
+    # structurally untappable on iPhone (live iphone_transition_n1 view_0016:
+    # "Action Button" cy≈122, "Camera" cy≈173, "Control Centre" cy≈226 all
+    # dead while neighbours at cy≥263 entered). Evidence-based instead: keep
+    # the 260 exclusion only when the account card is actually on screen;
+    # on a card-free settings ROOT use the nav-bar cutoff 110 (mirrors
+    # `visible_settings_root_row_label`, glassbox/ios/settings_rows.py).
+    # Non-root scenes and scene-less callers keep the conservative 260.
+    _NAV_ROW_TOP_CUTOFF_DEFAULT = 260
+    _NAV_ROW_TOP_CUTOFF_ROOT_BAND = 110
+    _ACCOUNT_CARD_MAX_CY = 360
+    _ACCOUNT_CARD_COMPACT_MARKERS = (
+        "appleaccount",        # en card subtitle + "Review Apple Account…" banner
+        "apple账户",            # zh card subtitle / review banner
+        "appleid",             # pre-iOS-18 card subtitle
+        "signintoyouriphone",  # signed-out card (en)
+        "登录iphone",           # signed-out card (zh)
+    )
+
+    def scene_has_apple_account_card(self, scene) -> bool:
+        for element in getattr(scene, "elements", ()) or ():
+            text = (element.text or "").strip()
+            if not text or element.box.center[1] > self._ACCOUNT_CARD_MAX_CY:
+                continue
+            compact = compact_text(text).casefold()
+            if any(marker in compact for marker in self._ACCOUNT_CARD_COMPACT_MARKERS):
+                return True
+        return False
+
+    def navigation_row_top_cutoff(self, scene) -> int:
+        if scene is None or not self.scene_is_settings_root(scene):
+            return self._NAV_ROW_TOP_CUTOFF_DEFAULT
+        if self.scene_has_apple_account_card(scene):
+            return self._NAV_ROW_TOP_CUTOFF_DEFAULT
+        return self._NAV_ROW_TOP_CUTOFF_ROOT_BAND
+
+    def potential_navigation_row_text(
+        self,
+        element: UIElement,
+        *,
+        top_cutoff: int = _NAV_ROW_TOP_CUTOFF_DEFAULT,
+    ) -> str | None:
         text = (element.text or "").strip()
         if not text:
             return None
         if self.is_status_bar_clock_text(text):
             return None
         cx, cy = element.box.center
-        if cy < 260 or cy > 900 or cx > 260:
+        if cy < top_cutoff or cy > 900 or cx > 260:
             return None
         if len(text) <= 3 and (text[0] in "([（【〈《" or text[-1] in ")]）】〉》"):
             return None

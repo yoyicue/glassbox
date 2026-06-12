@@ -570,6 +570,11 @@ def _looks_like_system_search(scene: Scene, *, viewport_size: tuple[int, int]) -
     w, h = viewport_size
     has_global_search_marker = any(
         _matches(_text(el), SYSTEM_SEARCH_MARKERS, fuzzy=0.78)
+        # A bare "Suggestions"/"建议" title is the WEAK signal owned by the
+        # branch below; without this exclusion it fuzzy-leaks into the hard
+        # markers via "Siri Suggestions" (ratio ≈0.81 ≥ 0.78) and bypasses the
+        # weak branch's geometry gates and abstain veto entirely.
+        and _text(el) not in {"建议", "Suggestions"}
         for el in scene.elements
     )
     if has_global_search_marker and _has_settings_search_chrome(scene, viewport_size=viewport_size):
@@ -599,7 +604,34 @@ def _looks_like_system_search(scene: Scene, *, viewport_size: tuple[int, int]) -
         and _matches(_text(el), SETTINGS_SEARCH_LABELS, fuzzy=0.78)
         for el in scene.elements
     )
-    return has_unqueried_search and (has_app_category or has_recent_label)
+    if not (has_unqueried_search and (has_app_category or has_recent_label)):
+        return False
+    # Weak-branch abstain veto: the Settings app's OWN untyped search pane also
+    # shows a "Suggestions" title, a "Recents" section, and bottom search
+    # chrome — but its rows are Settings root labels (General, Screen Time,
+    # Privacy & Security, …), while genuine Spotlight suggests *apps*. Claiming
+    # system_search here is a task-killer (callers mark Settings search
+    # unavailable and press Home before any query is typed; live:
+    # iphone_transition_n1 view_0065), whereas falling through to
+    # settings_search_home is recoverable — typed Spotlight re-enters via the
+    # hard-marker branch above, which this veto never touches.
+    return _settings_root_label_row_count(scene, viewport_size=(w, h)) < 2
+
+
+def _settings_root_label_row_count(scene: Scene, *, viewport_size: tuple[int, int]) -> int:
+    """Distinct left-column list-band texts that are known Settings root labels."""
+    w, h = viewport_size
+    counted: set[str] = set()
+    for el in scene.elements:
+        text = _text(el)
+        if not text or text in counted:
+            continue
+        cx, cy = el.box.center
+        if cx > w * 0.45 or not (h * 0.10 <= cy <= h * 0.86):
+            continue
+        if _is_known_settings_root_label(text):
+            counted.add(text)
+    return len(counted)
 
 
 def _looks_like_settings_search_results(scene: Scene, *, viewport_size: tuple[int, int]) -> bool:

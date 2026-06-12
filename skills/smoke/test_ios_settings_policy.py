@@ -6,7 +6,11 @@ import pytest
 
 from glassbox.cognition import Box, Scene, UIElement
 from glassbox.config import get_config
-from skills.regression.ios_settings.policy import DEFAULT_SETTINGS_POLICY, IPadSettingsPolicy
+from skills.regression.ios_settings.policy import (
+    DEFAULT_SETTINGS_POLICY,
+    IPadSettingsPolicy,
+    SettingsPolicy,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IOS_SETTINGS_CODE = [
@@ -1391,7 +1395,10 @@ def test_ios_settings_policy_owns_settings_search_element_selection():
         _el("搜索", 126, 929, w=22, h=10, ty="tab_bar_item"),
     )
     system_search = _scene(
-        _el("建议", 18, 98, w=36),
+        # Hard Spotlight marker (Siri建议): root-label deep-links in genuine
+        # Spotlight stay system_search; only the WEAK Suggestions branch
+        # abstains on >=2 root-label rows (Settings' own search pane).
+        _el("Siri建议", 18, 98, w=64),
         _el("App", 56, 152, w=34),
         _el("通用", 56, 212, w=36, ty="button"),
         _el("面容ID与密码", 58, 710, w=106, ty="button"),
@@ -1740,3 +1747,214 @@ def test_settings_policy_blocks_apple_account_review_row_as_unsafe():
         )
     ]
     assert "Review Apple Account phone number" not in labels
+
+
+# ── account-card-conditional navigation dead zone (iphone_transition_n1) ──────
+
+
+def _scene_from_corpus_root() -> Scene:
+    import json
+
+    payload = json.loads(
+        (REPO_ROOT / "skills" / "golden" / "ios_settings_transitions" / "root_scene.json")
+        .read_text(encoding="utf-8")
+    )
+    elements = []
+    for raw in payload["elements"]:
+        box = raw["box"]
+        elements.append(
+            UIElement(
+                type=raw.get("type") or "text",
+                box=Box(x=box["x"], y=box["y"], w=box["w"], h=box["h"]),
+                text=raw.get("text"),
+                confidence=0.9,
+            )
+        )
+    return Scene(frame_id=0, timestamp=0.0, elements=elements)
+
+
+def _settled_fling_band_scene() -> Scene:
+    # Geometry of live iphone_transition_n1 view_0016 (settled scroll band of
+    # the en/CN iPhone Settings root; texts are generic UI labels). Rows 1-3
+    # sit at cy 122/173/226 — inside the old blanket cy<260 dead zone.
+    return _scene(
+        _el("2:43", 64, 28, w=42, h=18, ty="status_bar"),
+        _el("Settings", 188, 82, w=70, h=19, ty="button"),
+        _el("Action Button", 80, 114, w=108, h=16),
+        _el("Camera", 80, 165, w=64, h=17, ty="button"),
+        _el("Control Centre", 82, 218, w=114, h=16),
+        _el("Display & Brightness", 80, 272, w=162, h=20),
+        _el("Home Screen & App Library", 80, 324, w=218, h=20),
+        _el("Search", 80, 378, w=58, h=16, ty="list_item"),
+        _el(">", 396, 378, w=10, h=12),
+        _el("Siri", 80, 430, w=28, h=16),
+        _el("StandBy", 80, 481, w=68, h=21, ty="button"),
+        _el("Wallpaper", 80, 535, w=83, h=21),
+        _el("Notifications", 80, 624, w=100, h=18, ty="list_item"),
+        _el(">", 396, 624, w=10, h=14),
+        _el("Sounds & Haptics", 80, 676, w=142, h=20, ty="list_item"),
+        _el(">", 396, 678, w=10, h=12),
+        _el("Focus", 82, 730, w=48, h=16),
+        _el("Screen Time", 80, 782, w=100, h=18),
+        _el("Face ID & Passcode", 80, 870, w=156, h=20),
+        _el("Q", 48, 914, w=18, h=18, ty="button"),
+        _el("Search", 74, 916, w=58, h=17),
+    )
+
+
+def _zh_unscrolled_root_scene() -> Scene:
+    # zh unscrolled Settings root mirroring the committed en root_scene.json
+    # geometry: Apple-Account card (name button + subtitle) + review banner on
+    # top, first nav rows from cy 448 down.
+    return _scene(
+        _el("6:17", 66, 24, w=40, h=24, ty="status_bar"),
+        _el("设置", 200, 82, w=48, h=20, ty="button"),
+        _el("某用户", 110, 184, w=48, h=20, ty="button"),
+        _el("Apple 账户、iCloud 等", 110, 210, w=200, h=14),
+        _el("检查 Apple 账户手机号码", 42, 258, w=347, h=39, ty="list_item"),
+        _el("飞行模式", 80, 448, w=114, h=18, ty="button"),
+        _el("无线局域网", 80, 502, w=54, h=16),
+        _el("蓝牙", 80, 554, w=78, h=16, ty="list_item"),
+        _el("打开", 362, 554, w=24, h=16),
+        _el(">", 396, 554, w=10, h=12),
+        _el("蜂窝网络", 80, 606, w=80, h=18),
+        _el("个人热点", 80, 658, w=136, h=18),
+        _el("电池", 80, 722, w=60, h=19, ty="button"),
+        _el("VPN", 80, 774, w=36, h=16),
+        _el("通用", 80, 863, w=64, h=18, ty="list_item"),
+        _el(">", 396, 863, w=10, h=14),
+        _el("Q 搜索", 46, 912, w=86, h=20),
+    )
+
+
+@pytest.mark.smoke
+def test_unscrolled_root_candidate_set_pinned_with_account_card():
+    # Pin: with the Apple-Account card on screen the cy<260 protection stays.
+    # The candidate set matches the pre-fix blanket dead zone on the committed
+    # en root_scene.json (snapshot verified against 2fa4911) with ONE deliberate
+    # delta: "Review Apple Account phone number" moved from candidates[0] to
+    # rejected/unsafe_text when the en Apple-Account-review vocab landed
+    # (modal-escape PR) — the row anchors the auto-presented trusted-number
+    # safety sheet and must never be deliberately tapped.
+    policy = SettingsPolicy()
+    scene = _scene_from_corpus_root()
+
+    assert policy.scene_has_apple_account_card(scene)
+    assert policy.navigation_row_top_cutoff(scene) == 260
+    for allow_sensitive in (False, True):
+        labels = [
+            (candidate.text or "").strip()
+            for candidate in policy.safe_navigation_candidates(
+                scene, allow_sensitive_root_labels=allow_sensitive
+            )
+        ]
+        assert labels == [
+            "WLAN",
+            "Bluetooth",
+            "Battery",
+            "General",
+        ]
+    rejected = policy.rejected_candidate_rows(
+        scene, allow_sensitive_root_labels=True, allow_known_without_affordance=True
+    )
+    assert [(item.text, item.reason) for item in rejected] == [
+        ("Review Apple Account phone number", "unsafe_text"),
+        ("Airplane Mode", "unsafe_text"),
+        ("Mobile Service", "unknown_navigation_label"),
+        ("Personal Hotspot", "unsafe_text"),
+        ("VPN", "unsafe_text"),
+    ]
+
+
+@pytest.mark.smoke
+def test_zh_unscrolled_root_candidate_set_byte_stable():
+    # zh lane byte-stability proof: the zh unscrolled root carries the same
+    # Apple-Account card evidence ("Apple 账户、iCloud 等"), so it keeps the 260
+    # cutoff and the exact pre-fix candidate set (snapshot verified against the
+    # pre-change code at 2fa4911). The account-name button (cy 194) must never
+    # become a candidate.
+    policy = SettingsPolicy()
+    scene = _zh_unscrolled_root_scene()
+
+    assert policy.scene_has_apple_account_card(scene)
+    assert policy.navigation_row_top_cutoff(scene) == 260
+    for allow_sensitive in (False, True):
+        labels = [
+            (candidate.text or "").strip()
+            for candidate in policy.safe_navigation_candidates(
+                scene, allow_sensitive_root_labels=allow_sensitive
+            )
+        ]
+        assert labels == ["无线局域网", "蓝牙", "蜂窝网络", "电池", "通用"]
+    rejected = policy.rejected_candidate_rows(
+        scene, allow_sensitive_root_labels=True, allow_known_without_affordance=True
+    )
+    assert [(item.text, item.reason) for item in rejected] == [
+        ("检查 Apple 账户手机号码", "unsafe_text"),
+        ("飞行模式", "unsafe_text"),
+        ("个人热点", "unsafe_text"),
+        ("VPN", "unsafe_text"),
+    ]
+
+
+@pytest.mark.smoke
+def test_settled_fling_band_top_rows_become_candidates():
+    # Regression (live iphone_transition_n1 view_0016): the blanket cy<260
+    # dead zone made rows 1-3 of every settled fling band structurally
+    # untappable — "Action Button"/"Camera"/"Control Centre" could never be
+    # candidates while their neighbours at cy>=263 entered. With no
+    # Apple-Account card on screen the cutoff drops to the nav-bar band (110)
+    # and the three rows are candidates; the nav-bar "Settings" title (cy 91)
+    # stays excluded.
+    policy = SettingsPolicy()
+    scene = _settled_fling_band_scene()
+
+    assert not policy.scene_has_apple_account_card(scene)
+    assert policy.navigation_row_top_cutoff(scene) == 110
+    for allow_sensitive in (False, True):
+        labels = [
+            (candidate.text or "").strip()
+            for candidate in policy.safe_navigation_candidates(
+                scene, allow_sensitive_root_labels=allow_sensitive
+            )
+        ]
+        assert labels == [
+            "Action Button",
+            "Camera",
+            "Control Centre",
+            "Display & Brightness",
+            "Home Screen & App Library",
+            "Siri",
+            "StandBy",
+            "Wallpaper",
+            "Notifications",
+            "Sounds & Haptics",
+            "Focus",
+            "Screen Time",
+            "Face ID & Passcode",
+        ]
+
+
+@pytest.mark.smoke
+def test_navigation_dead_zone_stays_conservative_off_root_and_without_scene():
+    policy = SettingsPolicy()
+    row = _el("Display & Brightness", 80, 165, w=162, h=20)
+
+    # Element-only callers (scene_state/page_records wrappers) keep the
+    # conservative 260 cutoff — byte-identical to the pre-fix behavior.
+    assert policy.potential_navigation_row_text(row) is None
+    assert policy.potential_navigation_row_text(row, top_cutoff=110) == "Display & Brightness"
+
+    # Non-root scenes (e.g. a Settings detail page with a large header in the
+    # 110-260 band) keep the conservative cutoff: the relaxation is
+    # root-band-only, so a detail page's own title can not become a candidate.
+    detail = _scene(
+        _el("<", 18, 76, w=18, ty="nav_back"),
+        _el("隐私与安全性", 118, 124, w=120, h=28),
+        _el("控制哪些App和服务可以访问你的信息。", 146, 154, w=250, h=22),
+        _el("定位服务", 80, 224, w=72, ty="button"),
+        _el("跟踪", 80, 280, w=36, ty="button"),
+    )
+    assert not policy.scene_is_settings_root(detail)
+    assert policy.navigation_row_top_cutoff(detail) == 260
+    assert policy.navigation_row_top_cutoff(None) == 260

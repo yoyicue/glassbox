@@ -15,7 +15,8 @@ from glassbox.ios.scene import apply_ios_classification, classify_ios_scene
 from glassbox.ipados.scene import classify_ipados_scene
 from glassbox.perceptor import Perceptor
 
-_GOLDEN_IOS_SCENE_DIR = Path(__file__).parents[1] / "golden" / "ios_scene" / "drill_aftersim"
+_GOLDEN_IOS_SCENE_ROOT = Path(__file__).parents[1] / "golden" / "ios_scene"
+_GOLDEN_IOS_SCENE_DIR = _GOLDEN_IOS_SCENE_ROOT / "drill_aftersim"
 
 
 def _el(text: str, x: int, y: int, w: int = 80, h: int = 20, *, ty: str = "text") -> UIElement:
@@ -26,8 +27,8 @@ def _scene(*elements: UIElement) -> Scene:
     return Scene(frame_id=0, timestamp=0.0, elements=list(elements))
 
 
-def _scene_from_ocr_fixture(name: str) -> Scene:
-    payload = json.loads((_GOLDEN_IOS_SCENE_DIR / name).read_text(encoding="utf-8"))
+def _scene_from_ocr_fixture(name: str, *, root: Path = _GOLDEN_IOS_SCENE_DIR) -> Scene:
+    payload = json.loads((root / name).read_text(encoding="utf-8"))
     elements = []
     for raw in payload["elements"]:
         x, y, w, h = raw["box"]
@@ -314,10 +315,15 @@ def test_ios_scene_classifier_does_not_resist_settings_detail_below_prior_margin
 
 @pytest.mark.smoke
 def test_ios_scene_classifier_system_search_is_not_settings_search():
+    # Weak branch (bare "建议" title, no hard Spotlight marker): genuine
+    # Spotlight suggests APPS. At most ONE Settings-root-label row may appear
+    # (e.g. a Siri shortcut to a recently-opened pane); two or more flip the
+    # read to the Settings app's own search pane — see
+    # test_ios_scene_classifier_settings_own_search_pane_*.
     scene = _scene(
         _el("建议", 18, 98, w=36),
         _el("App", 56, 152, w=34),
-        _el("通用", 56, 212, w=36, ty="button"),
+        _el("App Store", 56, 212, w=80, ty="button"),
         _el("最近1", 18, 410, w=46),
         _el("隐私与安全性", 56, 708, w=104),
         _el("Q", 48, 912, w=16),
@@ -328,6 +334,89 @@ def test_ios_scene_classifier_system_search_is_not_settings_search():
 
     assert classified.kind == "system_search"
     assert "home" in classified.safe_actions
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_settings_own_search_pane_is_not_system_search():
+    # Regression (live iphone_transition_n1 view_0065, iPhone 17 Pro Max
+    # en/CN): tapping the Settings root's own Search field opens the Settings
+    # app's UNTYPED search pane — "Suggestions" + "Recents" + bottom search
+    # chrome. The weak Suggestions branch claimed system_search, so the
+    # harness marked Settings search unavailable and pressed Home before the
+    # query was ever typed (actions.jsonl seq 51-52). The pane's rows are
+    # Settings root labels (Spotlight suggests apps), so >=2 such rows abstain
+    # from system_search and the scene falls through to settings_search_home.
+    scene = _scene_from_ocr_fixture(
+        "view_0065.ocr.json", root=_GOLDEN_IOS_SCENE_ROOT / "settings_search_pane"
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 989))
+
+    assert classified.kind == "settings_search_home"
+    assert "type_query" in classified.safe_actions
+    assert "home" not in classified.safe_actions
+
+
+@pytest.mark.smoke
+def test_settings_search_pane_fixture_stays_free_of_personal_data():
+    # The committed view_0065 fixture is raw rig OCR; keep it provably free of
+    # personal data (same shape guards as the transition-corpus scrub tests).
+    import re
+
+    payload = json.loads(
+        (_GOLDEN_IOS_SCENE_ROOT / "settings_search_pane" / "view_0065.ocr.json")
+        .read_text(encoding="utf-8")
+    )
+    email_shape = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+    digit_separators = re.compile(r"[\s().+\-:/]")
+    long_digit_run = re.compile(r"\d{7,}")
+    ssid_shape = re.compile(r"^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+$")
+    for element in payload["elements"]:
+        text = element.get("text") or ""
+        assert not email_shape.search(text)
+        assert not long_digit_run.search(digit_separators.sub("", text))
+        assert not ssid_shape.match(text.strip())
+        assert not text.strip().startswith("DIRECT-")
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_settings_own_search_pane_zh_is_not_system_search():
+    # zh lane of the view_0065 abstain: same weak Suggestions shape with >=2
+    # zh Settings root labels in the list band must abstain identically.
+    scene = _scene(
+        _el("建议", 18, 98, w=36),
+        _el("面容ID与密码", 56, 152, w=110),
+        _el("紧急 SOS", 56, 212, w=80),
+        _el("通用", 56, 340, w=36),
+        _el("最近", 18, 410, w=36),
+        _el("屏幕使用时间", 56, 470, w=104),
+        _el("隐私与安全性", 56, 708, w=104),
+        _el("Q", 48, 912, w=16),
+        _el("搜索", 68, 910, w=42),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 973))
+
+    assert classified.kind == "settings_search_home"
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_hard_spotlight_marker_wins_over_root_label_rows():
+    # The abstain veto is WEAK-branch only: with a hard Spotlight marker
+    # ("Siri Suggestions" — e.g. typed-Spotlight results listing Settings
+    # deep-links), root-label rows must NOT flip the read away from
+    # system_search.
+    scene = _scene(
+        _el("Siri Suggestions", 42, 128, w=130),
+        _el("General", 56, 212, w=60, ty="button"),
+        _el("Privacy & Security", 56, 280, w=140, ty="button"),
+        _el("Screen Time", 56, 348, w=100, ty="button"),
+        _el("Q Search", 68, 910, w=80),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 973))
+
+    assert classified.kind == "system_search"
 
 
 @pytest.mark.smoke
