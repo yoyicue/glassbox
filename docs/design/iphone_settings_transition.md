@@ -149,6 +149,23 @@ Every prior theory about this failure died on the data:
 transport_failed)。S6 让它不再伪装成 walkthrough exception;其本体修复
 (流会话级恢复/重建)另立工单。
 
+**重新定性(2026-06-13):** 此前归到本债名下的"流翘死"大部分实为 **dev
+Mac 侧 HTTP/SOCKS 代理污染** —— VPN/代理软件导出 `http_proxy`/`all_proxy`
+(指向 127.0.0.1 的环回代理,无法路由到 RFC1918),glassbox 的 OpenCV/ffmpeg
+帧源与 httpx RPC 都遵守这些环境变量 → 每次连 LAN rig 都被路由到连不通的
+代理 → `PicoKVM video stream did not open after 4 attempts`,与硬件翘死**完全
+同形**。判别信号:rig localhost `curl /video/stream | xxd` 吐 H.264
+(`00 00 00 01 41…`)= 管线健康;原始 TCP(`nc -z`)通而 HTTP 客户端失败 =
+代理而非 rig。**核心修复已入库(PR #107,`glassbox/perception/picokvm_proxy.py`):
+私网/LAN/loopback host 自动 bypass 代理(OpenCV open 周围清 env + httpx
+`trust_env=False`),`GLASSBOX_PICOKVM_BYPASS_PROXY` 可覆盖。** 残留的真实
+瞬态(5 轮里偶发 1 轮、run 中途 30s AVIO 读 stall)仍存在但远比代理放大的
+表象罕见 —— 流会话级恢复仍是独立工单。另一脆点:若 VPN 整段吃掉 LAN 路由
+(ping 100% loss / no route to host),客户端代理 bypass 也无能为力,属环境
+配置问题。真机 SSH 重启 kvm_app 必须带 Rockchip 环境(`HOME=/oem` +
+`LD_LIBRARY_PATH=/oem/usr/lib:/oem/lib`,或 `/etc/init.d/S21appinit`),否则
+kvm_video crash-loop 于 `can't load library 'librockit.so'`。
+
 ### 5.1 环境危害族:iOS 自呈现安全弹层(Apple Account safety sheet)
 
 证据:`iphone_transition_n1`(2026-06-12,两次复现)。run 抵达 settings/root
