@@ -40,6 +40,20 @@ from skills.regression.ios_settings.sections import (
 )
 
 ROOT_TITLE = SETTINGS_TITLE_LABELS
+# Soft-keyboard chrome that pops over the bottom search field once it is focused
+# (the iOS edit-menu / autofill bar). These look like 2+ char body text low on the
+# screen and were misread as the field's *query text*, so `_clear_settings_search`
+# believed an empty field still held a query and bailed out with 'search_no_result'
+# without ever typing (iPhone Settings floor, all 5 post-#99 rounds). Mirror the
+# iPad top-field exclusion (`core._top_search_has_visible_query_text`) plus the OCR
+# variants of "AutoFill" the live keyboard bar emits.
+KEYBOARD_CHROME_TEXTS = frozenset(
+    {
+        "Paste", "AutoFill", "AutoFil", "AutoFI", "Select", "Select All",
+        "Cut", "Copy", "Replace", "Replace...", "Look Up", "Translate",
+        "Share...", "Scan Text", "全选", "粘贴", "拷贝", "复制", "剪切",
+    }
+)
 HARNESS_APP_MARKERS = ("GlassboxHelper", "Mac 大脑", "服务有问题", "最近活动")
 FAILURE_CATEGORY_KEYS = ("perception", "operation", "recovery", "efficiency", "safety")
 _STATUS_BAR_CLOCK_NOISE_RE = re.compile(
@@ -786,9 +800,27 @@ class SettingsPolicy:
             return False
         return "搜索" in text or "Search" in text or fuzzy_ratio(text, "搜索") >= 0.78 or fuzzy_ratio(text, "Search") >= 0.78
 
-    def _is_bottom_search_query_candidate(self, element, *, has_clear_button: bool) -> bool:
+    def _bottom_search_field_row_cy(self, scene) -> int | None:
+        """Centre-y of the bottom search field/pill (its placeholder row), if any.
+
+        Query text lives on this row; keyboard chrome sits above it and the
+        Suggestions list bleeds below it. Used to bound the query-text band so a
+        focused-but-empty field is not read as holding a query.
+        """
+        rows = [
+            element.box.center[1]
+            for element in scene.elements
+            if element.box.center[1] >= 850
+            and self.is_settings_search_affordance_text((element.text or "").strip())
+        ]
+        return max(rows) if rows else None
+
+    def _is_bottom_search_query_candidate(
+        self, element, *, has_clear_button: bool, field_row_cy: int | None = None
+    ) -> bool:
         text = (element.text or "").strip()
-        if not text or element.box.center[1] < 850:
+        cy = element.box.center[1]
+        if not text or cy < 850:
             return False
         compact = re.sub(r"\s+", "", text)
         if compact in {"Q", "q", "×", "X"}:
@@ -797,16 +829,32 @@ class SettingsPolicy:
             return False
         if self.is_settings_search_affordance_text(text):
             return False
+        # Soft-keyboard chrome (AutoFill / Paste / Select / …) is never query text.
+        if text in KEYBOARD_CHROME_TEXTS:
+            return False
         if element.type == "tab_bar_item" and not has_clear_button:
             return False
         if element.box.center[0] > 300:
+            return False
+        # Bound the query band to the field row (±28px). Without a "×" clear
+        # button the field is empty, so anything off-row in the bottom band is
+        # keyboard chrome above the field or a Suggestions-list row bleeding below
+        # it (even OCR-garbled, e.g. "Solnds & Hantieg"), not a typed query.
+        if not has_clear_button and field_row_cy is not None and abs(cy - field_row_cy) > 28:
+            return False
+        # Defence in depth where the field row could not be located: a canonical
+        # root label in the bottom band with no clear button is a suggestion row.
+        if not has_clear_button and self.canonical_expected_root_label(text) is not None:
             return False
         return len(compact) >= 2
 
     def settings_search_has_query_text(self, scene) -> bool:
         has_clear_button = self.find_search_clear_button(scene) is not None
+        field_row_cy = self._bottom_search_field_row_cy(scene)
         for element in scene.elements:
-            if self._is_bottom_search_query_candidate(element, has_clear_button=has_clear_button):
+            if self._is_bottom_search_query_candidate(
+                element, has_clear_button=has_clear_button, field_row_cy=field_row_cy
+            ):
                 return True
         return False
 

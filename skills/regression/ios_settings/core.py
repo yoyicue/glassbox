@@ -889,6 +889,28 @@ def _tap_search_field(phone, scene) -> bool:
     return _accept_tolerating_unknown(phone, result)
 
 
+def _bottom_search_field_is_empty(phone, scene, field) -> bool:
+    """True when an iPhone bottom search field is already empty (placeholder).
+
+    The iPhone Settings search pill is a *bottom* field. When it is focused but
+    empty the soft keyboard's AutoFill bar and the Suggestions list bleed into
+    the bottom band; the query-text detector used to read those as query text, so
+    `_clear_settings_search` would run a no-op Cmd+A / Backspace on an empty field
+    (which verifies `unknown — no progress` and gets the search rung rejected) and
+    then report the clear as failed — without ever typing the query. Short-circuit
+    True here so the rung proceeds straight to typing.
+    """
+    if field is None or _is_top_settings_search_field(phone, field):
+        return False
+    if not _top_search_field_is_empty(field):
+        return False
+    if settings_scene_state.find_search_clear_button(scene) is not None:
+        return False
+    if _settings_search_has_query_text(scene):
+        return False
+    return not _top_search_has_no_results_text(scene)
+
+
 def _clear_settings_search(phone) -> bool:
     for _ in range(2):
         scene = phone.perceive()
@@ -900,6 +922,10 @@ def _clear_settings_search(phone) -> bool:
             and not _top_search_has_visible_query_text(scene, field)
             and not _top_search_has_no_results_text(scene)
         ):
+            return True
+        # iPhone bottom field already empty: nothing to clear, skip the no-op
+        # Cmd+A/Backspace dance (which would verify unknown and kill the rung).
+        if _is_settings_search_scene(scene) and _bottom_search_field_is_empty(phone, scene, field):
             return True
         if _dismiss_ipad_top_search_query_if_present(phone, scene):
             time.sleep(0.8)

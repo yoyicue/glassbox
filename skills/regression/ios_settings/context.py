@@ -24,6 +24,12 @@ class SettingsRuntimeState:
     vlm_point_grounding_history: list[dict[str, Any]] = field(default_factory=list)
     root_sidebar_exhaustive: bool = False
     sidebar_absent_root_labels: set[str] = field(default_factory=set)
+    # Honest attribution for a failed search rung (docs/design/
+    # iphone_settings_transition.md §5): set by open_root_label_via_search so the
+    # crawler records *why* the rung gave up — "search_clear_failed" (could not
+    # clear a stale/garbled field) or "search_query_not_typed" (gave up before
+    # typing) vs the genuine "search_no_result" (typed, no match).
+    last_search_rung_failure_reason: str | None = None
     # S5a (docs/design/iphone_settings_transition.md §2): per-tap taxonomy
     # records for verification-rejected row taps ("entered_unverified"). The
     # report writer surfaces these as the report's `unverified_transitions`
@@ -71,6 +77,14 @@ def set_search_input_toggled(phone: object, value: bool = True) -> None:
 
 def search_input_toggled(phone: object) -> bool:
     return state_for(phone).search_input_toggled
+
+
+def set_search_rung_failure_reason(phone: object, reason: str | None) -> None:
+    state_for(phone).last_search_rung_failure_reason = reason
+
+
+def search_rung_failure_reason(phone: object) -> str | None:
+    return state_for(phone).last_search_rung_failure_reason
 
 
 def record_row_tap(phone: object, payload: dict[str, Any]) -> None:

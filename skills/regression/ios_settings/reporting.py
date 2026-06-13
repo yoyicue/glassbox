@@ -118,7 +118,18 @@ EXPECTED_REJECTED_REASONS = frozenset({
     "section_header",
     "inert_self_loop",
 })
-EXPECTED_NAVIGATION_FAILURE_REASONS = frozenset({"tap_no_navigation", "search_no_result"})
+# "search_clear_failed" / "search_query_not_typed" honestly split a failed
+# search rung from a genuine typed-no-result (docs/design/
+# iphone_settings_transition.md §5): the rung gave up on field mechanics before
+# ever typing the query, so it must not be charged to "search_no_result".
+EXPECTED_NAVIGATION_FAILURE_REASONS = frozenset(
+    {
+        "tap_no_navigation",
+        "search_no_result",
+        "search_clear_failed",
+        "search_query_not_typed",
+    }
+)
 # S5a (docs/design/iphone_settings_transition.md §1 C4, §2): taxonomy for a row
 # tap whose semantic verification was REJECTED ("entered_unverified"). The
 # category decides the runtime recovery (see navigation.py) and is recorded

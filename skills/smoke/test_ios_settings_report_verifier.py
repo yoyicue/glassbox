@@ -1652,3 +1652,33 @@ def test_ios_settings_report_verifier_rejects_malformed_unverified_transitions()
         "unverified_transitions is not a list" in error
         for error in validate_report(not_a_list)
     )
+
+
+@pytest.mark.smoke
+def test_ios_settings_report_verifier_accepts_split_search_rung_reasons():
+    """Post-floor residual fix #2 part 3 (docs/design/iphone_settings_transition.md
+    §5): the honest split reasons 'search_clear_failed' / 'search_query_not_typed'
+    are valid navigation-failure reasons, and (like 'search_no_result') their root
+    label need not appear in any visited page (the rung never entered it)."""
+    for reason in ("search_clear_failed", "search_query_not_typed"):
+        missing_label = EXPECTED_ROOT_NAV_TEXT_ZH[-1]
+        report = _report(
+            missing=[missing_label],
+            visits=[
+                {"path": ["Settings"], "title": "设置", "texts": ["设置"]},
+                *[
+                    {"path": ["Settings", label], "title": label, "texts": [label]}
+                    for label in EXPECTED_ROOT_NAV_TEXT_ZH
+                    if label != missing_label
+                ],
+            ],
+        )
+        report["navigation_failures"] = [
+            {"path": ["Settings"], "title": "Settings", "text": missing_label, "reason": reason}
+        ]
+        _refresh_report_summaries(report)
+        errors = validate_report(report, require_exhaustive=False)
+        assert not any("invalid reason" in error for error in errors), (reason, errors)
+        assert not any(
+            "was not present in visited page" in error for error in errors
+        ), (reason, errors)
