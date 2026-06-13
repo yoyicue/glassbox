@@ -10,6 +10,7 @@ import cv2
 from loguru import logger
 
 from glassbox.perception.picokvm_config import PicoKVMVideoConfig, PicoKVMVideoSettings
+from glassbox.perception.picokvm_proxy import no_proxy_env, should_bypass_proxy
 from glassbox.perception.source import Frame
 
 # A fully-decoded iOS screen always has real spatial variance (status bar, text,
@@ -43,6 +44,14 @@ class PicoKVMFrameSource:
         self._capture = capture
         self._capture_factory = capture_factory or cv2.VideoCapture
         self._owns_capture = capture is None
+        # 2026-06-13 incident: a host-level http_proxy/all_proxy that cannot
+        # route to the LAN silently swallowed the FFmpeg stream open ("did not
+        # open after N attempts", indistinguishable from a hardware wedge).
+        # FFmpeg's own no_proxy handling is unreliable, so for a private/LAN rig
+        # we clear the proxy env for just the VideoCapture open (see
+        # picokvm_proxy.no_proxy_env). Overridable via
+        # GLASSBOX_PICOKVM_BYPASS_PROXY (auto / on / off).
+        self._bypass_proxy = should_bypass_proxy(self.config.base_url)
         # After a reopen the first decoded frame(s) of the long-lived H.264
         # stream are frequently pre-keyframe / partial decodes (smeared or
         # near-empty). Discard a few, then return the first frame that looks
@@ -70,7 +79,10 @@ class PicoKVMFrameSource:
         # wedge; a genuinely dead rig still raises after the budget.
         attempts = max(1, int(getattr(self.config, "open_retry_attempts", 4)))
         for attempt in range(attempts):
-            capture = self._capture_factory(self.stream_url)
+            # Clear proxy env around just the FFmpeg open when the rig is a
+            # private/LAN host; restored exactly afterward (no_proxy_env).
+            with no_proxy_env(self._bypass_proxy):
+                capture = self._capture_factory(self.stream_url)
             if not hasattr(capture, "isOpened") or capture.isOpened():
                 self._capture = capture
                 return

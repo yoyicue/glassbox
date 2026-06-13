@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from glassbox.effectors.picokvm.config import PicoKVMEffectorConfig
+from glassbox.perception.picokvm_proxy import should_bypass_proxy
 
 
 class PicoKVMRpcError(RuntimeError):
@@ -44,7 +45,15 @@ class PicoKVMRpcClient:
             timeout=self.config.request_timeout_s,
             connect=self.config.connect_timeout_s,
         )
-        self._client = client or httpx.Client(timeout=timeout, trust_env=self.config.trust_env)
+        # 2026-06-13 incident: a host-level proxy that cannot route to the LAN
+        # made the RPC/diagnose API unreachable. httpx honors env proxies only
+        # when trust_env is True; force it False (proxy bypassed) whenever the
+        # rig host is private/loopback, so a LAN rig never goes through a proxy
+        # even if the operator opts trust_env on for a genuinely-remote rig.
+        # GLASSBOX_PICOKVM_BYPASS_PROXY (auto / on / off) overrides the host test.
+        trust_env = self.config.trust_env and not should_bypass_proxy(self.config.base_url)
+        self._client = client or httpx.Client(timeout=timeout, trust_env=trust_env)
+        self._trust_env = trust_env
         self._owns_client = client is None
         self._seq = 0
         self._lock = threading.Lock()
