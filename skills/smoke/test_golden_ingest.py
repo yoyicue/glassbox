@@ -12,6 +12,7 @@ the per-case replay alone cannot guard a zeroed corpus — the floor test does.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -64,10 +65,15 @@ def test_harvested_corpus_nonempty_and_covers_core_verifiers():
 def test_harvest_is_idempotent(tmp_path):
     """Re-harvesting the source ledgers reproduces exactly the committed filename
     set (content-addressed) — enforces the no-hand-counted-baseline rule. Skips in
-    CI where artifacts/ is gitignored (the committed corpus is then authoritative)."""
-    if not has_source_ledgers([Path("artifacts")]):
+    CI where artifacts/ is gitignored (the committed corpus is then authoritative).
+
+    Uses include_facade=True to mirror `make golden-harvest`: this corpus is
+    sourced from curated facade probes, so the idempotence check must scan the
+    same run set the Makefile does (the default facade-skip is for direct CLI
+    callers, not the curated refresh)."""
+    if not has_source_ledgers([Path("artifacts")], include_facade=True):
         pytest.skip("no source ledgers (artifacts/ gitignored) — committed corpus is authoritative")
-    harvest([Path("artifacts")], tmp_path)
+    harvest([Path("artifacts")], tmp_path, include_facade=True)
     fresh = {p.name for p in tmp_path.glob("*.json")}
     committed = {p.name for p in Path(_HARVESTED).glob("*.json")}
     assert fresh == committed, (
@@ -208,3 +214,181 @@ def test_audit_skip_on_ledger_free_host_is_loud_and_honest(tmp_path, capsys):
     assert "SKIPPED" in captured.out
     assert "BY DESIGN" in captured.out
     assert "Do NOT read this as 'corpus audited'" in captured.out
+
+
+# —— privacy hardening (2026-06-13): cross-run union + harvest-inert facade ——
+#
+# All fixtures below use SYNTHETIC, obviously-fake personal values. The repo is
+# public + MIT: never put a real display name / SSID / email in a test.
+_FAKE_ACCOUNT_NAME = "Jamie Q Synthetic"  # multi-word, not a real person
+
+
+def _write_scene(scenes_dir: Path, name: str, texts: list[str]) -> None:
+    scenes_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "elements": [
+            {"text": text, "box": {"x": 10, "y": 40 * i, "w": 200, "h": 16}, "type": "text"}
+            for i, text in enumerate(texts)
+        ]
+    }
+    (scenes_dir / name).write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_action(run_dir: Path, before_scene: str, after_scene: str, *, verifier="scene_progressed", status="succeeded") -> None:
+    (run_dir / "actions.jsonl").write_text(
+        json.dumps(
+            {
+                "op": "tap",
+                "attempt_id": "att_000001",
+                "attempt_group_id": "grp_000001",
+                "before_command": {"scene": f"scenes/{before_scene}"},
+                "after": {"scene": f"scenes/{after_scene}"},
+                "semantic": {"verifier": verifier, "status": status},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.smoke
+def test_harvest_union_scrubs_cross_run_unanchored_value(tmp_path):
+    """THE 2026-06-13 INCIDENT, reproduced with synthetic values.
+
+    Run A's Settings root anchors the account display name (the 'Apple Account,
+    iCloud and more' subtitle right below it), so A's own scrubber learns it.
+    Run B is an App-Library page that lists the SAME name as a flat text BETWEEN
+    app labels — no account-card shape — so B's per-run scrubber cannot learn it.
+    The union scrubber (primed across A+B) must scrub the name out of B's case."""
+    from skills.regression.scrub import find_personal_texts
+
+    run_a = tmp_path / "run_settings"
+    run_b = tmp_path / "run_app_library"
+
+    # Run A: account name anchored by the subtitle marker (per-run learns it).
+    _write_scene(run_a / "scenes", "scn_000000.json",
+                 ["Settings", _FAKE_ACCOUNT_NAME, "Apple Account, iCloud and more"])
+    _write_scene(run_a / "scenes", "scn_000001.json",
+                 ["General", "About", "Software Update"])
+    _write_action(run_a, "scn_000000.json", "scn_000001.json")
+
+    # Run B: App-Library — the same name sits between app labels, UNANCHORED.
+    _write_scene(run_b / "scenes", "scn_000000.json",
+                 ["App Library", "Maps", _FAKE_ACCOUNT_NAME, "Notes", "Reminders"])
+    _write_scene(run_b / "scenes", "scn_000001.json",
+                 ["App Library", "Search", "Recently Added", "Suggestions"])
+    _write_action(run_b, "scn_000000.json", "scn_000001.json")
+
+    # Sanity: B alone never anchors the name (structural detector finds nothing
+    # in B's flat App-Library page), so a per-run-only harvest WOULD leak it.
+    b_scene = json.loads((run_b / "scenes" / "scn_000000.json").read_text())
+    assert not any(k == "account_name" for k, _i, _t in find_personal_texts(b_scene))
+
+    out_dir = tmp_path / "corpus"
+    report = harvest([run_a, run_b], out_dir)
+    assert report.kept == 2, report.render()
+
+    blobs = [p.read_text(encoding="utf-8") for p in out_dir.glob("*.json")]
+    assert all(_FAKE_ACCOUNT_NAME not in b for b in blobs), (
+        "cross-run union scrub failed: the App-Library page leaked the account name"
+    )
+    # The name was replaced by the account-name placeholder in B's case.
+    assert any("SCRUBBED_ACCOUNT_NAME" in b for b in blobs)
+
+
+@pytest.mark.smoke
+def test_union_scrub_is_noop_on_already_clean_run(tmp_path):
+    """No-churn proof: a run whose values are ALL anchored in its own scenes
+    scrubs identically whether or not a union pass is layered on top — so the
+    committed (per-run-anchored) corpus does not churn when union-scrubbing
+    lands. Compares the union harvest against a per-run-only harvest byte-for-byte."""
+    from skills.regression.golden_ingest import build_union_scrubber, candidate_cases
+
+    run = tmp_path / "run_clean"
+    _write_scene(run / "scenes", "scn_000000.json",
+                 ["Settings", _FAKE_ACCOUNT_NAME, "Apple Account, iCloud and more"])
+    _write_scene(run / "scenes", "scn_000001.json",
+                 ["General", "About"])
+    _write_action(run, "scn_000000.json", "scn_000001.json")
+
+    per_run_only = candidate_cases(run, None)
+    with_union = candidate_cases(run, build_union_scrubber([run]))
+    assert per_run_only == with_union, "union pass churned an already-clean run"
+    # And it is actually scrubbed (not vacuously equal because nothing matched).
+    assert any("SCRUBBED_ACCOUNT_NAME" in t
+               for c in with_union for t in c["before_texts"])
+
+
+@pytest.mark.smoke
+def test_union_placeholder_numbering_is_iteration_order_independent(tmp_path):
+    """Determinism proof for placeholder STABILITY: the union numbers SSIDs in a
+    fixed (kind, value) order, so scanning the runs in either order yields the
+    same value->placeholder map (hence the same scrubbed bytes, hence stable
+    fingerprints across hosts/harvests)."""
+    from skills.regression.golden_ingest import build_union_scrubber
+
+    run_a = tmp_path / "run_a"
+    run_b = tmp_path / "run_b"
+    _write_scene(run_a / "scenes", "scn_000000.json",
+                 ["My Networks", "synthnet_alpha", "Other Networks"])
+    _write_scene(run_b / "scenes", "scn_000000.json",
+                 ["My Networks", "synthnet_bravo", "Other Networks"])
+
+    forward = build_union_scrubber([run_a, run_b])._map
+    backward = build_union_scrubber([run_b, run_a])._map
+    assert forward == backward, "union placeholder numbering depends on scan order"
+    # Deterministic: alpha < bravo, so alpha is always SSID_1.
+    assert forward["synthnet_alpha"].endswith("SSID_1")
+    assert forward["synthnet_bravo"].endswith("SSID_2")
+
+
+@pytest.mark.smoke
+def test_facade_session_is_harvest_inert_by_default(tmp_path):
+    """Ad-hoc glassbox.ai probe sessions (manifests carrying ai_api_version) must
+    be SKIPPED by default — the 2026-06-13 incident was a facade run that the
+    harvester ingested. --include-facade is the explicit opt-in."""
+    from skills.regression.golden_ingest import is_facade_session
+
+    facade = tmp_path / "run_facade"
+    _write_scene(facade / "scenes", "scn_000000.json", ["App Library", "Maps", "Notes"])
+    _write_action(facade, "scn_000000.json", "scn_000000.json")
+    (facade / "manifest.json").write_text(
+        json.dumps({"run_id": "run_facade", "ai_api_version": "ai-api-v1"}), encoding="utf-8"
+    )
+    assert is_facade_session(facade) is True
+
+    out_dir = tmp_path / "corpus"
+    skipped = harvest([tmp_path], out_dir, allow_empty=True)
+    assert skipped.scanned_runs == 0, "facade session was harvested despite default skip"
+
+    included = harvest([tmp_path], out_dir, include_facade=True, allow_empty=True)
+    assert included.scanned_runs == 1, "--include-facade did not re-admit the facade run"
+
+
+@pytest.mark.smoke
+def test_harness_run_without_facade_marker_is_harvested(tmp_path):
+    """The flip side: a measurement-harness run (manifest WITHOUT ai_api_version,
+    or no manifest at all) must still be harvested — the facade filter must not
+    starve the legitimate corpus source."""
+    from skills.regression.golden_ingest import is_facade_session
+
+    harness = tmp_path / "run_harness"
+    _write_scene(harness / "scenes", "scn_000000.json", ["Settings", "General"])
+    _write_scene(harness / "scenes", "scn_000001.json", ["General", "About"])
+    _write_action(harness, "scn_000000.json", "scn_000001.json")
+    (harness / "manifest.json").write_text(
+        json.dumps({"run_id": "run_harness", "harness_version": "git:dead", "platform": "ios"}),
+        encoding="utf-8",
+    )
+    assert is_facade_session(harness) is False
+
+    out_dir = tmp_path / "corpus"
+    report = harvest([tmp_path], out_dir)
+    assert report.scanned_runs == 1 and report.kept == 1, report.render()
+
+    # A run with NO manifest at all fails safe toward the harness path.
+    nomani = tmp_path / "run_nomani"
+    _write_scene(nomani / "scenes", "scn_000000.json", ["Settings", "General"])
+    _write_scene(nomani / "scenes", "scn_000001.json", ["General", "About"])
+    _write_action(nomani, "scn_000000.json", "scn_000001.json")
+    assert is_facade_session(nomani) is False

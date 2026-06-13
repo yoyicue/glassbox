@@ -246,6 +246,11 @@ class Scrubber:
         self._map: dict[str, str] = {}
         self._counters: dict[str, int] = {}
         self._loose: dict[str, re.Pattern[str]] = {}
+        # Deferred (kind, value) observations for the deterministic union mode:
+        # collected without assigning ordinals so the placeholder numbering can
+        # be made independent of run/scene iteration order (see
+        # ``collect_deferred`` / ``finalize_union``).
+        self._deferred: dict[str, str] = {}  # value -> kind (first kind wins)
 
     def _placeholder(self, kind: str, value: str) -> str:
         if value in self._map:
@@ -294,15 +299,55 @@ class Scrubber:
                 if value:
                     self._placeholder(kind, value)
 
-    def scrub_text(self, text: str | None) -> str | None:
+    def collect_deferred(self, scene: dict[str, Any]) -> None:
+        """Record this scene's personal values WITHOUT assigning placeholder
+        ordinals yet. Used to build a *union* scrubber across many runs whose
+        placeholder numbering must not depend on run/scene iteration order:
+        call this over every run's scenes, then :meth:`finalize_union`.
+
+        The recorded value is the same canonical span ``collect`` would store
+        (the bare email/phone match, or the trailing-decoration-stripped name),
+        so finalize produces exactly the placeholders ``collect`` would have."""
+        texts = _texts(scene)
+        for kind, idx, _text in find_personal_texts(scene):
+            text = texts[idx]
+            if kind in {"email", "phone"}:
+                regex = _EMAIL_RE if kind == "email" else _PHONEISH_RE
+                for match in regex.finditer(text):
+                    span = match.group()
+                    if kind == "phone" and _digit_count(span) < _MIN_PHONE_DIGITS:
+                        continue
+                    self._deferred.setdefault(span, kind)
+            else:
+                value = self._TRAILING_DECORATION_RE.sub("", text.strip())
+                if value:
+                    self._deferred.setdefault(value, kind)
+
+    def finalize_union(self) -> None:
+        """Assign placeholders to all deferred values in a DETERMINISTIC order
+        (by kind, then value), so a fresh harvest yields the same union
+        placeholders on any host regardless of which run was scanned first.
+        Idempotent; values already assigned via ``collect`` keep their map."""
+        for value, kind in sorted(self._deferred.items(), key=lambda kv: (kv[1], kv[0])):
+            self._placeholder(kind, value)
+        self._deferred.clear()
+
+    def scrub_text(self, text: str | None, *, skip: set[str] | None = None) -> str | None:
+        """Replace collected personal values with their placeholders.
+
+        ``skip`` excludes specific values from substitution — used by the
+        residual (union) pass so it only touches CROSS-RUN leaks the per-run
+        scrubber already handled with its own ordinals, leaving the committed
+        per-run placeholders byte-identical (no corpus churn)."""
         if not text:
             return text
         out = text
-        for value in sorted(self._map, key=len, reverse=True):
+        active = [v for v in sorted(self._map, key=len, reverse=True) if not (skip and v in skip)]
+        for value in active:
             if value in out:
                 out = out.replace(value, self._map[value])
         # Loose pass: OCR case/whitespace garbles of already-collected values.
-        for value in sorted(self._map, key=len, reverse=True):
+        for value in active:
             out = self._loose[value].sub(self._map[value], out)
         return out
 
