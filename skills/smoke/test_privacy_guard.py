@@ -35,9 +35,40 @@ SCAN_ROOTS = (
     REPO_ROOT / "skills" / "regression" / "fixtures",
 )
 SWEEP_ROOTS = (REPO_ROOT / "skills", REPO_ROOT / "glassbox")
-# Raw on-rig run ledgers (gitignored): the only place the personal values
-# exist, so the sweep can derive them without ever committing them.
-RAW_RUNS_DIR = REPO_ROOT / "artifacts" / "computer_use_success_rate" / "iphone_floor_runs"
+
+# Raw on-rig artifact ledgers (gitignored; present only on the rig/owner host):
+# the only place the personal values exist, so the sweep can derive them
+# without ever committing them. FIX 2 (2026-06-13) widens the derivation from a
+# single floor-runs dir to ALL artifact scene layouts — so a value that leaks
+# into the committed tree from ANY run (springboard, App-Library, Settings-
+# detail, Screen-Time, the AI-facade `ai_*` probes, the `_reports` view dumps)
+# is caught, not just the iPhone floor runs.
+#
+# This widening is only safe because the structural detector is now precise
+# enough to NOT anchor generic iOS UI strings on those heterogeneous scenes
+# (see skills/smoke/test_scrub.py precision suite); a loose detector here would
+# false-positive committed generic content ("Settings" in skills/crawl/
+# crawl_app.py, "Camera"/"Week" in the golden corpus).
+#
+# Each glob is BOUNDED (no unbounded `**` over artifacts/), so the scan can only
+# reach the known scene-bearing layouts. `scenes/*.json` are full scene dumps;
+# `views/*.ocr.json` are the report-view OCR dumps (also scene-shaped).
+ARTIFACTS_DIR = REPO_ROOT / "artifacts"
+_DERIVATION_GLOBS = (
+    # Top-level measurement-harness runs and AI-facade probe sessions.
+    "run_*/scenes/*.json",
+    "ai_*/scenes/*.json",
+    # computer_use_success_rate floor / honest-gate / candidate run dirs.
+    "computer_use_success_rate/*_runs/run_*/scenes/*.json",
+    # ... and the nested rounds/ layout (iphone_floor_n5*, etc.).
+    "computer_use_success_rate/*/rounds/run_*/scenes/*.json",
+    # Per-app A/B run dirs (clock, app-store remote-AC).
+    "clock_ab/*_runs/run_*/scenes/*.json",
+    "appstore_remoteac_ab/*/run_*/scenes/*.json",
+    # ios_settings report views and computer_use report views (OCR dumps).
+    "ios_settings/*/*.artifacts/views/*.ocr.json",
+    "computer_use_success_rate/*_reports/*.artifacts/views/*.ocr.json",
+)
 
 # Keys whose list-of-strings payloads are scene text dumps in committed
 # fixtures (harvested golden cases, OCR fixtures, scene signatures).
@@ -85,9 +116,17 @@ def test_committed_fixture_scenes_have_no_personal_data_shapes():
     assert findings == [], f"personal-data shapes in committed fixtures: {findings}"
 
 
+def _iter_derivation_scene_paths() -> Iterator[Path]:
+    """Every scene-bearing artifact path across the bounded derivation globs."""
+    for pattern in _DERIVATION_GLOBS:
+        yield from sorted(ARTIFACTS_DIR.glob(pattern))
+
+
 def _derived_personal_values() -> set[str]:
+    """Re-derive the personal value set from ALL artifact scene layouts (FIX 2),
+    so a value that leaks from ANY run is swept for — not just the floor runs."""
     scrubber = Scrubber()
-    for scene_path in sorted(RAW_RUNS_DIR.glob("run_*/scenes/*.json")):
+    for scene_path in _iter_derivation_scene_paths():
         try:
             scene = json.loads(scene_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -97,19 +136,40 @@ def _derived_personal_values() -> set[str]:
     return scrubber.values()
 
 
+def _has_any_derivation_scenes() -> bool:
+    return any(True for _ in _iter_derivation_scene_paths())
+
+
 @pytest.mark.smoke
 def test_raw_run_personal_values_absent_from_committed_tree():
-    """Direct sweep: none of the personal values derivable from the raw run
-    ledgers may appear anywhere under skills/ or glassbox/. The values are
-    derived at test time and never committed; failures report a digest, not
-    the value."""
-    if not RAW_RUNS_DIR.is_dir() or not any(RAW_RUNS_DIR.glob("run_*/scenes/*.json")):
+    """Direct sweep: none of the personal values derivable from the raw artifact
+    ledgers (ALL layouts, FIX 2) may appear anywhere under skills/ or glassbox/.
+    The values are derived at test time and never committed; failures report a
+    digest, not the value.
+
+    ORCHESTRATOR NOTE — this assertion only RUNS on a host that holds the
+    gitignored artifacts/ (the rig/owner host); CI and worktrees skip by design
+    (the worktree has no artifacts/, so the widened derivation cannot be proven
+    GREEN here). To confirm on the artifact-bearing host:
+
+        uv run pytest skills/smoke/test_privacy_guard.py \\
+            ::test_raw_run_personal_values_absent_from_committed_tree -q
+
+    and, to inspect the re-derived value set / assert no generic words leaked in
+    (host-local; never commit the output):
+
+        uv run python -c "from skills.smoke.test_privacy_guard import \\
+            _derived_personal_values as d; v=d(); print(len(v)); \\
+            import json; print(json.dumps(sorted(len(x) for x in v)))"
+    """
+    if not ARTIFACTS_DIR.is_dir() or not _has_any_derivation_scenes():
         pytest.skip(
-            "SKIPPED BY DESIGN: no raw run ledgers under "
-            f"{RAW_RUNS_DIR.relative_to(REPO_ROOT)} (artifacts/ is gitignored, so CI and "
-            "fresh checkouts cannot derive the personal value list). This sweep runs on "
-            "hosts that hold the original artifacts (the rig/owner host); the shape-based "
-            "scan in this file still guards committed fixtures everywhere."
+            "SKIPPED BY DESIGN: no raw artifact scenes under "
+            f"{ARTIFACTS_DIR.relative_to(REPO_ROOT)} across the derivation globs "
+            "(artifacts/ is gitignored, so CI, fresh checkouts and git worktrees cannot "
+            "derive the personal value list). This sweep runs on hosts that hold the "
+            "original artifacts (the rig/owner host); the shape-based scan in this file "
+            "still guards committed fixtures everywhere."
         )
     values = _derived_personal_values()
     if not values:
@@ -129,4 +189,7 @@ def test_raw_run_personal_values_absent_from_committed_tree():
                 if value in content:
                     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
                     hits.append((str(path.relative_to(REPO_ROOT)), f"value sha256:{digest}"))
-    assert hits == [], f"personal values from raw run ledgers leaked into the tree: {hits}"
+    assert hits == [], (
+        f"personal values derived from raw artifact ledgers (all layouts) leaked "
+        f"into the committed tree: {hits}"
+    )
