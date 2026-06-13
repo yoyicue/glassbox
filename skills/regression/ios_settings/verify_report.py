@@ -42,6 +42,12 @@ from skills.regression.ios_settings.sections import root_section_ids_for_canonic
 
 _canonical_expected_root_label = DEFAULT_SETTINGS_POLICY.canonical_expected_root_label
 
+# A failed search rung (typed-no-result OR gave-up-before-typing) means the root
+# was never entered, so its label legitimately is not present in any visited page.
+_SEARCH_RUNG_FAILURE_REASONS = frozenset(
+    {"search_no_result", "search_clear_failed", "search_query_not_typed"}
+)
+
 DEVICE_UNAVAILABLE_ENV = "IOS_SETTINGS_DEVICE_UNAVAILABLE_ROOT_LABELS"
 
 
@@ -476,7 +482,7 @@ def validate_report(
             errors.append(f"navigation_failures[{idx}] has invalid text")
         elif (
             not text_entry_exempt
-            and reason != "search_no_result"
+            and reason not in _SEARCH_RUNG_FAILURE_REASONS
             and not _text_present_in_visit(text, visit_texts_by_path.get(path_key, []))
         ):
             errors.append(

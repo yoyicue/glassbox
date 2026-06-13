@@ -5140,3 +5140,163 @@ def test_same_page_retap_block_still_retaps_on_ipad_split_view(monkeypatch):
     _s5a_run_crawl(phone, actions)
 
     assert taps == ["Wallpaper", "Wallpaper"]  # unchanged iPad behavior
+
+
+@pytest.mark.smoke
+def test_clear_settings_search_short_circuits_empty_bottom_field(monkeypatch):
+    """Post-floor residual fix #2 part 1 (docs/design/iphone_settings_transition.md
+    §5). An iPhone bottom search field that is focused-but-empty (placeholder, no
+    "×" clear button) must short-circuit the clear step to True WITHOUT running
+    the no-op Cmd+A / Backspace dance — that dance verifies "unknown — no progress"
+    and used to kill the search rung before a query was ever typed (all 5 post-#99
+    floor rounds). Scene geometry mirrors the recorded keyboard+AutoFill shape
+    (scn_000674) with generic UI copy."""
+    monkeypatch.setattr(walkthrough.time, "sleep", lambda _seconds: None)
+
+    empty_search = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(448, 990),
+        elements=[
+            _el("5:30", 64, 32, w=42, h=20, ty="status_bar"),
+            _el("Suggestions", 20, 104, w=102, h=21),
+            _el("Notifications", 58, 840, w=98, h=18, ty="button"),
+            _el("AutoFill", 54, 870, w=54, h=17),
+            _el("Q Search", 46, 905, w=201, h=57, ty="list_item"),
+        ],
+    )
+
+    class IPhonePhone:
+        device_geometry = SimpleNamespace(model="iphone_17_pro_max")
+
+        def __init__(self) -> None:
+            self.keys: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return empty_search
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def viewport_size(self):
+            return (448, 990)
+
+        def key(self, modifier: int, keycode: int):
+            self.keys.append((modifier, keycode))
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+        def tap_xy(self, _x: int, _y: int):
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+    phone = IPhonePhone()
+    settings_context.reset_for(phone)
+
+    assert walkthrough._clear_settings_search(phone) is True
+    # No Cmd+A (0x08, 0x04) / Backspace (0, 0x2A): the empty-field path skips them.
+    assert phone.keys == []
+
+
+@pytest.mark.smoke
+def test_open_root_label_via_search_types_and_taps_on_empty_field(monkeypatch):
+    """End-to-end (docs/design/iphone_settings_transition.md §5): with the bottom
+    field empty, the search rung must proceed to TYPE the query and TAP the result
+    row (not bail out with a never-typed miss). The recorded failure reason after a
+    successful type is the genuine "search_no_result", never the empty-field
+    mechanics reasons."""
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+    search_scene = _scene(_el("通知", 72, 160, w=40, ty="button"))
+    opened_detail = _scene(
+        _el("Q Search", 34, 90, w=72),
+        _el("通知", 404, 44, w=90),
+        _el("Scheduled Summary", 280, 320, w=138),
+    )
+
+    class SearchPhone:
+        device_geometry = SimpleNamespace(model="iphone_17_pro_max")
+
+        def __init__(self) -> None:
+            self.scene = search_scene
+            self.typed: list[str] = []
+            self.taps: list[tuple[int, int]] = []
+
+        def perceive(self):
+            return self.scene
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+        def type(self, query: str):
+            self.typed.append(query)
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+        def tap_xy(self, x: int, y: int):
+            self.taps.append((x, y))
+            self.scene = opened_detail
+            return ActionResult(ok=True, backend="mock", connected=True)
+
+    phone = SearchPhone()
+    settings_context.reset_for(phone)
+
+    actions = SimpleNamespace(
+        root_search_query=lambda label: "tongzhi" if label == "通知" else None,
+        enter_settings_search=lambda _phone: True,
+        # Empty field already clear → real clear path short-circuits to True.
+        clear_settings_search=lambda _phone: True,
+        tap_search_field=lambda _phone, _scene: True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+        record_action_verdict=lambda _phone, _result: True,
+        find_search_result=lambda scene, label: scene.elements[0] if label == "通知" else None,
+        find_search_query_suggestion=lambda _scene, _label: None,
+        is_settings_search_scene=lambda scene: scene is search_scene,
+        scene_is_settings_root=lambda scene: scene is opened_detail,
+        page_title=lambda scene: "通知" if scene is opened_detail else "Search",
+        canonical_expected_root_label=lambda text: "通知" if text in {"通知", "Notifications"} else None,
+    )
+
+    assert settings_navigation.open_root_label_via_search(phone, "通知", actions)
+    assert phone.typed == ["tongzhi"]          # the query WAS typed
+    assert phone.taps                           # the result row WAS tapped
+    # Honest attribution: the query was typed, so a later miss would be a genuine
+    # no-result, never the empty-field mechanics reasons.
+    assert settings_context.search_rung_failure_reason(phone) == "search_no_result"
+
+
+@pytest.mark.smoke
+def test_open_root_label_via_search_reason_splits_clear_failure(monkeypatch):
+    """Honest attribution (docs/design/iphone_settings_transition.md §5): a rung
+    that gives up because the field clear FAILED is recorded as
+    'search_clear_failed', and one that never even typed as
+    'search_query_not_typed' — neither is charged to a genuine 'search_no_result'.
+    """
+    monkeypatch.setattr(settings_navigation.time, "sleep", lambda _seconds: None)
+
+    class P:
+        device_geometry = SimpleNamespace(model="iphone_17_pro_max")
+
+        def perceive(self):
+            return SimpleNamespace(elements=[])
+
+        def invalidate_perceive_cache(self) -> None:
+            pass
+
+    phone = P()
+    settings_context.reset_for(phone)
+    clear_fail = SimpleNamespace(
+        root_search_query=lambda _label: "tongzhi",
+        enter_settings_search=lambda _phone: True,
+        clear_settings_search=lambda _phone: False,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+    )
+    assert settings_navigation.open_root_label_via_search(phone, "通知", clear_fail) is False
+    assert settings_context.search_rung_failure_reason(phone) == "search_clear_failed"
+
+    phone2 = P()
+    settings_context.reset_for(phone2)
+    never_typed = SimpleNamespace(
+        root_search_query=lambda _label: "tongzhi",
+        enter_settings_search=lambda _phone: False,
+        clear_settings_search=lambda _phone: True,
+        action_intent=lambda *_args, **_kwargs: nullcontext(),
+    )
+    assert settings_navigation.open_root_label_via_search(phone2, "通知", never_typed) is False
+    assert settings_context.search_rung_failure_reason(phone2) == "search_query_not_typed"

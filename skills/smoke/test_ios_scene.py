@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from glassbox.action.context import ActionContext
+from glassbox.action.semantic_plan import ExpectedState, verify_expected_state
 from glassbox.cognition import Box, Scene, SceneClassificationPrior, UIElement
 from glassbox.element_selector import ElementSelector
 from glassbox.ios.app_store import annotate_app_store_search_intents
@@ -90,7 +91,6 @@ def test_ios_scene_classifier_keeps_ipad_home_widget_as_springboard():
     [
         ("view_0002.ocr.json", "WLAN"),
         ("view_0007.ocr.json", "Bluetooth"),
-        ("view_0012.ocr.json", "Silent Mode"),
         ("view_0025.ocr.json", "Face ID & Passcode"),
         ("view_0029.ocr.json", "Privacy & Security"),
     ],
@@ -104,6 +104,73 @@ def test_ios_scene_classifier_real_drill_detail_fixtures(fixture_name: str, expe
     assert classified.title == expected_title
     assert "back" in classified.safe_actions
     assert "semantic_settings_detail" in classified.evidence
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_action_button_carousel_verifier_golden():
+    """Post-floor residual fix #1 (docs/design/iphone_settings_transition.md §5).
+
+    `view_0012.ocr.json` is the iOS 26 操作按钮 / Action Button carousel slide:
+    its only body text is the centered slide caption "Silent Mode" plus the
+    description copy. The body-band semantic guess used to mint
+    `settings/Silent Mode`, which the row's expected-state any_of
+    (`settings/操作按钮` / `settings/Action Button` / …) rejected, so the crawler
+    treated the entered page as not-entered (iPhone floor residual, all 5 rounds
+    of the post-#99 floor). The carousel detector now mints `settings/Action
+    Button`, and the row verifies `succeeded`.
+    """
+    scene = _scene_from_ocr_fixture("view_0012.ocr.json")
+
+    classified = classify_ios_scene(scene)
+
+    assert classified.kind == "settings_detail"
+    assert classified.title == "Action Button"
+    assert classified.page_id == "settings/Action Button"
+    assert "back" in classified.safe_actions
+    assert "action_button_carousel" in classified.evidence
+
+    # Verifier-golden: the recorded row any_of accepts the minted identity.
+    expected = ExpectedState.from_dict(
+        {
+            "kind": "page_id",
+            "payload": {
+                "any_of": [
+                    "settings/操作按钮",
+                    "settings/Action Button",
+                    "com.apple.settings.action-button",
+                ]
+            },
+        }
+    )
+    outcome = verify_expected_state(expected, SimpleNamespace(page_id=classified.page_id))
+    assert outcome.status == "succeeded", outcome.reason
+
+
+@pytest.mark.smoke
+def test_ios_scene_classifier_sounds_haptics_not_action_button():
+    """Guard (a): a real Sounds & Haptics detail page (which lists a "Silent
+    Mode" row under its visible nav title) must NOT be reclassified as the
+    Action Button carousel — it has many rows and a nav-band title, so the
+    sparse/no-rows/no-nav-title veto excludes it.
+    """
+    scene = _scene(
+        _el("Sounds & Haptics", 224, 94, w=156),
+        _el("Silent Mode", 160, 209, w=120),
+        _el("iPhone will play ringtones, alerts and system sounds.", 224, 252, w=320),
+        _el("Show in Status Bar", 120, 311, w=140),
+        _el("Input", 100, 401, w=48),
+        _el("Ringtone and Alerts", 130, 476, w=160),
+        _el("Change with Buttons", 130, 572, w=160),
+        _el("Always Play", 320, 625, w=80),
+        _el("Ringtone", 120, 744, w=80),
+        _el("Text Tone", 120, 797, w=80),
+        _el("New Voicemail", 130, 851, w=120),
+    )
+
+    classified = classify_ios_scene(scene, viewport_size=(448, 982))
+
+    assert classified.page_id == "settings/Sounds & Haptics"
+    assert "action_button_carousel" not in classified.evidence
 
 
 @pytest.mark.smoke

@@ -140,6 +140,43 @@ SETTINGS_DETAIL_SEMANTIC_COPY_MARKERS = (
     "接入", "可用网络", "附近热点", "进一步了解", "访问", "默认", "管理",
     "控制哪些", "定位服务", "麦克风", "安全保护",
 )
+# iOS 26 操作按钮 / Action Button "what should it do?" picker is a near-textless
+# *carousel*: a single large centered slide caption low on the page (cy≈0.62h)
+# with one or two lines of description copy below it, an optional "+" add glyph
+# top-right, and NO nav-band title and NO detail rows. The body-band semantic
+# guess (`settings_detail_semantic_guess`) sees only the slide caption and mints
+# `settings/<caption>` (e.g. `settings/Silent Mode`), which `verify_expected_state`
+# rejects against the row's any_of (`settings/操作按钮` / `settings/Action Button`
+# / `com.apple.settings.action-button`) so the crawler treats the entered page as
+# not-entered. Anchor on the *known slide-caption family* (the assignable Action
+# Button actions) PLUS the sparse-carousel shape, and mint `settings/Action
+# Button`. Veto+anchor+abstain: a real settings detail page (incl. Sounds &
+# Haptics, whose body lists a "Silent Mode" row under its visible nav title) has
+# many rows and a nav-band title, so it is excluded by the sparse/no-rows veto
+# and never reclassified. The captions are generic iOS UI strings, not personal
+# data (verified via skills.regression.scrub.find_personal_texts).
+ACTION_BUTTON_CAROUSEL_CAPTIONS = (
+    "Silent Mode", "静音模式",
+    "Focus", "专注模式",
+    "Camera", "相机",
+    "Torch", "Flashlight", "手电筒",
+    "Voice Memo", "Voice Memos", "语音备忘录",
+    "Magnifier", "放大器",
+    "Translate", "翻译",
+    "Shortcut", "Run Shortcut", "快捷指令",
+    "Accessibility", "辅助功能",
+    "Controls", "控制",
+    "No Action", "无操作",
+)
+# Description copy seen below the slide caption (generic system UI strings). Used
+# only as *supporting* evidence — the structural carousel shape is the anchor.
+ACTION_BUTTON_CAROUSEL_DESC_MARKERS = (
+    "switch between", "silent and ring", "and alerts",
+    "press and hold", "side button", "action button",
+    "切换", "静音", "响铃", "按住",
+)
+# The page identity the row's expected-state any_of accepts.
+ACTION_BUTTON_PAGE_TITLE = "Action Button"
 
 
 @dataclass(frozen=True)
@@ -267,6 +304,22 @@ def classify_ios_scene(
             title=title,
             safe_actions=("record_blocked",),
             evidence=(blocked,),
+        )
+
+    # Action Button carousel (iOS 26): a sparse near-textless slide whose only
+    # body text is a centered action caption ("Silent Mode", …) + description.
+    # Detect it before the body-band semantic guess, which would otherwise mint
+    # `settings/<caption>` and get the entered page rejected against the row's
+    # `settings/Action Button` any_of.
+    carousel = action_button_carousel_guess(scene, viewport_size=(w, h))
+    if carousel is not None:
+        return IOSSceneClassification(
+            kind="settings_detail",
+            confidence=carousel.confidence,
+            page_id=f"settings/{carousel.title}",
+            title=carousel.title,
+            safe_actions=("back", "edge_back"),
+            evidence=carousel.evidence,
         )
 
     semantic_detail = settings_detail_semantic_guess(
@@ -916,6 +969,111 @@ def settings_detail_semantic_guess(
             evidence=tuple(evidence),
         )
     return None
+
+
+def action_button_carousel_guess(
+    scene: Scene,
+    *,
+    viewport_size: tuple[int, int] | None = None,
+) -> IOSSceneSemanticGuess | None:
+    """Recognise the iOS 26 Action Button carousel and mint `Action Button`.
+
+    The carousel slide is a single large centered caption from the assignable
+    Action Button action family (e.g. "Silent Mode"), low on the page
+    (cy≈0.55–0.72h), with one or two centered description lines just below it and
+    no nav-band title / no detail rows. Returns a guess titled "Action Button"
+    on a confident match, else ``None`` (abstain).
+
+    Veto+anchor+abstain so a real settings detail page is never reclassified:
+      • veto  — must be a *sparse* page (≤6 non-chrome texts), have NO nav-band
+                 title, NO back affordance, and no grouped detail rows;
+      • anchor — a centered slide caption from the known caption family at the
+                 carousel slide band, plus a centered description line below it;
+      • abstain — anything weaker falls through to the existing classifiers.
+    """
+    w, h = _scene_size(scene, viewport_size)
+    # A real settings_root / search / home / app-library surface is never the
+    # carousel — let the hard gates own those.
+    if (
+        _is_settings_root(scene, viewport_size=(w, h))
+        or _has_settings_search_chrome(scene, viewport_size=(w, h))
+        or _looks_like_settings_search_results(scene, viewport_size=(w, h))
+        or _looks_like_system_search(scene, viewport_size=(w, h))
+        or _app_library_evidence(scene, viewport_size=(w, h)) is not None
+        or _has_strong_home_evidence(scene, viewport_size=(w, h))
+    ):
+        return None
+    # A real detail page carries a back affordance and/or a nav-band title; the
+    # carousel has neither. Either signal vetoes the carousel verdict.
+    if _has_back_affordance(scene):
+        return None
+    if has_semantic_title_chars(_page_title(scene, viewport_size=(w, h))):
+        return None
+
+    non_chrome = [
+        el for el in scene.elements
+        if _text(el)
+        and el.type != "status_bar"
+        and not _TIME_RE.match(_text(el))
+        and _text(el) != "+"
+        and 0 <= el.box.center[1] <= h
+    ]
+    # Sparse page veto: a Settings detail page (incl. Sounds & Haptics, whose
+    # body lists a "Silent Mode" row) carries many rows; the carousel does not.
+    if not non_chrome or len(non_chrome) > 6:
+        return None
+
+    caption: UIElement | None = None
+    for el in non_chrome:
+        text = _text(el)
+        cx, cy = el.box.center
+        if not (h * 0.50 <= cy <= h * 0.72):
+            continue
+        # Centered slide caption (within ±0.30w of the horizontal centre).
+        if abs(cx - w / 2) > w * 0.30:
+            continue
+        if matches_label(text, ACTION_BUTTON_CAROUSEL_CAPTIONS, fuzzy=0.86):
+            caption = el
+            break
+    if caption is None:
+        return None
+
+    _cap_cx, cap_cy = caption.box.center
+    # A centered description line sits just below the caption (anchor support).
+    has_description = False
+    for el in non_chrome:
+        if el is caption:
+            continue
+        text = _text(el)
+        cx, cy = el.box.center
+        if cy <= cap_cy or cy > h * 0.82:
+            continue
+        if abs(cx - w / 2) > w * 0.30:
+            continue
+        if marker_hits(text.casefold(), ACTION_BUTTON_CAROUSEL_DESC_MARKERS) or (
+            el.box.w >= w * 0.40 or len(text) >= 18
+        ):
+            has_description = True
+            break
+    if not has_description:
+        return None
+
+    # Optional supporting evidence: the carousel "+" add glyph in the top-right.
+    has_add_glyph = any(
+        _text(el) == "+"
+        and el.box.center[1] <= h * 0.14
+        and el.box.center[0] >= w * 0.60
+        for el in scene.elements
+    )
+    evidence: list[str] = ["action_button_carousel", "slide_caption", "slide_description"]
+    if has_add_glyph:
+        evidence.append("carousel_add_glyph")
+    return IOSSceneSemanticGuess(
+        kind="settings_detail",
+        confidence=0.82,
+        title=ACTION_BUTTON_PAGE_TITLE,
+        evidence=tuple(evidence),
+    )
 
 
 def has_strong_ios_home_evidence(

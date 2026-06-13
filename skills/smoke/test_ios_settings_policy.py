@@ -2200,3 +2200,78 @@ def test_iphone_visit_title_zh_two_char_nav_title_survives_delegation():
     )
 
     assert policy.page_title(scene) == "通用"
+
+
+@pytest.mark.smoke
+def test_bottom_search_empty_field_keyboard_autofill_is_not_query():
+    """Post-floor residual fix #2 (docs/design/iphone_settings_transition.md §5).
+
+    The iPhone Settings search pill is a *bottom* field. Once focused-but-empty,
+    the soft keyboard's AutoFill bar pops over the bottom band. The query-text
+    detector used to read that "AutoFill" chip as query text, so the clear-step
+    believed an empty field still held a query and gave up with 'search_no_result'
+    WITHOUT EVER TYPING (iPhone floor, all 5 post-#99 rounds; recorded scene
+    scn_000674). Geometry reconstructed from the recorded scene with generic UI
+    copy (privacy-verified via skills.regression.scrub.find_personal_texts)."""
+    policy = SettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(448, 990),
+        elements=[
+            _el("5:30", 64, 32, w=42, h=20, ty="status_bar"),
+            _el("Suggestions", 20, 104, w=102, h=21),
+            _el("Face ID & Passcode", 58, 156, w=154, h=16),
+            _el("General", 58, 220, w=62, h=17, ty="button"),
+            _el("Notifications", 58, 840, w=98, h=18, ty="button"),
+            _el("AutoFill", 54, 870, w=54, h=17),
+            _el("Q Search", 46, 905, w=201, h=57, ty="list_item"),
+        ],
+    )
+
+    assert policy.is_settings_search_scene(scene)
+    assert not policy.settings_search_has_query_text(scene)
+
+
+@pytest.mark.smoke
+def test_bottom_search_suggestion_row_bleed_is_not_query():
+    """Round-1 secondary mode (scn_000601): a Suggestions-list row bleeds below
+    cy>=850, garbled by OCR ("Solnds & Hantieg"). It sits ~42px BELOW the search
+    field row, so the field-row band guard rejects it — without it the empty
+    field reads as holding a query and the rung never types."""
+    policy = SettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(448, 989),
+        elements=[
+            _el("5:53", 58, 26, w=50, h=24, ty="status_bar"),
+            _el("Suggestions", 18, 101, w=104, h=21),
+            _el("Screen Time", 58, 837, w=98, h=16),
+            _el("earch", 38, 897, w=382, h=56, ty="list_item"),
+            _el("Solnds & Hantieg", 60, 961, w=138, h=12),
+        ],
+    )
+
+    assert policy.is_settings_search_scene(scene)
+    assert not policy.settings_search_has_query_text(scene)
+
+
+@pytest.mark.smoke
+def test_bottom_search_typed_query_with_clear_button_is_query():
+    """Positive control: a real typed query with a visible "×" clear button on
+    the field row MUST still read as query text (the clear path must run)."""
+    policy = SettingsPolicy()
+    scene = Scene(
+        frame_id=0,
+        timestamp=0.0,
+        viewport_size=(448, 990),
+        elements=[
+            _el("5:30", 64, 32, w=42, h=20, ty="status_bar"),
+            _el("Q", 46, 918, w=18, h=14),
+            _el("wallpaper", 70, 905, w=120, h=40),
+            _el("×", 400, 905, w=24, h=24, ty="button"),
+        ],
+    )
+
+    assert policy.settings_search_has_query_text(scene)

@@ -122,11 +122,18 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
     query = actions.root_search_query(label)
     if query is None:
         return False
+    # Honest attribution (docs/design/iphone_settings_transition.md §5): assume the
+    # rung never got to type until proven otherwise, then promote to
+    # "search_no_result" once a query is actually typed. The caller reads this to
+    # split the recorded failure reason instead of charging every miss to a
+    # genuine no-result.
+    settings_context.set_search_rung_failure_reason(phone, "search_query_not_typed")
     if not actions.enter_settings_search(phone):
         return False
     max_attempts = 1 if _is_ipad_target(phone) else 2
     for attempt in range(max_attempts):
         if not actions.clear_settings_search(phone):
+            settings_context.set_search_rung_failure_reason(phone, "search_clear_failed")
             if _is_ipad_target(phone):
                 settings_context.set_search_unavailable(phone)
             return False
@@ -161,6 +168,8 @@ def open_root_label_via_search(phone, label: str, actions: SettingsNavigationAct
             attempt=attempt + 1,
         ):
             result = phone.type(query)
+        # The query was actually typed: any later miss is a genuine no-result.
+        settings_context.set_search_rung_failure_reason(phone, "search_no_result")
         if not actions.record_action_verdict(phone, result):
             return False
         with contextlib.suppress(Exception):
@@ -943,12 +952,19 @@ def crawl_missing_root_pages_via_search(
             ):
                 print(f"[ios_settings] sidebar fallback opened {label}", flush=True)
             else:
+                # Honest split (docs/design/iphone_settings_transition.md §5):
+                # "search_clear_failed" / "search_query_not_typed" charge the miss
+                # to the rung mechanics, not to a genuine "search_no_result" (typed,
+                # no match). Default to no-result for safety if unset.
+                reason = (
+                    settings_context.search_rung_failure_reason(phone) or "search_no_result"
+                )
                 actions.record_navigation_failure(
                     navigation_failures,
                     path=("Settings",),
                     scene=phone.perceive(),
                     text=label,
-                    reason="search_no_result",
+                    reason=reason,
                 )
                 if settings_context.search_unavailable(phone):
                     limits_hit.add("settings_search_unavailable")
