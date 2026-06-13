@@ -893,7 +893,7 @@ def test_ios_scene_classifier_wifi_detail_without_nav_ocr_is_not_springboard():
         _el("homenet_aiot", 58, 624, w=90, h=22),
         _el("acme_washer_r_0a1b", 58, 732, w=162, h=22),
         _el("STB_AB12", 60, 788, w=84, h=21),
-        _el("yunduo", 58, 841, w=62, h=19),
+        _el("synthnet_3f", 58, 841, w=88, h=19),
         _el("其他⋯..", 60, 894, w=54, h=20),
     )
 
