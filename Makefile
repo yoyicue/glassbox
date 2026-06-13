@@ -88,14 +88,24 @@ human-baseline-validate:
 # The replay+floor guard rides `make test` (skills/smoke/test_golden_ingest.py).
 GOLDEN_INGEST ?= uv run python -m skills.regression.golden_ingest
 HARVESTED_DIR ?= skills/golden/computer_use/_harvested
+# --include-facade: the curated golden corpus is sourced from deliberate
+# glassbox.ai probe runs (run_name='manual-*' etc.), which carry the
+# ai_api_version manifest stamp. The harvester skips such facade sessions BY
+# DEFAULT (so a stray ad-hoc open_phone() session a direct CLI caller left in
+# artifacts/ can't seed the corpus); these targets opt in because this corpus
+# legitimately depends on them. The privacy net for what they ingest is the
+# per-run + cross-run UNION scrub (golden_ingest.build_union_scrubber) and the
+# widened repo-wide guard (skills/smoke/test_privacy_guard.py).
 golden-harvest:
-	$(GOLDEN_INGEST) harvest --roots artifacts --out "$(HARVESTED_DIR)"
+	$(GOLDEN_INGEST) harvest --roots artifacts --include-facade --out "$(HARVESTED_DIR)"
 
 # Fail (rc 1) if the committed harvested corpus drifts from a fresh harvest.
 # No-ops (rc 0) in CI where artifacts/ is gitignored — folded into `make check`
 # so it guards on hosts that have ledgers without breaking hardware-free CI.
+# --include-facade MUST match golden-harvest or the fresh harvest would falsely
+# diverge from the committed corpus.
 golden-audit:
-	$(GOLDEN_INGEST) audit --roots artifacts --against "$(HARVESTED_DIR)"
+	$(GOLDEN_INGEST) audit --roots artifacts --include-facade --against "$(HARVESTED_DIR)"
 
 # Compare a freshly-produced benchmark ($(CANDIDATE)) against the committed floor,
 # failing (rc 1) on any success-rate regression beyond $(TOLERANCE). This is the
